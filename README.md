@@ -100,6 +100,7 @@ rows = 32
 cols = 64
 chain_length = 2            # two panels daisy-chained = 128x32
 pitch_mm = 2.5              # informational; 128x32 at P2.5 is 320x80 mm
+pixel_mapper = ""           # e.g. "U-mapper" to stack two panels into 64x64
 hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60

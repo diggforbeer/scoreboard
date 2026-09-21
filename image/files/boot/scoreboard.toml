@@ -64,6 +64,16 @@ parallel = 1
 # but it lets tools report the display's physical size. P2.5 x 128x32 = 320x80mm.
 pitch_mm = 2.5
 
+# Advanced: reorders/rotates pixels before they reach the panel. Leave empty
+# unless you know you need it. Common values:
+#   "U-mapper"     Fold two panels chained end-to-end into a stacked 64x64
+#                  display instead of a 128x32 one (also set chain_length=2,
+#                  see rpi-rgb-led-matrix's docs for the wiring this expects)
+#   "Rotate:180"   Panel mounted upside down
+#   "Mirror:H"     Panel mirrored horizontally
+# Chain several with ";", e.g. "U-mapper;Rotate:90".
+pixel_mapper = ""
+
 # Which GPIO pins drive the HUB75 signals. Depends on the adapter board:
 #   "regular"          Seengreat / XICOOLEE / WatangTech adapter boards, and
 #                      direct wiring per the rpi-rgb-led-matrix README.
