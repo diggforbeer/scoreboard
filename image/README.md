@@ -10,7 +10,7 @@ Debian-based image builder.
 |------|---------|
 | `config/scoreboard.yaml` | Image definition — device, partition sizes, which layers to apply |
 | `layer/nhl-scoreboard.yaml` | Custom layer: installs the app, builds the HUB75 bindings, wires up services |
-| `files/systemd/` | Service units and `systemd-networkd` DHCP configuration |
+| `files/systemd/` | Service units for the scoreboard and its provisioner |
 | `files/scripts/scoreboard-provision` | Applies boot-partition settings on every boot |
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
@@ -53,7 +53,6 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 - `rgbmatrix` Python bindings, compiled during the build
 - `scoreboard-provision.service`, which reads `/boot/firmware/scoreboard.toml`
   on each boot and applies Wi-Fi, timezone and regulatory domain
-- `systemd-networkd` DHCP for wired and wireless interfaces
 - `dtparam=audio=off` in `config.txt` and `isolcpus=3` in `cmdline.txt`, both
   required for a stable, flicker-free panel refresh
 
@@ -63,8 +62,13 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
   dialog only writes settings Raspberry Pi OS knows how to read. Configure the
   board through `scoreboard.toml` on the boot partition instead.
 - The base image uses **iwd** for Wi-Fi, not NetworkManager or wpa_supplicant.
-- `systemd-net-min` enables networkd but ships no `.network` files; ours supply
-  the DHCP configuration, without which the board has no network at all.
+- DHCP is already handled: the base layers generate `01-eth0.network` and
+  `02-wlan0.network`. Adding higher-numbered files of our own would be inert,
+  since networkd applies only the first matching `.network`.
+- The HUB75 bindings are built through upstream's CMake/scikit-build-core path
+  from the repository root. The older `lib/Makefile` route defaults
+  `CPU_ARCH_FLAGS` to `-march=native`, which on a CI runner targets the
+  runner's CPU and can emit instructions a Pi 4 cannot execute.
 - Default login is `scoreboard` / `Scoreboard1!`. The `device-user-credentials`
   layer enforces a complexity rule (upper, lower, digit, symbol, 8+ chars), so
   any replacement must satisfy it. Change this before putting the board on an

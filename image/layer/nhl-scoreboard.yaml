@@ -44,12 +44,14 @@ mmdebstrap:
     - python3-requests
     - iw
     - ca-certificates
-    # Build-time, for the HUB75 bindings
+    # Build-time, for the HUB75 bindings. Upstream builds through
+    # scikit-build-core/CMake, not the old bindings/python Makefile.
     - build-essential
+    - cmake
+    - ninja-build
     - cython3
     - python3-dev
     - python3-pip
-    - python3-setuptools
 
   customize-hooks:
     # ---- scoreboard application -------------------------------------
@@ -73,25 +75,17 @@ mmdebstrap:
       fi
       install -d -m 0755 "$1/usr/src"
       cp -a "$SRC" "$1/usr/src/rpi-rgb-led-matrix"
+      # Upstream installs from the repository root through scikit-build-core.
+      # This also avoids lib/Makefile's CPU_ARCH_FLAGS, which default to
+      # -march=native: building natively on a CI runner would target that
+      # runner's CPU and emit instructions a Pi 4's Cortex-A72 lacks. The
+      # CMake path compiles with generic flags, so the result runs on any
+      # ARMv8 Pi.
       chroot "$1" sh -eu -c '
         cd /usr/src/rpi-rgb-led-matrix
-        make -C lib -j"$(nproc)"
-        cd bindings/python
-        python3 -m pip install --break-system-packages --no-build-isolation . \
-          || make install-python PYTHON=/usr/bin/python3
-        python3 -c "import rgbmatrix; print(\"rgbmatrix bindings OK\")"
+        python3 -m pip install --break-system-packages .
+        python3 -c "import rgbmatrix, rgbmatrix.graphics; print(\"rgbmatrix bindings OK\")"
       '
-
-    # ---- networking --------------------------------------------------
-    # systemd-net-min enables networkd but ships no .network files, so
-    # without these the board comes up with no address at all.
-    - |-
-      set -eu
-      install -d -m 0755 "$1/etc/systemd/network"
-      install -m 0644 "$IGconf_sb_assetdir/systemd/10-wired.network" \
-        "$1/etc/systemd/network/"
-      install -m 0644 "$IGconf_sb_assetdir/systemd/20-wifi.network" \
-        "$1/etc/systemd/network/"
 
     # ---- services ----------------------------------------------------
     - |-
