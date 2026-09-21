@@ -95,6 +95,11 @@ class FakeClient:
             raise NHLApiError("boom")
         return self.situations.get(game_id)
 
+    def schedule(self, team: str) -> list[Game]:
+        if self.fail:
+            raise NHLApiError("boom")
+        return [g for g in self._games if g.involves(team)]
+
     def close(self) -> None:
         self.closed = True
 

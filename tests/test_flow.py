@@ -151,10 +151,15 @@ def test_live_game_takes_priority(day):
     assert scene(app) == ("game", 1)
 
 
-def test_final_holds_then_moves_to_next_preview(day):
+def test_watched_final_holds_from_the_moment_it_ended(day):
+    """Live -> final while running: the hold starts when we saw it end."""
     app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=2)
+    tick(app, clock, hours=7)  # 1h into the game
+    assert scene(app) == ("game", 1)
+
     client.today[1] = dataclasses.replace(client.today[1], state="FINAL", period=3)
-    tick(app, clock, hours=8, minutes=40)  # first sighting of the final starts the hold
+    tick(app, clock, hours=1, minutes=40)  # we watch it finish
     assert scene(app) == ("game", 1)
 
     tick(app, clock, minutes=29)
@@ -163,6 +168,47 @@ def test_final_holds_then_moves_to_next_preview(day):
     tick(app, clock, minutes=2)
     assert scene(app) == ("preview", 2), "hold expired: preview the next game"
     assert client.schedule_calls == 1
+
+
+def test_startup_hours_after_the_game_does_not_hold_the_final(fake_backend):
+    """The bug: booting at 11 PM after a 7 PM game showed FINAL for 30 minutes."""
+    client = FlowClient()
+    finished = game(1, "TBL", FAV, PUCK_DROP, "FINAL", period=3)
+    client.today = [finished]
+    client.season = [finished, game(2, FAV, "CAR", NEXT_DROP)]
+    app = make_app(fake_backend, Clock(PUCK_DROP + timedelta(hours=4)), client)
+    app.refresh()
+    assert scene(app) == ("preview", 2)
+
+
+def test_startup_shortly_after_the_game_still_holds_the_final(fake_backend):
+    """Estimated end = start + 2h30; booting 10 minutes after that is inside the hold."""
+    client = FlowClient()
+    finished = game(1, "TBL", FAV, PUCK_DROP, "FINAL", period=3)
+    client.today = [finished]
+    client.season = [finished, game(2, FAV, "CAR", NEXT_DROP)]
+    clock = Clock(PUCK_DROP + timedelta(hours=2, minutes=40))
+    app = make_app(fake_backend, clock, client)
+    app.refresh()
+    assert scene(app) == ("game", 1)
+
+    tick(app, clock, minutes=25)  # 35 minutes past the estimated end
+    assert scene(app) == ("preview", 2)
+
+
+def test_startup_during_a_game_that_ran_long_is_not_cut_short(fake_backend):
+    """A game still final-less at start+2h30 is live; the estimate never applies."""
+    client = FlowClient()
+    client.today = [game(1, "TBL", FAV, PUCK_DROP, "LIVE", period=3)]
+    clock = Clock(PUCK_DROP + timedelta(hours=2, minutes=50))
+    app = make_app(fake_backend, clock, client)
+    app.refresh()
+    assert scene(app) == ("game", 1)
+
+    client.today[0] = dataclasses.replace(client.today[0], state="FINAL")
+    tick(app, clock, minutes=5)  # watched it end at start+2h55
+    tick(app, clock, minutes=25)
+    assert scene(app) == ("game", 1), "hold runs from the observed end, not the estimate"
 
 
 def test_final_hold_is_configurable(day):

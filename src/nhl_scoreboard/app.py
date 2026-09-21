@@ -8,7 +8,7 @@ import signal
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import FrameType
 from zoneinfo import ZoneInfo
 
@@ -78,8 +78,10 @@ class ScoreboardApp:
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
-        #: game id -> monotonic time we first saw it final, for final_hold_minutes.
-        self.final_seen: dict[int, float] = {}
+        #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
+        #: if we watched it finish; estimated from the start time otherwise.
+        self.ended_at: dict[int, datetime] = {}
+        self._seen_live: set[int] = set()
         self._schedule: tuple[float, list[Game]] | None = None
         self._running = False
 
@@ -130,9 +132,23 @@ class ScoreboardApp:
             return
         self.games = self.order(games)
         self.last_success = self.monotonic()
+        now = self.clock()
         for game in self.games:
-            if game.is_final:
-                self.final_seen.setdefault(game.id, self.last_success)
+            if game.is_live:
+                self._seen_live.add(game.id)
+            elif game.is_final and game.id not in self.ended_at:
+                # Watched it finish: now is the end. Found it already over
+                # (typically at startup): the API has no end time, so
+                # estimate one rather than holding a stale final for the
+                # full window from whenever we happened to start.
+                watched = game.id in self._seen_live
+                self.ended_at[game.id] = now if watched else min(now, game.estimated_end())
+                log.debug(
+                    "Game %s ended at %s (%s)",
+                    game.id,
+                    self.ended_at[game.id],
+                    "observed" if watched else "estimated",
+                )
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
@@ -192,9 +208,9 @@ class ScoreboardApp:
             if today.is_live:
                 return Scene("game", today)
             if today.is_final:
-                seen = self.final_seen.get(today.id)
-                held = seen is not None and self.monotonic() - seen < cfg.final_hold_minutes * 60
-                if held:
+                ended = self.ended_at.get(today.id)
+                hold = timedelta(minutes=cfg.final_hold_minutes)
+                if ended is not None and self.clock() - ended < hold:
                     return Scene("game", today)
         upcoming = today if today is not None and today.is_pregame else self.next_favourite_game()
         if upcoming is None:
