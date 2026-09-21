@@ -549,3 +549,84 @@ def test_upcoming_text_layout(name, method, now, bottom_color, update_snapshots)
     assert_centered(c, STATUS_TOP, H - 1, "bottom line")
     assert status_color(c) == {bottom_color}
     check_snapshot(f"text_{name}", art, update_snapshots)
+
+
+# --------------------------------------------------------------------------
+# goal celebration
+# --------------------------------------------------------------------------
+
+
+def test_logo_layout_goal(games, synthetic_logos, update_snapshots):
+    game = games["live"]  # SEA 2 @ CGY 1
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_goal(c, game)
+    art = show(f"logos, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+
+    assert not c.out_of_bounds
+    for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
+        logo_colors = c.colors(x0, 0, x0 + LOGO - 1, H - 1)
+        assert team_color(side.abbrev) in logo_colors, f"{side.abbrev} logo"
+    goal_box = c.bbox(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1)
+    assert goal_box is not None, "GOAL text missing"
+    assert abs(goal_box.center_x - (W - 1) / 2) <= 1, "GOAL not centred"
+    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1) == {ACCENT}, "GOAL must be amber only"
+    # No rule, no power-play band: this frame owns the whole panel.
+    assert not c.row_is_solid(RULE_Y)
+    assert_centered(c, STATUS_TOP, H - 1, "score line")
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {WHITE}
+    check_snapshot("logo_goal", art, update_snapshots)
+
+
+def test_text_layout_goal(games, update_snapshots):
+    game = games["live"]
+    c = canvas()
+    make_renderer().draw_goal(c, game)
+    art = show(f"text, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+
+    assert not c.out_of_bounds
+    goal_box = c.bbox(0, 0, W - 1, RULE_Y - 1)
+    assert goal_box is not None
+    assert c.colors(0, 0, W - 1, RULE_Y - 1) == {ACCENT}, "GOAL must be amber only"
+    assert abs(goal_box.center_x - (W - 1) / 2) <= 1, "GOAL not centred"
+    assert_centered(c, STATUS_TOP, H - 1, "score line")
+    assert status_color(c) == {WHITE}
+    check_snapshot("text_goal", art, update_snapshots)
+
+
+def test_goal_score_reflects_the_current_score(games, synthetic_logos):
+    """A distinct score from the fixture must actually show up, not a stale one."""
+    game = dataclasses.replace(
+        games["live"],
+        home=dataclasses.replace(games["live"].home, score=9),
+        away=dataclasses.replace(games["live"].away, score=7),
+    )
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_goal(c, game)
+    # "9-7" and "2-1" (the un-doctored score) are different widths/shapes;
+    # a bbox-based smoke check that something in the score band changed
+    # would be weak, so instead render the real score for comparison.
+    c2 = canvas()
+    make_renderer(logos=synthetic_logos).draw_goal(c2, games["live"])
+    assert c.pixels != c2.pixels
+
+
+def test_goal_scene_ignores_favourite_and_situation(games, synthetic_logos):
+    """draw_goal never reads self.favourite or game.situation -- there is
+    nothing to mark as favourite (the whole frame already is) and no room
+    for a power-play band."""
+    game = games["live"]
+    with_situation = dataclasses.replace(
+        game,
+        situation=Situation.from_api(
+            {
+                "awayTeam": {"strength": 4},
+                "homeTeam": {"strength": 5, "situationDescriptions": ["PP"]},
+                "timeRemaining": "1:23",
+            }
+        ),
+    )
+    c1, c2 = canvas(), canvas()
+    r = make_renderer(favourite="CGY", logos=synthetic_logos)
+    r.draw_goal(c1, game)
+    r.draw_goal(c2, with_situation)
+    assert c1.pixels == c2.pixels

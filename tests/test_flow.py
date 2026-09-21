@@ -39,6 +39,16 @@ def game(gid: int, away: str, home: str, start: datetime, state: str = "FUT", **
     return Game.from_api(raw)
 
 
+def score(g: Game, *, home: int | None = None, away: int | None = None) -> Game:
+    """Return g with an updated score -- Game.home/away are nested TeamSide."""
+    changes = {}
+    if home is not None:
+        changes["home"] = dataclasses.replace(g.home, score=home)
+    if away is not None:
+        changes["away"] = dataclasses.replace(g.away, score=away)
+    return dataclasses.replace(g, **changes)
+
+
 def tick(app: ScoreboardApp, clock: Clock, **delta) -> None:
     """Advance time and poll, as the real loop would have every minute."""
     clock.advance(**delta)
@@ -56,6 +66,17 @@ class Clock:
         delta = timedelta(**kwargs)
         self.now += delta
         self.mono += delta.total_seconds()
+
+
+class RecordingHorn:
+    """Fake GoalHornPlayer: records what would have played, plays nothing."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def play(self, abbrev: str) -> bool:
+        self.calls.append(abbrev)
+        return True
 
 
 class FlowClient:
@@ -86,7 +107,7 @@ def fake_backend() -> Backend:
     return Backend("fake", FakeMatrix, FakeOptions, FakeGraphics)
 
 
-def make_app(fake_backend, clock: Clock, client: FlowClient, **cfg) -> ScoreboardApp:
+def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -> ScoreboardApp:
     settings = Settings()
     settings.scoreboard.favourite_team = FAV
     settings.scoreboard.rotation = "favourite"
@@ -98,6 +119,7 @@ def make_app(fake_backend, clock: Clock, client: FlowClient, **cfg) -> Scoreboar
         backend=fake_backend,
         clock=lambda: clock.now,
         monotonic=lambda: clock.mono,
+        horn=horn or RecordingHorn(),
     )
 
 
@@ -297,3 +319,130 @@ def test_fixture_file_still_parses_for_schedule_shape():
         raw.pop(key, None)
     g = Game.from_api(raw)
     assert g.is_final and g.period == 0
+
+
+# --------------------------------------------------------------------------
+# goal detection and the goal scene
+# --------------------------------------------------------------------------
+
+
+def test_goal_fires_horn_and_scene_on_a_favourite_score_increase(day):
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert scene(app) == ("game", 1)
+    assert app.horn.calls == []
+
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, minutes=1)
+    assert app.horn.calls == [FAV]
+    assert scene(app) == ("goal", 1)
+
+
+def test_first_sighting_of_a_game_never_fires_a_goal(fake_backend):
+    """A game already 3-1 at startup must not celebrate on the first poll."""
+    client = FlowClient()
+    client.today = [game(1, "TBL", FAV, PUCK_DROP, "LIVE", period=2, home_score=3, away_score=1)]
+    app = make_app(fake_backend, Clock(PUCK_DROP + timedelta(hours=1)), client)
+    app.refresh()
+    assert app.horn.calls == []
+    assert scene(app) == ("game", 1)
+
+
+def test_opponent_goal_does_not_fire(day):
+    """The away team (TBL) scoring is not a home-team (NSH) celebration."""
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), away=1)
+    tick(app, clock, minutes=1)
+    assert app.horn.calls == []
+    assert scene(app)[0] == "game"
+
+
+def test_score_correction_downward_does_not_fire(day):
+    app, clock, client = day
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=2)
+    tick(app, clock, hours=6, minutes=5)  # 0 -> 2 against the fixture's baseline: a real goal
+    assert app.horn.calls == [FAV]
+    app.horn.calls.clear()
+
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, minutes=1)  # a correction downward, not a goal
+    assert app.horn.calls == []
+
+
+def test_goal_scene_reverts_after_goal_flash_seconds(day):
+    app, clock, client = day
+    app.settings.scoreboard.goal_flash_seconds = 10
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 1)
+
+    clock.advance(seconds=9)
+    assert scene(app) == ("goal", 1), "still inside the flash window"
+
+    clock.advance(seconds=2)
+    assert scene(app) == ("game", 1), "flash window elapsed: back to the normal scene"
+
+
+def test_goal_override_does_not_leak_onto_a_different_game(day):
+    """A goal in game 1 must not paint a goal screen over some other game."""
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    assert app.last_goal is not None and app.last_goal[0] == 1
+
+    from nhl_scoreboard.app import Scene
+
+    unrelated = Scene("game", client.today[0])  # SEA @ CGY, unrelated game
+    assert app._apply_goal_override(unrelated) is unrelated
+
+
+def test_goal_does_not_override_countdown_or_preview(day):
+    """A goal can only ever replace the exact 'game' scene it belongs to."""
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+
+    from nhl_scoreboard.app import Scene
+
+    preview = Scene("preview", client.season[2])
+    assert app._apply_goal_override(preview) is preview
+    countdown = Scene("countdown", client.season[2])
+    assert app._apply_goal_override(countdown) is countdown
+
+
+def test_no_favourite_team_never_detects_goals(fake_backend):
+    client = FlowClient()
+    client.today = [game(1, "TBL", "NSH", PUCK_DROP, "LIVE")]
+    settings_app = ScoreboardApp(
+        Settings.from_dict({"scoreboard": {"favourite_team": "", "rotation": "all"}}),
+        client=client,
+        backend=fake_backend,
+        clock=lambda: PUCK_DROP,
+        monotonic=lambda: 1000.0,
+        horn=RecordingHorn(),
+    )
+    settings_app.refresh()
+    client.today[0] = score(client.today[0], home=1)
+    settings_app.refresh()
+    assert settings_app.horn.calls == []
+
+
+def test_draw_dispatches_goal_scene(day):
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 1)
+    app.draw()  # must not raise; exercises Renderer.draw_goal via the real dispatch
+    assert app.matrix.swaps >= 1

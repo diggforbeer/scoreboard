@@ -15,6 +15,7 @@ Debian-based image builder.
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
 | `../assets/logos/` | Team logos rasterised by `scripts/fetch-logos.py` (git-ignored, fetched on demand) |
+| `../assets/horns/` | The default goal siren, synthesized by `scripts/generate-default-horn.py` and committed (no third-party content, so nothing to fetch) |
 
 ## Building in CI
 
@@ -53,6 +54,8 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 
 - The scoreboard app at `/opt/nhl-scoreboard`, run by `nhl-scoreboard.service`
 - Team logos at `/usr/share/nhl-scoreboard/logos/32/{dark,light}/`
+- The default goal siren at `/usr/share/nhl-scoreboard/horns/_default.wav`,
+  and `alsa-utils` for `aplay`
 - `rgbmatrix` Python bindings, compiled during the build
 - `scoreboard-provision.service`, which reads `/boot/firmware/scoreboard.toml`
   on each boot and applies Wi-Fi, timezone and regulatory domain

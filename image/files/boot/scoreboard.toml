@@ -53,6 +53,29 @@ show_logos = true
 # several teams' "light" marks are near-black and disappear.
 logo_variant = "dark"
 
+# How long the GOAL screen stays up after your team scores before returning
+# to the normal live score.
+goal_flash_seconds = 6
+
+[audio]
+# Plays a horn through a USB speaker or USB audio adapter when your team
+# scores. The board has no other way to make sound: the HUB75 panel needs
+# the Pi's onboard audio hardware for its own timing (see the config.txt
+# note about dtparam=audio=off), and I2S conflicts with the panel wiring.
+enabled = true
+
+# ALSA device name. Leave empty to use aplay's default output; set this if
+# you have more than one audio device, e.g. "plughw:1,0". Run
+# `aplay -l` over SSH to see what's attached.
+device = ""
+
+# Override where horn WAV files are looked for. Leave empty for the
+# built-in location. A file named {ABBR}.wav (e.g. NSH.wav) is used for
+# that team's goal if present; otherwise a shipped default siren plays.
+# Team-specific horns are not included -- broadcast goal horns are
+# copyrighted -- so this is a slot to drop your own recording into.
+horn_dir = ""
+
 [panel]
 # Defaults describe two 64x32 panels daisy-chained into one 128x32 board.
 rows = 32

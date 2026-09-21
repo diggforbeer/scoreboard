@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from types import FrameType
 from zoneinfo import ZoneInfo
 
+from .audio import GoalHornPlayer
 from .config import Settings
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
@@ -49,10 +50,16 @@ class ScoreboardApp:
         backend: Backend | None = None,
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
+        horn: GoalHornPlayer | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
+        self.horn = horn or GoalHornPlayer.default(
+            device=settings.audio.device,
+            horn_dir=settings.audio.horn_dir,
+            enabled=settings.audio.enabled,
+        )
         self.tz = ZoneInfo(settings.scoreboard.timezone)
         self.client = client or NHLClient()
         self.backend = backend or load_backend()
@@ -83,6 +90,13 @@ class ScoreboardApp:
         self.ended_at: dict[int, datetime] = {}
         self._seen_live: set[int] = set()
         self._schedule: tuple[float, list[Game]] | None = None
+        #: game id -> the favourite's own score last seen in that game, so a
+        #: goal can be detected as an increase. Set on first sighting without
+        #: firing, so a game already 3-1 at startup does not fire a goal.
+        self._known_favourite_score: dict[int, int] = {}
+        #: (game id, monotonic time) of the most recent favourite goal, for
+        #: how long the goal scene stays up.
+        self.last_goal: tuple[int, float] | None = None
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -132,6 +146,7 @@ class ScoreboardApp:
             return
         self.games = self.order(games)
         self.last_success = self.monotonic()
+        self._detect_goals(self.games)
         now = self.clock()
         for game in self.games:
             if game.is_live:
@@ -152,6 +167,43 @@ class ScoreboardApp:
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    # -- goal detection ---------------------------------------------------
+
+    def _favourite_score(self, game: Game) -> int | None:
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite or not game.involves(favourite):
+            return None
+        return game.home.score if game.home.abbrev == favourite else game.away.score
+
+    def _detect_goals(self, games: list[Game]) -> None:
+        """A favourite-team goal: their own score increased since we last saw it.
+
+        Scoped to the favourite only -- same reasoning as the power-play
+        indicator (situation_targets): this is a favourite-team board
+        feature, not a "celebrate every goal in every game" one.
+        """
+        for game in games:
+            score = self._favourite_score(game)
+            if score is None:
+                continue
+            previous = self._known_favourite_score.get(game.id)
+            self._known_favourite_score[game.id] = score
+            if previous is not None and score > previous:
+                self._on_goal(game)
+
+    def _on_goal(self, game: Game) -> None:
+        favourite = self.settings.scoreboard.favourite_team
+        log.info(
+            "GOAL: %s %s %d-%d %s",
+            favourite,
+            game.away.abbrev,
+            game.away.score,
+            game.home.score,
+            game.home.abbrev,
+        )
+        self.last_goal = (game.id, self.monotonic())
+        self.horn.play(favourite)
 
     # -- favourite mode --------------------------------------------------
 
@@ -189,6 +241,10 @@ class ScoreboardApp:
 
     def select_scene(self) -> Scene:
         """Decide what to show; the draw step only renders the answer."""
+        scene = self._select_base_scene()
+        return self._apply_goal_override(scene)
+
+    def _select_base_scene(self) -> Scene:
         if self.last_success is None:
             return Scene("connecting")
         if self.is_stale():
@@ -200,6 +256,22 @@ class ScoreboardApp:
         if self.games:
             return Scene("game", self.games[self.index])
         return Scene("clock" if self.settings.scoreboard.show_clock_when_idle else "no_games")
+
+    def _apply_goal_override(self, scene: Scene) -> Scene:
+        """Show the goal screen in place of the game it just happened in.
+
+        Only ever replaces a "game" scene for the exact game the goal
+        belongs to -- it never interrupts a countdown, preview or a
+        different game mid-rotation to force attention to the favourite.
+        """
+        if scene.kind != "game" or self.last_goal is None:
+            return scene
+        goal_game_id, goal_time = self.last_goal
+        if scene.game.id != goal_game_id:
+            return scene
+        if self.monotonic() - goal_time >= self.settings.scoreboard.goal_flash_seconds:
+            return scene
+        return Scene("goal", scene.game)
 
     def _favourite_scene(self) -> Scene | None:
         cfg = self.settings.scoreboard
@@ -299,6 +371,8 @@ class ScoreboardApp:
         r = self.renderer
         if scene.kind == "game":
             r.draw_game(self.canvas, self.with_situation(scene.game))
+        elif scene.kind == "goal":
+            r.draw_goal(self.canvas, scene.game)
         elif scene.kind == "countdown":
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":

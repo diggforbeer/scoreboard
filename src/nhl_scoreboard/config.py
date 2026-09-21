@@ -75,6 +75,9 @@ class ScoreboardConfig:
     prefer_favourite: bool = True
     show_logos: bool = True
     logo_variant: str = "dark"
+    #: How long a goal celebration screen stays up before returning to the
+    #: normal game scene.
+    goal_flash_seconds: float = 6.0
     #: "favourite": follow the favourite's game -- countdown, live, final,
     #: then a preview of the next one. "all": rotate every game today.
     rotation: str = "favourite"
@@ -96,9 +99,22 @@ class ScoreboardConfig:
 
 
 @dataclass(slots=True)
+class AudioConfig:
+    """Goal horn playback. See ``audio.GoalHornPlayer``."""
+
+    enabled: bool = True
+    #: ALSA device name, e.g. "plughw:1,0". Empty uses aplay's default.
+    device: str = ""
+    #: Override the search directory for horn WAVs. Empty uses the built-in
+    #: search path (NHL_SCOREBOARD_HORN_DIR env var, then the shipped assets).
+    horn_dir: str = ""
+
+
+@dataclass(slots=True)
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -125,6 +141,7 @@ class Settings:
         return cls(
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
+            audio=_build(AudioConfig, raw.get("audio", {})),
         )
 
 
