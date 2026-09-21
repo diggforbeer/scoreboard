@@ -6,7 +6,7 @@ from nhl_scoreboard.config import Settings
 def test_defaults_describe_two_chained_64x32_panels():
     settings = Settings()
     assert (settings.panel.width, settings.panel.height) == (128, 32)
-    assert settings.panel.hardware_mapping == "adafruit-hat"
+    assert settings.panel.hardware_mapping == "regular"
 
 
 def test_loads_toml(tmp_path):

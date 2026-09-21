@@ -13,8 +13,22 @@ the boot partition, and the board comes up showing live scores.
 |------|--------|
 | Computer | Raspberry Pi 4 (Pi 3B+ also supported) |
 | Display | 2 × 64×32 P2 HUB75 panels, daisy-chained → **128×32** |
-| Adapter | Adafruit RGB Matrix Bonnet or HAT |
-| Power | 5 V supply rated for the panels (≈4 A for two P2 panels at full white) |
+| Adapter | Seengreat-style RGB Matrix Adapter Board (also sold as XICOOLEE, WatangTech) |
+| Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
+
+The adapter board's pinout is the driver's `regular` mapping, with output-enable
+on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
+no modification — the Adafruit Bonnet needs a solder bridge for the same result.
+An Adafruit board still works: set `hardware_mapping = "adafruit-hat"`.
+
+**Power notes.** The board accepts USB-C (5 V / 4 A) or a 5.5 × 2.1 mm barrel
+jack (5 V / 8 A) and passes 5 V to the Pi through the GPIO header. Two 64×32
+panels can each draw ~2 A at full white, plus ~1 A for the Pi, so use the barrel
+jack with a supply rated 6 A or better. At the default `brightness = 60` and
+mostly-dark scoreboard content the real draw is far lower, but headroom is what
+keeps the supply from browning out on a bright frame. **Do not also connect a
+USB-C supply to the Pi** — two supplies feeding the same 5 V rail is a good way
+to damage one of them.
 
 Panel geometry is configuration-driven, so a single 64×32 or a 128×64 stack
 works too — see `[panel]` in the config file.
@@ -74,7 +88,7 @@ live_poll_seconds = 15
 rows = 32
 cols = 64
 chain_length = 2            # two panels daisy-chained = 128x32
-hardware_mapping = "adafruit-hat"
+hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60
 ```

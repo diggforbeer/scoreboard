@@ -28,14 +28,14 @@ class PanelConfig:
     """Geometry and electrical settings for the HUB75 chain.
 
     Defaults describe two 64x32 P2 panels daisy-chained into one 128x32
-    display driven through an Adafruit RGB Matrix Bonnet/HAT.
+    display through a HUB75 adapter wired to the driver's "regular" pinout.
     """
 
     rows: int = 32
     cols: int = 64
     chain_length: int = 2
     parallel: int = 1
-    hardware_mapping: str = "adafruit-hat"
+    hardware_mapping: str = "regular"
     gpio_slowdown: int = 4
     pwm_bits: int = 11
     pwm_lsb_nanoseconds: int = 130

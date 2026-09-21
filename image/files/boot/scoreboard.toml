@@ -36,17 +36,19 @@ live_poll_seconds = 15
 show_clock_when_idle = true
 
 [panel]
-# Defaults describe two 64x32 P2 panels daisy-chained into one 128x32 board
-# driven by an Adafruit RGB Matrix Bonnet or HAT.
+# Defaults describe two 64x32 P2 panels daisy-chained into one 128x32 board.
 rows = 32
 cols = 64
 chain_length = 2
 parallel = 1
 
-# "adafruit-hat" for a stock Bonnet/HAT.
-# "adafruit-hat-pwm" if you have soldered the GPIO4-GPIO18 quality mod.
-# "regular" for a directly wired HUB75 connection.
-hardware_mapping = "adafruit-hat"
+# Which GPIO pins drive the HUB75 signals. Depends on the adapter board:
+#   "regular"          Seengreat / XICOOLEE / WatangTech adapter boards, and
+#                      direct wiring per the rpi-rgb-led-matrix README.
+#                      OE is on GPIO 18, so hardware PWM works unmodified.
+#   "adafruit-hat"     Adafruit RGB Matrix Bonnet or HAT, stock.
+#   "adafruit-hat-pwm" Adafruit board with the GPIO4-GPIO18 solder mod.
+hardware_mapping = "regular"
 
 # 0-100. Lower brightness means less current draw and a cooler panel.
 brightness = 60
