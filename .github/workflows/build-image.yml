@@ -117,10 +117,22 @@ jobs:
         id: artifact
         run: |
           set -euo pipefail
-          img="$(find rpi-image-gen/work -name '*.img' -type f | head -1)"
+          # rpi-image-gen writes to work/image-<name>/. Look there first and
+          # never pipe find into head: under pipefail, head closing the pipe
+          # makes find exit non-zero, and root-owned dirs inside the chroot
+          # add permission errors on top.
+          img=""
+          for d in rpi-image-gen/work/image-*/; do
+            f="$(find "$d" -maxdepth 2 -name '*.img' -type f -print -quit 2>/dev/null || true)"
+            if [ -n "$f" ]; then img="$f"; break; fi
+          done
+          if [ -z "$img" ]; then
+            img="$(find rpi-image-gen/work -path '*/filesystem' -prune -o \
+                     -name '*.img' -type f -print -quit 2>/dev/null || true)"
+          fi
           if [ -z "$img" ]; then
             echo "::error::No .img produced by the build"
-            find rpi-image-gen/work -maxdepth 3 -type d || true
+            ls -la rpi-image-gen/work/ rpi-image-gen/work/image-*/ 2>/dev/null || true
             exit 1
           fi
           echo "Found image: $img ($(du -h "$img" | cut -f1))"
