@@ -45,6 +45,7 @@ Early development. Working today:
 - [x] Wi-Fi and settings applied from the boot partition on every boot
 - [x] Team logos, rasterised at build time from the NHL's own artwork
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
+- [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [ ] Verified on real hardware
 
 ## Development
@@ -83,9 +84,12 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 
 ```toml
 [scoreboard]
-favourite_team = "NSH"      # pinned to the front of the rotation; "" for none
+favourite_team = "NSH"      # "" for none
+rotation = "favourite"      # follow the favourite's day; "all" rotates every game
+countdown_hours = 2         # preview becomes a countdown this close to puck drop
+final_hold_minutes = 30     # how long a final stays up before the next preview
 timezone = "America/Toronto"
-rotate_seconds = 8
+rotate_seconds = 8          # dwell per game in "all" rotation
 poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
@@ -100,6 +104,22 @@ hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60
 ```
+
+## What it shows
+
+In the default `rotation = "favourite"`, the board follows your team's day:
+
+| When | Board shows |
+|---|---|
+| Morning of a game (or no game today) | **Preview** — logos, `TONIGHT` / `TOMORROW` / `SAT OCT 4`, start time |
+| Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
+| Game in progress | **Live** — scores, period and clock, power-play indicator |
+| Final, for `final_hold_minutes` | **Final** — the result stays up |
+| After that | Preview of the next game on the schedule |
+
+The next game comes from the team's season schedule, fetched once an hour.
+With `rotation = "all"` the board instead rotates through every game in the
+league today, `rotate_seconds` each, favourite first.
 
 ## Layout
 

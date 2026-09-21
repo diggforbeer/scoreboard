@@ -182,6 +182,78 @@ class Renderer:
             underline = x0 + 3 + text_width(self.fonts.large, abbrev) - 1
             self.hline(canvas, x0 + 3, underline, y + 2, ACCENT)
 
+    def draw_preview(self, canvas: Any, game: Game, now: datetime) -> None:
+        """The favourite's next game: who, which day, what time."""
+        self._draw_upcoming(
+            canvas, game, top=game.day_label(now, self.tz), bottom=game.start_label(self.tz)
+        )
+
+    def draw_countdown(self, canvas: Any, game: Game, now: datetime) -> None:
+        """Same frame as the preview, but the clock is running."""
+        self._draw_upcoming(
+            canvas,
+            game,
+            top=game.start_label(self.tz),
+            bottom=game.countdown_label(now),
+            bottom_color=ACCENT,
+        )
+
+    def _draw_upcoming(
+        self,
+        canvas: Any,
+        game: Game,
+        top: str,
+        bottom: str,
+        bottom_color: tuple[int, int, int] = WHITE,
+    ) -> None:
+        canvas.Clear()
+        rule_y = 19
+        top_baseline = 12
+        bottom_baseline = self.height - 2
+
+        away = home = None
+        if self.logos is not None:
+            away, home = self.logos.get(game.away.abbrev), self.logos.get(game.home.abbrev)
+
+        if away is not None and home is not None:
+            self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
+            self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
+            left, right = away.width, self.width - home.width
+            centre = (left + right) // 2
+            self.text_center(canvas, self.fonts.medium, centre, top_baseline, WHITE, top)
+            self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+            self.text_center(
+                canvas, self.fonts.small, centre, bottom_baseline, bottom_color, bottom
+            )
+            return
+
+        # No artwork: the matchup itself becomes the top line, and the day
+        # joins the bottom line when the two fit side by side.
+        self._draw_matchup(canvas, game, top_baseline + 1)
+        self.hline(canvas, 0, self.width - 1, rule_y, DIM)
+        combined = f"{top} {bottom}"
+        fits = text_width(self.fonts.small, combined) <= self.width - 4
+        self.text_center(
+            canvas,
+            self.fonts.small,
+            self.width // 2,
+            bottom_baseline,
+            bottom_color,
+            combined if fits else bottom,
+        )
+
+    def _draw_matchup(self, canvas: Any, game: Game, y: int) -> None:
+        """``NSH @ TBL`` in the large face, each abbreviation in its colour."""
+        font = self.fonts.large
+        parts = (
+            (game.away.abbrev, team_color(game.away.abbrev)),
+            (" @ ", SUBDUED),
+            (game.home.abbrev, team_color(game.home.abbrev)),
+        )
+        x = self.width // 2 - sum(text_width(font, t) for t, _ in parts) // 2
+        for text, color in parts:
+            x += self.text(canvas, font, x, y, color, text)
+
     def draw_clock(self, canvas: Any, now: datetime) -> None:
         """Idle scene: the time, for when there is no hockey to show."""
         canvas.Clear()

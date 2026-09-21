@@ -56,6 +56,13 @@ class NHLClient:
         games.sort(key=Game.sort_key)
         return games
 
+    def schedule(self, team: str) -> list[Game]:
+        """Every game on ``team``'s season schedule, in start order."""
+        payload = self._get(f"/club-schedule-season/{team.strip().upper()}/now")
+        games = [Game.from_api(raw) for raw in payload.get("games", [])]
+        games.sort(key=lambda g: g.start_utc)
+        return games
+
     def situation(self, game_id: int) -> Situation | None:
         """Special-teams state for one live game; None at even strength."""
         payload = self._get(f"/gamecenter/{game_id}/landing")

@@ -6,6 +6,8 @@ import dataclasses
 import logging
 import signal
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import FrameType
 from zoneinfo import ZoneInfo
@@ -23,6 +25,20 @@ log = logging.getLogger(__name__)
 #: How long stale data stays on the board before we admit we are offline.
 STALE_AFTER_SECONDS = 15 * 60
 FRAME_INTERVAL = 0.5
+#: The favourite's season schedule changes rarely; this is plenty.
+SCHEDULE_TTL_SECONDS = 60 * 60
+
+
+@dataclass(frozen=True, slots=True)
+class Scene:
+    """What the board should show right now.
+
+    ``kind`` is one of ``game`` (live or final scoreboard), ``countdown``,
+    ``preview``, ``clock``, ``no_games``, ``connecting``, ``no_data``.
+    """
+
+    kind: str
+    game: Game | None = None
 
 
 class ScoreboardApp:
@@ -31,8 +47,12 @@ class ScoreboardApp:
         settings: Settings,
         client: NHLClient | None = None,
         backend: Backend | None = None,
+        clock: Callable[[], datetime] | None = None,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         self.settings = settings
+        self.clock = clock or (lambda: datetime.now(UTC))
+        self.monotonic = monotonic or time.monotonic
         self.tz = ZoneInfo(settings.scoreboard.timezone)
         self.client = client or NHLClient()
         self.backend = backend or load_backend()
@@ -58,6 +78,9 @@ class ScoreboardApp:
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
+        #: game id -> monotonic time we first saw it final, for final_hold_minutes.
+        self.final_seen: dict[int, float] = {}
+        self._schedule: tuple[float, list[Game]] | None = None
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -78,7 +101,7 @@ class ScoreboardApp:
         next_poll = 0.0
         next_rotate = 0.0
         while self._running:
-            now = time.monotonic()
+            now = self.monotonic()
             if now >= next_poll:
                 self.refresh()
                 next_poll = now + self.poll_interval()
@@ -106,10 +129,79 @@ class ScoreboardApp:
             log.warning("Score refresh failed: %s", exc)
             return
         self.games = self.order(games)
-        self.last_success = time.monotonic()
+        self.last_success = self.monotonic()
+        for game in self.games:
+            if game.is_final:
+                self.final_seen.setdefault(game.id, self.last_success)
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    # -- favourite mode --------------------------------------------------
+
+    def favourite_game_today(self) -> Game | None:
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        return next((g for g in self.games if g.involves(favourite)), None)
+
+    def next_favourite_game(self) -> Game | None:
+        """The favourite's next game from the season schedule, cached an hour.
+
+        Today's game is excluded once it is final so the board moves on to
+        the one after it.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        now_mono = self.monotonic()
+        if self._schedule is None or now_mono - self._schedule[0] > SCHEDULE_TTL_SECONDS:
+            try:
+                self._schedule = (now_mono, self.client.schedule(favourite))
+            except NHLApiError as exc:
+                log.warning("Schedule fetch failed: %s", exc)
+                if self._schedule is None:
+                    return None
+        now = self.clock()
+        finished = {g.id for g in self.games if g.is_final}
+        for game in self._schedule[1]:
+            if game.id in finished or game.is_final:
+                continue
+            if game.is_live or game.start_utc > now:
+                return game
+        return None
+
+    def select_scene(self) -> Scene:
+        """Decide what to show; the draw step only renders the answer."""
+        if self.last_success is None:
+            return Scene("connecting")
+        if self.is_stale():
+            return Scene("no_data")
+        if self.settings.scoreboard.rotation == "favourite":
+            scene = self._favourite_scene()
+            if scene is not None:
+                return scene
+        if self.games:
+            return Scene("game", self.games[self.index])
+        return Scene("clock" if self.settings.scoreboard.show_clock_when_idle else "no_games")
+
+    def _favourite_scene(self) -> Scene | None:
+        cfg = self.settings.scoreboard
+        today = self.favourite_game_today()
+        if today is not None:
+            if today.is_live:
+                return Scene("game", today)
+            if today.is_final:
+                seen = self.final_seen.get(today.id)
+                held = seen is not None and self.monotonic() - seen < cfg.final_hold_minutes * 60
+                if held:
+                    return Scene("game", today)
+        upcoming = today if today is not None and today.is_pregame else self.next_favourite_game()
+        if upcoming is None:
+            return None
+        if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
+            return Scene("countdown", upcoming)
+        return Scene("preview", upcoming)
 
     def situation_targets(self) -> list[Game]:
         """Live games worth a second request: the favourite's and the on-screen one.
@@ -121,14 +213,14 @@ class ScoreboardApp:
         favourite = self.settings.scoreboard.favourite_team
         if favourite:
             targets += [g for g in self.games if g.is_live and g.involves(favourite)]
-        if self.games:
+        if self.settings.scoreboard.rotation == "all" and self.games:
             current = self.games[self.index]
             if current.is_live and current not in targets:
                 targets.append(current)
         return targets
 
     def refresh_situations(self) -> None:
-        now = time.monotonic()
+        now = self.monotonic()
         interval = self.settings.scoreboard.live_poll_seconds
         wanted = {g.id: g for g in self.situation_targets()}
         for game_id in list(self.situations):
@@ -184,17 +276,23 @@ class ScoreboardApp:
     def is_stale(self) -> bool:
         if self.last_success is None:
             return True
-        return (time.monotonic() - self.last_success) > STALE_AFTER_SECONDS
+        return (self.monotonic() - self.last_success) > STALE_AFTER_SECONDS
 
     def draw(self) -> None:
-        if self.games and not self.is_stale():
-            self.renderer.draw_game(self.canvas, self.with_situation(self.games[self.index]))
-        elif self.is_stale() and self.last_success is not None:
-            self.renderer.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
-        elif self.last_success is None:
-            self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
-        elif self.settings.scoreboard.show_clock_when_idle:
-            self.renderer.draw_clock(self.canvas, datetime.now(UTC))
+        scene = self.select_scene()
+        r = self.renderer
+        if scene.kind == "game":
+            r.draw_game(self.canvas, self.with_situation(scene.game))
+        elif scene.kind == "countdown":
+            r.draw_countdown(self.canvas, scene.game, self.clock())
+        elif scene.kind == "preview":
+            r.draw_preview(self.canvas, scene.game, self.clock())
+        elif scene.kind == "no_data":
+            r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
+        elif scene.kind == "connecting":
+            r.draw_message(self.canvas, "NHL", "CONNECTING")
+        elif scene.kind == "clock":
+            r.draw_clock(self.canvas, self.clock())
         else:
-            self.renderer.draw_message(self.canvas, "NO GAMES")
+            r.draw_message(self.canvas, "NO GAMES")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)

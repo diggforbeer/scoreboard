@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -445,3 +445,107 @@ def test_even_strength_situation_draws_nothing_special(games, synthetic_logos):
     make_renderer(logos=synthetic_logos).draw_game(c, game)
     assert_logo_layout(c, game)  # includes: the rule is present
     assert not c.lit(MID_LEFT + 3, INDICATOR_TOP, MID_RIGHT - 4, INDICATOR_BOTTOM)
+
+
+# --------------------------------------------------------------------------
+# preview and countdown (favourite mode)
+# --------------------------------------------------------------------------
+
+PUCK_DROP = datetime(2026, 9, 23, 0, 0, tzinfo=UTC)  # 8:00 PM Toronto
+UPCOMING = Game.from_api(
+    {
+        "id": 77,
+        "gameState": "FUT",
+        "startTimeUTC": "2026-09-23T00:00:00Z",
+        "awayTeam": {"abbrev": "TOR"},
+        "homeTeam": {"abbrev": "MTL"},
+    }
+)
+
+
+@pytest.mark.parametrize(
+    ("name", "method", "now", "top", "bottom", "bottom_color"),
+    [
+        (
+            "preview_tonight",
+            "draw_preview",
+            PUCK_DROP - timedelta(hours=9),
+            "TONIGHT",
+            "8:00P",
+            WHITE,
+        ),
+        (
+            "preview_tomorrow",
+            "draw_preview",
+            PUCK_DROP - timedelta(days=1, hours=4),
+            "TOMORROW",
+            "8:00P",
+            WHITE,
+        ),
+        (
+            "preview_date",
+            "draw_preview",
+            PUCK_DROP - timedelta(days=5),
+            "TUE SEP 22",
+            "8:00P",
+            WHITE,
+        ),
+        (
+            "countdown_hours",
+            "draw_countdown",
+            PUCK_DROP - timedelta(hours=1, minutes=29),
+            "8:00P",
+            "IN 1H 29M",
+            ACCENT,
+        ),
+        (
+            "countdown_minutes",
+            "draw_countdown",
+            PUCK_DROP - timedelta(minutes=12, seconds=34),
+            "8:00P",
+            "IN 12:34",
+            ACCENT,
+        ),
+    ],
+)
+def test_upcoming_logo_layout(
+    synthetic_logos, name, method, now, top, bottom, bottom_color, update_snapshots
+):
+    c = canvas()
+    getattr(make_renderer(logos=synthetic_logos), method)(c, UPCOMING, now)
+    art = show(f"logos, {name}: {top} / {bottom}", c)
+
+    assert not c.out_of_bounds
+    for x0, side in ((0, UPCOMING.away), (MID_RIGHT, UPCOMING.home)):
+        assert team_color(side.abbrev) in c.colors(x0, 0, x0 + LOGO - 1, H - 1), (
+            f"{side.abbrev} logo"
+        )
+    top_box = c.bbox(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1)
+    assert top_box and abs(top_box.center_x - (W - 1) / 2) <= 1, "top line not centred"
+    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 2) == {WHITE}
+    assert c.lit(MID_LEFT + 3, RULE_Y, MID_RIGHT - 4, RULE_Y), "rule missing"
+    assert_centered(c, STATUS_TOP, H - 1, "bottom line")
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {bottom_color}
+    check_snapshot(f"logo_{name}", art, update_snapshots)
+
+
+@pytest.mark.parametrize(
+    ("name", "method", "now", "bottom_color"),
+    [
+        ("preview_tonight", "draw_preview", PUCK_DROP - timedelta(hours=9), WHITE),
+        ("countdown_hours", "draw_countdown", PUCK_DROP - timedelta(hours=1, minutes=29), ACCENT),
+    ],
+)
+def test_upcoming_text_layout(name, method, now, bottom_color, update_snapshots):
+    c = canvas()
+    getattr(make_renderer(), method)(c, UPCOMING, now)
+    art = show(f"text, {name}", c)
+
+    assert not c.out_of_bounds
+    matchup = c.colors(0, 0, W - 1, RULE_Y - 1)
+    assert {team_color("TOR"), team_color("MTL"), SUBDUED} <= matchup, "matchup colours"
+    assert_centered(c, 0, RULE_Y - 1, "matchup")
+    assert c.row_is_solid(RULE_Y)
+    assert_centered(c, STATUS_TOP, H - 1, "bottom line")
+    assert status_color(c) == {bottom_color}
+    check_snapshot(f"text_{name}", art, update_snapshots)

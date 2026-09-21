@@ -32,6 +32,17 @@ poll_seconds = 60
 # Faster polling while a game is actually in progress.
 live_poll_seconds = 15
 
+# What the board follows.
+#   "favourite"  Your team's day: a preview of the next game, a countdown as
+#                puck drop approaches, the live score, the final for a while,
+#                then the preview of the game after that.
+#   "all"        Rotate through every game in the league today.
+rotation = "favourite"
+# Within this many hours of puck drop the preview becomes a countdown.
+countdown_hours = 2
+# How long a finished game stays on the board before the next preview.
+final_hold_minutes = 30
+
 # Show a clock when there is no hockey on. Set to false to show "NO GAMES".
 show_clock_when_idle = true
 

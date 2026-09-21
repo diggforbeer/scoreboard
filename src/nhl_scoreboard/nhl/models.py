@@ -178,6 +178,33 @@ class Game:
     def start_local(self, tz: ZoneInfo) -> datetime:
         return self.start_utc.astimezone(tz)
 
+    def start_label(self, tz: ZoneInfo) -> str:
+        """``7:00P`` -- the local start time, sized for the panel."""
+        return self.start_local(tz).strftime("%-I:%M%p").replace("AM", "A").replace("PM", "P")
+
+    def day_label(self, now: datetime, tz: ZoneInfo) -> str:
+        """``TONIGHT``, ``TOMORROW`` or ``SAT OCT 4``, relative to ``now``."""
+        start = self.start_local(tz)
+        today = now.astimezone(tz).date()
+        days = (start.date() - today).days
+        if days == 0:
+            return "TONIGHT" if start.hour >= 17 else "TODAY"
+        if days == 1:
+            return "TOMORROW"
+        return start.strftime("%a %b %-d").upper()
+
+    def countdown_label(self, now: datetime) -> str:
+        """``IN 1H 23M`` beyond an hour, ``IN 23:45`` (mm:ss) inside it."""
+        remaining = max(0, int((self.start_utc - now).total_seconds()))
+        hours, rest = divmod(remaining, 3600)
+        minutes, seconds = divmod(rest, 60)
+        if hours:
+            return f"IN {hours}H {minutes:02d}M"
+        return f"IN {minutes:02d}:{seconds:02d}"
+
+    def seconds_until_start(self, now: datetime) -> float:
+        return (self.start_utc - now).total_seconds()
+
     def sort_key(self) -> tuple[int, datetime]:
         """Live games first, then upcoming, then finals -- each by start time."""
         rank = 0 if self.is_live else (1 if self.is_pregame else 2)

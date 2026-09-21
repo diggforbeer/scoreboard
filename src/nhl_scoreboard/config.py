@@ -75,10 +75,24 @@ class ScoreboardConfig:
     prefer_favourite: bool = True
     show_logos: bool = True
     logo_variant: str = "dark"
+    #: "favourite": follow the favourite's game -- countdown, live, final,
+    #: then a preview of the next one. "all": rotate every game today.
+    rotation: str = "favourite"
+    #: Inside this many hours of puck drop the preview becomes a countdown.
+    countdown_hours: float = 2.0
+    #: How long a finished favourite game stays up before the next preview.
+    final_hold_minutes: float = 30.0
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
         self.logo_variant = self.logo_variant.strip().lower() or "dark"
+        self.rotation = self.rotation.strip().lower() or "favourite"
+        if self.rotation not in ("favourite", "all"):
+            log.warning("Unknown rotation %r; using 'all'", self.rotation)
+            self.rotation = "all"
+        if self.rotation == "favourite" and not self.favourite_team:
+            log.warning("rotation = 'favourite' needs a favourite_team; using 'all'")
+            self.rotation = "all"
 
 
 @dataclass(slots=True)

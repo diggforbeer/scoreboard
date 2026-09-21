@@ -208,8 +208,9 @@ def in_play(games: list[Game]) -> list[Game]:
 
 
 def test_situations_fetched_only_for_favourite_and_on_screen(fake_backend, games):
+    """In 'all' rotation the on-screen game is a second target; nothing else is."""
     games = in_play(games)  # three live games: SEA@CGY, CAR@FLA, UTA@COL
-    app = build_app(fake_backend, games, favourite_team="CGY")
+    app = build_app(fake_backend, games, favourite_team="CGY", rotation="all")
     app.refresh()
     favourite_game = next(g for g in app.games if g.involves("CGY"))
     assert app.games[app.index] == favourite_game, "favourite is pinned first: targets coincide"
