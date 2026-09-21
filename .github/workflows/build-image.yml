@@ -52,15 +52,44 @@ jobs:
 
       - name: Install rpi-image-gen dependencies
         working-directory: rpi-image-gen
-        run: sudo ./install_deps.sh
+        run: |
+          set -euxo pipefail
+          # install_deps.sh shells out to `apt install` without refreshing the
+          # package lists first, which fails on a runner with stale indexes.
+          sudo apt-get update -qq
+          sudo ./install_deps.sh
+
+      - name: Verify build host
+        working-directory: rpi-image-gen
+        run: |
+          set -x
+          uname -m
+          for tool in mmdebstrap podman genimage bdebstrap; do
+            command -v "$tool" || echo "MISSING: $tool"
+          done
+          python3 -c "import yaml, debian; print('python deps ok')"
 
       - name: Fetch vendored HUB75 driver
         working-directory: scoreboard
         run: ./scripts/fetch-vendor.sh
 
+      - name: Lint the scoreboard layer
+        working-directory: rpi-image-gen
+        run: |
+          ./rpi-image-gen metadata --lint \
+            "${GITHUB_WORKSPACE}/scoreboard/image/layer/nhl-scoreboard.yaml"
+
+      - name: Show discovered layers
+        working-directory: rpi-image-gen
+        continue-on-error: true
+        run: |
+          ./rpi-image-gen layer --list -S "${GITHUB_WORKSPACE}/scoreboard/image" \
+            | grep -i scoreboard || echo "scoreboard layer NOT discovered"
+
       - name: Build image
         working-directory: rpi-image-gen
         run: |
+          set -x
           ./rpi-image-gen build \
             -S "${GITHUB_WORKSPACE}/scoreboard/image" \
             -c scoreboard.yaml

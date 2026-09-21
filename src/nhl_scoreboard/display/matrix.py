@@ -46,7 +46,7 @@ def load_backend(prefer: str | None = None) -> Backend:
     for module_name in order:
         try:
             module = __import__(module_name, fromlist=["RGBMatrix", "RGBMatrixOptions", "graphics"])
-        except ImportError as exc:  # noqa: PERF203 - we want the per-backend reason
+        except ImportError as exc:
             errors.append(f"{module_name}: {exc}")
             continue
         log.info("Using LED matrix backend: %s", module_name)

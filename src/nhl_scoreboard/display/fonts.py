@@ -44,7 +44,7 @@ class FontSet:
         self.large = _load(graphics, "7x13B.bdf")
 
 
-def _load(graphics: object, name: str):  # noqa: ANN202 - backend-specific type
+def _load(graphics: object, name: str):
     font = graphics.Font()  # type: ignore[attr-defined]
     path = font_path(name)
     font.LoadFont(str(path))
