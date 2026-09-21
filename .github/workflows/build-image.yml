@@ -16,7 +16,9 @@ on:
 
 concurrency:
   group: image-${{ github.ref }}
-  cancel-in-progress: true
+  # Queue rather than cancel: an image build is ~12 minutes and a cancelled
+  # one discards a finished artifact. Runs on the same ref go one at a time.
+  cancel-in-progress: false
 
 env:
   # Pinned so image builds stay reproducible; bump deliberately.
