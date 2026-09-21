@@ -44,6 +44,7 @@ Early development. Working today:
 - [x] CI pipelines — lint/test, plus an image build on native arm64 runners
 - [x] Wi-Fi and settings applied from the boot partition on every boot
 - [x] Team logos, rasterised at build time from the NHL's own artwork
+- [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [ ] Verified on real hardware
 
 ## Development
@@ -112,6 +113,12 @@ With logos (the default):
 │ ▀▀▀▀▀▀        2ND 12:34       ▀▀▀▀▀▀ │
 └──────────────────────────────────────┘
 ```
+
+During a power play or with a goalie pulled, the rule under the scores gives
+way to an amber indicator on the side of the team it applies to — `PP 1:23`,
+`5v3 0:41`, `EN`. That state comes from a second, per-game API call, which is
+made only for your favourite team's game and whichever game is on screen, so
+other games in the rotation show even strength.
 
 Text fallback, used when `show_logos = false` or a team's artwork is missing:
 

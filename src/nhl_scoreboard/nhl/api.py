@@ -15,7 +15,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import Game
+from .models import Game, Situation
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,11 @@ class NHLClient:
         games = [Game.from_api(raw) for raw in payload.get("games", [])]
         games.sort(key=Game.sort_key)
         return games
+
+    def situation(self, game_id: int) -> Situation | None:
+        """Special-teams state for one live game; None at even strength."""
+        payload = self._get(f"/gamecenter/{game_id}/landing")
+        return Situation.from_api(payload.get("situation"))
 
     def standings(self, date: str = "now") -> list[dict[str, Any]]:
         return list(self._get(f"/standings/{date}").get("standings", []))

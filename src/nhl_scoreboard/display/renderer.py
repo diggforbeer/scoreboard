@@ -111,7 +111,8 @@ class Renderer:
         self._draw_score(canvas, game.home.abbrev, game.home.score, right - quarter, score_baseline)
 
         self.vline(canvas, centre - 1, 3, score_baseline, DIM)
-        self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y - 1):
+            self.hline(canvas, left + 3, right - 4, rule_y, DIM)
         self.text_center(
             canvas,
             self.fonts.small,
@@ -120,6 +121,27 @@ class Renderer:
             self._status_color(game),
             game.status_label(self.tz),
         )
+
+    def _draw_situation(self, canvas: Any, game: Game, x0: int, x1: int, baseline: int) -> bool:
+        """Power play / empty net indicator in the band above the status line.
+
+        Drawn in the tiny font, in amber, aligned to the side of the team it
+        applies to. Returns True when something was drawn, so the caller can
+        leave out the rule that normally occupies that band.
+        """
+        situation = game.situation
+        if situation is None:
+            return False
+        side = situation.indicator_side()
+        label = situation.label()
+        if side is None or not label:
+            return False
+        font = self.fonts.tiny
+        if side == "away":
+            self.text(canvas, font, x0, baseline, ACCENT, label)
+        else:
+            self.text_right(canvas, font, x1 + 1, baseline, ACCENT, label)
+        return True
 
     def _draw_score(self, canvas: Any, abbrev: str, score: int, cx: int, y: int) -> None:
         text = str(score)
@@ -141,7 +163,8 @@ class Renderer:
         self._draw_side(canvas, game.home.abbrev, game.home.score, half, half, score_baseline)
 
         self.vline(canvas, half - 1, 2, rule_y - 3, DIM)
-        self.hline(canvas, 0, self.width - 1, rule_y, DIM)
+        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y - 1):
+            self.hline(canvas, 0, self.width - 1, rule_y, DIM)
 
         self.text_center(
             canvas,

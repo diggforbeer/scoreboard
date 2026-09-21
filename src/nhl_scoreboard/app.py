@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import signal
 import time
@@ -15,7 +16,7 @@ from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
 from .nhl.api import NHLApiError, NHLClient
-from .nhl.models import Game
+from .nhl.models import Game, Situation
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +55,9 @@ class ScoreboardApp:
         self.games: list[Game] = []
         self.index = 0
         self.last_success: float | None = None
+        #: game id -> (fetched at, situation). Only kept for the games we
+        #: actually show the indicator on: the favourite's and the on-screen one.
+        self.situations: dict[int, tuple[float, Situation | None]] = {}
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -81,6 +85,7 @@ class ScoreboardApp:
             if now >= next_rotate:
                 self.advance()
                 next_rotate = now + self.settings.scoreboard.rotate_seconds
+            self.refresh_situations()
             self.draw()
             time.sleep(FRAME_INTERVAL)
         self.shutdown()
@@ -105,6 +110,49 @@ class ScoreboardApp:
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    def situation_targets(self) -> list[Game]:
+        """Live games worth a second request: the favourite's and the on-screen one.
+
+        Everything else shows even strength; that is the trade for not
+        hammering the landing endpoint once per live game every poll.
+        """
+        targets: list[Game] = []
+        favourite = self.settings.scoreboard.favourite_team
+        if favourite:
+            targets += [g for g in self.games if g.is_live and g.involves(favourite)]
+        if self.games:
+            current = self.games[self.index]
+            if current.is_live and current not in targets:
+                targets.append(current)
+        return targets
+
+    def refresh_situations(self) -> None:
+        now = time.monotonic()
+        interval = self.settings.scoreboard.live_poll_seconds
+        wanted = {g.id: g for g in self.situation_targets()}
+        for game_id in list(self.situations):
+            if game_id not in wanted:
+                del self.situations[game_id]
+        for game_id, game in wanted.items():
+            fetched_at = self.situations.get(game_id, (None, None))[0]
+            if fetched_at is not None and now - fetched_at < interval:
+                continue
+            if game.in_intermission:
+                self.situations[game_id] = (now, None)
+                continue
+            try:
+                situation = self.client.situation(game_id)
+            except NHLApiError as exc:
+                log.debug("Situation fetch for %s failed: %s", game_id, exc)
+                situation = self.situations.get(game_id, (None, None))[1]
+            self.situations[game_id] = (now, situation)
+
+    def with_situation(self, game: Game) -> Game:
+        entry = self.situations.get(game.id)
+        if entry is None or entry[1] is None:
+            return game
+        return dataclasses.replace(game, situation=entry[1])
 
     def order(self, games: list[Game]) -> list[Game]:
         """Sort live-first, then optionally pin the favourite team to the front.
@@ -140,7 +188,7 @@ class ScoreboardApp:
 
     def draw(self) -> None:
         if self.games and not self.is_stale():
-            self.renderer.draw_game(self.canvas, self.games[self.index])
+            self.renderer.draw_game(self.canvas, self.with_situation(self.games[self.index]))
         elif self.is_stale() and self.last_success is not None:
             self.renderer.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif self.last_success is None:

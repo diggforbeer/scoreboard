@@ -33,6 +33,68 @@ class TeamSide:
 
 
 @dataclass(frozen=True, slots=True)
+class Situation:
+    """Special-teams state from ``gamecenter/{id}/landing``.
+
+    Present in that payload only while something is on: a power play, an
+    empty net, a penalty shot. ``descriptions`` carry the NHL's codes per
+    side -- ``PP``, ``EN``, ``PS`` -- and ``strength`` is skaters on the ice.
+    """
+
+    away_strength: int
+    home_strength: int
+    away_descriptions: tuple[str, ...]
+    home_descriptions: tuple[str, ...]
+    time_remaining: str
+    seconds_remaining: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any] | None) -> Situation | None:
+        if not raw:
+            return None
+        away = raw.get("awayTeam") or {}
+        home = raw.get("homeTeam") or {}
+        return cls(
+            away_strength=int(away.get("strength") or 0),
+            home_strength=int(home.get("strength") or 0),
+            away_descriptions=_codes(away.get("situationDescriptions")),
+            home_descriptions=_codes(home.get("situationDescriptions")),
+            time_remaining=str(raw.get("timeRemaining") or ""),
+            seconds_remaining=int(raw.get("secondsRemaining") or 0),
+        )
+
+    def power_play_side(self) -> str | None:
+        """``"away"`` or ``"home"`` for the team with the advantage, else None."""
+        if "PP" in self.away_descriptions:
+            return "away"
+        if "PP" in self.home_descriptions:
+            return "home"
+        return None
+
+    def empty_net_side(self) -> str | None:
+        if "EN" in self.away_descriptions:
+            return "away"
+        if "EN" in self.home_descriptions:
+            return "home"
+        return None
+
+    def indicator_side(self) -> str | None:
+        return self.power_play_side() or self.empty_net_side()
+
+    def label(self) -> str:
+        """Short indicator text: ``PP 1:23``, ``5v3 0:41``, ``EN``."""
+        side = self.power_play_side()
+        if side:
+            skaters = (self.away_strength, self.home_strength)
+            mine, theirs = skaters if side == "away" else skaters[::-1]
+            kind = "PP" if mine - theirs < 2 else f"{mine}v{theirs}"
+            return f"{kind} {self.time_remaining}".strip()
+        if self.empty_net_side():
+            return "EN"
+        return ""
+
+
+@dataclass(frozen=True, slots=True)
 class Game:
     id: int
     state: str
@@ -46,6 +108,8 @@ class Game:
     clock_time: str
     clock_running: bool
     in_intermission: bool
+    #: Filled in separately from the landing endpoint; None at even strength.
+    situation: Situation | None = None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> Game:
@@ -79,6 +143,10 @@ class Game:
     @property
     def is_pregame(self) -> bool:
         return self.state in PREGAME_STATES
+
+    @property
+    def special_teams(self) -> bool:
+        return self.situation is not None and self.situation.indicator_side() is not None
 
     def involves(self, abbrev: str) -> bool:
         target = abbrev.strip().upper()
@@ -114,6 +182,10 @@ class Game:
         """Live games first, then upcoming, then finals -- each by start time."""
         rank = 0 if self.is_live else (1 if self.is_pregame else 2)
         return (rank, self.start_utc)
+
+
+def _codes(value: Any) -> tuple[str, ...]:
+    return tuple(str(code).upper() for code in (value or ()))
 
 
 def _default_str(value: Any) -> str:

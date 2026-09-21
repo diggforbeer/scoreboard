@@ -15,7 +15,7 @@ from nhl_scoreboard.app import ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game
+from nhl_scoreboard.nhl.models import Game, Situation
 
 
 class FakeCanvas:
@@ -80,12 +80,20 @@ class FakeClient:
         self.fail = fail
         self.calls = 0
         self.closed = False
+        self.situation_calls: list[int] = []
+        self.situations: dict[int, Situation | None] = {}
 
     def scores(self, date: str = "now") -> list[Game]:
         self.calls += 1
         if self.fail:
             raise NHLApiError("boom")
         return list(self._games)
+
+    def situation(self, game_id: int) -> Situation | None:
+        self.situation_calls.append(game_id)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.situations.get(game_id)
 
     def close(self) -> None:
         self.closed = True
@@ -177,3 +185,95 @@ def test_shutdown_closes_the_client(fake_backend, games):
     app = build_app(fake_backend, games)
     app.shutdown()
     assert app.client.closed
+
+
+# -- special teams: only the favourite's game and the on-screen game ----------
+
+
+def home_pp() -> Situation:
+    return Situation.from_api(
+        {
+            "awayTeam": {"strength": 4},
+            "homeTeam": {"strength": 5, "situationDescriptions": ["PP"]},
+            "timeRemaining": "1:23",
+        }
+    )
+
+
+def in_play(games: list[Game]) -> list[Game]:
+    """The fixture's intermission games, made live-in-play so they are fetchable."""
+    import dataclasses
+
+    return [dataclasses.replace(g, in_intermission=False) if g.is_live else g for g in games]
+
+
+def test_situations_fetched_only_for_favourite_and_on_screen(fake_backend, games):
+    games = in_play(games)  # three live games: SEA@CGY, CAR@FLA, UTA@COL
+    app = build_app(fake_backend, games, favourite_team="CGY")
+    app.refresh()
+    favourite_game = next(g for g in app.games if g.involves("CGY"))
+    assert app.games[app.index] == favourite_game, "favourite is pinned first: targets coincide"
+
+    app.refresh_situations()
+    assert app.client.situation_calls == [favourite_game.id]
+
+    # Rotate: the newly on-screen live game joins the favourite as a target.
+    app.advance()
+    app.refresh_situations()
+    now_showing = app.games[app.index]
+    assert now_showing.is_live and now_showing.id != favourite_game.id
+    assert set(app.client.situation_calls) == {favourite_game.id, now_showing.id}
+
+    # The third live game is never on screen and never the favourite: never fetched.
+    live_ids = {g.id for g in app.games if g.is_live}
+    assert len(live_ids) == 3
+    assert live_ids - {favourite_game.id, now_showing.id}, "a live game must remain unfetched"
+    assert not (live_ids - {favourite_game.id, now_showing.id}) & set(app.client.situation_calls)
+
+
+def test_situation_not_refetched_within_live_interval(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=15)
+    app.refresh()
+    app.refresh_situations()
+    app.refresh_situations()
+    assert len(app.client.situation_calls) == 1
+
+
+def test_intermission_games_are_not_fetched(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="CAR")  # CAR @ FLA is in intermission
+    app.refresh()
+    app.refresh_situations()
+    assert app.client.situation_calls == []
+    car = next(g for g in app.games if g.involves("CAR"))
+    assert app.with_situation(car).situation is None
+
+
+def test_with_situation_attaches_and_stale_entries_are_dropped(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="CGY")
+    app.refresh()
+    game = next(g for g in app.games if g.involves("CGY"))
+    app.client.situations[game.id] = home_pp()
+    app.refresh_situations()
+
+    shown = app.with_situation(game)
+    assert shown.situation is not None
+    assert shown.situation.label() == "PP 1:23"
+    assert shown.id == game.id
+
+    # Change favourite and move on: the CGY entry is no longer a target.
+    app.settings.scoreboard.favourite_team = "NYI"  # final, not live
+    while app.games[app.index].involves("CGY"):
+        app.advance()
+    app.refresh_situations()
+    assert game.id not in app.situations
+
+
+def test_situation_fetch_failure_keeps_last_value(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=0)
+    app.refresh()
+    game = next(g for g in app.games if g.involves("CGY"))
+    app.client.situations[game.id] = home_pp()
+    app.refresh_situations()
+    app.client.fail = True
+    app.refresh_situations()
+    assert app.with_situation(game).situation is not None

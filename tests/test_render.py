@@ -14,6 +14,7 @@ Run with ``pytest -s tests/test_render.py`` to see every frame.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ from nhl_scoreboard.display.fonts import FontSet
 from nhl_scoreboard.display.logos import LogoLibrary
 from nhl_scoreboard.display.renderer import (
     ACCENT,
+    DIM,
     FINAL,
     INTERMISSION,
     LIVE,
@@ -35,7 +37,7 @@ from nhl_scoreboard.display.renderer import (
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color
-from nhl_scoreboard.nhl.models import Game
+from nhl_scoreboard.nhl.models import Game, Situation
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -51,6 +53,7 @@ UNDERLINE_Y = SCORE_BASELINE + 2
 STATUS_TOP = RULE_Y + 1
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
+INDICATOR_TOP, INDICATOR_BOTTOM = SCORE_BASELINE + 1, RULE_Y - 1  # the band the rule normally uses
 LOGO = 32
 MID_LEFT, MID_RIGHT = LOGO, W - LOGO  # the column between the logos
 AWAY_CX, HOME_CX = MID_LEFT + 16, MID_RIGHT - 16
@@ -358,3 +361,87 @@ def test_message_scene(name, title, subtitle, update_snapshots):
     else:
         assert_centered(c, 0, H - 1, "title")
     check_snapshot(name, art, update_snapshots)
+
+
+# --------------------------------------------------------------------------
+# special teams
+# --------------------------------------------------------------------------
+
+
+def with_situation(game: Game, away=(), home=(), away_strength=5, home_strength=5, time="1:23"):
+    return dataclasses.replace(
+        game,
+        situation=Situation.from_api(
+            {
+                "awayTeam": {"strength": away_strength, "situationDescriptions": list(away)},
+                "homeTeam": {"strength": home_strength, "situationDescriptions": list(home)},
+                "timeRemaining": time,
+                "secondsRemaining": 83,
+            }
+        ),
+    )
+
+
+def assert_indicator(c: AsciiCanvas, side: str, x0: int, x1: int, allow=frozenset()) -> None:
+    """Amber text in the indicator band, hugging the given side; no rule.
+
+    ``allow`` lists other colours that may legitimately share the band -- the
+    text layout's vertical divider runs through it.
+    """
+    band = {xy: rgb for xy, rgb in c.lit(x0, INDICATOR_TOP, x1, INDICATOR_BOTTOM).items()}
+    amber = {xy for xy, rgb in band.items() if rgb == ACCENT}
+    assert amber, "indicator not drawn"
+    colours = set(band.values())
+    assert colours <= {ACCENT, *allow}, f"unexpected colours in band: {colours}"
+    xs = [x for x, _ in amber]
+    # Glyphs in the 4x6 face can have a blank edge column, hence the 1px slack.
+    if side == "away":
+        assert x0 <= min(xs) <= x0 + 1, f"away indicator should start at x={x0}, got {min(xs)}"
+    else:
+        assert x1 - 1 <= max(xs) <= x1, f"home indicator should end at x={x1}, got {max(xs)}"
+    assert not c.lit(x0, RULE_Y, x1, RULE_Y), "rule should give way to the indicator"
+
+
+@pytest.mark.parametrize(
+    ("name", "kwargs", "side"),
+    [
+        ("pp_home", {"home": ["PP"], "away_strength": 4}, "home"),
+        ("pp_away", {"away": ["PP"], "home_strength": 4}, "away"),
+        ("pp_5v3", {"home": ["PP"], "away_strength": 3}, "home"),
+        ("empty_net", {"away": ["EN"], "away_strength": 6}, "away"),
+    ],
+)
+def test_logo_layout_special_teams(games, synthetic_logos, name, kwargs, side, update_snapshots):
+    game = with_situation(games["live"], **kwargs)
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_game(c, game)
+    art = show(f"logos, {name}: {game.situation.label()} ({side})", c)
+
+    assert not c.out_of_bounds
+    assert_indicator(c, side, MID_LEFT + 3, MID_RIGHT - 4)
+    # Scores and status are untouched by the indicator.
+    for cx in (AWAY_CX, HOME_CX):
+        assert WHITE in c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {LIVE}
+    check_snapshot(f"logo_{name}", art, update_snapshots)
+
+
+def test_text_layout_special_teams(games, update_snapshots):
+    game = with_situation(games["live"], home=["PP"], away_strength=4)
+    c = canvas()
+    make_renderer().draw_game(c, game)
+    art = show("text, pp_home: PP 1:23", c)
+
+    assert not c.out_of_bounds
+    assert_indicator(c, "home", TEXT_LEFT, W - 4, allow={DIM})
+    assert status_color(c) == {LIVE}
+    check_snapshot("text_pp_home", art, update_snapshots)
+
+
+def test_even_strength_situation_draws_nothing_special(games, synthetic_logos):
+    """4-on-4 arrives as a situation object but is not an advantage."""
+    game = with_situation(games["live"], away_strength=4, home_strength=4)
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_game(c, game)
+    assert_logo_layout(c, game)  # includes: the rule is present
+    assert not c.lit(MID_LEFT + 3, INDICATOR_TOP, MID_RIGHT - 4, INDICATOR_BOTTOM)

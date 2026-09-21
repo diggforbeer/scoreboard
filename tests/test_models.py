@@ -100,3 +100,58 @@ def test_missing_fields_do_not_raise():
     assert game.away.abbrev == "???"
     assert game.away.score == 0
     assert game.state == "FUT"
+
+
+# -- special teams -----------------------------------------------------------
+
+from nhl_scoreboard.nhl.models import Situation  # noqa: E402
+
+
+def situation(away_strength, home_strength, away=(), home=(), time="1:23"):
+    return Situation.from_api(
+        {
+            "awayTeam": {"strength": away_strength, "situationDescriptions": list(away)},
+            "homeTeam": {"strength": home_strength, "situationDescriptions": list(home)},
+            "timeRemaining": time,
+            "secondsRemaining": 83,
+        }
+    )
+
+
+def test_situation_absent_at_even_strength():
+    assert Situation.from_api(None) is None
+    assert Situation.from_api({}) is None
+
+
+def test_power_play_side_and_label():
+    home_pp = situation(4, 5, home=["PP"])
+    assert home_pp.indicator_side() == "home"
+    assert home_pp.label() == "PP 1:23"
+
+    away_pp = situation(5, 4, away=["PP"])
+    assert away_pp.indicator_side() == "away"
+
+
+def test_two_man_advantage_shows_strength():
+    assert situation(3, 5, home=["PP"]).label() == "5v3 1:23"
+
+
+def test_empty_net_without_power_play():
+    en = situation(5, 6, home=["EN"])
+    assert en.power_play_side() is None
+    assert en.indicator_side() == "home"
+    assert en.label() == "EN"
+
+
+def test_four_on_four_is_not_an_indicator():
+    assert situation(4, 4).indicator_side() is None
+    assert situation(4, 4).label() == ""
+
+
+def test_game_special_teams_flag(games):
+    import dataclasses
+
+    live = next(g for g in games if g.is_live)
+    assert not live.special_teams
+    assert dataclasses.replace(live, situation=situation(4, 5, home=["PP"])).special_teams
+    assert not dataclasses.replace(live, situation=situation(4, 4)).special_teams
