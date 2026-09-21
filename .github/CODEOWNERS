@@ -1,0 +1,6 @@
+# Code owners are requested for review on every pull request and, with
+# "require code owner review" on main, must approve before a merge.
+#
+# The last matching pattern wins; a single catch-all keeps this simple.
+
+*   @diggforbeer
