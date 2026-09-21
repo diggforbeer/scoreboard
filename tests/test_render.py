@@ -43,7 +43,7 @@ graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
 W, H = 128, 32
 HALF = W // 2
-TZ = ZoneInfo("America/Toronto")
+TZ = ZoneInfo("America/Chicago")
 SNAPSHOTS = Path(__file__).parent / "snapshots"
 
 # Layout constants the renderer uses; asserting on them keeps the two honest.
@@ -330,7 +330,7 @@ def test_favourite_underline_follows_the_team(games):
 
 def test_clock_scene(update_snapshots):
     c = canvas()
-    # 23:05 UTC on 2026-09-20 is 7:05 PM EDT: exercises both time and date lines.
+    # 23:05 UTC on 2026-09-20 is 6:05 PM CDT: exercises both time and date lines.
     make_renderer().draw_clock(c, datetime(2026, 9, 20, 23, 5, tzinfo=UTC))
     art = show("clock", c)
 
@@ -451,7 +451,7 @@ def test_even_strength_situation_draws_nothing_special(games, synthetic_logos):
 # preview and countdown (favourite mode)
 # --------------------------------------------------------------------------
 
-PUCK_DROP = datetime(2026, 9, 23, 0, 0, tzinfo=UTC)  # 8:00 PM Toronto
+PUCK_DROP = datetime(2026, 9, 23, 0, 0, tzinfo=UTC)  # 7:00 PM Chicago
 UPCOMING = Game.from_api(
     {
         "id": 77,

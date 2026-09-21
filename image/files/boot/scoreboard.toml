@@ -22,7 +22,7 @@ country = "CA"
 favourite_team = "NSH"
 
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-timezone = "America/Toronto"
+timezone = "America/Chicago"
 
 # Seconds each game stays on screen before rotating to the next.
 rotate_seconds = 8

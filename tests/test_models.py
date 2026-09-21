@@ -6,7 +6,7 @@ import pytest
 
 from nhl_scoreboard.nhl.models import Game
 
-TZ = ZoneInfo("America/Toronto")
+TZ = ZoneInfo("America/Chicago")
 
 
 @pytest.fixture
@@ -47,8 +47,8 @@ def test_intermission_beats_period_clock(games):
 
 def test_pregame_shows_local_start_time(games):
     future = next(g for g in games if g.state == "FUT")
-    # 23:00 UTC is 19:00 in Toronto (EDT).
-    assert future.status_label(TZ) == "7:00P"
+    # 23:00 UTC is 18:00 in Chicago (CDT).
+    assert future.status_label(TZ) == "6:00P"
 
 
 def test_sort_puts_live_first_then_upcoming_then_finals(games):

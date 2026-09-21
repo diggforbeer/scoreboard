@@ -133,7 +133,7 @@ asking; it was an explicit decision.
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
   a typo must not stop the board booting.
 - Defaults are the Predators, favourite rotation, `regular` mapping,
-  128×32, Toronto time. Anything can be overridden in the toml.
+  128×32, Central time (America/Chicago). Anything can be overridden in the toml.
 - `rotation = "favourite"` with no `favourite_team` degrades to `all`.
 
 ## Style

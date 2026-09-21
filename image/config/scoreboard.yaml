@@ -38,7 +38,7 @@ locale:
   default: en_CA.UTF-8
   keyboard_keymap: us
   keyboard_layout: English (US)
-  timezone: America/Toronto
+  timezone: America/Chicago
 
 ieee80211:
   regdom: CA

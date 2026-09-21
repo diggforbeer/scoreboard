@@ -21,7 +21,7 @@ from nhl_scoreboard.nhl.models import Game
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
-PUCK_DROP = datetime(2026, 9, 23, 0, 0, tzinfo=UTC)  # 8:00 PM Toronto on the 22nd
+PUCK_DROP = datetime(2026, 9, 23, 0, 0, tzinfo=UTC)  # 7:00 PM Chicago on the 22nd
 NEXT_DROP = datetime(2026, 9, 24, 23, 0, tzinfo=UTC)
 
 
