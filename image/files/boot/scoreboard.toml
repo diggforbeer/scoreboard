@@ -35,6 +35,13 @@ live_poll_seconds = 15
 # Show a clock when there is no hockey on. Set to false to show "NO GAMES".
 show_clock_when_idle = true
 
+# Team logos at each edge of the board. Set to false for the text layout
+# (three-letter abbreviations instead of artwork).
+show_logos = true
+# "dark" artwork is drawn for dark backgrounds and is right for an LED panel;
+# several teams' "light" marks are near-black and disappear.
+logo_variant = "dark"
+
 [panel]
 # Defaults describe two 64x32 panels daisy-chained into one 128x32 board.
 rows = 32

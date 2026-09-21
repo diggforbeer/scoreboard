@@ -71,9 +71,12 @@ class ScoreboardConfig:
     live_poll_seconds: float = 15.0
     show_clock_when_idle: bool = True
     prefer_favourite: bool = True
+    show_logos: bool = True
+    logo_variant: str = "dark"
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
+        self.logo_variant = self.logo_variant.strip().lower() or "dark"
 
 
 @dataclass(slots=True)

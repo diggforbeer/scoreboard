@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..nhl.models import Game
 from .fonts import FontSet, text_width
+from .logos import Logo, LogoLibrary
 from .teams import team_color
 
 WHITE = (255, 255, 255)
@@ -34,6 +35,7 @@ class Renderer:
         height: int,
         tz: ZoneInfo,
         favourite: str = "",
+        logos: LogoLibrary | None = None,
     ) -> None:
         self.g = graphics
         self.fonts = fonts
@@ -41,6 +43,7 @@ class Renderer:
         self.height = height
         self.tz = tz
         self.favourite = favourite.strip().upper()
+        self.logos = logos
         self._colors: dict[tuple[int, int, int], Any] = {}
 
     # -- primitives ------------------------------------------------------
@@ -68,9 +71,66 @@ class Renderer:
     def vline(self, canvas: Any, x: int, y0: int, y1: int, rgb: tuple[int, int, int]) -> None:
         self.g.DrawLine(canvas, x, y0, x, y1, self.color(rgb))
 
+    def draw_logo(self, canvas: Any, logo: Logo, x: int, y: int) -> None:
+        for dx, dy, (r, g, b) in logo.pixels:
+            canvas.SetPixel(x + dx, y + dy, r, g, b)
+
     # -- scenes ----------------------------------------------------------
 
     def draw_game(self, canvas: Any, game: Game) -> None:
+        """Logos flanking the scores when both are available, else text."""
+        if self.logos is not None:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                self._draw_game_with_logos(canvas, game, away, home)
+                return
+        self._draw_game_text(canvas, game)
+
+    def _draw_game_with_logos(self, canvas: Any, game: Game, away: Logo, home: Logo) -> None:
+        """``[logo] 3   2 [logo]`` with the status line under the scores.
+
+        Logos take the full panel height at each edge; everything else lives
+        in the column between them.
+        """
+        canvas.Clear()
+        score_baseline = 13
+        rule_y = 19
+        status_baseline = self.height - 2
+
+        self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
+        self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
+
+        left = away.width
+        right = self.width - home.width
+        span = right - left
+        quarter = span // 4
+        centre = left + span // 2
+
+        self._draw_score(canvas, game.away.abbrev, game.away.score, left + quarter, score_baseline)
+        self._draw_score(canvas, game.home.abbrev, game.home.score, right - quarter, score_baseline)
+
+        self.vline(canvas, centre - 1, 3, score_baseline, DIM)
+        self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+        self.text_center(
+            canvas,
+            self.fonts.small,
+            centre,
+            status_baseline,
+            self._status_color(game),
+            game.status_label(self.tz),
+        )
+
+    def _draw_score(self, canvas: Any, abbrev: str, score: int, cx: int, y: int) -> None:
+        text = str(score)
+        width = text_width(self.fonts.large, text)
+        x = cx - width // 2
+        self.text(canvas, self.fonts.large, x, y, WHITE, text)
+        if self.favourite and abbrev == self.favourite:
+            self.hline(canvas, x, x + width - 1, y + 2, ACCENT)
+
+    def _draw_game_text(self, canvas: Any, game: Game) -> None:
+        """Fallback when a logo is missing: abbreviation and score per side."""
         canvas.Clear()
         half = self.width // 2
         score_baseline = 13

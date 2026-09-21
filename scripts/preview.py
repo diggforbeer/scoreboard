@@ -23,6 +23,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from nhl_scoreboard.config import Settings  # noqa: E402
 from nhl_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
 from nhl_scoreboard.display.fonts import FontSet  # noqa: E402
+from nhl_scoreboard.display.logos import LogoLibrary  # noqa: E402
 from nhl_scoreboard.display.renderer import Renderer  # noqa: E402
 from nhl_scoreboard.nhl.models import Game  # noqa: E402
 
@@ -42,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixture", action="store_true", help="Use the test fixture, not the API")
     parser.add_argument("--team", default="", help="Favourite team, e.g. TOR")
     parser.add_argument("--limit", type=int, default=3, help="How many games to draw")
+    parser.add_argument("--no-logos", action="store_true", help="Force the text layout")
     args = parser.parse_args(argv)
 
     logging.disable(logging.CRITICAL)
@@ -50,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = Settings()
     panel = settings.panel
+    variant = settings.scoreboard.logo_variant
     renderer = Renderer(
         graphics=graphics,
         fonts=FontSet(graphics),
@@ -57,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         height=panel.height,
         tz=ZoneInfo(settings.scoreboard.timezone),
         favourite=args.team,
+        logos=None if args.no_logos else LogoLibrary.default(variant=variant),
     )
 
     games = load_games(args.fixture)

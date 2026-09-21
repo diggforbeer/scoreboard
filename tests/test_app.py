@@ -21,9 +21,13 @@ from nhl_scoreboard.nhl.models import Game
 class FakeCanvas:
     def __init__(self) -> None:
         self.cleared = 0
+        self.pixels = 0
 
     def Clear(self) -> None:  # noqa: N802 - mirrors the C++ binding's API
         self.cleared += 1
+
+    def SetPixel(self, x, y, r, g, b) -> None:  # noqa: N802
+        self.pixels += 1
 
 
 class FakeMatrix:

@@ -79,6 +79,13 @@ jobs:
         working-directory: scoreboard
         run: ./scripts/fetch-vendor.sh
 
+      - name: Rasterise team logos
+        working-directory: scoreboard
+        run: |
+          sudo apt-get install -y -qq libcairo2
+          python3 -m pip install --user --quiet cairosvg pillow requests
+          python3 scripts/fetch-logos.py --size 32 --variant both
+
       - name: Lint the scoreboard layer
         working-directory: rpi-image-gen
         run: |

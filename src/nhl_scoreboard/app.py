@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from .config import Settings
 from .display.fonts import FontSet
+from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
 from .nhl.api import NHLApiError, NHLClient
@@ -36,6 +37,11 @@ class ScoreboardApp:
         self.backend = backend or load_backend()
         self.matrix, self.backend = create_matrix(settings.panel, self.backend)
         self.canvas = self.matrix.CreateFrameCanvas()
+        logos = None
+        if settings.scoreboard.show_logos:
+            logos = LogoLibrary.default(
+                size=min(settings.panel.height, 32), variant=settings.scoreboard.logo_variant
+            )
         self.renderer = Renderer(
             graphics=self.backend.graphics,
             fonts=FontSet(self.backend.graphics),
@@ -43,6 +49,7 @@ class ScoreboardApp:
             height=settings.panel.height,
             tz=self.tz,
             favourite=settings.scoreboard.favourite_team,
+            logos=logos,
         )
         self.games: list[Game] = []
         self.index = 0

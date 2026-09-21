@@ -24,3 +24,6 @@ image/files/vendor/
 
 # local dev config for the emulator
 scoreboard.local.toml
+
+# team logos, fetched by scripts/fetch-logos.py
+assets/logos/

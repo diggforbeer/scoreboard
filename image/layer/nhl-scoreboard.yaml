@@ -69,6 +69,21 @@ mmdebstrap:
       install -d -m 0755 "$1/usr/share/nhl-scoreboard/fonts"
       install -m 0644 "$IGconf_sb_srcdir"/fonts/*.bdf "$1/usr/share/nhl-scoreboard/fonts/"
 
+    # ---- team logos --------------------------------------------------
+    # Rasterised on the build host by scripts/fetch-logos.py; the board
+    # never fetches artwork at runtime.
+    - |-
+      set -eu
+      LOGOS="$IGconf_sb_srcdir/assets/logos"
+      if [ ! -d "$LOGOS/32/dark" ]; then
+        echo "ERROR: $LOGOS/32/dark missing. Run scripts/fetch-logos.py first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/share/nhl-scoreboard/logos"
+      cp -a "$LOGOS"/. "$1/usr/share/nhl-scoreboard/logos/"
+      find "$1/usr/share/nhl-scoreboard/logos" -type f -exec chmod 0644 {} +
+      echo "Installed $(find "$1/usr/share/nhl-scoreboard/logos" -name '*.png' | wc -l) logo files"
+
     # ---- HUB75 driver ------------------------------------------------
     - |-
       set -eu

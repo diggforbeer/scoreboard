@@ -43,8 +43,8 @@ Early development. Working today:
 - [x] rpi-image-gen image definition ([image/](image/))
 - [x] CI pipelines — lint/test, plus an image build on native arm64 runners
 - [x] Wi-Fi and settings applied from the boot partition on every boot
+- [x] Team logos, rasterised at build time from the NHL's own artwork
 - [ ] Verified on real hardware
-- [ ] Team logos
 
 ## Development
 
@@ -55,6 +55,9 @@ renders to a browser window.
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
+
+# Team logos are not committed; fetch and rasterise them once (needs libcairo2)
+python scripts/fetch-logos.py
 
 # Print today's scores; needs no display at all
 nhl-scoreboard --dump
@@ -84,6 +87,8 @@ timezone = "America/Toronto"
 rotate_seconds = 8
 poll_seconds = 60
 live_poll_seconds = 15
+show_logos = true           # false = three-letter abbreviations instead
+logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 
 [panel]
 rows = 32
@@ -97,6 +102,19 @@ brightness = 60
 
 ## Layout
 
+With logos (the default):
+
+```
+┌──────────────────────────────────────┐
+│ ▄▄▄▄▄▄                        ▄▄▄▄▄▄ │
+│ █ TOR █      3    │    2      █ MTL █ │
+│ █logo █     ─────────────     █logo █ │
+│ ▀▀▀▀▀▀        2ND 12:34       ▀▀▀▀▀▀ │
+└──────────────────────────────────────┘
+```
+
+Text fallback, used when `show_logos = false` or a team's artwork is missing:
+
 ```
 ┌──────────────────────────────────────┐
 │  TOR      3   │   MTL             2  │
@@ -104,6 +122,11 @@ brightness = 60
 │              2ND 12:34               │
 └──────────────────────────────────────┘
 ```
+
+Logos come from `assets.nhle.com`, the same source the NHL's score API links
+per team. `scripts/fetch-logos.py` downloads the SVGs and rasterises them to
+32×32 PNGs; CI runs it before every image build. The PNGs are git-ignored, so
+this repository never redistributes the artwork.
 
 ## Licence
 

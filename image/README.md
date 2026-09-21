@@ -14,6 +14,7 @@ Debian-based image builder.
 | `files/scripts/scoreboard-provision` | Applies boot-partition settings on every boot |
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
+| `../assets/logos/` | Team logos rasterised by `scripts/fetch-logos.py` (git-ignored, fetched on demand) |
 
 ## Building in CI
 
@@ -36,8 +37,9 @@ sudo apt-get install -y --no-install-recommends \
 git clone https://github.com/raspberrypi/rpi-image-gen.git
 cd rpi-image-gen && sudo ./install_deps.sh && cd ..
 
-# Fetch the pinned HUB75 driver source
+# Fetch the pinned HUB75 driver source, and rasterise the team logos
 ./scripts/fetch-vendor.sh
+python3 scripts/fetch-logos.py        # needs libcairo2, cairosvg, pillow
 
 # Build
 rpi-image-gen/rpi-image-gen build -S "$PWD/image" -c scoreboard.yaml
@@ -50,6 +52,7 @@ The image lands in `rpi-image-gen/work/nhl-scoreboard/nhl-scoreboard.img`.
 Debian Trixie arm64 (`trixie-minbase`) plus:
 
 - The scoreboard app at `/opt/nhl-scoreboard`, run by `nhl-scoreboard.service`
+- Team logos at `/usr/share/nhl-scoreboard/logos/32/{dark,light}/`
 - `rgbmatrix` Python bindings, compiled during the build
 - `scoreboard-provision.service`, which reads `/boot/firmware/scoreboard.toml`
   on each boot and applies Wi-Fi, timezone and regulatory domain

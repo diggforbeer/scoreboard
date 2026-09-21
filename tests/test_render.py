@@ -23,6 +23,7 @@ import pytest
 
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.fonts import FontSet
+from nhl_scoreboard.display.logos import LogoLibrary
 from nhl_scoreboard.display.renderer import (
     ACCENT,
     FINAL,
@@ -30,6 +31,7 @@ from nhl_scoreboard.display.renderer import (
     LIVE,
     PREGAME,
     SUBDUED,
+    WHITE,
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color
@@ -49,6 +51,10 @@ UNDERLINE_Y = SCORE_BASELINE + 2
 STATUS_TOP = RULE_Y + 1
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
+LOGO = 32
+MID_LEFT, MID_RIGHT = LOGO, W - LOGO  # the column between the logos
+AWAY_CX, HOME_CX = MID_LEFT + 16, MID_RIGHT - 16
+FIXTURE_TEAMS = ("SEA", "CGY", "CAR", "FLA", "NYI", "NJD", "WSH", "BOS", "TOR", "MTL", "EDM")
 
 
 # --------------------------------------------------------------------------
@@ -82,9 +88,28 @@ def big_score_game(games) -> Game:
     )
 
 
-def make_renderer(favourite: str = "") -> Renderer:
+@pytest.fixture(scope="module")
+def synthetic_logos(tmp_path_factory) -> LogoLibrary:
+    """A filled circle per team in its colour: deterministic, and no NHL artwork."""
+    from PIL import Image, ImageDraw
+
+    root = tmp_path_factory.mktemp("logos")
+    for abbrev in FIXTURE_TEAMS:
+        im = Image.new("RGBA", (LOGO, LOGO), (0, 0, 0, 0))
+        ImageDraw.Draw(im).ellipse((2, 2, LOGO - 3, LOGO - 3), fill=(*team_color(abbrev), 255))
+        im.save(root / f"{abbrev}.png")
+    return LogoLibrary([root])
+
+
+def make_renderer(favourite: str = "", logos: LogoLibrary | None = None) -> Renderer:
     return Renderer(
-        graphics=graphics, fonts=FontSet(graphics), width=W, height=H, tz=TZ, favourite=favourite
+        graphics=graphics,
+        fonts=FontSet(graphics),
+        width=W,
+        height=H,
+        tz=TZ,
+        favourite=favourite,
+        logos=logos,
     )
 
 
@@ -158,8 +183,40 @@ def assert_game_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
     assert_centered(c, STATUS_TOP, H - 1, "status line")
 
 
-def status_color(c: AsciiCanvas) -> set:
-    return c.colors(0, STATUS_TOP, W - 1, H - 1)
+def assert_logo_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+
+    for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
+        region = c.lit(x0, 0, x0 + LOGO - 1, H - 1)
+        assert region, f"no logo drawn for {side.abbrev}"
+        assert team_color(side.abbrev) in set(region.values()), f"{side.abbrev} logo colour wrong"
+
+    # Scores sit centred in each half of the middle column, in white.
+    for cx, side in ((AWAY_CX, game.away), (HOME_CX, game.home)):
+        box = c.bbox(cx - 12, 0, cx + 12, SCORE_BASELINE)
+        assert box is not None, f"no score drawn for {side.abbrev}"
+        assert abs(box.center_x - cx) <= 1, f"{side.abbrev} score off-centre: {box.center_x}"
+        assert WHITE in c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
+
+        underline = c.lit(cx - 12, UNDERLINE_Y, cx + 12, UNDERLINE_Y)
+        should = bool(favourite) and side.abbrev == favourite
+        state = "missing" if should else "present"
+        assert bool(underline) == should, f"{side.abbrev}: underline {state}"
+        if underline:
+            assert set(underline.values()) == {ACCENT}
+
+    mid = (MID_LEFT + MID_RIGHT) // 2
+    assert all((mid - 1, y) in c.pixels for y in range(3, SCORE_BASELINE + 1)), "divider missing"
+    rule = c.lit(MID_LEFT + 3, RULE_Y, MID_RIGHT - 4, RULE_Y)
+    assert len(rule) == MID_RIGHT - 4 - (MID_LEFT + 3) + 1, "rule should span the middle column"
+
+    box = c.bbox(MID_LEFT, STATUS_TOP, MID_RIGHT - 1, H - 1)
+    assert box is not None, "status line missing"
+    assert abs(box.center_x - (mid - 0.5)) <= 1, f"status not centred: {box.center_x}"
+
+
+def status_color(c: AsciiCanvas, x0: int = 0, x1: int = W - 1) -> set:
+    return c.colors(x0, STATUS_TOP, x1, H - 1)
 
 
 # --------------------------------------------------------------------------
@@ -177,7 +234,8 @@ def status_color(c: AsciiCanvas) -> set:
         ("pregame", "TOR", PREGAME),
     ],
 )
-def test_game_scene(games, scene, favourite, expected_color, update_snapshots):
+def test_text_layout(games, scene, favourite, expected_color, update_snapshots):
+    """Fallback layout, used when a logo is unavailable."""
     game = games[scene]
     c = canvas()
     make_renderer(favourite).draw_game(c, game)
@@ -190,15 +248,65 @@ def test_game_scene(games, scene, favourite, expected_color, update_snapshots):
 
     assert_game_layout(c, game, favourite)
     assert status_color(c) == {expected_color}
-    check_snapshot(f"game_{scene}", art, update_snapshots)
+    check_snapshot(f"text_{scene}", art, update_snapshots)
 
 
-def test_two_digit_scores_fit(big_score_game, update_snapshots):
+def test_text_layout_two_digit_scores(big_score_game, update_snapshots):
     c = canvas()
     make_renderer().draw_game(c, big_score_game)
-    art = show("big score: EDM 12 @ CGY 10", c)
+    art = show("text, big score: EDM 12 @ CGY 10", c)
     assert_game_layout(c, big_score_game)
-    check_snapshot("game_big_score", art, update_snapshots)
+    check_snapshot("text_big_score", art, update_snapshots)
+
+
+# --------------------------------------------------------------------------
+# logo layout
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("scene", "favourite", "expected_color"),
+    [
+        ("live", "", LIVE),
+        ("intermission", "", INTERMISSION),
+        ("final", "", FINAL),
+        ("shootout", "", FINAL),
+        ("pregame", "TOR", PREGAME),
+    ],
+)
+def test_logo_layout(games, synthetic_logos, scene, favourite, expected_color, update_snapshots):
+    game = games[scene]
+    c = canvas()
+    make_renderer(favourite, synthetic_logos).draw_game(c, game)
+
+    art = show(
+        f"logos, {scene}: {game.away.abbrev} {game.away.score} @ "
+        f"{game.home.abbrev} {game.home.score} [{game.status_label(TZ)}]",
+        c,
+    )
+    assert_logo_layout(c, game, favourite)
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {expected_color}
+    check_snapshot(f"logo_{scene}", art, update_snapshots)
+
+
+def test_logo_layout_two_digit_scores(big_score_game, synthetic_logos, update_snapshots):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_game(c, big_score_game)
+    art = show("logos, big score: EDM 12 @ CGY 10", c)
+    assert_logo_layout(c, big_score_game)
+    check_snapshot("logo_big_score", art, update_snapshots)
+
+
+def test_missing_logo_falls_back_to_text(games, synthetic_logos, tmp_path):
+    """One side without artwork means the whole frame uses the text layout."""
+    from PIL import Image
+
+    only_away = tmp_path / "partial"
+    only_away.mkdir()
+    Image.open(synthetic_logos.path_for("SEA")).save(only_away / "SEA.png")
+    c = canvas()
+    make_renderer(logos=LogoLibrary([only_away])).draw_game(c, games["live"])
+    assert_game_layout(c, games["live"])  # full-width rule etc: the text layout's signature
 
 
 def test_favourite_underline_follows_the_team(games):
