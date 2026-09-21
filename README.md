@@ -51,6 +51,10 @@ nhl-scoreboard --backend RGBMatrixEmulator
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team TOR
 python scripts/preview.py --fixture      # offline, uses the test fixture
+
+# Rendering tests: every scene is snapshot-compared against tests/snapshots/
+pytest -s tests/test_render.py           # -s prints each frame
+pytest --update-snapshots                # after an intentional layout change
 ```
 
 ## Configuration

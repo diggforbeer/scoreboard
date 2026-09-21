@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render scoreboard frames as ASCII art, for iterating on layout without hardware.
 
-The emulator's ``graphics`` module is pure Python and draws through
-``SetPixel``, so a recording canvas can capture a frame and print it.
+Uses the same AsciiCanvas the snapshot tests do, so what you see here is
+exactly what tests/test_render.py asserts on.
 
     python scripts/preview.py              # today's live games
     python scripts/preview.py --fixture    # the checked-in test fixture
@@ -21,34 +21,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from nhl_scoreboard.config import Settings  # noqa: E402
+from nhl_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
 from nhl_scoreboard.display.fonts import FontSet  # noqa: E402
 from nhl_scoreboard.display.renderer import Renderer  # noqa: E402
 from nhl_scoreboard.nhl.models import Game  # noqa: E402
-
-
-class RecordingCanvas:
-    """Stands in for a matrix canvas, keeping the pixels that were lit."""
-
-    def __init__(self, width: int, height: int) -> None:
-        self.width = width
-        self.height = height
-        self.pixels: dict[tuple[int, int], tuple[int, int, int]] = {}
-
-    def Clear(self) -> None:  # noqa: N802 - mirrors the binding's API
-        self.pixels.clear()
-
-    def SetPixel(self, x, y, r, g, b) -> None:  # noqa: N802
-        if 0 <= x < self.width and 0 <= y < self.height and (r or g or b):
-            self.pixels[(int(x), int(y))] = (r, g, b)
-
-    def render(self, on: str = "#", off: str = " ") -> str:
-        rows = []
-        for y in range(self.height):
-            row = "".join(on if (x, y) in self.pixels else off for x in range(self.width))
-            if row.strip():
-                rows.append("|" + row + "|")
-        border = "+" + "-" * self.width + "+"
-        return "\n".join([border, *rows, border])
 
 
 def load_games(use_fixture: bool) -> list[Game]:
@@ -89,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     for game in games[: args.limit]:
-        canvas = RecordingCanvas(panel.width, panel.height)
+        canvas = AsciiCanvas(panel.width, panel.height)
         renderer.draw_game(canvas, game)
         status = game.status_label(renderer.tz)
         print(
