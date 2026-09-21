@@ -26,9 +26,11 @@ Early development. Working today:
 - [x] NHL API client against `api-web.nhle.com` (live scores, period, clock)
 - [x] 128×32 renderer with per-team accent colours
 - [x] Hardware / emulator / headless display backends
-- [ ] rpi-image-gen image build
-- [ ] CI pipelines and released `.img.xz`
-- [ ] First-boot Wi-Fi + settings from the boot partition
+- [x] rpi-image-gen image definition ([image/](image/))
+- [x] CI pipelines — lint/test, plus an image build on native arm64 runners
+- [x] Wi-Fi and settings applied from the boot partition on every boot
+- [ ] Verified on real hardware
+- [ ] Team logos
 
 ## Development
 

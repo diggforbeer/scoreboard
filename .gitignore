@@ -19,3 +19,6 @@ deploy/
 
 # local scratch
 .emulator_config.json
+
+# vendored driver source, fetched by scripts/fetch-vendor.sh
+image/files/vendor/

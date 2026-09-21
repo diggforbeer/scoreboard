@@ -100,7 +100,12 @@ class ScoreboardApp:
         log.debug("Refreshed: %d games", len(self.games))
 
     def order(self, games: list[Game]) -> list[Game]:
-        """Already sorted live-first by the client; optionally pin the favourite."""
+        """Sort live-first, then optionally pin the favourite team to the front.
+
+        The sort is repeated here rather than trusted from the client so that
+        display order is a property of the app, not of whoever fetched.
+        """
+        games = sorted(games, key=Game.sort_key)
         favourite = self.settings.scoreboard.favourite_team
         if not (favourite and self.settings.scoreboard.prefer_favourite):
             return games

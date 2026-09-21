@@ -51,7 +51,9 @@ class Renderer:
             self._colors[rgb] = self.g.Color(*rgb)
         return self._colors[rgb]
 
-    def text(self, canvas: Any, font: Any, x: int, y: int, rgb: tuple[int, int, int], s: str) -> int:
+    def text(
+        self, canvas: Any, font: Any, x: int, y: int, rgb: tuple[int, int, int], s: str
+    ) -> int:
         return self.g.DrawText(canvas, font, x, y, self.color(rgb), s)
 
     def text_right(self, canvas: Any, font: Any, right: int, y: int, rgb, s: str) -> int:
@@ -94,7 +96,8 @@ class Renderer:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
         self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
         if self.favourite and abbrev == self.favourite:
-            self.hline(canvas, x0 + 3, x0 + 3 + text_width(self.fonts.large, abbrev) - 1, y + 2, ACCENT)
+            underline = x0 + 3 + text_width(self.fonts.large, abbrev) - 1
+            self.hline(canvas, x0 + 3, underline, y + 2, ACCENT)
 
     def draw_clock(self, canvas: Any, now: datetime) -> None:
         """Idle scene: the time, for when there is no hockey to show."""

@@ -1,0 +1,16 @@
+[Unit]
+Description=Apply scoreboard settings from the boot partition
+Documentation=https://github.com/diggforbeer/scoreboard
+# Runs on every boot, not just the first, so editing scoreboard.toml on the
+# boot partition is all it takes to change Wi-Fi network or timezone.
+After=local-fs.target
+Before=nhl-scoreboard.service
+Wants=nhl-scoreboard.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/scoreboard-provision /boot/firmware/scoreboard.toml
+
+[Install]
+WantedBy=multi-user.target

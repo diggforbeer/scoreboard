@@ -1,0 +1,133 @@
+# METABEGIN
+# X-Env-Layer-Name: nhl-scoreboard
+# X-Env-Layer-Version: 0.1.0
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: NHL scoreboard appliance. Installs the scoreboard
+#  application, builds the rpi-rgb-led-matrix Python bindings for the HUB75
+#  panel, provisions networkd/iwd configuration, and installs a
+#  human-editable settings file on the boot partition.
+# X-Env-Layer-Requires: device-user-admin,systemd-net-min,systemd-timesyncd,iwd,rpi-boot-firmware
+#
+# X-Env-VarPrefix: sb
+#
+# X-Env-Var-srcdir: /dev/null
+# X-Env-Var-srcdir-Desc: Path to the scoreboard source tree (repository root).
+# X-Env-Var-srcdir-Required: y
+# X-Env-Var-srcdir-Valid: dir
+# X-Env-Var-srcdir-Set: y
+#
+# X-Env-Var-assetdir: /dev/null
+# X-Env-Var-assetdir-Desc: Path to image/files containing units and defaults.
+# X-Env-Var-assetdir-Required: y
+# X-Env-Var-assetdir-Valid: dir
+# X-Env-Var-assetdir-Set: y
+#
+# X-Env-Var-vendordir: /dev/null
+# X-Env-Var-vendordir-Desc: Path to vendored third-party source, populated by
+#  scripts/fetch-vendor.sh before the build.
+# X-Env-Var-vendordir-Required: y
+# X-Env-Var-vendordir-Valid: dir
+# X-Env-Var-vendordir-Set: y
+#
+# X-Env-Var-isolated_cpu: 3
+# X-Env-Var-isolated_cpu-Desc: CPU core reserved for the matrix refresh thread
+#  via isolcpus. Set to empty to disable core isolation.
+# X-Env-Var-isolated_cpu-Required: n
+# X-Env-Var-isolated_cpu-Valid: string-or-empty
+# X-Env-Var-isolated_cpu-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # Runtime
+    - python3
+    - python3-requests
+    - iw
+    - ca-certificates
+    # Build-time, for the HUB75 bindings
+    - build-essential
+    - cython3
+    - python3-dev
+    - python3-pip
+    - python3-setuptools
+
+  customize-hooks:
+    # ---- scoreboard application -------------------------------------
+    # Installed as a plain source tree on PYTHONPATH rather than a package:
+    # no pip, no network, and nothing to go wrong at first boot.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/opt/nhl-scoreboard"
+      cp -a "$IGconf_sb_srcdir/src/nhl_scoreboard" "$1/opt/nhl-scoreboard/"
+      find "$1/opt/nhl-scoreboard" -name '__pycache__' -type d -prune -exec rm -rf {} +
+      install -d -m 0755 "$1/usr/share/nhl-scoreboard/fonts"
+      install -m 0644 "$IGconf_sb_srcdir"/fonts/*.bdf "$1/usr/share/nhl-scoreboard/fonts/"
+
+    # ---- HUB75 driver ------------------------------------------------
+    - |-
+      set -eu
+      SRC="$IGconf_sb_vendordir/rpi-rgb-led-matrix"
+      if [ ! -d "$SRC" ]; then
+        echo "ERROR: $SRC missing. Run scripts/fetch-vendor.sh first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/src"
+      cp -a "$SRC" "$1/usr/src/rpi-rgb-led-matrix"
+      chroot "$1" sh -eu -c '
+        cd /usr/src/rpi-rgb-led-matrix
+        make -C lib -j"$(nproc)"
+        cd bindings/python
+        python3 -m pip install --break-system-packages --no-build-isolation . \
+          || make install-python PYTHON=/usr/bin/python3
+        python3 -c "import rgbmatrix; print(\"rgbmatrix bindings OK\")"
+      '
+
+    # ---- networking --------------------------------------------------
+    # systemd-net-min enables networkd but ships no .network files, so
+    # without these the board comes up with no address at all.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/systemd/network"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/10-wired.network" \
+        "$1/etc/systemd/network/"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/20-wifi.network" \
+        "$1/etc/systemd/network/"
+
+    # ---- services ----------------------------------------------------
+    - |-
+      set -eu
+      install -m 0755 "$IGconf_sb_assetdir/scripts/scoreboard-provision" \
+        "$1/usr/local/sbin/scoreboard-provision"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard.service" \
+        "$1/etc/systemd/system/"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/scoreboard-provision.service" \
+        "$1/etc/systemd/system/"
+
+    # ---- boot partition settings file --------------------------------
+    - |-
+      set -eu
+      install -d -m 0755 "$1/boot/firmware"
+      install -m 0644 "$IGconf_sb_assetdir/boot/scoreboard.toml" \
+        "$1/boot/firmware/scoreboard.toml"
+
+    # ---- firmware configuration --------------------------------------
+    # The matrix driver uses the PWM hardware that the onboard analogue
+    # audio also claims; they cannot coexist. Isolating a core stops the
+    # scheduler from interrupting the refresh thread and causing flicker.
+    - |-
+      set -eu
+      CONFIG="$1/boot/firmware/config.txt"
+      if ! grep -q '^# nhl-scoreboard' "$CONFIG" 2>/dev/null; then
+        printf '\n%s\n%s\n%s\n' \
+          '# nhl-scoreboard: the HUB75 driver needs exclusive use of the PWM' \
+          '# peripheral, which the onboard audio output otherwise occupies.' \
+          'dtparam=audio=off' >> "$CONFIG"
+      fi
+      CMDLINE="$1/boot/firmware/cmdline.txt"
+      if [ -n "${IGconf_sb_isolated_cpu:-}" ] && ! grep -q 'isolcpus=' "$CMDLINE"; then
+        sed -i "1s/\$/ isolcpus=${IGconf_sb_isolated_cpu}/" "$CMDLINE"
+      fi
+
+    # ---- enable units ------------------------------------------------
+    - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
+    - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard

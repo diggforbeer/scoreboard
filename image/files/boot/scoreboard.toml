@@ -1,0 +1,60 @@
+# ============================================================
+#  NHL Scoreboard settings
+# ============================================================
+#
+#  Edit this file on the SD card's boot partition (it shows up as a small
+#  drive on Windows/macOS/Linux after flashing), save it, and put the card
+#  back in the Pi. Settings are applied on every boot.
+#
+#  Lines starting with # are comments and are ignored.
+# ------------------------------------------------------------
+
+[wifi]
+# Leave ssid empty if you are using a wired ethernet connection.
+ssid = ""
+password = ""
+# Two-letter country code for the wireless regulatory domain, e.g. CA, US, GB.
+country = "CA"
+
+[scoreboard]
+# Three-letter team abbreviation, shown first in the rotation. Leave empty
+# for no preference. Examples: TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
+favourite_team = ""
+
+# https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+timezone = "America/Toronto"
+
+# Seconds each game stays on screen before rotating to the next.
+rotate_seconds = 8
+
+# How often to ask the NHL for updated scores, in seconds.
+poll_seconds = 60
+# Faster polling while a game is actually in progress.
+live_poll_seconds = 15
+
+# Show a clock when there is no hockey on. Set to false to show "NO GAMES".
+show_clock_when_idle = true
+
+[panel]
+# Defaults describe two 64x32 P2 panels daisy-chained into one 128x32 board
+# driven by an Adafruit RGB Matrix Bonnet or HAT.
+rows = 32
+cols = 64
+chain_length = 2
+parallel = 1
+
+# "adafruit-hat" for a stock Bonnet/HAT.
+# "adafruit-hat-pwm" if you have soldered the GPIO4-GPIO18 quality mod.
+# "regular" for a directly wired HUB75 connection.
+hardware_mapping = "adafruit-hat"
+
+# 0-100. Lower brightness means less current draw and a cooler panel.
+brightness = 60
+
+# Raise if the display shows flicker or garbled pixels; 4 suits a Pi 4,
+# 2 is usually right for a Pi 3.
+gpio_slowdown = 4
+
+# Colour depth. Lower to 8 if refresh looks unstable.
+pwm_bits = 11
+pwm_lsb_nanoseconds = 130

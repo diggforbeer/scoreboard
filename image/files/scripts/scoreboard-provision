@@ -1,0 +1,144 @@
+#!/usr/bin/python3
+"""Apply settings from the boot-partition config file.
+
+Runs on every boot via scoreboard-provision.service. Its job is to turn the
+human-editable ``scoreboard.toml`` on the FAT boot partition into the system
+state the appliance needs -- Wi-Fi credentials for iwd, the timezone, and the
+wireless regulatory domain.
+
+Failures here are logged but never fatal: a typo in the config file must not
+stop the board from booting, and an unreachable Wi-Fi network should still
+leave a working console.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+IWD_DIR = Path("/var/lib/iwd")
+STATE_FILE = IWD_DIR / ".scoreboard-managed"
+ZONEINFO = Path("/usr/share/zoneinfo")
+
+# iwd uses the SSID as the profile filename when it is plainly printable;
+# anything else has to be hex-encoded. See iwd.network(5).
+SAFE_SSID = re.compile(r"^[A-Za-z0-9_ .\-]+$")
+
+log = logging.getLogger("scoreboard-provision")
+
+
+def main(argv: list[str]) -> int:
+    logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
+    path = Path(argv[1]) if len(argv) > 1 else Path("/boot/firmware/scoreboard.toml")
+
+    config = read_config(path)
+    if config is None:
+        return 0
+
+    apply_timezone(config.get("scoreboard", {}))
+    apply_wifi(config.get("wifi", {}))
+    return 0
+
+
+def read_config(path: Path) -> dict | None:
+    if not path.is_file():
+        log.warning("No config at %s; leaving system settings untouched", path)
+        return None
+    try:
+        with path.open("rb") as fh:
+            return tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        log.error("Could not parse %s: %s", path, exc)
+        return None
+
+
+def apply_timezone(scoreboard: dict) -> None:
+    tz = str(scoreboard.get("timezone") or "").strip()
+    if not tz:
+        return
+    if not (ZONEINFO / tz).exists():
+        log.error("Unknown timezone %r; keeping current setting", tz)
+        return
+    localtime = Path("/etc/localtime")
+    try:
+        if localtime.is_symlink() and localtime.readlink() == ZONEINFO / tz:
+            return
+        localtime.unlink(missing_ok=True)
+        localtime.symlink_to(ZONEINFO / tz)
+        Path("/etc/timezone").write_text(f"{tz}\n")
+        log.info("Timezone set to %s", tz)
+    except OSError as exc:
+        log.error("Could not set timezone: %s", exc)
+
+
+def apply_wifi(wifi: dict) -> None:
+    ssid = str(wifi.get("ssid") or "").strip()
+    password = str(wifi.get("password") or "")
+    if not ssid:
+        log.info("No Wi-Fi SSID configured; relying on ethernet")
+        return
+
+    apply_regulatory_domain(str(wifi.get("country") or "").strip().upper())
+
+    profile = IWD_DIR / iwd_profile_name(ssid)
+    contents = "[Security]\nPassphrase={}\n".format(password)
+    try:
+        IWD_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        remove_stale_profile(profile)
+        if profile.exists() and profile.read_text() == contents:
+            log.info("Wi-Fi profile for %r already current", ssid)
+            return
+        profile.write_text(contents)
+        profile.chmod(0o600)
+        STATE_FILE.write_text(f"{profile.name}\n")
+        log.info("Wrote Wi-Fi profile for %r", ssid)
+    except OSError as exc:
+        log.error("Could not write Wi-Fi profile: %s", exc)
+        return
+
+    run(["systemctl", "restart", "iwd"])
+
+
+def remove_stale_profile(current: Path) -> None:
+    """Drop the profile we wrote last boot if the SSID has since changed."""
+    if not STATE_FILE.is_file():
+        return
+    previous = STATE_FILE.read_text().strip()
+    if previous and previous != current.name:
+        stale = IWD_DIR / previous
+        stale.unlink(missing_ok=True)
+        log.info("Removed previous Wi-Fi profile %s", previous)
+
+
+def iwd_profile_name(ssid: str) -> str:
+    if SAFE_SSID.match(ssid) and not ssid.startswith("."):
+        return f"{ssid}.psk"
+    return "=" + ssid.encode().hex() + ".psk"
+
+
+def apply_regulatory_domain(country: str) -> None:
+    if len(country) != 2 or not country.isalpha():
+        return
+    conf = Path("/etc/default/crda")
+    try:
+        Path("/etc/iwd").mkdir(parents=True, exist_ok=True)
+        conf.write_text(f"REGDOMAIN={country}\n")
+    except OSError:
+        pass
+    run(["iw", "reg", "set", country])
+
+
+def run(cmd: list[str]) -> None:
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        log.info("ran %s", " ".join(cmd))
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.error("Command %s failed: %s", " ".join(cmd), exc)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

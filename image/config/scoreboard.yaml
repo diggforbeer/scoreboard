@@ -1,0 +1,33 @@
+# Image definition for the NHL scoreboard appliance.
+#
+# Build from the repository root:
+#   ./scripts/fetch-vendor.sh
+#   rpi-image-gen build -S ./image -c scoreboard.yaml
+#
+# Output: work/nhl-scoreboard/nhl-scoreboard.img
+
+include:
+  file: trixie-minbase.yaml
+
+device:
+  layer: rpi4
+  hostname: scoreboard
+  user1: scoreboard
+  user1pass: hockey
+  user1groups: sudo,video,gpio,i2c,spi
+  user1sudo: password
+
+image:
+  layer: image-rpios
+  name: nhl-scoreboard
+  boot_part_size: 256M
+  # Room for the toolchain used to build the HUB75 bindings, plus headroom.
+  root_part_size: 2560M
+
+layer:
+  app: nhl-scoreboard
+
+sb:
+  srcdir: ${@SRCROOT}/..
+  assetdir: ${@SRCROOT}/files
+  vendordir: ${@SRCROOT}/files/vendor
