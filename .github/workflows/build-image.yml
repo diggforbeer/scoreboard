@@ -104,7 +104,9 @@ jobs:
             # Republish the tail as an ::error:: annotation. Unlike raw job
             # logs, annotations are readable through the public REST API, so
             # a failure can be diagnosed without repository admin rights.
-            msg=$(tail -c 6000 /tmp/build.log \
+            # GitHub caps annotation messages at ~4KB and keeps the FIRST
+            # part, so send only the last few lines -- where the error is.
+            msg=$(tail -n 25 /tmp/build.log | tail -c 2000 \
                   | sed 's/%/%25/g; s/\r//g' \
                   | sed ':a;N;$!ba;s/\n/%0A/g')
             echo "::error title=rpi-image-gen build failed::${msg}"
