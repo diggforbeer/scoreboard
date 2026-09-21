@@ -155,3 +155,28 @@ def test_game_special_teams_flag(games):
     assert not live.special_teams
     assert dataclasses.replace(live, situation=situation(4, 5, home=["PP"])).special_teams
     assert not dataclasses.replace(live, situation=situation(4, 4)).special_teams
+
+
+# -- estimated end ----------------------------------------------------------
+
+
+def test_estimated_end_by_how_the_game_finished(games):
+    from datetime import timedelta
+
+    reg = next(g for g in games if g.away.abbrev == "NYI")  # FINAL in regulation
+    so = next(g for g in games if g.away.abbrev == "WSH")  # F/SO
+    assert reg.estimated_end() == reg.start_utc + timedelta(hours=2, minutes=30)
+    assert so.estimated_end() == so.start_utc + timedelta(hours=2, minutes=45)
+
+    ot = Game.from_api(
+        {
+            "id": 1,
+            "gameState": "FINAL",
+            "startTimeUTC": "2026-09-20T23:00:00Z",
+            "awayTeam": {},
+            "homeTeam": {},
+            "period": 4,
+            "periodDescriptor": {"number": 4, "periodType": "OT", "maxRegulationPeriods": 3},
+        }
+    )
+    assert ot.estimated_end() == ot.start_utc + timedelta(hours=2, minutes=40)

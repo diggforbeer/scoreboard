@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -13,6 +13,13 @@ FINAL_STATES = frozenset({"FINAL", "OFF"})
 PREGAME_STATES = frozenset({"FUT", "PRE"})
 
 _ORDINALS = {1: "1ST", 2: "2ND", 3: "3RD"}
+
+# The API has no wall-clock end time, so a finished game's end is estimated
+# from its start. Typical NHL game lengths, a little generous so a hold is
+# more likely to run slightly long than to be cut short.
+REGULATION_LENGTH = timedelta(hours=2, minutes=30)
+OVERTIME_EXTRA = timedelta(minutes=10)
+SHOOTOUT_EXTRA = timedelta(minutes=15)
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +211,15 @@ class Game:
 
     def seconds_until_start(self, now: datetime) -> float:
         return (self.start_utc - now).total_seconds()
+
+    def estimated_end(self) -> datetime:
+        """When a finished game probably ended; see REGULATION_LENGTH."""
+        end = self.start_utc + REGULATION_LENGTH
+        if self.period_type == "SO":
+            end += SHOOTOUT_EXTRA
+        elif self.period_type == "OT" or self.period > self.max_regulation_periods:
+            end += OVERTIME_EXTRA
+        return end
 
     def sort_key(self) -> tuple[int, datetime]:
         """Live games first, then upcoming, then finals -- each by start time."""
