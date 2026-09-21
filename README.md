@@ -47,6 +47,10 @@ nhl-scoreboard --dump
 
 # Run the board in the emulator
 nhl-scoreboard --backend RGBMatrixEmulator
+
+# Print frames as ASCII art - fastest way to iterate on layout
+python scripts/preview.py --team TOR
+python scripts/preview.py --fixture      # offline, uses the test fixture
 ```
 
 ## Configuration

@@ -65,7 +65,10 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 - DHCP is already handled: the base layers generate `01-eth0.network` and
   `02-wlan0.network`. Adding higher-numbered files of our own would be inert,
   since networkd applies only the first matching `.network`.
-- The HUB75 bindings are built through upstream's CMake/scikit-build-core path
+- The HUB75 bindings need `python3-pil` at build time: their Pillow shim
+  includes `Imaging.h`, which Pillow's wheels do not ship but Debian's
+  `python3-pil` installs into `/usr/include/python3.x/`.
+- The bindings are built through upstream's CMake/scikit-build-core path
   from the repository root. The older `lib/Makefile` route defaults
   `CPU_ARCH_FLAGS` to `-march=native`, which on a CI runner targets the
   runner's CPU and can emit instructions a Pi 4 cannot execute.
