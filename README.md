@@ -59,8 +59,9 @@ pip install -e '.[dev]'
 # Print today's scores; needs no display at all
 nhl-scoreboard --dump
 
-# Run the board in the emulator
-nhl-scoreboard --backend RGBMatrixEmulator
+# Run the board in the emulator, then open http://localhost:8888
+cp image/files/boot/scoreboard.toml scoreboard.local.toml   # edit favourite_team etc.
+nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team TOR
