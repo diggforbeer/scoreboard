@@ -96,7 +96,7 @@ class Game:
         return _ORDINALS.get(self.period, f"{self.period}TH")
 
     def status_label(self, tz: ZoneInfo) -> str:
-        """One short line describing where the game is, sized for a P2 panel."""
+        """One short line describing where the game is, sized to fit 128 pixels."""
         if self.is_pregame:
             return self.start_local(tz).strftime("%-I:%M%p").replace("AM", "A").replace("PM", "P")
         if self.is_final:

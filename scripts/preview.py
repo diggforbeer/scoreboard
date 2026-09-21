@@ -64,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
         print("No games to draw.")
         return 0
 
+    w_mm, h_mm = panel.physical_mm
+    print(f"{panel.width}x{panel.height} px at P{panel.pitch_mm:g} = {w_mm:g} x {h_mm:g} mm")
+
     for game in games[: args.limit]:
         canvas = AsciiCanvas(panel.width, panel.height)
         renderer.draw_game(canvas, game)

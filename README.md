@@ -12,7 +12,7 @@ the boot partition, and the board comes up showing live scores.
 | Part | Target |
 |------|--------|
 | Computer | Raspberry Pi 4 (Pi 3B+ also supported) |
-| Display | 2 × 64×32 P2 HUB75 panels, daisy-chained → **128×32** |
+| Display | 2 × 64×32 **P2.5** HUB75 panels, daisy-chained → **128×32** (320 × 80 mm) |
 | Adapter | Seengreat-style RGB Matrix Adapter Board (also sold as XICOOLEE, WatangTech) |
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 
@@ -89,6 +89,7 @@ live_poll_seconds = 15
 rows = 32
 cols = 64
 chain_length = 2            # two panels daisy-chained = 128x32
+pitch_mm = 2.5              # informational; 128x32 at P2.5 is 320x80 mm
 hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60

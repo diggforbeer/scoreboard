@@ -1,4 +1,4 @@
-"""Per-team accent colours, tuned for a P2 LED panel.
+"""Per-team accent colours, tuned for an LED matrix.
 
 Several NHL identities are near-black navy or burgundy, which disappear on an
 LED matrix. Those are substituted with the team's brighter secondary colour so

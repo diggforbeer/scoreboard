@@ -27,14 +27,17 @@ DEFAULT_CONFIG_PATHS = (
 class PanelConfig:
     """Geometry and electrical settings for the HUB75 chain.
 
-    Defaults describe two 64x32 P2 panels daisy-chained into one 128x32
+    Defaults describe two 64x32 panels daisy-chained into one 128x32
     display through a HUB75 adapter wired to the driver's "regular" pinout.
+    Pixel pitch does not affect the driver; it is recorded so physical
+    dimensions can be derived rather than remembered.
     """
 
     rows: int = 32
     cols: int = 64
     chain_length: int = 2
     parallel: int = 1
+    pitch_mm: float = 2.5
     hardware_mapping: str = "regular"
     gpio_slowdown: int = 4
     pwm_bits: int = 11
@@ -50,6 +53,11 @@ class PanelConfig:
     @property
     def height(self) -> int:
         return self.rows * self.parallel
+
+    @property
+    def physical_mm(self) -> tuple[float, float]:
+        """(width, height) of the assembled display in millimetres."""
+        return (self.width * self.pitch_mm, self.height * self.pitch_mm)
 
 
 @dataclass(slots=True)

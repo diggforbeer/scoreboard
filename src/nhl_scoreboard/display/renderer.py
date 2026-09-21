@@ -1,6 +1,6 @@
 """Drawing the scoreboard onto a matrix canvas.
 
-The layout targets the default 128x32 chain (two 64x32 P2 panels) but is
+The layout targets the default 128x32 chain (two 64x32 panels) but is
 computed from the canvas size, so a 64x32 or 128x64 panel still renders
 sensibly -- just with less or more breathing room.
 """

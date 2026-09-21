@@ -45,3 +45,12 @@ def test_missing_file_falls_back_to_defaults(tmp_path):
     settings = Settings.load(tmp_path / "absent.toml")
     assert settings.panel.width == 128
     assert settings.source_path is None
+
+
+def test_physical_size_follows_pitch():
+    settings = Settings()
+    assert settings.panel.pitch_mm == 2.5
+    assert settings.panel.physical_mm == (320.0, 80.0)
+
+    settings.panel.pitch_mm = 2.0
+    assert settings.panel.physical_mm == (256.0, 64.0)

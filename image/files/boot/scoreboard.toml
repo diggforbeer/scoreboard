@@ -36,11 +36,15 @@ live_poll_seconds = 15
 show_clock_when_idle = true
 
 [panel]
-# Defaults describe two 64x32 P2 panels daisy-chained into one 128x32 board.
+# Defaults describe two 64x32 panels daisy-chained into one 128x32 board.
 rows = 32
 cols = 64
 chain_length = 2
 parallel = 1
+
+# LED pitch in millimetres. Informational only -- the driver does not use it --
+# but it lets tools report the display's physical size. P2.5 x 128x32 = 320x80mm.
+pitch_mm = 2.5
 
 # Which GPIO pins drive the HUB75 signals. Depends on the adapter board:
 #   "regular"          Seengreat / XICOOLEE / WatangTech adapter boards, and
