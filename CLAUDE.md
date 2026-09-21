@@ -4,6 +4,27 @@ NHL scoreboard for a 128×32 HUB75 LED matrix (two 64×32 P2.5 panels) on a
 Raspberry Pi 4, shipped as a flashable image built by rpi-image-gen in CI.
 Python app in `src/nhl_scoreboard/`; image definition in `image/`.
 
+## Workflow
+
+- **`main` is protected.** No direct pushes; every change is a branch and a
+  pull request (`gh pr create`). CI must be green. A code-owner review is
+  required, and GitHub never counts the author's own review, so PRs the
+  owner authors need the admin bypass to merge.
+- **GitHub Issues is the backlog.** Before starting anything new, check
+  `gh issue list`; work that's already an issue should reference it. When
+  you discover new work — a decision to make, a follow-up, something to
+  verify on hardware — file an issue rather than leaving a TODO in code or
+  a note in a commit message. Use the area labels: `display`, `hardware`,
+  `image`, `audio`, `ci`, plus GitHub's `bug` / `enhancement` /
+  `documentation`.
+- **PRs close issues.** Put `Closes #N` in the PR body so merging closes
+  the issue. One issue per PR where practical.
+- **Decisions live in issues, not chat.** If a choice is waiting on the
+  owner (e.g. #5, the favourite marker), the options and recommendation
+  go in the issue so the next session can pick it up.
+- `.github/pull_request_template.md` has the checklist: tests, lint,
+  snapshot diff reviewed, docs updated.
+
 ## Commands
 
 ```bash
