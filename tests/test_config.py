@@ -9,6 +9,14 @@ def test_defaults_describe_two_chained_64x32_panels():
     assert settings.panel.hardware_mapping == "regular"
 
 
+def test_default_favourite_is_nashville_but_overridable(tmp_path):
+    assert Settings().scoreboard.favourite_team == "NSH"
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = ""\n')
+    assert Settings.load(path).scoreboard.favourite_team == ""
+
+
 def test_loads_toml(tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text(

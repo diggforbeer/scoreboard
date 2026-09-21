@@ -64,7 +64,9 @@ class PanelConfig:
 class ScoreboardConfig:
     """Behaviour of the scoreboard itself."""
 
-    favourite_team: str = ""
+    #: Pinned to the front of the rotation and eligible for the special-teams
+    #: indicator. Nashville unless the boot-partition config says otherwise.
+    favourite_team: str = "NSH"
     timezone: str = "America/Toronto"
     rotate_seconds: float = 8.0
     poll_seconds: float = 60.0

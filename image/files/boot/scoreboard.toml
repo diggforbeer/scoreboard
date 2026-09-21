@@ -17,9 +17,9 @@ password = ""
 country = "CA"
 
 [scoreboard]
-# Three-letter team abbreviation, shown first in the rotation. Leave empty
-# for no preference. Examples: TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
-favourite_team = ""
+# Three-letter team abbreviation, shown first in the rotation. Set to "" for
+# no preference. Examples: NSH, TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
+favourite_team = "NSH"
 
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 timezone = "America/Toronto"

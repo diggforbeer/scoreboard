@@ -41,7 +41,9 @@ def load_games(use_fixture: bool) -> list[Game]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixture", action="store_true", help="Use the test fixture, not the API")
-    parser.add_argument("--team", default="", help="Favourite team, e.g. TOR")
+    parser.add_argument(
+        "--team", default=None, help='Favourite team, e.g. NSH; "" for none (default: config)'
+    )
     parser.add_argument("--limit", type=int, default=3, help="How many games to draw")
     parser.add_argument("--no-logos", action="store_true", help="Force the text layout")
     args = parser.parse_args(argv)
@@ -59,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         width=panel.width,
         height=panel.height,
         tz=ZoneInfo(settings.scoreboard.timezone),
-        favourite=args.team,
+        favourite=settings.scoreboard.favourite_team if args.team is None else args.team,
         logos=None if args.no_logos else LogoLibrary.default(variant=variant),
     )
 

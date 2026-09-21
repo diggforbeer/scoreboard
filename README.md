@@ -68,7 +68,7 @@ cp image/files/boot/scoreboard.toml scoreboard.local.toml   # edit favourite_tea
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Print frames as ASCII art - fastest way to iterate on layout
-python scripts/preview.py --team TOR
+python scripts/preview.py --team NSH
 python scripts/preview.py --fixture      # offline, uses the test fixture
 
 # Rendering tests: every scene is snapshot-compared against tests/snapshots/
@@ -83,7 +83,7 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 
 ```toml
 [scoreboard]
-favourite_team = "TOR"      # pinned to the front of the rotation
+favourite_team = "NSH"      # pinned to the front of the rotation; "" for none
 timezone = "America/Toronto"
 rotate_seconds = 8
 poll_seconds = 60
