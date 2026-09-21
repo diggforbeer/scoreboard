@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# rpi-image-gen build output
+work/
+deploy/
+*.img
+*.img.xz
+*.sha256
+
+# local scratch
+.emulator_config.json

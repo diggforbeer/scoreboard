@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nhl-scoreboard"
+version = "0.1.0"
+description = "NHL scoreboard for a HUB75 LED matrix driven by a Raspberry Pi"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mark Goudie" }]
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+emulator = ["RGBMatrixEmulator>=0.11"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "RGBMatrixEmulator>=0.11",
+    "responses>=0.25",
+]
+
+[project.scripts]
+nhl-scoreboard = "nhl_scoreboard.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nhl_scoreboard = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
