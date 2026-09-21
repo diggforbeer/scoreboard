@@ -13,9 +13,13 @@ device:
   layer: rpi4
   hostname: scoreboard
   user1: scoreboard
-  user1pass: hockey
-  user1groups: sudo,video,gpio,i2c,spi
-  user1sudo: password
+  # The device-user-credentials layer enforces upper/lower/digit/symbol and a
+  # minimum of 8 characters. Change this before exposing the board publicly.
+  user1pass: Scoreboard1!
+  # 'sudo' must not appear here -- membership is granted by user1sudo, and
+  # listing it in both is rejected as a conflict.
+  user1groups: video,gpio,i2c,spi
+  user1sudo: passwd
 
 image:
   layer: image-rpios
@@ -26,6 +30,18 @@ image:
 
 layer:
   app: nhl-scoreboard
+
+# The base layers default to UK locale and the restrictive '00' wireless
+# regulatory domain. The provisioning script resets timezone and regdom from
+# scoreboard.toml at boot, but these give sane values before it first runs.
+locale:
+  default: en_CA.UTF-8
+  keyboard_keymap: us
+  keyboard_layout: English (US)
+  timezone: America/Toronto
+
+ieee80211:
+  regdom: CA
 
 sb:
   srcdir: ${@SRCROOT}/..

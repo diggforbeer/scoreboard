@@ -65,5 +65,9 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 - The base image uses **iwd** for Wi-Fi, not NetworkManager or wpa_supplicant.
 - `systemd-net-min` enables networkd but ships no `.network` files; ours supply
   the DHCP configuration, without which the board has no network at all.
-- Default login is `scoreboard` / `hockey`. Change it before putting the board
-  on an untrusted network.
+- Default login is `scoreboard` / `Scoreboard1!`. The `device-user-credentials`
+  layer enforces a complexity rule (upper, lower, digit, symbol, 8+ chars), so
+  any replacement must satisfy it. Change this before putting the board on an
+  untrusted network — the base image also runs an SSH server.
+- `user1sudo` accepts only `none`, `passwd` or `nopasswd`, and listing `sudo`
+  in `user1groups` is rejected as a conflict with it.
