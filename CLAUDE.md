@@ -217,7 +217,13 @@ startup does not celebrate.
   not assumed. Tension worth knowing: #9 wanted the *first* persisted
   release gated on #4 (real hardware verified) -- this workflow has no
   such gate, so merging it is itself what fires the first automatic
-  release, whenever that happens to be.
+  release, whenever that happens to be. That `workflow_dispatch` call
+  needs `actions: write` in the workflow's `permissions:` block --
+  `contents: write` alone is not enough and fails with "403: Resource
+  not accessible by integration". Not theoretical either: the very
+  first release this workflow ever created (`v2026.09.22`) hit exactly
+  this, tag and release created fine, dispatch call failed, image
+  attached manually as a one-off recovery.
 
 ## Disk-destructive code (grow-rootfs)
 
