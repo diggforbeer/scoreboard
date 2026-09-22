@@ -9,25 +9,43 @@ name: Build image
 # as a passing check instead. https://docs.github.com/en/pull-requests/
 # collaborating-with-pull-requests/collaborating-on-repositories-with-code-
 # quality-features/troubleshooting-required-status-checks
+#
+# No `push: branches: [main]` trigger, deliberately: release.yml tags and
+# releases every merge automatically, then explicitly triggers a real
+# build here (workflow_dispatch, against the new tag) -- a separate
+# path-filtered build on the merge itself would only ever produce an
+# untagged, 14-day-expiring artifact that the tag-triggered build
+# immediately supersedes. Pure waste, removed rather than kept "just in
+# case". `tags: ["v*"]` stays as a manual fallback (a human pushing a
+# real release tag with their own credentials still fires it normally --
+# GITHUB_TOKEN-authored pushes don't cascade to this, see release.yml),
+# now with no path filter: a human pushing a real tag wants the build
+# regardless of what changed.
 on:
   push:
-    branches: [main]
-    paths:
-      - "image/**"
-      - "src/**"
-      - "fonts/**"
-      - "scripts/fetch-vendor.sh"
-      - ".github/workflows/build-image.yml"
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
   release:
     types: [created]
 
+permissions:
+  # Needed for the "Attach image to release" step (softprops/action-gh-
+  # release), which updates the release and uploads assets to it. This
+  # workflow had no explicit permissions: block until this line -- it
+  # was relying on the repository's default token permissions, and that
+  # release-attach step is the only thing here that needs more than the
+  # implicit default gives. actions/checkout only needs contents:read
+  # (covered); actions/upload-artifact authenticates with its own
+  # ACTIONS_RUNTIME_TOKEN, not GITHUB_TOKEN, so it's unaffected by this
+  # block either way.
+  contents: write
+
 concurrency:
   # One PR's own stacked pushes cancel each other (no reason to finish
-  # build #1 once #2 has superseded it); a push to main or a tag queues
-  # instead, since that run's artifact is the point, not just a gate.
+  # build #1 once #2 has superseded it); a tag push, a manual dispatch,
+  # or a release queues instead, since that run's artifact is the point,
+  # not just a gate.
   group: image-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 

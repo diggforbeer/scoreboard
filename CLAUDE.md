@@ -217,7 +217,32 @@ startup does not celebrate.
   not assumed. Tension worth knowing: #9 wanted the *first* persisted
   release gated on #4 (real hardware verified) -- this workflow has no
   such gate, so merging it is itself what fires the first automatic
-  release, whenever that happens to be.
+  release, whenever that happens to be. That `workflow_dispatch` call
+  needs `actions: write` in `release.yml`'s own `permissions:` block --
+  `contents: write` alone is not enough and fails with "403: Resource
+  not accessible by integration". Separately, `build-image.yml` needs
+  its *own* `contents: write` for the "Attach image to release" step
+  (`softprops/action-gh-release`) to update the release and upload
+  assets -- a completely different permissions gap on a different
+  workflow's token, not the same bug twice. Neither was theoretical:
+  the first release this workflow ever created (`v2026.09.22`) hit both
+  of them back to back -- tag and release created fine, the dispatch
+  call failed on the first gap, a manual `gh workflow run` retry then
+  hit the second. Both fixed; if a *third* release-pipeline permission
+  gap ever turns up, check every workflow's token separately rather
+  than assume they share one `permissions:` block -- they don't, each
+  workflow's `GITHUB_TOKEN` is scoped by its own file.
+- `build-image.yml` has no `push: branches: [main]` trigger, deliberately
+  removed once `release.yml` existed: that trigger produced an untagged,
+  14-day-expiring build on every relevant merge, immediately superseded
+  by the tag-triggered build `release.yml` fires moments later for the
+  same commit. Pure waste once every merge gets auto-released. Do not
+  add it back "to keep main green" -- `pull_request` already gates
+  merges on a real build (see above); nothing still needs a build to
+  fire on the merge itself. `tags: ["v*"]` stays, unfiltered by path
+  now (it used to share `push:`'s `paths:` list with the removed
+  branch trigger) -- a human pushing a real release tag by hand should
+  get a build regardless of what changed.
 
 ## Disk-destructive code (grow-rootfs)
 
