@@ -25,6 +25,16 @@ native arm64 and free for public repositories — no QEMU emulation. The
 compressed `.img.xz` is uploaded as a workflow artifact, and attached to a
 GitHub Release when a `v*` tag is pushed.
 
+**A pull request that touches `image/`, `src/`, `fonts/`, `scripts/fetch-
+vendor.sh` or this workflow file must build successfully before it can
+merge** — `nhl-scoreboard.img` is a required status check on `main`. A PR
+that doesn't touch those paths skips the build entirely (fast, reports as
+passing) rather than waiting ~12 minutes for an irrelevant build. This
+exists because #21 once merged clean — every *required* check passed — and
+broke the real image build anyway: `Build image` only ran *after* merge
+back then, so nothing had actually gated it. See `CLAUDE.md`'s "Image
+build facts" for the incident.
+
 ## Building locally
 
 rpi-image-gen's supported host is Debian Bookworm/Trixie **arm64** — a Pi 4 or
