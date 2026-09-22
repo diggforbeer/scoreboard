@@ -62,6 +62,19 @@ mmdebstrap:
     # shim includes. Pillow's own wheels ship no C headers, so without this
     # Debian package the extension build fails on shims/pillow.c.
     - python3-pil
+    # The compiled rgbmatrix extension links directly against
+    # libpython3.13.so.1.0 -- CMake's Development.Embed find_package
+    # component links extensions the way an embedding host would, not the
+    # usual "resolve symbols from the running interpreter" style most C
+    # extensions use, so this is a genuine runtime dependency. apt has no
+    # way to know that: it's an ELF dependency baked into our own compiled
+    # .so, invisible to dpkg's dependency graph, not a declared Depends of
+    # anything. Without this listed explicitly, purging python3-dev below
+    # takes libpython3.13 down with it via autoremove -- apt correctly (by
+    # its own knowledge) considers it orphaned, since python3-dev was the
+    # only thing that had asked for it. Confirmed by a failed build:
+    # ImportError: libpython3.13.so.1.0: cannot open shared object file.
+    - libpython3.13
 
   customize-hooks:
     # ---- scoreboard application -------------------------------------
