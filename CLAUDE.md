@@ -54,7 +54,7 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
 
 ```bash
 source .venv/bin/activate            # python3 -m venv .venv && pip install -e '.[dev]' first time
-pytest                               # 93 tests, ~1s, fully offline
+pytest                               # 199 tests, ~1s, fully offline
 pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
 ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (RUF100)
@@ -105,6 +105,19 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   no favourite-team marker on the game scene at all -- #5 tried amber score
   digits, #33 removed them outright; don't reintroduce one without a new
   decision to do so.
+- The game/goal/preview scenes are computed from `self.width`, not
+  hardcoded to 128 -- but at the default 128px (two chained 64x32 panels),
+  two full 32px logos leave the 64px column between them untouched, while
+  on a single 64x32 panel (`chain_length = 1`) they'd meet with zero room
+  left for the score column (#38). `Renderer._logo_span` handles this by
+  cropping each logo's centre-facing edge -- never its outer, panel-flush
+  edge -- down to half its width and no further, rather than shrinking the
+  artwork to a smaller square; `Renderer._LOGO_MIN_MIDDLE` is the reserved
+  middle-column width that decision is tuned against (32px, so two-digit
+  scores still clear each other at 64px). Alternatives considered and
+  rejected in #38: shrinking to smaller logos (loses recognisable detail
+  faster than cropping does) and alternating a single full-size team per
+  frame (changes the scene's information density, not just its size).
 - Fonts are vendored BDF (`fonts/`): `7x13B` scores/abbrevs, `6x10` preview
   day, `5x7` status, `4x6` power-play indicator. Glyphs can have a blank
   edge column, so alignment assertions allow 1px.
