@@ -197,6 +197,27 @@ startup does not celebrate.
   theoretical: #21 merged with every required check green and broke the
   real build (see the `libpython3.13` entry above) because back then
   `Build image` only ran *after* merge, so nothing had actually gated it.
+  A PR run also skips compression and the artifact upload (`if:
+  github.event_name != 'pull_request'` on those two steps) -- it only
+  needs to prove the build succeeds, not produce a distributable image,
+  and compression alone was ~85s of an otherwise sub-minute job.
+- `release.yml` tags and releases **every merge to `main`** automatically
+  (CalVer: `vYYYY.MM.DD`, `.1`/`.2`… same-day suffix). `pyproject.toml`'s
+  `version` is deliberately NOT kept in sync -- doing so would need a
+  commit to the protected `main` branch (a PR, or a bypass-capable bot
+  identity), which tags avoid entirely since `refs/tags/*` isn't covered
+  by the branch ruleset. Pushing that tag with `GITHUB_TOKEN` does **not**
+  trigger `build-image.yml`'s own `tags: ["v*"]` push trigger -- GitHub
+  doesn't cascade workflow runs from events the built-in token caused, to
+  prevent recursion -- so `release.yml` explicitly invokes
+  `build-image.yml` via `workflow_dispatch` (the documented exception:
+  always fires, any token) once the tag and release exist. Don't try to
+  make the tag-push trigger do this instead; it structurally cannot.
+  Verified this precisely against GitHub's own docs before relying on it,
+  not assumed. Tension worth knowing: #9 wanted the *first* persisted
+  release gated on #4 (real hardware verified) -- this workflow has no
+  such gate, so merging it is itself what fires the first automatic
+  release, whenever that happens to be.
 
 ## Disk-destructive code (grow-rootfs)
 

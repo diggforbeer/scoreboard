@@ -29,11 +29,34 @@ GitHub Release when a `v*` tag is pushed.
 vendor.sh` or this workflow file must build successfully before it can
 merge** — `nhl-scoreboard.img` is a required status check on `main`. A PR
 that doesn't touch those paths skips the build entirely (fast, reports as
-passing) rather than waiting ~12 minutes for an irrelevant build. This
-exists because #21 once merged clean — every *required* check passed — and
-broke the real image build anyway: `Build image` only ran *after* merge
-back then, so nothing had actually gated it. See `CLAUDE.md`'s "Image
-build facts" for the incident.
+passing) rather than paying for an irrelevant build. Compression and the
+artifact upload are also skipped on a PR run — the point there is only to
+prove the build succeeds, not to produce a downloadable image — so a
+relevant PR's build finishes in ~3 minutes rather than the full ~12 a
+release build (which does compress and upload) takes. This whole gate
+exists because #21 once merged clean — every *required* check passed —
+and broke the real image build anyway: `Build image` only ran *after*
+merge back then, so nothing had actually gated it. See `CLAUDE.md`'s
+"Image build facts" for the incident.
+
+## Releases
+
+`.github/workflows/release.yml` tags and creates a GitHub Release for
+**every merge to `main`**, automatically — no manual tagging step.
+Versioning is CalVer: `v2026.09.22`, with a `.1`/`.2`/… suffix for a
+second release the same day. `pyproject.toml`'s own `version` is a
+separate, static package version, deliberately *not* kept in sync — see
+the comment at the top of `release.yml` for why (short version: it would
+need a commit to the protected `main` branch, which tags don't).
+
+Pushing that tag itself won't trigger `build-image.yml`'s `tags: ["v*"]`
+push trigger — GitHub doesn't cascade workflow runs from events the
+built-in `GITHUB_TOKEN` caused, to prevent recursive triggering — so
+`release.yml` explicitly calls `build-image.yml` via `workflow_dispatch`
+(the documented exception that always fires) once the tag and release
+exist, which is what actually attaches the compressed image to the new
+release. A human pushing a `v*` tag by hand still fires the normal push
+trigger, kept as a fallback.
 
 ## Building locally
 
