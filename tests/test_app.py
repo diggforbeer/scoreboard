@@ -291,3 +291,36 @@ def test_situation_fetch_failure_keeps_last_value(fake_backend, games):
     app.client.fail = True
     app.refresh_situations()
     assert app.with_situation(game).situation is not None
+
+
+def test_status_server_off_by_default(fake_backend, games):
+    app = build_app(fake_backend, games)
+    assert app.status_server is None
+
+
+def test_status_server_built_when_enabled(fake_backend, games):
+    settings = Settings()
+    settings.status.enabled = True
+    settings.status.port = 9191
+    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is not None
+    assert app.status_server.port == 9191
+
+
+def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="TOR")
+    assert app.status_snapshot()["last successful poll"] == "never"
+    assert app.status_snapshot()["last error"] == "(none)"
+
+    app.refresh()
+    snapshot = app.status_snapshot()
+    assert snapshot["favourite team"] == "TOR"
+    assert snapshot["rotation"] == "favourite"
+    assert snapshot["last successful poll"] != "never"
+    assert snapshot["scene"]
+
+    app.client.fail = True
+    app.refresh()
+    snapshot = app.status_snapshot()
+    assert "score refresh" in snapshot["last error"]
+    assert snapshot["last error at"] != ""

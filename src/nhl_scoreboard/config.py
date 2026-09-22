@@ -146,10 +146,24 @@ class AudioConfig:
 
 
 @dataclass(slots=True)
+class StatusServerConfig:
+    """Read-only web status page for headless debugging (#48).
+
+    Off by default so it isn't one more thing that has to be reasoned about
+    for every board. No auth: it binds the local network only, for a device
+    already trusted there -- do not port-forward it to the internet.
+    """
+
+    enabled: bool = False
+    port: int = 8080
+
+
+@dataclass(slots=True)
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    status: StatusServerConfig = field(default_factory=StatusServerConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -177,6 +191,7 @@ class Settings:
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
             audio=_build(AudioConfig, raw.get("audio", {})),
+            status=_build(StatusServerConfig, raw.get("status", {})),
         )
 
 
