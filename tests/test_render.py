@@ -36,7 +36,7 @@ from nhl_scoreboard.display.renderer import (
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color
-from nhl_scoreboard.nhl.models import Game, Situation
+from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -584,6 +584,94 @@ def test_goal_score_reflects_the_current_score(games, synthetic_logos):
     c2 = canvas()
     make_renderer(logos=synthetic_logos).draw_goal(c2, games["live"])
     assert c.pixels != c2.pixels
+
+
+def standings_row(abbrev: str, seq: int, points: int, record=(10, 5, 2)) -> StandingsRow:
+    wins, losses, otl = record
+    return StandingsRow(
+        abbrev=abbrev,
+        conference="W",
+        division="C",
+        division_sequence=1,
+        wildcard_sequence=0,
+        conference_sequence=seq,
+        clinch_indicator="",
+        points=points,
+        games_played=sum(record),
+        wins=wins,
+        losses=losses,
+        ot_losses=otl,
+    )
+
+
+STANDINGS_ROW_HEIGHT = 6
+FAVOURITE_WINDOW = [
+    standings_row("STL", 4, 45),
+    standings_row("WPG", 5, 43),
+    standings_row("NSH", 6, 42),
+    standings_row("DAL", 7, 40),
+    standings_row("COL", 8, 38),
+]
+
+
+def assert_standings_layout(c: AsciiCanvas, rows: list[StandingsRow], favourite: str) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    for i, row in enumerate(rows):
+        y0, y1 = i * STANDINGS_ROW_HEIGHT, i * STANDINGS_ROW_HEIGHT + STANDINGS_ROW_HEIGHT - 1
+        band = c.bbox(0, y0, W - 1, y1)
+        assert band is not None, f"row {i} ({row.abbrev}) not drawn"
+        colors = c.colors(0, y0, W - 1, y1)
+        highlight = ACCENT if row.abbrev == favourite else WHITE
+        assert colors <= {highlight, team_color(row.abbrev)}, (
+            f"row {i} ({row.abbrev}) has unexpected colours: {colors}"
+        )
+        assert team_color(row.abbrev) in colors, f"row {i} ({row.abbrev}) not in its team colour"
+
+
+def test_standings_layout_favourite_centred(update_snapshots):
+    c = canvas()
+    make_renderer().draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    art = show("standings, favourite centred (NSH 6th)", c)
+
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH")
+    assert ACCENT in c.colors(0, 2 * STANDINGS_ROW_HEIGHT, W - 1, 3 * STANDINGS_ROW_HEIGHT - 1)
+    check_snapshot("standings_favourite_centred", art, update_snapshots)
+
+
+def test_standings_layout_favourite_clamped_to_top(update_snapshots):
+    window = [
+        standings_row("NSH", 1, 50),
+        standings_row("WPG", 2, 48),
+        standings_row("DAL", 3, 46),
+        standings_row("STL", 4, 44),
+        standings_row("COL", 5, 42),
+    ]
+    c = canvas()
+    make_renderer().draw_standings(c, window, "NSH")
+    art = show("standings, favourite 1st (extra rows below)", c)
+
+    assert_standings_layout(c, window, "NSH")
+    assert ACCENT in c.colors(0, 0, W - 1, STANDINGS_ROW_HEIGHT - 1)
+    check_snapshot("standings_favourite_top", art, update_snapshots)
+
+
+def test_standings_layout_only_favourite_is_highlighted():
+    c = canvas()
+    make_renderer().draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    for i, row in enumerate(FAVOURITE_WINDOW):
+        y0, y1 = i * STANDINGS_ROW_HEIGHT, i * STANDINGS_ROW_HEIGHT + STANDINGS_ROW_HEIGHT - 1
+        colors = c.colors(0, y0, W - 1, y1)
+        if row.abbrev == "NSH":
+            assert ACCENT in colors
+        else:
+            assert ACCENT not in colors
+
+
+def test_standings_layout_no_favourite_uses_no_accent():
+    """Shouldn't happen in practice, but nothing should crash or highlight wrongly."""
+    c = canvas()
+    make_renderer().draw_standings(c, FAVOURITE_WINDOW, "ZZZ")
+    assert ACCENT not in c.colors()
 
 
 def test_goal_scene_ignores_situation(games, synthetic_logos):

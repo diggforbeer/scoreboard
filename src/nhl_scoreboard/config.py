@@ -90,6 +90,9 @@ class ScoreboardConfig:
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.
     final_hold_minutes: float = 30.0
+    #: Show the favourite's conference playoff picture, interleaved with the
+    #: preview/countdown screen, once their season has actually started.
+    show_standings: bool = True
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()

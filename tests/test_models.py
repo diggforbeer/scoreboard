@@ -180,3 +180,112 @@ def test_estimated_end_by_how_the_game_finished(games):
         }
     )
     assert ot.estimated_end() == ot.start_utc + timedelta(hours=2, minutes=40)
+
+
+# -- standings ----------------------------------------------------------
+
+from nhl_scoreboard.nhl.models import (  # noqa: E402
+    StandingsRow,
+    conference_standings,
+    standings_window,
+)
+
+
+@pytest.fixture
+def standings_rows(standings_payload) -> list[StandingsRow]:
+    return [StandingsRow.from_api(raw) for raw in standings_payload["standings"]]
+
+
+def test_parses_every_row_in_fixture(standings_rows):
+    assert len(standings_rows) == 9
+    assert all(r.abbrev for r in standings_rows)
+
+
+def test_standings_row_fields(standings_rows):
+    nsh = next(r for r in standings_rows if r.abbrev == "NSH")
+    assert nsh.conference == "W"
+    assert nsh.division == "C"
+    assert nsh.division_sequence == 4
+    assert nsh.wildcard_sequence == 1
+    assert nsh.conference_sequence == 5
+    assert (nsh.wins, nsh.losses, nsh.ot_losses) == (9, 8, 2)
+    assert nsh.points == 20
+    assert nsh.games_played == 19
+    assert nsh.record_label() == "9-8-2"
+
+
+def test_missing_standings_fields_do_not_raise():
+    row = StandingsRow.from_api({})
+    assert row.abbrev == ""
+    assert row.points == 0
+    assert row.games_played == 0
+
+
+@pytest.mark.parametrize(
+    ("division_sequence", "wildcard_sequence", "expected"),
+    [
+        (1, 0, True),  # division leader
+        (3, 0, True),  # 3rd in division: still in
+        (4, 0, False),  # 4th in division, not a wildcard: out
+        (4, 1, True),  # missed the division, holds a wildcard spot
+        (4, 3, False),  # 3rd wildcard: out
+    ],
+)
+def test_in_playoff_position(division_sequence, wildcard_sequence, expected):
+    row = StandingsRow.from_api(
+        {"divisionSequence": division_sequence, "wildcardSequence": wildcard_sequence}
+    )
+    assert row.in_playoff_position is expected
+
+
+def test_conference_standings_filters_and_sorts(standings_rows):
+    west = conference_standings(standings_rows, "w")  # case-insensitive
+    assert [r.abbrev for r in west] == ["WPG", "DAL", "STL", "VGK", "NSH", "LAK", "CGY"]
+    east = conference_standings(standings_rows, "E")
+    assert [r.abbrev for r in east] == ["TOR", "CAR"]
+
+
+def _row(abbrev: str, conference_sequence: int) -> StandingsRow:
+    return StandingsRow(
+        abbrev=abbrev,
+        conference="W",
+        division="C",
+        division_sequence=1,
+        wildcard_sequence=0,
+        conference_sequence=conference_sequence,
+        clinch_indicator="",
+        points=0,
+        games_played=1,
+        wins=0,
+        losses=0,
+        ot_losses=0,
+    )
+
+
+def test_standings_window_centers_on_the_favourite():
+    rows = [_row(f"T{i}", i) for i in range(8)]  # ranks 0..7
+    window = standings_window(rows, "T4")
+    assert [r.abbrev for r in window] == ["T2", "T3", "T4", "T5", "T6"]
+
+
+def test_standings_window_clamps_at_the_top():
+    rows = [_row(f"T{i}", i) for i in range(8)]
+    window = standings_window(rows, "T0")
+    assert [r.abbrev for r in window] == ["T0", "T1", "T2", "T3", "T4"]
+
+
+def test_standings_window_clamps_at_the_bottom():
+    rows = [_row(f"T{i}", i) for i in range(8)]
+    window = standings_window(rows, "T7")
+    assert [r.abbrev for r in window] == ["T3", "T4", "T5", "T6", "T7"]
+
+
+def test_standings_window_shrinks_for_a_small_conference():
+    rows = [_row(f"T{i}", i) for i in range(3)]
+    window = standings_window(rows, "T1")
+    assert [r.abbrev for r in window] == ["T0", "T1", "T2"]
+
+
+def test_standings_window_missing_team_is_empty():
+    rows = [_row(f"T{i}", i) for i in range(8)]
+    assert standings_window(rows, "ZZZ") == []

@@ -158,6 +158,30 @@ preview, or a different game mid-rotation. The baseline score for a game is
 recorded on first sighting *without* firing, so a game already 3-1 at
 startup does not celebrate.
 
+The `standings` scene (#40) is the favourite's conference playoff picture:
+`conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
+favourite's conference by `conferenceSequence` and trim it to the
+favourite plus up to two teams on either side, clamped at either end of
+the conference so a team sitting 1st or last still gets a full-size
+window. Layout is Option C from #40 (favourite ± a few spots, one screen,
+no pagination) -- Option A (paginate the full 8) and Option B
+(favourite-centric single line) were considered and explicitly not
+chosen. Suppressed entirely until the favourite's own `games_played > 0`:
+`standings/now` keeps serving the just-finished season's *final* table
+all through the off-season rather than an empty result (verified with a
+live call while filing #40), and `games_played` is the only signal on
+hand for "is this actually the current season." Only scoped to
+`rotation = "favourite"`, same precedent as the power-play indicator and
+goal detection above -- shown interleaved with the preview/countdown
+scene, alternating on `rotate_seconds`' own cadence (`_show_standings_
+now()`), never in place of a live game or a held final. Standings are
+polled on an hourly TTL (`STANDINGS_TTL_SECONDS`), the same idea as
+`SCHEDULE_TTL_SECONDS` for the season schedule. `clinchIndicator` values
+are parsed onto `StandingsRow` but not rendered or colour-coded -- they're
+confirmed from only one real, end-of-season response and not documented
+anywhere; don't act on them without verifying against a few more live
+examples first.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.

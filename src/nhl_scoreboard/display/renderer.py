@@ -7,11 +7,12 @@ sensibly -- just with less or more breathing room.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game
+from ..nhl.models import Game, StandingsRow
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color
@@ -289,6 +290,35 @@ class Renderer:
         x = self.width // 2 - sum(text_width(font, t) for t, _ in parts) // 2
         for text, color in parts:
             x += self.text(canvas, font, x, y, color, text)
+
+    #: Fixed left edges/right edge for each standings column, so values of
+    #: different widths (a 1- vs 2-digit rank, a 5- vs 7-char W-L-OT record)
+    #: still line up between rows instead of drifting with their own width.
+    _STANDINGS_RANK_X = 1
+    _STANDINGS_ABBREV_X = 12
+    _STANDINGS_RECORD_X = 28
+    _STANDINGS_POINTS_RIGHT = 68
+
+    def draw_standings(self, canvas: Any, rows: Sequence[StandingsRow], favourite: str) -> None:
+        """The favourite's conference neighbourhood: rank, abbrev, record, points.
+
+        No logos -- eight rows of 32px artwork plus text doesn't fit
+        regardless of variant; this stays abbreviation + text, like the
+        game scene's text fallback. One row per team, tightest face
+        (``4x6``) so up to five rows fit the panel height.
+        """
+        canvas.Clear()
+        font = self.fonts.tiny
+        row_height = 6
+        for i, row in enumerate(rows):
+            y = 1 + i * row_height + (row_height - 2)
+            color = ACCENT if row.abbrev == favourite else WHITE
+            self.text(
+                canvas, font, self._STANDINGS_RANK_X, y, color, f"{row.conference_sequence:>2}"
+            )
+            self.text(canvas, font, self._STANDINGS_ABBREV_X, y, team_color(row.abbrev), row.abbrev)
+            self.text(canvas, font, self._STANDINGS_RECORD_X, y, color, row.record_label())
+            self.text_right(canvas, font, self._STANDINGS_POINTS_RIGHT, y, color, str(row.points))
 
     def draw_clock(self, canvas: Any, now: datetime) -> None:
         """Idle scene: the time, for when there is no hockey to show."""
