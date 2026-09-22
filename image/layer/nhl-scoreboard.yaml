@@ -90,7 +90,11 @@ mmdebstrap:
 
     # ---- team logos --------------------------------------------------
     # Rasterised on the build host by scripts/fetch-logos.py; the board
-    # never fetches artwork at runtime.
+    # never fetches artwork at runtime. assets/logos/overrides/ (hand-
+    # picked replacements for crests that don't downscale legibly, #12)
+    # is committed rather than fetched, but lives under the same tree and
+    # is copied recursively along with everything else here -- no special
+    # handling needed for LogoLibrary to find it first at runtime.
     - |-
       set -eu
       LOGOS="$IGconf_sb_srcdir/assets/logos"

@@ -39,8 +39,15 @@ def default_directories(size: int, variant: str) -> list[Path]:
     env = os.environ.get("NHL_SCOREBOARD_LOGO_DIR")
     if env:
         dirs.append(Path(env))
+    repo_root = Path(__file__).resolve().parents[3]
+    # Hand-picked overrides for teams whose official crest doesn't
+    # downscale legibly at panel size (#12) -- checked before the
+    # auto-fetched directory below, so one of these wins without needing
+    # to touch fetch-logos.py's own output.
+    dirs.append(Path("/usr/share/nhl-scoreboard/logos/overrides") / str(size) / variant)
+    dirs.append(repo_root / "assets" / "logos" / "overrides" / str(size) / variant)
     dirs.append(Path("/usr/share/nhl-scoreboard/logos") / str(size) / variant)
-    dirs.append(Path(__file__).resolve().parents[3] / "assets" / "logos" / str(size) / variant)
+    dirs.append(repo_root / "assets" / "logos" / str(size) / variant)
     return dirs
 
 

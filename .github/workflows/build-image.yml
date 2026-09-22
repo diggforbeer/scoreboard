@@ -75,7 +75,7 @@ jobs:
           files=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
                   --paginate --jq '.[].filename')
           echo "$files"
-          if echo "$files" | grep -qE '^(image/|src/|fonts/|scripts/fetch-vendor\.sh|\.github/workflows/build-image\.yml)'; then
+          if echo "$files" | grep -qE '^(image/|src/|fonts/|assets/|scripts/fetch-vendor\.sh|\.github/workflows/build-image\.yml)'; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"

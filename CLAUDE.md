@@ -75,9 +75,11 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
 - One code path: logos and text draw through `SetPixel`; never `SetImage`.
   Hardware, emulator and tests must render identically.
 - Layout constants live in the renderer and are mirrored in
-  `tests/test_render.py` (`SCORE_BASELINE=13`, `RULE_Y=19`,
-  `UNDERLINE_Y=15`, status baseline `H-2`, logos 32px at each edge).
-  Change both together.
+  `tests/test_render.py` (`SCORE_BASELINE=13`, `RULE_Y=19`, status
+  baseline `H-2`, logos 32px at each edge). Change both together. The
+  favourite marker is amber score digits (`ACCENT` colour), not an
+  underline -- `UNDERLINE_Y` was removed when #5 changed this; don't
+  reintroduce a reference to it.
 - Fonts are vendored BDF (`fonts/`): `7x13B` scores/abbrevs, `6x10` preview
   day, `5x7` status, `4x6` power-play indicator. Glyphs can have a blank
   edge column, so alignment assertions allow 1px.
@@ -85,6 +87,24 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   are lifted to a brighter secondary so they don't read as black.
 - Logo variant is `dark` for a reason: several teams' `light` marks are
   near-black (TOR light leaf: 67/255 luminance vs 228 for dark).
+- Some official crests don't downscale legibly at 32px no matter the
+  variant -- fine linework (shield stripes, letterform strokes) turns to
+  mush, same failure mode regardless of colour. `display/logos.py`'s
+  `default_directories()` checks `assets/logos/overrides/{size}/{variant}/`
+  *before* the fetched directory for exactly this (#12); WSH is the first
+  one there. That override is NOT the NHL CDN's `WSH_dark.svg` cropped
+  smaller -- that endpoint serves an ornate eagle+shield+sword mark, not
+  the team's actual current primary logo (the bold two-wing "W" with a
+  simple eagle head). The override PNG was built from a user-supplied
+  reference photo: flood-fill background removal from the image border
+  inward (protects internal whites -- the eagle head, the outline stroke
+  -- that aren't connected to the border, unlike a naive "remove all
+  near-white pixels" threshold would), then the same crop-to-bbox +
+  LANCZOS-to-32px pipeline `fetch-logos.py` already uses for every other
+  team. If another team's crest needs this treatment, check whether the
+  CDN is even serving their true current primary mark before assuming the
+  crest itself is just "too detailed" -- verify like this one was, don't
+  assume the auto-fetched SVG is right by default.
 
 ## App flow
 

@@ -66,3 +66,34 @@ def test_cache_loads_once(tmp_path, monkeypatch):
     first = lib.get("TOR")
     (tmp_path / "TOR.png").unlink()
     assert lib.get("TOR") is first
+
+
+# -- overrides for crests that don't downscale legibly (#12) ----------------
+
+
+def test_override_directory_is_checked_before_the_fetched_one():
+    from nhl_scoreboard.display.logos import default_directories
+
+    dirs = [str(d) for d in default_directories(32, "dark")]
+    override = next(i for i, d in enumerate(dirs) if d.endswith("logos/overrides/32/dark"))
+    fetched = next(i for i, d in enumerate(dirs) if d.endswith("assets/logos/32/dark"))
+    assert override < fetched, "override tier must be searched first"
+
+
+def test_wsh_override_ships_and_is_legible():
+    """The Capitals' official crest is fine linework that turns to mush at
+    32px (#12); this repo carries a hand-picked replacement instead of
+    falling back to text for every Capitals game. Sanity-check it's
+    actually there and isn't itself a near-empty or corrupt image."""
+    from nhl_scoreboard.display.logos import LogoLibrary
+
+    lib = LogoLibrary.default(variant="dark")
+    logo = lib.get("WSH")
+    assert logo is not None, "assets/logos/overrides/32/dark/WSH.png is missing"
+    assert lib.path_for("WSH") is not None
+    resolved = str(lib.path_for("WSH"))
+    assert "overrides" in resolved, f"must resolve to the override, not the fetched one: {resolved}"
+    # A bold two-colour mark should light a healthy fraction of the panel;
+    # a near-empty result would mean the source image or background-removal
+    # step went wrong.
+    assert 200 <= len(logo.pixels) <= 32 * 32 * 0.8

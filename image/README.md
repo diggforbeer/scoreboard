@@ -16,6 +16,7 @@ Debian-based image builder.
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
 | `../assets/logos/` | Team logos rasterised by `scripts/fetch-logos.py` (git-ignored, fetched on demand) |
+| `../assets/logos/overrides/` | Hand-picked replacements for crests that don't downscale legibly (#12) — committed, checked before the fetched ones |
 | `../assets/horns/` | The default goal siren, synthesized by `scripts/generate-default-horn.py` and committed (no third-party content, so nothing to fetch) |
 
 ## Building in CI
@@ -25,11 +26,12 @@ native arm64 and free for public repositories — no QEMU emulation. The
 compressed `.img.xz` is uploaded as a workflow artifact, and attached to a
 GitHub Release when a `v*` tag is pushed.
 
-**A pull request that touches `image/`, `src/`, `fonts/`, `scripts/fetch-
-vendor.sh` or this workflow file must build successfully before it can
-merge** — `nhl-scoreboard.img` is a required status check on `main`. A PR
-that doesn't touch those paths skips the build entirely (fast, reports as
-passing) rather than paying for an irrelevant build. Compression and the
+**A pull request that touches `image/`, `src/`, `fonts/`, `assets/`,
+`scripts/fetch-vendor.sh` or this workflow file must build successfully
+before it can merge** — `nhl-scoreboard.img` is a required status check
+on `main`. A PR that doesn't touch those paths skips the build entirely
+(fast, reports as passing) rather than paying for an irrelevant build.
+Compression and the
 artifact upload are also skipped on a PR run — the point there is only to
 prove the build succeeds, not to produce a downloadable image — so a
 relevant PR's build finishes in ~3 minutes rather than the full ~12 a
