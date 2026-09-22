@@ -227,6 +227,81 @@ class Game:
         return (rank, self.start_utc)
 
 
+@dataclass(frozen=True, slots=True)
+class StandingsRow:
+    """One team's line from ``standings/{date}``.
+
+    ``clinch_indicator`` values (``p``, ``y``, ``z``, ``x``, ``e`` seen so
+    far) are kept but not interpreted here -- confirmed from only one real,
+    end-of-season response and not documented anywhere, so nothing renders
+    off them yet (#40).
+    """
+
+    abbrev: str
+    conference: str
+    division: str
+    division_sequence: int
+    wildcard_sequence: int
+    conference_sequence: int
+    clinch_indicator: str
+    points: int
+    games_played: int
+    wins: int
+    losses: int
+    ot_losses: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> StandingsRow:
+        return cls(
+            abbrev=_default_str(raw.get("teamAbbrev")),
+            conference=str(raw.get("conferenceAbbrev") or "").upper(),
+            division=str(raw.get("divisionAbbrev") or "").upper(),
+            division_sequence=int(raw.get("divisionSequence") or 0),
+            wildcard_sequence=int(raw.get("wildcardSequence") or 0),
+            conference_sequence=int(raw.get("conferenceSequence") or 0),
+            clinch_indicator=str(raw.get("clinchIndicator") or ""),
+            points=int(raw.get("points") or 0),
+            games_played=int(raw.get("gamesPlayed") or 0),
+            wins=int(raw.get("wins") or 0),
+            losses=int(raw.get("losses") or 0),
+            ot_losses=int(raw.get("otLosses") or 0),
+        )
+
+    @property
+    def in_playoff_position(self) -> bool:
+        """Top 3 per division, or top 2 wildcards -- the NHL's actual format."""
+        return (1 <= self.division_sequence <= 3) or (1 <= self.wildcard_sequence <= 2)
+
+    def record_label(self) -> str:
+        return f"{self.wins}-{self.losses}-{self.ot_losses}"
+
+
+def conference_standings(rows: list[StandingsRow], conference: str) -> list[StandingsRow]:
+    """``rows`` for one conference, ranked by overall conference position."""
+    matches = [r for r in rows if r.conference == conference.strip().upper()]
+    return sorted(matches, key=lambda r: r.conference_sequence)
+
+
+def standings_window(
+    rows: list[StandingsRow], abbrev: str, above: int = 2, below: int = 2
+) -> list[StandingsRow]:
+    """``rows`` (already ranked) trimmed to ``abbrev`` plus nearby teams.
+
+    Clamped at either end of the conference -- a favourite sitting 1st or
+    last still gets a full-size window, taking the slack from the other
+    side, rather than a short list.
+    """
+    target = abbrev.strip().upper()
+    index = next((i for i, r in enumerate(rows) if r.abbrev == target), None)
+    if index is None:
+        return []
+    size = above + below + 1
+    start = max(0, index - above)
+    end = min(len(rows), start + size)
+    start = max(0, end - size)
+    return rows[start:end]
+
+
 def _codes(value: Any) -> tuple[str, ...]:
     return tuple(str(code).upper() for code in (value or ()))
 

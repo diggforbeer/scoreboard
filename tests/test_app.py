@@ -15,7 +15,7 @@ from nhl_scoreboard.app import ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, Situation
+from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
 
 
 class FakeCanvas:
@@ -82,6 +82,8 @@ class FakeClient:
         self.closed = False
         self.situation_calls: list[int] = []
         self.situations: dict[int, Situation | None] = {}
+        self.standings_rows: list[StandingsRow] = []
+        self.standings_calls = 0
 
     def scores(self, date: str = "now") -> list[Game]:
         self.calls += 1
@@ -99,6 +101,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return [g for g in self._games if g.involves(team)]
+
+    def standings(self, date: str = "now") -> list[StandingsRow]:
+        self.standings_calls += 1
+        if self.fail:
+            raise NHLApiError("boom")
+        return list(self.standings_rows)
 
     def close(self) -> None:
         self.closed = True

@@ -19,7 +19,7 @@ from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
 from .nhl.api import NHLApiError, NHLClient
-from .nhl.models import Game, Situation
+from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +28,8 @@ STALE_AFTER_SECONDS = 15 * 60
 FRAME_INTERVAL = 0.5
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
+#: Standings don't change intra-day except right after games finish.
+STANDINGS_TTL_SECONDS = 60 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,11 +37,13 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``countdown``,
-    ``preview``, ``clock``, ``no_games``, ``connecting``, ``no_data``.
+    ``preview``, ``standings``, ``clock``, ``no_games``, ``connecting``,
+    ``no_data``.
     """
 
     kind: str
     game: Game | None = None
+    standings: tuple[StandingsRow, ...] | None = None
 
 
 class ScoreboardApp:
@@ -89,6 +93,7 @@ class ScoreboardApp:
         self.ended_at: dict[int, datetime] = {}
         self._seen_live: set[int] = set()
         self._schedule: tuple[float, list[Game]] | None = None
+        self._standings: tuple[float, list[StandingsRow]] | None = None
         #: game id -> the favourite's own score last seen in that game, so a
         #: goal can be detected as an increase. Set on first sighting without
         #: firing, so a game already 3-1 at startup does not fire a goal.
@@ -238,6 +243,47 @@ class ScoreboardApp:
                 return game
         return None
 
+    def _refresh_standings(self) -> list[StandingsRow] | None:
+        """League standings, cached for ``STANDINGS_TTL_SECONDS`` like the schedule."""
+        now_mono = self.monotonic()
+        if self._standings is None or now_mono - self._standings[0] > STANDINGS_TTL_SECONDS:
+            try:
+                self._standings = (now_mono, self.client.standings())
+            except NHLApiError as exc:
+                log.warning("Standings fetch failed: %s", exc)
+                if self._standings is None:
+                    return None
+        return self._standings[1]
+
+    def _standings_scene(self) -> Scene | None:
+        """The favourite's conference neighbourhood, or None if there's nothing to show.
+
+        Suppressed entirely until the favourite has actually played a game
+        this season (#40): the standings endpoint keeps serving last
+        season's final table through the whole off-season rather than an
+        empty result, and ``games_played`` is the only signal available to
+        tell the two apart.
+        """
+        cfg = self.settings.scoreboard
+        favourite = cfg.favourite_team
+        if not cfg.show_standings or not favourite:
+            return None
+        rows = self._refresh_standings()
+        if not rows:
+            return None
+        favourite_row = next((r for r in rows if r.abbrev == favourite), None)
+        if favourite_row is None or favourite_row.games_played <= 0:
+            return None
+        window = standings_window(conference_standings(rows, favourite_row.conference), favourite)
+        if not window:
+            return None
+        return Scene("standings", standings=tuple(window))
+
+    def _show_standings_now(self) -> bool:
+        """Alternate standings with the preview/countdown scene, on rotate_seconds' cadence."""
+        period = max(self.settings.scoreboard.rotate_seconds, 1.0)
+        return int(self.monotonic() // period) % 2 == 1
+
     def select_scene(self) -> Scene:
         """Decide what to show; the draw step only renders the answer."""
         scene = self._select_base_scene()
@@ -284,6 +330,9 @@ class ScoreboardApp:
                 if ended is not None and self.clock() - ended < hold:
                     return Scene("game", today)
         upcoming = today if today is not None and today.is_pregame else self.next_favourite_game()
+        standings = self._standings_scene()
+        if standings is not None and (upcoming is None or self._show_standings_now()):
+            return standings
         if upcoming is None:
             return None
         if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
@@ -376,6 +425,8 @@ class ScoreboardApp:
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
+        elif scene.kind == "standings":
+            r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":

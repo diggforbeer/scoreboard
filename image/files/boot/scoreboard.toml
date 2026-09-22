@@ -57,6 +57,11 @@ logo_variant = "dark"
 # to the normal live score.
 goal_flash_seconds = 6
 
+# Show the favourite's conference playoff picture (their spot plus a few
+# teams on either side), interleaved with the preview/countdown screen.
+# Only appears once favourite_team has actually played a game this season.
+show_standings = true
+
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
 # scores. The board has no other way to make sound: the HUB75 panel needs

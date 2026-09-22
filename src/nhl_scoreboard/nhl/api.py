@@ -15,7 +15,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import Game, Situation
+from .models import Game, Situation, StandingsRow
 
 log = logging.getLogger(__name__)
 
@@ -68,8 +68,17 @@ class NHLClient:
         payload = self._get(f"/gamecenter/{game_id}/landing")
         return Situation.from_api(payload.get("situation"))
 
-    def standings(self, date: str = "now") -> list[dict[str, Any]]:
-        return list(self._get(f"/standings/{date}").get("standings", []))
+    def standings(self, date: str = "now") -> list[StandingsRow]:
+        """Every team's current standings line, unsorted across conferences.
+
+        During the off-season this endpoint keeps serving the just-finished
+        season's final standings rather than an empty result (verified with
+        a live call) -- callers that care about "has the current season
+        actually started" need a signal beyond just "rows came back", e.g.
+        the favourite's own ``games_played``.
+        """
+        payload = self._get(f"/standings/{date}")
+        return [StandingsRow.from_api(raw) for raw in payload.get("standings", [])]
 
     # -- plumbing --------------------------------------------------------
 
