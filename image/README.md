@@ -31,15 +31,31 @@ GitHub Release when a `v*` tag is pushed.
 before it can merge** — `nhl-scoreboard.img` is a required status check
 on `main`. A PR that doesn't touch those paths skips the build entirely
 (fast, reports as passing) rather than paying for an irrelevant build.
-Compression and the
-artifact upload are also skipped on a PR run — the point there is only to
-prove the build succeeds, not to produce a downloadable image — so a
-relevant PR's build finishes in ~3 minutes rather than the full ~12 a
-release build (which does compress and upload) takes. This whole gate
-exists because #21 once merged clean — every *required* check passed —
-and broke the real image build anyway: `Build image` only ran *after*
-merge back then, so nothing had actually gated it. See `CLAUDE.md`'s
-"Image build facts" for the incident.
+Compression and the artifact upload are also skipped on a PR run — the
+point there is only to prove the build succeeds, not to produce a
+downloadable image — so a relevant PR's build finishes in ~3 minutes
+rather than the ~4.5 a release build (which does compress and upload)
+takes. This whole gate exists because #21 once merged clean — every
+*required* check passed — and broke the real image build anyway:
+`Build image` only ran *after* merge back then, so nothing had actually
+gated it. See `CLAUDE.md`'s "Image build facts" for the incident.
+
+**Team logos** are cached across runs (`actions/cache` on
+`assets/logos/32/`, keyed on `scripts/fetch-logos.py` + `display/teams.py`)
+— skips re-fetching and re-rasterising all 32 teams' SVGs when neither
+has changed, ~9-11s. Confirmed working across two consecutive real runs.
+Only pays off from the *second* build with a given cache key onward — the
+first is a normal cold build that populates it.
+
+Caching APT downloads for the target rootfs was also tried, via
+`sys.apt_cachedir` — a genuine rpi-image-gen feature, not something
+bolted on from outside. It doesn't work: the bind-mount it sets up
+genuinely executes, but the target directory comes back empty
+(`Apt cache: 0 pkgs`) after a real build, confirmed via two consecutive
+runs and the GitHub caches API. See `CLAUDE.md`'s "Image build facts" —
+don't re-attempt this without new information about *why* packages never
+land in the bind-mounted directory; that's a bdebstrap-internals
+question, not a config error in this repo.
 
 ## Releases
 

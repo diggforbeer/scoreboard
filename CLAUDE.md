@@ -206,6 +206,38 @@ startup does not celebrate.
   the failure tail as one.
 - Builds queue rather than cancel (`cancel-in-progress: false`) — a doc
   push once cancelled a finished 12-minute build mid-compress.
+- Team logos are `actions/cache`d across runs (keyed on `fetch-logos.py`
+  + `display/teams.py`), skipping the whole rasterise step on a hit.
+  Confirmed genuinely working across two consecutive runs (real
+  `Cache hit for:` + `Cache restored from key:` + the step showing
+  `skipped`), ~9-11s saved.
+- **`sys.apt_cachedir` (caching APT downloads for the target rootfs) was
+  tried and does NOT work, despite being correctly wired -- don't
+  re-attempt this without new information.** It's a genuine
+  rpi-image-gen feature (`layer/base/sys-build-base.yaml`, confirmed via
+  the tool's own source; override syntax confirmed against
+  `examples/setoptions`: the full `IGconf_sys_apt_cachedir=<path>` form
+  after `--`, not dotted notation). Wired up correctly by every check
+  available from outside the tool: `sys-build-base` active in our layer
+  chain (confirmed in our own build log), the bind-mount setup-hook
+  genuinely executes (`mount --bind '<cache>' "$1/var/cache/apt/archives"`
+  visible in the log), a real permission bug in the cache-*save* step
+  found and fixed along the way (`tar: apt-cache/partial: Cannot open:
+  Permission denied` -- needs `sudo chmod -R a+rX` before
+  `actions/cache`'s post-job save, since apt writes `partial/` as root
+  inside its own namespace; `actions/cache` treats a failed save as a
+  warning, not a job failure, so this shipped silently once already).
+  None of that mattered: after two consecutive runs, GitHub's cache
+  genuinely restored (`Cache hit for:` + `Cache restored from key:`,
+  no tar error) into a directory that rpi-image-gen itself then reported
+  as `Apt cache: 0 pkgs` -- confirmed via the caches API too (306 bytes
+  saved total, nowhere near real `.deb` content). The bind-mount
+  executes; something later in bdebstrap's own multi-phase pipeline
+  (separate essential/bootstrap vs customize chroot sessions, possibly)
+  never actually writes packages through it. Diagnosing further means
+  reading bdebstrap's own internals, not this repo's config -- out of
+  scope for what this project needs. Removed from the workflow rather
+  than shipped as inert complexity that looks like it's helping.
 - `nhl-scoreboard.img` is a **required status check** on `main`, and
   `build-image.yml` runs on `pull_request` (unconditionally at the
   trigger level) with the actual path-relevance check done *inside* the

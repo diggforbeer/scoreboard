@@ -142,7 +142,19 @@ jobs:
         working-directory: scoreboard
         run: ./scripts/fetch-vendor.sh
 
+      - name: Cache team logos
+        id: logo-cache
+        uses: actions/cache@v4
+        with:
+          # Deterministic given the same team list and rasterisation code --
+          # invalidates itself on any change to either.
+          path: scoreboard/assets/logos/32
+          key: >-
+            logos-32-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
+            'scoreboard/src/nhl_scoreboard/display/teams.py') }}
+
       - name: Rasterise team logos
+        if: steps.logo-cache.outputs.cache-hit != 'true'
         working-directory: scoreboard
         run: |
           sudo apt-get install -y -qq libcairo2
@@ -172,7 +184,8 @@ jobs:
           set -o pipefail
           if ! ./rpi-image-gen build \
                 -S "${GITHUB_WORKSPACE}/scoreboard/image" \
-                -c scoreboard.yaml 2>&1 | tee /tmp/build.log; then
+                -c scoreboard.yaml \
+                2>&1 | tee /tmp/build.log; then
             # Republish the tail as an ::error:: annotation. Unlike raw job
             # logs, annotations are readable through the public REST API, so
             # a failure can be diagnosed without repository admin rights.
