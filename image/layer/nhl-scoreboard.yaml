@@ -45,6 +45,11 @@ mmdebstrap:
     - iw
     - ca-certificates
     - alsa-utils
+    # For nhl-scoreboard-grow-rootfs: partition inspection (parted) and
+    # filesystem growth (resize2fs). util-linux (findmnt, lsblk, sfdisk)
+    # is essential and always present, so not listed explicitly.
+    - parted
+    - e2fsprogs
     # Build-time, for the HUB75 bindings. Upstream builds through
     # scikit-build-core/CMake, not the old bindings/python Makefile.
     - build-essential
@@ -123,9 +128,13 @@ mmdebstrap:
       set -eu
       install -m 0755 "$IGconf_sb_assetdir/scripts/scoreboard-provision" \
         "$1/usr/local/sbin/scoreboard-provision"
+      install -m 0755 "$IGconf_sb_assetdir/scripts/nhl-scoreboard-grow-rootfs" \
+        "$1/usr/local/sbin/nhl-scoreboard-grow-rootfs"
       install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard.service" \
         "$1/etc/systemd/system/"
       install -m 0644 "$IGconf_sb_assetdir/systemd/scoreboard-provision.service" \
+        "$1/etc/systemd/system/"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard-grow-rootfs.service" \
         "$1/etc/systemd/system/"
 
     # ---- boot partition settings file --------------------------------
@@ -154,5 +163,6 @@ mmdebstrap:
       fi
 
     # ---- enable units ------------------------------------------------
+    - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
     - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
     - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard

@@ -50,7 +50,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck scripts/*.sh
+          shellcheck scripts/*.sh image/files/scripts/nhl-scoreboard-grow-rootfs
 
   layer-lint:
     name: Validate image definitions

@@ -7,6 +7,10 @@ Flash the image with the official [Raspberry Pi Imager](https://www.raspberrypi.
 ("Use custom"), drop your Wi-Fi details and favourite team into a text file on
 the boot partition, and the board comes up showing live scores.
 
+On first boot the board grows its root filesystem to fill the rest of the SD
+card and reboots itself once to finish — this is expected, not a fault; give
+it a couple of minutes on the very first power-up.
+
 ## Hardware
 
 | Part | Target |
@@ -47,6 +51,8 @@ Early development. Working today:
 - [x] Team logos, rasterised at build time from the NHL's own artwork
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
+- [x] Goal horn and GOAL celebration screen
+- [x] Root filesystem grows to fill the SD card on first boot
 - [ ] Verified on real hardware
 
 ## Development

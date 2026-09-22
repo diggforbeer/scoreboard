@@ -1,0 +1,18 @@
+[Unit]
+Description=Grow the root filesystem to fill the SD card (first boot)
+Documentation=https://github.com/diggforbeer/scoreboard
+# Runs on every boot until it reports done, not just the first: a failed
+# attempt (rare, but see the script's error handling) is safe to retry.
+# Ordered before the appliance services so the one reboot this can
+# trigger happens before the board starts showing anything, not mid-use.
+After=local-fs.target
+Before=scoreboard-provision.service nhl-scoreboard.service
+ConditionPathExists=!/var/lib/nhl-scoreboard/rootfs-grown
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/nhl-scoreboard-grow-rootfs
+
+[Install]
+WantedBy=multi-user.target

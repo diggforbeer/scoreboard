@@ -12,6 +12,7 @@ Debian-based image builder.
 | `layer/nhl-scoreboard.yaml` | Custom layer: installs the app, builds the HUB75 bindings, wires up services |
 | `files/systemd/` | Service units for the scoreboard and its provisioner |
 | `files/scripts/scoreboard-provision` | Applies boot-partition settings on every boot |
+| `files/scripts/nhl-scoreboard-grow-rootfs` | Grows the root filesystem to fill the SD card on first boot |
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
 | `../assets/logos/` | Team logos rasterised by `scripts/fetch-logos.py` (git-ignored, fetched on demand) |
@@ -61,6 +62,8 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
   on each boot and applies Wi-Fi, timezone and regulatory domain
 - `dtparam=audio=off` in `config.txt` and `isolcpus=3` in `cmdline.txt`, both
   required for a stable, flicker-free panel refresh
+- `nhl-scoreboard-grow-rootfs.service`, which grows the root filesystem to
+  fill the SD card on first boot (see below)
 
 ## Notes and gotchas
 
@@ -84,3 +87,13 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
   untrusted network — the base image also runs an SSH server.
 - `user1sudo` accepts only `none`, `passwd` or `nopasswd`, and listing `sudo`
   in `user1groups` is rejected as a conflict with it.
+- **Root filesystem growth is untested on real hardware** (tracked in #4).
+  The image ships a small, fixed-size root partition; `nhl-scoreboard-grow-
+  rootfs.service` grows it to fill the SD card on first boot, using the same
+  two-phase technique (grow the partition table, reboot, then `resize2fs`)
+  `raspi-config`'s `do_expand_rootfs` has used for years. `tests/test_grow_
+  rootfs.py` runs the real script against a faked toolchain (every command
+  it touches -- `findmnt`, `lsblk`, `parted`, `sfdisk`, `resize2fs`,
+  `systemctl` -- is a recording fake) and verifies its logic and safety
+  checks, but that cannot substitute for seeing it actually grow a real
+  partition on a real SD card.
