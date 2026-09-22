@@ -25,5 +25,11 @@ image/files/vendor/
 # local dev config for the emulator
 scoreboard.local.toml
 
-# team logos, fetched by scripts/fetch-logos.py
-assets/logos/
+# team logos, fetched by scripts/fetch-logos.py into size-numbered dirs
+# (32/, 64/, ...). assets/logos/overrides/ is NOT matched by this -- those
+# are hand-picked overrides for teams whose official crest doesn't
+# downscale well (#12), curated rather than fetched, committed like the
+# horns are. A blanket `assets/logos/` ignore would also hide overrides/,
+# since git won't descend into an ignored directory even for a negated
+# path underneath -- ignoring only the fetched pattern avoids that.
+assets/logos/[0-9]*/

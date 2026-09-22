@@ -16,6 +16,7 @@ Debian-based image builder.
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
 | `../assets/logos/` | Team logos rasterised by `scripts/fetch-logos.py` (git-ignored, fetched on demand) |
+| `../assets/logos/overrides/` | Hand-picked replacements for crests that don't downscale legibly (#12) — committed, checked before the fetched ones |
 | `../assets/horns/` | The default goal siren, synthesized by `scripts/generate-default-horn.py` and committed (no third-party content, so nothing to fetch) |
 
 ## Building in CI
