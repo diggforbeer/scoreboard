@@ -10,11 +10,24 @@ from __future__ import annotations
 import logging
 import os
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+import tomlkit
+
 log = logging.getLogger(__name__)
+
+
+class ConfigWriteError(Exception):
+    """Raised when Settings.save() cannot read or write the config file.
+
+    Deliberately not swallowed: a save that silently didn't happen (boot
+    partition full or read-only) needs to surface to whoever is editing the
+    config, not vanish (#51).
+    """
+
 
 DEFAULT_CONFIG_PATHS = (
     Path("/boot/firmware/scoreboard.toml"),
@@ -193,6 +206,47 @@ class Settings:
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
         )
+
+    def save(self, updates: Mapping[str, Mapping[str, Any]]) -> None:
+        """Write ``updates`` into the source file, in place, keeping everything else.
+
+        ``updates`` is ``{section: {key: value}}``, e.g.
+        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``.
+        Only those keys are touched -- parsed and re-emitted with ``tomlkit``
+        rather than ``tomllib`` + a plain writer, so every comment in the
+        heavily-annotated boot-partition template survives untouched (#51).
+
+        Updates this object's in-memory settings from the same file afterwards,
+        via the normal load path, so the caller sees the merged result without
+        a separate reload.
+        """
+        if self.source_path is None:
+            raise ConfigWriteError("no source file loaded; nothing to save to")
+        try:
+            doc = tomlkit.parse(self.source_path.read_text())
+        except OSError as exc:
+            raise ConfigWriteError(f"could not read {self.source_path}: {exc}") from exc
+
+        for section, values in updates.items():
+            table = doc.get(section)
+            if table is None:
+                table = tomlkit.table()
+                doc[section] = table
+            for key, value in values.items():
+                table[key] = value
+
+        tmp_path = self.source_path.with_name(self.source_path.name + ".tmp")
+        try:
+            tmp_path.write_text(tomlkit.dumps(doc))
+            tmp_path.replace(self.source_path)
+        except OSError as exc:
+            raise ConfigWriteError(f"could not write {self.source_path}: {exc}") from exc
+
+        reloaded = Settings.from_toml(self.source_path)
+        self.panel = reloaded.panel
+        self.scoreboard = reloaded.scoreboard
+        self.audio = reloaded.audio
+        self.status = reloaded.status
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:

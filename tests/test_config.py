@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from nhl_scoreboard.config import Settings
+import pytest
+
+from nhl_scoreboard.config import ConfigWriteError, Settings
 
 
 def test_defaults_describe_two_chained_64x32_panels():
@@ -86,6 +88,64 @@ def test_inverted_brightness_clamp_is_swapped_not_left_broken(caplog):
     panel = PanelConfig(min_brightness=80, max_brightness=20)
     assert (panel.min_brightness, panel.max_brightness) == (20, 80)
     assert "min_brightness" in caplog.text
+
+
+def test_save_preserves_comments_and_only_changes_targeted_keys(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        """
+        # a helpful comment about favourite_team
+        [scoreboard]
+        favourite_team = "NSH"
+        rotate_seconds = 8
+
+        # a helpful comment about brightness
+        [panel]
+        brightness = 60
+        chain_length = 2
+        """
+    )
+    settings = Settings.load(path)
+    settings.save({"scoreboard": {"favourite_team": "tor"}, "panel": {"brightness": 80}})
+
+    text = path.read_text()
+    assert "# a helpful comment about favourite_team" in text
+    assert "# a helpful comment about brightness" in text
+    assert 'favourite_team = "tor"' in text
+    assert "brightness = 80" in text
+    # Untouched keys are byte-for-byte unchanged.
+    assert "rotate_seconds = 8" in text
+    assert "chain_length = 2" in text
+
+    # In-memory settings reflect the write without a separate reload.
+    assert settings.scoreboard.favourite_team == "TOR"  # normalised, same as load
+    assert settings.panel.brightness == 80
+    assert settings.panel.chain_length == 2
+
+
+def test_save_adds_a_section_missing_from_the_file(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    settings = Settings.load(path)
+    settings.save({"audio": {"enabled": False}})
+    assert settings.audio.enabled is False
+    assert Settings.load(path).audio.enabled is False
+
+
+def test_save_without_a_loaded_file_raises():
+    settings = Settings()
+    with pytest.raises(ConfigWriteError):
+        settings.save({"scoreboard": {"favourite_team": "TOR"}})
+
+
+def test_save_failure_is_not_silent(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    settings = Settings.load(path)
+    path.unlink()
+    path.mkdir()  # any write to "path" now fails with IsADirectoryError
+    with pytest.raises(ConfigWriteError):
+        settings.save({"scoreboard": {"favourite_team": "TOR"}})
 
 
 def test_physical_size_follows_pitch():
