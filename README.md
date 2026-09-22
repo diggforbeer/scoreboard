@@ -20,6 +20,7 @@ it a couple of minutes on the very first power-up.
 | Adapter | Seengreat-style RGB Matrix Adapter Board (also sold as XICOOLEE, WatangTech) |
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
+| Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -52,6 +53,7 @@ Early development. Working today:
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [x] Goal horn and GOAL celebration screen
+- [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Root filesystem grows to fill the SD card on first boot
 - [ ] Verified on real hardware
 
@@ -117,6 +119,10 @@ pixel_mapper = ""           # e.g. "U-mapper" to stack two panels into 64x64
 hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60
+auto_brightness = false     # dim from a BH1750 ambient light sensor on I2C instead (#44)
+min_brightness = 10         # clamp range for auto_brightness
+max_brightness = 100
+brightness_poll_seconds = 5
 ```
 
 ## What it shows

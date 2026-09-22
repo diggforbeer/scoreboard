@@ -45,6 +45,10 @@ mmdebstrap:
     - iw
     - ca-certificates
     - alsa-utils
+    # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
+    # over I2C via this. Harmless if no sensor is wired up -- LightSensor
+    # .open() degrades to None the same as a missing /dev/i2c-* would.
+    - python3-smbus
     # For nhl-scoreboard-grow-rootfs: partition inspection (parted) and
     # filesystem growth (resize2fs). util-linux (findmnt, lsblk, sfdisk)
     # is essential and always present, so not listed explicitly.
@@ -165,14 +169,21 @@ mmdebstrap:
     # The matrix driver uses the PWM hardware that the onboard analogue
     # audio also claims; they cannot coexist. Isolating a core stops the
     # scheduler from interrupting the refresh thread and causing flicker.
+    # i2c_arm is unconditional, not gated behind auto_brightness (#44): the
+    # scoreboard user is already unconditionally in the i2c group, enabling
+    # the bus costs nothing on a board with no sensor wired up, and
+    # LightSensor already degrades to the static brightness on its own when
+    # nothing answers on it.
     - |-
       set -eu
       CONFIG="$1/boot/firmware/config.txt"
       if ! grep -q '^# nhl-scoreboard' "$CONFIG" 2>/dev/null; then
-        printf '\n%s\n%s\n%s\n' \
+        printf '\n%s\n%s\n%s\n%s\n%s\n' \
           '# nhl-scoreboard: the HUB75 driver needs exclusive use of the PWM' \
           '# peripheral, which the onboard audio output otherwise occupies.' \
-          'dtparam=audio=off' >> "$CONFIG"
+          'dtparam=audio=off' \
+          '# nhl-scoreboard: I2C bus for an optional BH1750 ambient light' \
+          'dtparam=i2c_arm=on' >> "$CONFIG"
       fi
       CMDLINE="$1/boot/firmware/cmdline.txt"
       if [ -n "${IGconf_sb_isolated_cpu:-}" ] && ! grep -q 'isolcpus=' "$CMDLINE"; then

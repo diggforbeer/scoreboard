@@ -13,11 +13,13 @@ from types import FrameType
 from zoneinfo import ZoneInfo
 
 from .audio import GoalHornPlayer
+from .brightness import lux_to_brightness
 from .config import Settings
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
+from .light_sensor import LightSensor
 from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
 
@@ -30,6 +32,10 @@ FRAME_INTERVAL = 0.5
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
 STANDINGS_TTL_SECONDS = 60 * 60
+#: How much a new lux reading moves the smoothed value, 0-1. Low on purpose:
+#: this is what keeps a cloud passing over a window, or a hand briefly
+#: covering the sensor, from visibly flickering the panel.
+BRIGHTNESS_SMOOTHING = 0.3
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +61,7 @@ class ScoreboardApp:
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
         horn: GoalHornPlayer | None = None,
+        light_sensor: LightSensor | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -64,6 +71,16 @@ class ScoreboardApp:
             horn_dir=settings.audio.horn_dir,
             enabled=settings.audio.enabled,
         )
+        # Only probe the I2C bus when the feature is actually on -- a board
+        # without the sensor shouldn't get I2C log noise every startup.
+        if light_sensor is not None:
+            self.light_sensor = light_sensor
+        elif settings.panel.auto_brightness:
+            self.light_sensor = LightSensor.open()
+        else:
+            self.light_sensor = None
+        self._smoothed_lux: float | None = None
+        self._applied_brightness = settings.panel.brightness
         self.tz = ZoneInfo(settings.scoreboard.timezone)
         self.client = client or NHLClient()
         self.backend = backend or load_backend()
@@ -120,6 +137,7 @@ class ScoreboardApp:
 
         next_poll = 0.0
         next_rotate = 0.0
+        next_brightness = 0.0
         while self._running:
             now = self.monotonic()
             if now >= next_poll:
@@ -128,6 +146,9 @@ class ScoreboardApp:
             if now >= next_rotate:
                 self.advance()
                 next_rotate = now + self.settings.scoreboard.rotate_seconds
+            if now >= next_brightness:
+                self.refresh_brightness()
+                next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
             self.draw()
             time.sleep(FRAME_INTERVAL)
@@ -171,6 +192,39 @@ class ScoreboardApp:
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    # -- auto brightness ---------------------------------------------------
+
+    def refresh_brightness(self) -> None:
+        """Sample the ambient sensor and re-apply matrix brightness if it moved.
+
+        No-op whenever auto_brightness is off (self.light_sensor is None) or
+        the sensor isn't answering -- the panel just keeps the static
+        `brightness` it was constructed with, same as if this feature did
+        not exist.
+        """
+        if self.light_sensor is None:
+            return
+        lux = self.light_sensor.read_lux()
+        if lux is None:
+            return
+        self._smoothed_lux = (
+            lux
+            if self._smoothed_lux is None
+            else self._smoothed_lux + BRIGHTNESS_SMOOTHING * (lux - self._smoothed_lux)
+        )
+        panel = self.settings.panel
+        target = lux_to_brightness(self._smoothed_lux, panel.min_brightness, panel.max_brightness)
+        if target == self._applied_brightness:
+            return
+        self._applied_brightness = target
+        try:
+            self.matrix.brightness = target
+        except (AttributeError, TypeError):
+            # The emulator and real rgbmatrix binding both expose a live
+            # settable brightness; a backend that doesn't just keeps
+            # whatever it was constructed with.
+            log.debug("Backend %s has no settable brightness", self.backend.name)
 
     # -- goal detection ---------------------------------------------------
 
