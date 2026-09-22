@@ -27,6 +27,15 @@ pi_hole_d       = 2.7;
 pi_standoff_h   = 6;   // clearance under the board for underside components
 pi_standoff_d   = 6;
 
+// ---- ambient light sensor (#44 -- auto-dimming) -------------------------
+// Provisional: sized for a generic small I2C breakout's sensing window
+// (e.g. a BH1750), not a specific module yet -- #44 hasn't settled on
+// one. Revisit diameter/position once it has. Through the right side
+// wall, near the front edge so the panel and the box's own depth don't
+// shadow it, at half the enclosure's height.
+sensor_hole_d      = 6;
+sensor_inset_front = 8;   // mm back from the open front face
+
 // ---- enclosure -----------------------------------------------------------
 wall = 2.4;  // ~6 perimeters at a 0.4mm nozzle
 lip  = 4;    // how far the front ledge overlaps the panel edge, each side
@@ -78,8 +87,21 @@ module pi_standoffs() {
                 }
 }
 
-union() {
-    shell();
-    panel_ledge();
-    pi_standoffs();
+module sensor_hole() {
+    // Drilled through the right wall. rotate([0,90,0]) maps the
+    // cylinder's local +z (its extrusion axis) onto global +x, so it
+    // must start 1mm before the wall's inner face to fully clear both
+    // faces after the wall + 2mm cylinder length.
+    translate([outer_w - wall - 1, outer_h / 2, outer_d - sensor_inset_front])
+        rotate([0, 90, 0])
+            cylinder(h = wall + 2, d = sensor_hole_d, $fn = 32);
+}
+
+difference() {
+    union() {
+        shell();
+        panel_ledge();
+        pi_standoffs();
+    }
+    sensor_hole();
 }
