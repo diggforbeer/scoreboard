@@ -40,4 +40,7 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Bills against the Claude Code Pro/Max subscription rather than
+          # metered API usage. Generate with `claude setup-token` (opens a
+          # browser login) and store as this secret -- not ANTHROPIC_API_KEY.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

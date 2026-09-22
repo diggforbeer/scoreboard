@@ -30,8 +30,10 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   runners, independent of any local session. Deliberately gated on the
   mention, not `issues: opened` alone: this repo's every-issue-gets-a-PR
   backlog flow means an agent that reacted to every filed issue unprompted
-  would fight the workflow above, not help it. Needs the `ANTHROPIC_API_KEY`
-  repo secret set (Settings → Secrets and variables → Actions).
+  would fight the workflow above, not help it. Bills against the Claude
+  Code Pro/Max subscription, not metered API usage: needs the
+  `CLAUDE_CODE_OAUTH_TOKEN` repo secret set (Settings → Secrets and
+  variables → Actions), generated locally with `claude setup-token`.
 
 ## Commands
 
