@@ -51,7 +51,7 @@ RULE_Y = 19
 STATUS_TOP = RULE_Y + 1
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
-INDICATOR_TOP, INDICATOR_BOTTOM = SCORE_BASELINE + 1, RULE_Y - 1  # the band the rule normally uses
+INDICATOR_TOP, INDICATOR_BOTTOM = SCORE_BASELINE + 2, RULE_Y  # the band the rule normally uses
 LOGO = 32
 MID_LEFT, MID_RIGHT = LOGO, W - LOGO  # the column between the logos
 AWAY_CX, HOME_CX = MID_LEFT + 16, MID_RIGHT - 16
@@ -375,7 +375,6 @@ def assert_indicator(c: AsciiCanvas, side: str, x0: int, x1: int, allow=frozense
         assert x0 <= min(xs) <= x0 + 1, f"away indicator should start at x={x0}, got {min(xs)}"
     else:
         assert x1 - 1 <= max(xs) <= x1, f"home indicator should end at x={x1}, got {max(xs)}"
-    assert not c.lit(x0, RULE_Y, x1, RULE_Y), "rule should give way to the indicator"
 
 
 @pytest.mark.parametrize(
@@ -420,7 +419,7 @@ def test_even_strength_situation_draws_nothing_special(games, synthetic_logos):
     c = canvas()
     make_renderer(logos=synthetic_logos).draw_game(c, game)
     assert_logo_layout(c, game)  # includes: the rule is present
-    assert not c.lit(MID_LEFT + 3, INDICATOR_TOP, MID_RIGHT - 4, INDICATOR_BOTTOM)
+    assert not c.lit(MID_LEFT + 3, INDICATOR_TOP, MID_RIGHT - 4, RULE_Y - 1)
 
 
 # --------------------------------------------------------------------------

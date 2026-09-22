@@ -110,7 +110,7 @@ class Renderer:
         self._draw_score(canvas, game.home.abbrev, game.home.score, right - quarter, score_baseline)
 
         self.vline(canvas, centre - 1, 3, score_baseline, DIM)
-        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y - 1):
+        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y):
             self.hline(canvas, left + 3, right - 4, rule_y, DIM)
         self.text_center(
             canvas,
@@ -160,7 +160,7 @@ class Renderer:
         self._draw_side(canvas, game.home.abbrev, game.home.score, half, half, score_baseline)
 
         self.vline(canvas, half - 1, 2, rule_y - 3, DIM)
-        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y - 1):
+        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y):
             self.hline(canvas, 0, self.width - 1, rule_y, DIM)
 
         self.text_center(
