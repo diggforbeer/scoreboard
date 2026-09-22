@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import ScoreboardApp
+from nhl_scoreboard.app import STALE_AFTER_SECONDS, ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
@@ -124,7 +124,9 @@ def build_app(fake_backend, games, **scoreboard_kwargs) -> ScoreboardApp:
     settings = Settings()
     for key, value in scoreboard_kwargs.items():
         setattr(settings.scoreboard, key, value)
-    return ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+    return ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, local_ip=lambda: None
+    )
 
 
 def test_favourite_team_is_pinned_to_the_front(fake_backend, games):
@@ -184,6 +186,38 @@ def test_draws_without_data_before_first_success(fake_backend, games):
     app = build_app(fake_backend, games)
     app.draw()
     assert app.matrix.swaps == 1
+
+
+def test_connecting_scene_shows_ip_once_dhcp_has_one(fake_backend, games):
+    app = build_app(fake_backend, games)
+    app.local_ip = lambda: "192.168.1.42"
+    scene = app.select_scene()
+    assert scene.kind == "connecting"
+    assert scene.detail == "192.168.1.42"
+
+
+def test_connecting_scene_falls_back_before_dhcp(fake_backend, games):
+    app = build_app(fake_backend, games)
+    app.local_ip = lambda: None
+    scene = app.select_scene()
+    assert scene.kind == "connecting"
+    assert scene.detail is None
+
+
+def test_never_connecting_falls_through_to_no_data_after_stale_window(fake_backend, games):
+    """A boot that never reaches a first successful poll is still "offline", eventually."""
+    mono = 1000.0
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        monotonic=lambda: mono,
+        local_ip=lambda: None,
+    )
+    assert app.select_scene().kind == "connecting"
+
+    mono += STALE_AFTER_SECONDS + 1
+    assert app.select_scene().kind == "no_data"
 
 
 def test_shutdown_closes_the_client(fake_backend, games):

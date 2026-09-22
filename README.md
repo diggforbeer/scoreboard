@@ -53,6 +53,9 @@ Early development. Working today:
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [x] Goal horn and GOAL celebration screen
 - [x] Root filesystem grows to fill the SD card on first boot
+- [x] Boot splash: "CONNECTING" then the board's LAN IP until the first
+      successful poll, falling back to the offline indicator if that never
+      happens
 - [ ] Verified on real hardware
 
 ## Development
