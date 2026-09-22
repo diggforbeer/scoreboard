@@ -1,0 +1,91 @@
+#!/bin/sh
+# Grow the root filesystem to fill whatever card the image was flashed
+# onto. The image ships with a small, fixed-size root partition (see
+# image/config/scoreboard.yaml); most of a real SD card is otherwise
+# unused, with no room for logs to grow.
+#
+# Two-phase across a reboot -- the same technique raspi-config's
+# do_expand_rootfs has used for years (see RPi-Distro/raspi-config). It is
+# NOT reinvented here: growing a partition table entry while its
+# filesystem is mounted only rewrites the table (sector 0), never the
+# data, since the start sector is never moved -- but the running kernel
+# has already cached the old, smaller table in memory and only ever
+# re-reads it fresh at boot, so resize2fs cannot act on the new size
+# until after a reboot.
+#
+# Safe by construction:
+#   - refuses unless the root partition is the LAST partition on the disk
+#     (growing one that has another partition after it would overwrite
+#     that partition's data)
+#   - the start sector is passed back to sfdisk explicitly unchanged, on
+#     top of sfdisk's own refusal to write an invalid/overlapping layout
+#   - idempotent and safe to run on every boot: sfdisk validates and
+#     commits its new layout atomically (no partial writes to recover
+#     from), and resize2fs is a documented no-op when there is nothing
+#     left to grow
+#   - MBR only (matches this image's layout); GPT would additionally need
+#     its backup header relocated, which this script does not attempt
+#
+# Run by nhl-scoreboard-grow-rootfs.service, gated so it stops trying
+# once $DONE_MARKER exists.
+set -eu
+
+# Overridable so tests/test_grow_rootfs.py can run this against a tmp
+# directory instead of real system state.
+STATE_DIR="${NHL_SCOREBOARD_STATE_DIR:-/var/lib/nhl-scoreboard}"
+GROWN_MARKER="$STATE_DIR/rootfs-partition-grown"
+DONE_MARKER="$STATE_DIR/rootfs-grown"
+
+log() {
+    logger -t nhl-scoreboard-grow-rootfs "$1"
+    echo "$1"
+}
+
+if [ -f "$DONE_MARKER" ]; then
+    exit 0
+fi
+mkdir -p "$STATE_DIR"
+
+ROOT_PART=$(findmnt / -o source -n)
+ROOT_DEV="/dev/$(lsblk -no pkname "$ROOT_PART")"
+PART_NUM=$(echo "$ROOT_PART" | grep -o '[0-9]*$')
+
+if [ -f "$GROWN_MARKER" ]; then
+    # Stage 2: we grew the partition table on a previous boot and have
+    # since rebooted, so the kernel now sees the larger partition.
+    log "Growing filesystem on $ROOT_PART to fill its partition"
+    if resize2fs "$ROOT_PART"; then
+        touch "$DONE_MARKER"
+        rm -f "$GROWN_MARKER"
+        log "Root filesystem grown; done"
+        exit 0
+    fi
+    log "resize2fs failed; will retry next boot"
+    exit 1
+fi
+
+# Stage 1: grow the partition table entry, then reboot so the kernel
+# re-reads it fresh.
+LAST_PART_NUM=$(parted "$ROOT_DEV" -ms unit s p | tail -n 1 | cut -f 1 -d:)
+if [ "$LAST_PART_NUM" != "$PART_NUM" ]; then
+    log "$ROOT_PART (partition $PART_NUM) is not the last partition on $ROOT_DEV (that's $LAST_PART_NUM); refusing to grow it"
+    touch "$DONE_MARKER"
+    exit 0
+fi
+
+PART_START=$(parted "$ROOT_DEV" -ms unit s p | grep "^${PART_NUM}:" | cut -f 2 -d: | sed 's/[^0-9]//g')
+if [ -z "$PART_START" ]; then
+    log "Could not determine the start of $ROOT_PART; refusing to grow it"
+    touch "$DONE_MARKER"
+    exit 0
+fi
+
+log "Growing partition $PART_NUM on $ROOT_DEV (start sector $PART_START unchanged, size -> max)"
+if ! printf '%s,+\n' "$PART_START" | sfdisk --no-reread -N "$PART_NUM" "$ROOT_DEV"; then
+    log "sfdisk failed; partition table left untouched, will retry next boot"
+    exit 1
+fi
+
+touch "$GROWN_MARKER"
+log "Partition table grown; rebooting so the kernel picks it up"
+systemctl --no-block reboot

@@ -177,6 +177,42 @@ startup does not celebrate.
 - Builds queue rather than cancel (`cancel-in-progress: false`) — a doc
   push once cancelled a finished 12-minute build mid-compress.
 
+## Disk-destructive code (grow-rootfs)
+
+`image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
+table on the user's SD card. Getting it wrong bricks the card, not just
+the app -- treat any change to it with the care that implies, not the
+same bar as everything else in this repo.
+
+- It is a **deliberate copy of `raspi-config`'s `do_expand_rootfs`**
+  (`RPi-Distro/raspi-config`), not an original design -- that script is
+  what every stock Raspberry Pi OS image has used for years. If you think
+  you've found a better way (e.g. an online BLKPG resize with no reboot),
+  check upstream did not already reject it before assuming it's safe;
+  don't improvise here.
+- The technique: grow the partition table entry (`sfdisk`) with the start
+  sector explicitly unchanged -- this only rewrites sector 0, never
+  touches the filesystem's data, but the running kernel has already
+  cached the old table and only re-reads a fresh one at boot, hence the
+  two-phase design across a `systemctl reboot`.
+- Non-negotiable safety checks, present for a reason, do not remove:
+  refuses unless the root partition is the **last** partition on the disk
+  (otherwise growing it would overwrite whatever comes after); the start
+  sector is passed back to `sfdisk` explicitly, never recomputed.
+- MBR only. GPT has a backup header at the end of the disk that would
+  also need relocating; this script does not attempt that, and this
+  image's layout (`image/mbr/simple_dual`) is MBR, so it doesn't need to.
+- **Cannot be verified without real hardware** (tracked in #4, same as
+  everything else that needs a Pi). What *is* tested,
+  `tests/test_grow_rootfs.py`: the actual script, run for real against a
+  faked toolchain (every external command it touches is a recording
+  fake) -- this catches shell logic bugs and confirms the safety checks
+  actually refuse when they should, but cannot confirm `sfdisk`/
+  `resize2fs` behave as expected against a real disk. When touching this
+  script, mutation-test the change the way the start-sector assertion
+  was verified: deliberately break the thing the test is supposed to
+  catch and confirm it fails before trusting it passes.
+
 ## Config conventions
 
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
