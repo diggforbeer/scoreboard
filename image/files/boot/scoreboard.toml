@@ -81,6 +81,15 @@ device = ""
 # copyrighted -- so this is a slot to drop your own recording into.
 horn_dir = ""
 
+[status]
+# A tiny read-only web page showing what the board currently thinks is going
+# on (current scene, last successful poll, last error, favourite team,
+# rotation) -- handy for checking on a headless board without SSH-ing in.
+# Off by default. No login: this binds the local network the board is on,
+# not the internet -- do not port-forward it.
+enabled = false
+port = 8080
+
 [panel]
 # Defaults describe two 64x32 panels daisy-chained into one 128x32 board.
 rows = 32

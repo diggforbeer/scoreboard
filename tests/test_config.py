@@ -61,6 +61,17 @@ def test_auto_brightness_defaults_off():
     assert (panel.min_brightness, panel.max_brightness) == (10, 100)
 
 
+def test_status_server_defaults_off(tmp_path):
+    assert Settings().status.enabled is False
+    assert Settings().status.port == 8080
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = true\nport = 9000\n")
+    status = Settings.load(path).status
+    assert status.enabled is True
+    assert status.port == 9000
+
+
 def test_brightness_clamp_is_kept_within_0_100():
     settings = Settings()
     settings.panel.min_brightness = -5

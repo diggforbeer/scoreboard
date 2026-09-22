@@ -22,6 +22,7 @@ from .display.renderer import Renderer
 from .light_sensor import LightSensor
 from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
+from .status_server import StatusServer
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class ScoreboardApp:
         monotonic: Callable[[], float] | None = None,
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
+        status_server: StatusServer | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -102,6 +104,19 @@ class ScoreboardApp:
         self.games: list[Game] = []
         self.index = 0
         self.last_success: float | None = None
+        #: Wall-clock companions to last_success, for the status page (#48) --
+        #: last_success itself is monotonic and not meaningful to a human.
+        self.last_success_at: datetime | None = None
+        self.last_error: str | None = None
+        self.last_error_at: datetime | None = None
+        if status_server is not None:
+            self.status_server = status_server
+        elif settings.status.enabled:
+            self.status_server = StatusServer(
+                snapshot=self.status_snapshot, port=settings.status.port
+            )
+        else:
+            self.status_server = None
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
@@ -132,6 +147,8 @@ class ScoreboardApp:
 
     def run(self) -> None:
         self._running = True
+        if self.status_server is not None:
+            self.status_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
@@ -156,6 +173,8 @@ class ScoreboardApp:
 
     def shutdown(self) -> None:
         try:
+            if self.status_server is not None:
+                self.status_server.stop()
             self.matrix.Clear()
         finally:
             self.client.close()
@@ -168,9 +187,11 @@ class ScoreboardApp:
             games = self.client.scores()
         except NHLApiError as exc:
             log.warning("Score refresh failed: %s", exc)
+            self._record_error(f"score refresh: {exc}")
             return
         self.games = self.order(games)
         self.last_success = self.monotonic()
+        self.last_success_at = self.clock()
         self._detect_goals(self.games)
         now = self.clock()
         for game in self.games:
@@ -192,6 +213,11 @@ class ScoreboardApp:
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    def _record_error(self, message: str) -> None:
+        """Track the most recent fetch failure, for the status page (#48)."""
+        self.last_error = message
+        self.last_error_at = self.clock()
 
     # -- auto brightness ---------------------------------------------------
 
@@ -286,6 +312,7 @@ class ScoreboardApp:
                 self._schedule = (now_mono, self.client.schedule(favourite))
             except NHLApiError as exc:
                 log.warning("Schedule fetch failed: %s", exc)
+                self._record_error(f"schedule fetch: {exc}")
                 if self._schedule is None:
                     return None
         now = self.clock()
@@ -305,6 +332,7 @@ class ScoreboardApp:
                 self._standings = (now_mono, self.client.standings())
             except NHLApiError as exc:
                 log.warning("Standings fetch failed: %s", exc)
+                self._record_error(f"standings fetch: {exc}")
                 if self._standings is None:
                     return None
         return self._standings[1]
@@ -467,6 +495,33 @@ class ScoreboardApp:
         if self.last_success is None:
             return True
         return (self.monotonic() - self.last_success) > STALE_AFTER_SECONDS
+
+    # -- status page (#48) ------------------------------------------------
+
+    def status_snapshot(self) -> dict[str, str]:
+        """Everything the status page shows -- state already sitting in memory."""
+        scene = self.select_scene()
+        cfg = self.settings.scoreboard
+        return {
+            "scene": scene.kind,
+            "current game": self._scene_game_label(scene),
+            "favourite team": cfg.favourite_team or "(none)",
+            "rotation": cfg.rotation,
+            "last successful poll": self._format_time(self.last_success_at),
+            "last error": self.last_error or "(none)",
+            "last error at": self._format_time(self.last_error_at) if self.last_error_at else "",
+        }
+
+    @staticmethod
+    def _scene_game_label(scene: Scene) -> str:
+        if scene.game is None:
+            return ""
+        return f"{scene.game.away.abbrev} @ {scene.game.home.abbrev}"
+
+    def _format_time(self, value: datetime | None) -> str:
+        if value is None:
+            return "never"
+        return value.astimezone(self.tz).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def draw(self) -> None:
         scene = self.select_scene()
