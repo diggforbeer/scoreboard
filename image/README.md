@@ -56,7 +56,10 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 - Team logos at `/usr/share/nhl-scoreboard/logos/32/{dark,light}/`
 - The default goal siren at `/usr/share/nhl-scoreboard/horns/_default.wav`,
   and `alsa-utils` for `aplay`
-- `rgbmatrix` Python bindings, compiled during the build
+- `rgbmatrix` Python bindings, compiled during the build, then the compiler
+  toolchain that built them (`build-essential`, `cmake`, `ninja-build`,
+  `cython3`, `python3-dev`, `python3-pip`) purged in the same layer -- the
+  running image never needs a compiler, only the `.so` it already built
 - `scoreboard-provision.service`, which reads `/boot/firmware/scoreboard.toml`
   on each boot and applies Wi-Fi, timezone and regulatory domain
 - `dtparam=audio=off` in `config.txt` and `isolcpus=3` in `cmdline.txt`, both
