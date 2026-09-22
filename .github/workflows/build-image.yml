@@ -167,8 +167,8 @@ jobs:
             exit 1
           fi
 
-      - name: Locate and compress image
-        id: artifact
+      - name: Locate image
+        id: locate
         run: |
           set -euo pipefail
           # rpi-image-gen writes to work/image-<name>/. Look there first and
@@ -190,11 +190,24 @@ jobs:
             exit 1
           fi
           echo "Found image: $img ($(du -h "$img" | cut -f1))"
+          echo "path=$img" >> "$GITHUB_OUTPUT"
 
+      # A pull_request run's whole job is proving the build itself
+      # succeeds -- finding a real .img above already does that. Nobody
+      # flashes a PR's test build, so compressing it (~85s for ~900MB on
+      # the run this was measured against) and uploading it buys nothing
+      # for a PR and is skipped. Every other trigger (push to main, a
+      # tag, workflow_dispatch, a release) keeps producing the real
+      # distributable artifact exactly as before.
+      - name: Compress image
+        id: artifact
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
           stamp="$(date -u +%Y%m%d)"
           out="${IMAGE_NAME}-${stamp}-$(git -C scoreboard rev-parse --short HEAD).img"
           mkdir -p deploy
-          mv "$img" "deploy/${out}"
+          mv "${{ steps.locate.outputs.path }}" "deploy/${out}"
 
           echo "Compressing (this is what Imager consumes)..."
           xz -T0 -6 "deploy/${out}"
@@ -204,6 +217,7 @@ jobs:
           echo "name=${out}.xz" >> "$GITHUB_OUTPUT"
 
       - name: Upload image artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.IMAGE_NAME }}-img
