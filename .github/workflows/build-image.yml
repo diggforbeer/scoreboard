@@ -1,5 +1,14 @@
 name: Build image
 
+# PRs that touch image-relevant paths must build successfully before they
+# can merge -- see the `changes` job below. Do not go back to path-filtering
+# at the trigger level (removed from here deliberately): a required check
+# whose *workflow* never triggers for a given PR blocks that PR's merge
+# forever (GitHub reports it "Pending", not "skipped"/"passed"). Path
+# filtering belongs at the job level, where a job skipped via `if:` reports
+# as a passing check instead. https://docs.github.com/en/pull-requests/
+# collaborating-with-pull-requests/collaborating-on-repositories-with-code-
+# quality-features/troubleshooting-required-status-checks
 on:
   push:
     branches: [main]
@@ -10,15 +19,17 @@ on:
       - "scripts/fetch-vendor.sh"
       - ".github/workflows/build-image.yml"
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
   release:
     types: [created]
 
 concurrency:
-  group: image-${{ github.ref }}
-  # Queue rather than cancel: an image build is ~12 minutes and a cancelled
-  # one discards a finished artifact. Runs on the same ref go one at a time.
-  cancel-in-progress: false
+  # One PR's own stacked pushes cancel each other (no reason to finish
+  # build #1 once #2 has superseded it); a push to main or a tag queues
+  # instead, since that run's artifact is the point, not just a gate.
+  group: image-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Pinned so image builds stay reproducible; bump deliberately.
@@ -26,8 +37,42 @@ env:
   IMAGE_NAME: nhl-scoreboard
 
 jobs:
+  # Only gates whether `build` runs *for a pull_request event*; every other
+  # trigger (push to main, a tag, workflow_dispatch, a release) always
+  # builds regardless -- those aren't merge gates, they're the runs that
+  # actually produce a distributable image.
+  changes:
+    name: Check for image-relevant changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - name: Check which files this PR touches
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          files=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                  --paginate --jq '.[].filename')
+          echo "$files"
+          if echo "$files" | grep -qE '^(image/|src/|fonts/|scripts/fetch-vendor\.sh|\.github/workflows/build-image\.yml)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: nhl-scoreboard.img
+    needs: [changes]
+    # needs: on a job that's conditionally skipped (github.event_name !=
+    # 'pull_request', so `changes` never ran) would by default skip this
+    # job too; `always()` opts out of that so the explicit condition below
+    # is what actually decides it.
+    if: >
+      always() &&
+      (github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true')
     # rpi-image-gen's supported host is Debian/Ubuntu arm64. These runners
     # are free for public repositories and avoid qemu emulation entirely.
     runs-on: ubuntu-24.04-arm
