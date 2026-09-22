@@ -34,6 +34,21 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   Code Pro/Max subscription, not metered API usage: needs the
   `CLAUDE_CODE_OAUTH_TOKEN` repo secret set (Settings → Secrets and
   variables → Actions), generated locally with `claude setup-token`.
+- **It can run this repo's own tests and lint, and (best-effort) open its
+  own PR.** The action's tag-mode default `--allowedTools` is a fixed,
+  narrow list with no general Bash (confirmed by reading
+  `anthropics/claude-code-action`'s own source, not assumed) — `claude.yml`
+  extends it via `claude_args` to allow setting up the venv, `pytest`,
+  `ruff check`/`format`, and `gh pr create`, and instructs it (via
+  `--append-system-prompt`) to actually run the test/lint suite before
+  claiming success and to call `gh pr create` itself for issue-triggered
+  runs. That second part overrides a default that's hard-coded into the
+  action's own base prompt (issue-triggered runs are told to only leave a
+  compare/quick_pull link) — there's no dedicated toggle for it, so it's a
+  best-effort prompt override, not guaranteed; verify it actually opened a
+  PR rather than just a link before trusting it. Either way, review what
+  it produces the same as any other PR — a real test run doesn't make the
+  *change* correct, only that it doesn't fail the suite as written.
 
 ## Commands
 
