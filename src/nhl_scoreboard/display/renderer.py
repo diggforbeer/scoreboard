@@ -147,9 +147,8 @@ class Renderer:
         text = str(score)
         width = text_width(self.fonts.large, text)
         x = cx - width // 2
-        self.text(canvas, self.fonts.large, x, y, WHITE, text)
-        if self.favourite and abbrev == self.favourite:
-            self.hline(canvas, x, x + width - 1, y + 2, ACCENT)
+        color = ACCENT if self.favourite and abbrev == self.favourite else WHITE
+        self.text(canvas, self.fonts.large, x, y, color, text)
 
     def _draw_game_text(self, canvas: Any, game: Game) -> None:
         """Fallback when a logo is missing: abbreviation and score per side."""
@@ -177,10 +176,8 @@ class Renderer:
 
     def _draw_side(self, canvas: Any, abbrev: str, score: int, x0: int, span: int, y: int) -> None:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
-        self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
-        if self.favourite and abbrev == self.favourite:
-            underline = x0 + 3 + text_width(self.fonts.large, abbrev) - 1
-            self.hline(canvas, x0 + 3, underline, y + 2, ACCENT)
+        color = ACCENT if self.favourite and abbrev == self.favourite else WHITE
+        self.text_right(canvas, self.fonts.large, x0 + span - 3, y, color, str(score))
 
     def draw_goal(self, canvas: Any, game: Game) -> None:
         """A goal celebration: GOAL in big amber type, current score below.

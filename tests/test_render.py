@@ -49,7 +49,6 @@ SNAPSHOTS = Path(__file__).parent / "snapshots"
 # Layout constants the renderer uses; asserting on them keeps the two honest.
 SCORE_BASELINE = 13
 RULE_Y = 19
-UNDERLINE_Y = SCORE_BASELINE + 2
 STATUS_TOP = RULE_Y + 1
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
@@ -175,13 +174,13 @@ def assert_game_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
         abbrev_colors = c.colors(x0 + TEXT_LEFT, 0, x0 + 24, SCORE_BASELINE)
         assert team_color(side.abbrev) in abbrev_colors, f"{side.abbrev} not in its team colour"
 
-        underline = c.lit(x0 + TEXT_LEFT, UNDERLINE_Y, x0 + 24, UNDERLINE_Y)
-        should_underline = bool(favourite) and side.abbrev == favourite
-        assert bool(underline) == should_underline, (
-            f"{side.abbrev}: favourite underline {'missing' if should_underline else 'present'}"
+        # Score colour marks the favourite: amber for them, white otherwise.
+        # Sampled right of the abbreviation/score gap already checked above.
+        score_colors = c.colors(x0 + 26, 0, right_edge, SCORE_BASELINE)
+        expected = ACCENT if favourite and side.abbrev == favourite else WHITE
+        assert score_colors == {expected}, (
+            f"{side.abbrev} score should be {expected}, got {score_colors}"
         )
-        if underline:
-            assert set(underline.values()) == {ACCENT}
 
     assert_centered(c, STATUS_TOP, H - 1, "status line")
 
@@ -194,19 +193,17 @@ def assert_logo_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
         assert region, f"no logo drawn for {side.abbrev}"
         assert team_color(side.abbrev) in set(region.values()), f"{side.abbrev} logo colour wrong"
 
-    # Scores sit centred in each half of the middle column, in white.
+    # Scores sit centred in each half of the middle column. Colour marks
+    # the favourite: amber for them, white otherwise.
     for cx, side in ((AWAY_CX, game.away), (HOME_CX, game.home)):
         box = c.bbox(cx - 12, 0, cx + 12, SCORE_BASELINE)
         assert box is not None, f"no score drawn for {side.abbrev}"
         assert abs(box.center_x - cx) <= 1, f"{side.abbrev} score off-centre: {box.center_x}"
-        assert WHITE in c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
-
-        underline = c.lit(cx - 12, UNDERLINE_Y, cx + 12, UNDERLINE_Y)
-        should = bool(favourite) and side.abbrev == favourite
-        state = "missing" if should else "present"
-        assert bool(underline) == should, f"{side.abbrev}: underline {state}"
-        if underline:
-            assert set(underline.values()) == {ACCENT}
+        expected = ACCENT if favourite and side.abbrev == favourite else WHITE
+        score_colors = c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
+        assert score_colors == {expected}, (
+            f"{side.abbrev} score should be {expected}, got {score_colors}"
+        )
 
     mid = (MID_LEFT + MID_RIGHT) // 2
     assert all((mid - 1, y) in c.pixels for y in range(3, SCORE_BASELINE + 1)), "divider missing"
@@ -312,15 +309,18 @@ def test_missing_logo_falls_back_to_text(games, synthetic_logos, tmp_path):
     assert_game_layout(c, games["live"])  # full-width rule etc: the text layout's signature
 
 
-def test_favourite_underline_follows_the_team(games):
-    """Same game, favourite on the other side: underline moves with it."""
+def test_favourite_marker_follows_the_team(games):
+    """Same game, favourite on the other side: the amber score moves with it."""
     game = games["pregame"]  # TOR @ MTL
-    for fav, x0 in (("TOR", 0), ("MTL", HALF)):
+    for fav, fav_x0, other_x0 in (("TOR", 0, HALF), ("MTL", HALF, 0)):
         c = canvas()
         make_renderer(fav).draw_game(c, game)
-        assert c.lit(x0 + TEXT_LEFT, UNDERLINE_Y, x0 + 24, UNDERLINE_Y), f"no underline for {fav}"
-        other = HALF - x0
-        assert not c.lit(other + TEXT_LEFT, UNDERLINE_Y, other + 24, UNDERLINE_Y)
+        fav_edge = fav_x0 + HALF - 1 - TEXT_RIGHT_PAD
+        other_edge = other_x0 + HALF - 1 - TEXT_RIGHT_PAD
+        fav_score = c.colors(fav_x0 + 26, 0, fav_edge, SCORE_BASELINE)
+        other_score = c.colors(other_x0 + 26, 0, other_edge, SCORE_BASELINE)
+        assert fav_score == {ACCENT}, f"{fav} score should be amber, got {fav_score}"
+        assert other_score == {WHITE}, f"non-favourite score should stay white, got {other_score}"
 
 
 # --------------------------------------------------------------------------
