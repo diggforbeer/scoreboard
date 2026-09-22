@@ -7,6 +7,7 @@ scheduling and selection logic against a stand-in that records draw calls.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -324,3 +325,105 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     snapshot = app.status_snapshot()
     assert "score refresh" in snapshot["last error"]
     assert snapshot["last error at"] != ""
+
+
+# -- config reload (#51) ---------------------------------------------------
+
+
+def _touch_later(path: Path, app: ScoreboardApp) -> None:
+    """Bump path's mtime past what app last recorded, regardless of FS resolution."""
+    new_mtime = (app._config_mtime or 0) + 5
+    os.utime(path, (new_mtime, new_mtime))
+
+
+def test_reload_noop_without_a_source_file(fake_backend, games):
+    app = build_app(fake_backend, games)
+    assert app.settings.source_path is None
+    assert app.reload_config_if_changed() is False
+
+
+def test_reload_noop_when_file_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.reload_config_if_changed() is False
+
+
+def test_reload_picks_up_a_changed_setting(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+
+    path.write_text('[scoreboard]\nfavourite_team = "TOR"\n')
+    _touch_later(path, app)
+
+    assert app.reload_config_if_changed() is True
+    assert app.settings.scoreboard.favourite_team == "TOR"
+
+
+def test_reload_keeps_previous_settings_on_parse_error(fake_backend, games, tmp_path, caplog):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+
+    path.write_text("this is not valid toml [[[")
+    _touch_later(path, app)
+
+    assert app.reload_config_if_changed() is False
+    assert app.settings.scoreboard.favourite_team == "NSH"
+    assert "reload failed" in caplog.text.lower()
+
+
+def test_reload_rebuilds_horn_on_audio_change(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[audio]\nenabled = true\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    old_horn = app.horn
+
+    path.write_text("[audio]\nenabled = false\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.horn is not old_horn
+    assert app.horn.enabled is False
+
+
+def test_reload_rebuilds_logos_on_show_logos_change(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[scoreboard]\nshow_logos = true\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.renderer.logos is not None
+
+    path.write_text("[scoreboard]\nshow_logos = false\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.renderer.logos is None
+
+
+def test_reload_updates_timezone_on_renderer_too(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\ntimezone = "America/Chicago"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+
+    path.write_text('[scoreboard]\ntimezone = "America/New_York"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert str(app.tz) == "America/New_York"
+    assert str(app.renderer.tz) == "America/New_York"
+
+
+def test_reload_does_not_touch_the_already_built_matrix(fake_backend, games, tmp_path):
+    """[panel] geometry is baked into RGBMatrix at construction; reload must not rebuild it."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[panel]\nchain_length = 2\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    old_matrix = app.matrix
+
+    path.write_text("[panel]\nchain_length = 1\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.matrix is old_matrix
+    assert app.settings.panel.chain_length == 1

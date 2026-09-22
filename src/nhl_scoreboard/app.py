@@ -6,6 +6,7 @@ import dataclasses
 import logging
 import signal
 import time
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -84,6 +85,7 @@ class ScoreboardApp:
         self._smoothed_lux: float | None = None
         self._applied_brightness = settings.panel.brightness
         self.tz = ZoneInfo(settings.scoreboard.timezone)
+        self._config_mtime = self._source_mtime()
         self.client = client or NHLClient()
         self.backend = backend or load_backend()
         self.matrix, self.backend = create_matrix(settings.panel, self.backend)
@@ -157,6 +159,7 @@ class ScoreboardApp:
         next_brightness = 0.0
         while self._running:
             now = self.monotonic()
+            self.reload_config_if_changed()
             if now >= next_poll:
                 self.refresh()
                 next_poll = now + self.poll_interval()
@@ -218,6 +221,75 @@ class ScoreboardApp:
         """Track the most recent fetch failure, for the status page (#48)."""
         self.last_error = message
         self.last_error_at = self.clock()
+
+    # -- config reload (#51) ----------------------------------------------
+
+    def _source_mtime(self) -> float | None:
+        path = self.settings.source_path
+        if path is None:
+            return None
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return None
+
+    def reload_config_if_changed(self) -> bool:
+        """Reload scoreboard.toml in place if it changed on disk since last checked.
+
+        Polls mtime rather than reacting to a signal from any particular
+        editor: the file is documented to be editable by any method -- SD
+        card on another machine, ``nano`` over SSH, or the eventual web
+        editor (#48) -- and all three need to pick up a change the same way.
+        Most settings are already read fresh from ``self.settings`` every
+        loop iteration; ``[audio]`` and the logo library are not, so those
+        get rebuilt explicitly here. ``[panel]`` geometry
+        (rows/cols/chain_length/hardware_mapping/...) is baked into the
+        already-constructed ``RGBMatrix`` and deliberately NOT reloaded --
+        that needs a process restart.
+        """
+        mtime = self._source_mtime()
+        if mtime is None or mtime == self._config_mtime:
+            return False
+        self._config_mtime = mtime
+        try:
+            new_settings = Settings.from_toml(self.settings.source_path)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            log.warning("Config reload failed, keeping previous settings: %s", exc)
+            return False
+        self._apply_reloaded_settings(new_settings)
+        log.info("Reloaded configuration from %s", new_settings.source_path)
+        return True
+
+    def _apply_reloaded_settings(self, new_settings: Settings) -> None:
+        old = self.settings
+        audio_changed = dataclasses.astuple(old.audio) != dataclasses.astuple(new_settings.audio)
+        logos_changed = (
+            old.scoreboard.show_logos != new_settings.scoreboard.show_logos
+            or old.scoreboard.logo_variant != new_settings.scoreboard.logo_variant
+        )
+        timezone_changed = old.scoreboard.timezone != new_settings.scoreboard.timezone
+
+        self.settings = new_settings
+
+        if timezone_changed:
+            self.tz = ZoneInfo(new_settings.scoreboard.timezone)
+            self.renderer.tz = self.tz
+
+        if audio_changed:
+            self.horn = GoalHornPlayer.default(
+                device=new_settings.audio.device,
+                horn_dir=new_settings.audio.horn_dir,
+                enabled=new_settings.audio.enabled,
+            )
+
+        if logos_changed:
+            logos = None
+            if new_settings.scoreboard.show_logos:
+                logos = LogoLibrary.default(
+                    size=min(new_settings.panel.height, 32),
+                    variant=new_settings.scoreboard.logo_variant,
+                )
+            self.renderer.logos = logos
 
     # -- auto brightness ---------------------------------------------------
 

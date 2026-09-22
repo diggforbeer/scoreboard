@@ -13,6 +13,10 @@ authors = [{ name = "Mark Goudie" }]
 dependencies = [
     "requests>=2.31",
     "pillow>=10",
+    # Only tomlkit round-trips scoreboard.toml (parse -> edit -> dump) without
+    # dropping the file's per-setting comments; stdlib tomllib is read-only,
+    # and a plain dict-based writer would throw the comments away (#51).
+    "tomlkit>=0.12",
 ]
 
 [project.optional-dependencies]

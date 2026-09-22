@@ -42,6 +42,11 @@ mmdebstrap:
     # Runtime
     - python3
     - python3-requests
+    # config.py's Settings.save() (#51) round-trips scoreboard.toml through
+    # tomlkit so hand-written comments survive an edit -- the app is a plain
+    # source tree on PYTHONPATH, not pip-installed, so this has to come from
+    # apt like python3-requests/python3-pil do, not pyproject.toml's deps.
+    - python3-tomlkit
     - iw
     - ca-certificates
     - alsa-utils
