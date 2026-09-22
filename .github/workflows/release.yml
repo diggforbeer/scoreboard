@@ -1,0 +1,91 @@
+name: Release
+
+# Tags and releases every merge to main automatically, so a release never
+# again depends on someone remembering to push a tag by hand (see #9).
+#
+# Versioning is CalVer: vYYYY.MM.DD, with a .1/.2/... suffix for a second
+# release the same day. No commit-message discipline required to compute
+# it, and nothing needs to be updated in the repo to produce a version --
+# pyproject.toml's own version stays a static package version, deliberately
+# NOT kept in sync with release tags. That split exists because main's
+# ruleset blocks direct pushes; a workflow bumping pyproject.toml would
+# itself need a PR (or a bypass-capable bot identity) to land the bump,
+# which defeats "automatic". Tags avoid the problem entirely: refs/tags/*
+# isn't covered by the branch ruleset (which only governs refs/heads/main),
+# so this workflow never needs to push a commit to main at all.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  # Serialises release runs so two near-simultaneous merges can't compute
+  # the same "next" tag and race to push it.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute the next CalVer tag
+        id: version
+        run: |
+          set -euo pipefail
+          today="$(date -u +%Y.%m.%d)"
+          base="v${today}"
+          # Query the remote directly rather than trust local tag refs --
+          # robust regardless of checkout's own tag-fetching behaviour.
+          existing="$(git ls-remote --tags origin "refs/tags/${base}*" | wc -l)"
+          if [ "$existing" -eq 0 ]; then
+            tag="$base"
+          else
+            n=1
+            while git ls-remote --exit-code --tags origin "refs/tags/${base}.${n}" >/dev/null 2>&1; do
+              n=$((n + 1))
+            done
+            tag="${base}.${n}"
+          fi
+          echo "Next tag: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push the tag
+        run: |
+          set -euo pipefail
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
+
+      - name: Trigger the image build for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A tag pushed with GITHUB_TOKEN does NOT trigger build-image.yml's
+          # own `tags: ["v*"]` push trigger -- GitHub deliberately does not
+          # cascade workflow runs from events the built-in token caused,
+          # to prevent recursive triggering. workflow_dispatch is the
+          # documented exception: it always creates a run regardless of
+          # which token invoked it. That trigger already exists on
+          # build-image.yml for manual runs; reused here rather than
+          # switching to a PAT or a GitHub App just to make the tag-push
+          # trigger work. (A human manually pushing a v* tag with their own
+          # credentials still fires that push trigger normally -- kept as
+          # a fallback, not removed.)
+          gh workflow run build-image.yml --ref "${{ steps.version.outputs.tag }}"
