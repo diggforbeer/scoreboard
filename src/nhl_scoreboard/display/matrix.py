@@ -74,6 +74,7 @@ def build_options(backend: Backend, panel: PanelConfig) -> Any:
         "brightness": panel.brightness,
         "limit_refresh_rate_hz": panel.limit_refresh_rate_hz,
         "disable_hardware_pulsing": panel.disable_hardware_pulsing,
+        "pixel_mapper_config": panel.pixel_mapper,
         "drop_privileges": False,
     }
     for key, value in wanted.items():

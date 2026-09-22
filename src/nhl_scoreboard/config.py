@@ -45,6 +45,11 @@ class PanelConfig:
     brightness: int = 60
     limit_refresh_rate_hz: int = 0
     disable_hardware_pulsing: bool = False
+    #: rpi-rgb-led-matrix's --led-pixel-mapper equivalent, e.g. "U-mapper"
+    #: to fold two panels chained end-to-end into a stacked 64x64 display,
+    #: or "Rotate:180" / "Mirror:H" for a panel mounted flipped. Chain
+    #: several with ";", e.g. "U-mapper;Rotate:90". Empty means none.
+    pixel_mapper: str = ""
 
     @property
     def width(self) -> int:
