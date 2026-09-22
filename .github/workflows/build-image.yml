@@ -142,7 +142,19 @@ jobs:
         working-directory: scoreboard
         run: ./scripts/fetch-vendor.sh
 
+      - name: Cache team logos
+        id: logo-cache
+        uses: actions/cache@v4
+        with:
+          # Deterministic given the same team list and rasterisation code --
+          # invalidates itself on any change to either.
+          path: scoreboard/assets/logos/32
+          key: >-
+            logos-32-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
+            'scoreboard/src/nhl_scoreboard/display/teams.py') }}
+
       - name: Rasterise team logos
+        if: steps.logo-cache.outputs.cache-hit != 'true'
         working-directory: scoreboard
         run: |
           sudo apt-get install -y -qq libcairo2
@@ -166,13 +178,38 @@ jobs:
                 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
           echo "::notice title=layer discovery::${msg:-none}"
 
+      - name: Cache APT downloads for the target rootfs
+        # sys_apt_cachedir is a genuine rpi-image-gen feature (layer/base/
+        # sys-build-base.yaml), not something bolted on from outside: it
+        # bind-mounts this directory into the chroot as /var/cache/apt/
+        # archives and skips the cleanup that normally empties it, so
+        # downloaded .debs persist across builds. The tool's own docs mark
+        # it "currently an opt-in experimental feature" -- fine to rely on
+        # here since RPI_IMAGE_GEN_REF is pinned, so its behaviour can't
+        # shift under us without a deliberate version bump. A stale cached
+        # .deb is not a correctness risk: apt always validates against the
+        # current Packages index checksum before using a cached file, and
+        # re-downloads on a mismatch -- caching only ever saves time, never
+        # silently installs something stale.
+        uses: actions/cache@v4
+        with:
+          path: apt-cache
+          key: apt-cache-${{ env.RPI_IMAGE_GEN_REF }}-${{ hashFiles('scoreboard/image/layer/nhl-scoreboard.yaml') }}
+          restore-keys: |
+            apt-cache-${{ env.RPI_IMAGE_GEN_REF }}-
+
       - name: Build image
         working-directory: rpi-image-gen
         run: |
           set -o pipefail
+          # rpi-image-gen requires this directory to exist before it will
+          # accept --apt_cachedir; a cache miss above leaves it absent.
+          mkdir -p "${GITHUB_WORKSPACE}/apt-cache"
           if ! ./rpi-image-gen build \
                 -S "${GITHUB_WORKSPACE}/scoreboard/image" \
-                -c scoreboard.yaml 2>&1 | tee /tmp/build.log; then
+                -c scoreboard.yaml \
+                -- IGconf_sys_apt_cachedir="${GITHUB_WORKSPACE}/apt-cache" \
+                2>&1 | tee /tmp/build.log; then
             # Republish the tail as an ::error:: annotation. Unlike raw job
             # logs, annotations are readable through the public REST API, so
             # a failure can be diagnosed without repository admin rights.

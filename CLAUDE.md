@@ -206,6 +206,22 @@ startup does not celebrate.
   the failure tail as one.
 - Builds queue rather than cancel (`cancel-in-progress: false`) — a doc
   push once cancelled a finished 12-minute build mid-compress.
+- Two things are `actions/cache`d across runs: team logos (keyed on
+  `fetch-logos.py` + `display/teams.py`, ~9-11s) and APT downloads for
+  the target rootfs via `sys.apt_cachedir` (keyed on the pinned
+  `RPI_IMAGE_GEN_REF` + a hash of `nhl-scoreboard.yaml`). The apt one is
+  a real rpi-image-gen feature (`layer/base/sys-build-base.yaml`), not
+  invented here -- verified via the tool's own source and its
+  `examples/setoptions` for the override syntax
+  (`-- IGconf_sys_apt_cachedir=<path>`, the full internal variable name,
+  not `sys.apt_cachedir` dotted notation) before wiring it in. The
+  directory must exist before the build starts (`mkdir -p` after the
+  cache-restore step, since a cache miss leaves nothing there) or
+  rpi-image-gen dies immediately. A stale cached `.deb` is never a
+  correctness risk -- apt validates every cached file against the
+  current package index checksum and re-downloads on a mismatch, so
+  caching only ever saves time. Both only pay off from the *second*
+  build with a given cache key; the first is a normal cold build.
 - `nhl-scoreboard.img` is a **required status check** on `main`, and
   `build-image.yml` runs on `pull_request` (unconditionally at the
   trigger level) with the actual path-relevance check done *inside* the
