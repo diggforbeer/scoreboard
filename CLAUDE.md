@@ -24,6 +24,14 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   go in the issue so the next session can pick it up.
 - `.github/pull_request_template.md` has the checklist: tests, lint,
   snapshot diff reviewed, docs updated.
+- **`@claude` mentions trigger a cloud Claude Code run** (`.github/workflows/
+  claude.yml`, `anthropics/claude-code-action`) — write `@claude` in an
+  issue, a comment, or a PR review and it responds there, on GitHub's own
+  runners, independent of any local session. Deliberately gated on the
+  mention, not `issues: opened` alone: this repo's every-issue-gets-a-PR
+  backlog flow means an agent that reacted to every filed issue unprompted
+  would fight the workflow above, not help it. Needs the `ANTHROPIC_API_KEY`
+  repo secret set (Settings → Secrets and variables → Actions).
 
 ## Commands
 
