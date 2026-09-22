@@ -204,6 +204,13 @@ examples first.
   onboard audio share the PWM peripheral. Audio → USB. Not the 3.5mm jack,
   not I2S (GPIO 21 is LAT).
 - Pixel pitch (`pitch_mm`) is informational; the driver never sees it.
+- Panel spec sheet (the actual purchased hardware): 64×32 / 2048 dots,
+  160×80mm at P2.5, 1R1G1B, ≥140° viewing angle, 1/16 scan, HUB75 header,
+  ≤12W at 5V/2.5A per panel (fed through the adapter board's VH4 header,
+  not the Pi). 1/16 scan is the standard scan rate for a 32-row panel --
+  matches `PanelConfig`'s `rows=32` default with no multiplexing/
+  `row_address_type` override needed. Two panels chained (`chain_length=2`
+  default) means a ~24W supply budget, not 12W -- size accordingly.
 - The goal horn's default siren (`assets/horns/_default.wav`) is committed
   to the repo, unlike logos or the HUB75 driver source: it's synthesized
   (`scripts/generate-default-horn.py`, stdlib `wave`, no external assets),
