@@ -89,16 +89,29 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
 ## App flow
 
 `rotation = "favourite"` (default, `NSH`): `select_scene()` picks live →
-final (held `final_hold_minutes` from first sighting) → today's game if
-pregame else next from the season schedule → countdown inside
-`countdown_hours`, preview beyond. Falls back to `all` rotation if there is
-no favourite game or the schedule fetch fails. `rotation = "all"` cycles
-every game today, `rotate_seconds` each.
+final (held `final_hold_minutes` from when the game *ended*, not from when
+we first saw it final -- exact if we watched it finish, estimated from the
+start time otherwise; see `Game.estimated_end`) → today's game if pregame
+else next from the season schedule → countdown inside `countdown_hours`,
+preview beyond. Falls back to `all` rotation if there is no favourite game
+or the schedule fetch fails. `rotation = "all"` cycles every game today,
+`rotate_seconds` each.
 
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
 **only** for the favourite's game and the on-screen game, at
 `live_poll_seconds`, never during intermission. Do not widen this without
 asking; it was an explicit decision.
+
+Goal detection (`_detect_goals`) fires **only** for the favourite's own
+score increasing in a game they're playing -- same scoping precedent as the
+power-play indicator above, deliberate, don't widen without asking. It
+drives two independent things off one detection: `GoalHornPlayer.play()`
+(fires immediately, regardless of what's on screen) and a `Scene("goal", …)`
+override in `select_scene()` that replaces only the exact game's normal
+`"game"` scene, for `goal_flash_seconds`, and never interrupts a countdown,
+preview, or a different game mid-rotation. The baseline score for a game is
+recorded on first sighting *without* firing, so a game already 3-1 at
+startup does not celebrate.
 
 ## NHL API notes
 
@@ -122,6 +135,13 @@ asking; it was an explicit decision.
   onboard audio share the PWM peripheral. Audio → USB. Not the 3.5mm jack,
   not I2S (GPIO 21 is LAT).
 - Pixel pitch (`pitch_mm`) is informational; the driver never sees it.
+- The goal horn's default siren (`assets/horns/_default.wav`) is committed
+  to the repo, unlike logos or the HUB75 driver source: it's synthesized
+  (`scripts/generate-default-horn.py`, stdlib `wave`, no external assets),
+  so there's no third-party content to keep out of the repo and no fetch
+  step needed. Team-specific horns (`{ABBR}.wav`) are a user drop-in slot,
+  same reasoning as logos not being redistributed -- but those, if a user
+  supplies them, are never committed either.
 
 ## Image build facts (each cost a failed CI run)
 

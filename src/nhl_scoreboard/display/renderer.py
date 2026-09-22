@@ -182,6 +182,49 @@ class Renderer:
             underline = x0 + 3 + text_width(self.fonts.large, abbrev) - 1
             self.hline(canvas, x0 + 3, underline, y + 2, ACCENT)
 
+    def draw_goal(self, canvas: Any, game: Game) -> None:
+        """A goal celebration: GOAL in big amber type, current score below.
+
+        Fires only for the favourite's own goal (the app never calls this
+        otherwise), so there is no separate "who scored" to thread through --
+        the whole frame is the celebration, not a variant of the normal one.
+        """
+        if self.logos is not None:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                self._draw_goal_with_logos(canvas, game, away, home)
+                return
+        self._draw_goal_text(canvas, game)
+
+    def _draw_goal_with_logos(self, canvas: Any, game: Game, away: Logo, home: Logo) -> None:
+        canvas.Clear()
+        goal_baseline = 13
+        score_baseline = self.height - 3
+
+        self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
+        self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
+
+        left, right = away.width, self.width - home.width
+        centre = (left + right) // 2
+        self.text_center(canvas, self.fonts.large, centre, goal_baseline, ACCENT, "GOAL")
+        self.text_center(
+            canvas,
+            self.fonts.small,
+            centre,
+            score_baseline,
+            WHITE,
+            f"{game.away.score}-{game.home.score}",
+        )
+
+    def _draw_goal_text(self, canvas: Any, game: Game) -> None:
+        canvas.Clear()
+        goal_baseline = 13
+        score_baseline = self.height - 3
+        self.text_center(canvas, self.fonts.large, self.width // 2, goal_baseline, ACCENT, "GOAL")
+        matchup = f"{game.away.abbrev} {game.away.score}-{game.home.score} {game.home.abbrev}"
+        self.text_center(canvas, self.fonts.small, self.width // 2, score_baseline, WHITE, matchup)
+
     def draw_preview(self, canvas: Any, game: Game, now: datetime) -> None:
         """The favourite's next game: who, which day, what time."""
         self._draw_upcoming(

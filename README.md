@@ -15,6 +15,7 @@ the boot partition, and the board comes up showing live scores.
 | Display | 2 × 64×32 **P2.5** HUB75 panels, daisy-chained → **128×32** (320 × 80 mm) |
 | Adapter | Seengreat-style RGB Matrix Adapter Board (also sold as XICOOLEE, WatangTech) |
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
+| Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -94,6 +95,12 @@ poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
+goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
+
+[audio]
+enabled = true
+device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
+horn_dir = ""                # override the search path for {ABBR}.wav horn files
 
 [panel]
 rows = 32
@@ -115,12 +122,29 @@ In the default `rotation = "favourite"`, the board follows your team's day:
 | Morning of a game (or no game today) | **Preview** — logos, `TONIGHT` / `TOMORROW` / `SAT OCT 4`, start time |
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
+| Your team scores | **GOAL** — a celebration screen, for `goal_flash_seconds`, then back to live |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |
 
 The next game comes from the team's season schedule, fetched once an hour.
 With `rotation = "all"` the board instead rotates through every game in the
-league today, `rotate_seconds` each, favourite first.
+league today, `rotate_seconds` each, favourite first. The GOAL screen and the
+horn both still only ever fire for your favourite team's own goal, regardless
+of rotation mode.
+
+## Audio
+
+The board can play a horn through a USB speaker or USB audio adapter when
+your favourite team scores. This is the only sound the board can make — see
+[Hardware](#hardware) for why the 3.5 mm jack and I2S DACs are unavailable.
+
+A default siren is included (synthesized, not sampled — there's no way to
+ship a real broadcast horn without infringing on someone's copyright) so
+audio works with zero configuration once a speaker is plugged in. Drop a
+recording named `{ABBR}.wav` (e.g. `NSH.wav`) into the horn directory to use
+your team's actual horn instead; it's checked first, and the default plays
+whenever a team-specific file isn't found. See `[audio]` in
+[Configuration](#configuration).
 
 ## Layout
 

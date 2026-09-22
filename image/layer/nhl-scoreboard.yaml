@@ -44,6 +44,7 @@ mmdebstrap:
     - python3-requests
     - iw
     - ca-certificates
+    - alsa-utils
     # Build-time, for the HUB75 bindings. Upstream builds through
     # scikit-build-core/CMake, not the old bindings/python Makefile.
     - build-essential
@@ -83,6 +84,17 @@ mmdebstrap:
       cp -a "$LOGOS"/. "$1/usr/share/nhl-scoreboard/logos/"
       find "$1/usr/share/nhl-scoreboard/logos" -type f -exec chmod 0644 {} +
       echo "Installed $(find "$1/usr/share/nhl-scoreboard/logos" -name '*.png' | wc -l) logo files"
+
+    # ---- goal horns ----------------------------------------------------
+    # The default siren is synthesized and committed to the repo (not
+    # third-party copyrighted content, so unlike logos there is nothing to
+    # fetch at build time). Team-specific WAVs are a user drop-in slot;
+    # none are shipped.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/usr/share/nhl-scoreboard/horns"
+      install -m 0644 "$IGconf_sb_srcdir/assets/horns/_default.wav" \
+        "$1/usr/share/nhl-scoreboard/horns/"
 
     # ---- HUB75 driver ------------------------------------------------
     - |-
