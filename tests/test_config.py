@@ -55,6 +55,28 @@ def test_missing_file_falls_back_to_defaults(tmp_path):
     assert settings.source_path is None
 
 
+def test_auto_brightness_defaults_off():
+    panel = Settings().panel
+    assert panel.auto_brightness is False
+    assert (panel.min_brightness, panel.max_brightness) == (10, 100)
+
+
+def test_brightness_clamp_is_kept_within_0_100():
+    settings = Settings()
+    settings.panel.min_brightness = -5
+    settings.panel.max_brightness = 500
+    settings.panel.__post_init__()
+    assert (settings.panel.min_brightness, settings.panel.max_brightness) == (1, 100)
+
+
+def test_inverted_brightness_clamp_is_swapped_not_left_broken(caplog):
+    from nhl_scoreboard.config import PanelConfig
+
+    panel = PanelConfig(min_brightness=80, max_brightness=20)
+    assert (panel.min_brightness, panel.max_brightness) == (20, 80)
+    assert "min_brightness" in caplog.text
+
+
 def test_physical_size_follows_pitch():
     settings = Settings()
     assert settings.panel.pitch_mm == 2.5

@@ -23,6 +23,7 @@ dev = [
     "RGBMatrixEmulator>=0.11",
     "responses>=0.25",
     "cairosvg>=2.7",
+    "smbus2>=0.4",
 ]
 
 [project.scripts]

@@ -42,6 +42,8 @@ class PanelConfig:
     gpio_slowdown: int = 4
     pwm_bits: int = 11
     pwm_lsb_nanoseconds: int = 130
+    #: Static brightness, and the fallback used whenever auto_brightness is
+    #: off or the ambient sensor (#44) isn't answering.
     brightness: int = 60
     limit_refresh_rate_hz: int = 0
     disable_hardware_pulsing: bool = False
@@ -50,6 +52,31 @@ class PanelConfig:
     #: or "Rotate:180" / "Mirror:H" for a panel mounted flipped. Chain
     #: several with ";", e.g. "U-mapper;Rotate:90". Empty means none.
     pixel_mapper: str = ""
+
+    #: Dim/brighten the panel from a BH1750 ambient light sensor on the I2C
+    #: bus instead of a fixed `brightness`. Off by default: not every board
+    #: has the sensor wired up, and `LightSensor` degrades to `brightness`
+    #: on its own if this is on but nothing answers, so there's no harm in
+    #: leaving it on for a board without the sensor -- it's just extra I2C
+    #: probing for nothing.
+    auto_brightness: bool = False
+    min_brightness: int = 10
+    max_brightness: int = 100
+    #: How often the sensor is sampled and brightness re-applied. Smoothed
+    #: on top of this (see ScoreboardApp.refresh_brightness) so this can be
+    #: fairly frequent without the panel visibly flickering.
+    brightness_poll_seconds: float = 5.0
+
+    def __post_init__(self) -> None:
+        self.min_brightness = max(1, min(100, self.min_brightness))
+        self.max_brightness = max(1, min(100, self.max_brightness))
+        if self.min_brightness > self.max_brightness:
+            log.warning(
+                "panel.min_brightness (%d) > max_brightness (%d); swapping",
+                self.min_brightness,
+                self.max_brightness,
+            )
+            self.min_brightness, self.max_brightness = self.max_brightness, self.min_brightness
 
     @property
     def width(self) -> int:
