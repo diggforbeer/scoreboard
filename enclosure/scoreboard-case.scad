@@ -49,7 +49,12 @@ speaker_hole_d = 25;
 // ---- enclosure -----------------------------------------------------------
 wall = 2.4;  // ~6 perimeters at a 0.4mm nozzle
 lip  = 4;    // how far the front ledge overlaps the panel edge, each side
-electronics_clearance = 20;  // mm behind the panel(s) for the Pi + wiring
+// The bay has to be at least as deep as the biggest side hole plus a
+// margin on each side of it, or that hole pokes through the back wall
+// or into the panel's seat -- derived from speaker_hole_d rather than a
+// fixed number so this can't silently break again if a hole size changes.
+hole_margin = 5;
+electronics_clearance = max(20, speaker_hole_d + hole_margin * 2);
 
 total_panel_w = panel_w * panel_count + panel_gap * (panel_count - 1);
 inner_w = total_panel_w;
