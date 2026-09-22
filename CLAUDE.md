@@ -86,10 +86,10 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   Hardware, emulator and tests must render identically.
 - Layout constants live in the renderer and are mirrored in
   `tests/test_render.py` (`SCORE_BASELINE=13`, `RULE_Y=19`, status
-  baseline `H-2`, logos 32px at each edge). Change both together. The
-  favourite marker is amber score digits (`ACCENT` colour), not an
-  underline -- `UNDERLINE_Y` was removed when #5 changed this; don't
-  reintroduce a reference to it.
+  baseline `H-2`, logos 32px at each edge). Change both together. There is
+  no favourite-team marker on the game scene at all -- #5 tried amber score
+  digits, #33 removed them outright; don't reintroduce one without a new
+  decision to do so.
 - Fonts are vendored BDF (`fonts/`): `7x13B` scores/abbrevs, `6x10` preview
   day, `5x7` status, `4x6` power-play indicator. Glyphs can have a blank
   edge column, so alignment assertions allow 1px.

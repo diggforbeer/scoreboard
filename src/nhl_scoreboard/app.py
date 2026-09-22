@@ -76,7 +76,6 @@ class ScoreboardApp:
             width=settings.panel.width,
             height=settings.panel.height,
             tz=self.tz,
-            favourite=settings.scoreboard.favourite_team,
             logos=logos,
         )
         self.games: list[Game] = []

@@ -34,7 +34,6 @@ class Renderer:
         width: int,
         height: int,
         tz: ZoneInfo,
-        favourite: str = "",
         logos: LogoLibrary | None = None,
     ) -> None:
         self.g = graphics
@@ -42,7 +41,6 @@ class Renderer:
         self.width = width
         self.height = height
         self.tz = tz
-        self.favourite = favourite.strip().upper()
         self.logos = logos
         self._colors: dict[tuple[int, int, int], Any] = {}
 
@@ -147,8 +145,7 @@ class Renderer:
         text = str(score)
         width = text_width(self.fonts.large, text)
         x = cx - width // 2
-        color = ACCENT if self.favourite and abbrev == self.favourite else WHITE
-        self.text(canvas, self.fonts.large, x, y, color, text)
+        self.text(canvas, self.fonts.large, x, y, WHITE, text)
 
     def _draw_game_text(self, canvas: Any, game: Game) -> None:
         """Fallback when a logo is missing: abbreviation and score per side."""
@@ -176,8 +173,7 @@ class Renderer:
 
     def _draw_side(self, canvas: Any, abbrev: str, score: int, x0: int, span: int, y: int) -> None:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
-        color = ACCENT if self.favourite and abbrev == self.favourite else WHITE
-        self.text_right(canvas, self.fonts.large, x0 + span - 3, y, color, str(score))
+        self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
 
     def draw_goal(self, canvas: Any, game: Game) -> None:
         """A goal celebration: GOAL in big amber type, current score below.
