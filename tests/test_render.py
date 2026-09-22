@@ -6,8 +6,7 @@ Two layers of checking:
   ``pytest --update-snapshots`` after an intentional layout change, then read
   the diff in git before committing it.
 * Structural assertions that hold regardless of snapshot: nothing drawn off
-  the panel, status text centred, scores right-aligned, colours as expected,
-  the favourite underline only where it belongs.
+  the panel, status text centred, scores right-aligned, colours as expected.
 
 Run with ``pytest -s tests/test_render.py`` to see every frame.
 """
@@ -73,7 +72,7 @@ def games() -> dict[str, Game]:
         "intermission": by_away["CAR"],  # INT2
         "final": by_away["NYI"],  # FINAL
         "shootout": by_away["WSH"],  # F/SO
-        "pregame": by_away["TOR"],  # 7:00P, favourite involved
+        "pregame": by_away["TOR"],  # 7:00P
     }
 
 
@@ -103,14 +102,13 @@ def synthetic_logos(tmp_path_factory) -> LogoLibrary:
     return LogoLibrary([root])
 
 
-def make_renderer(favourite: str = "", logos: LogoLibrary | None = None) -> Renderer:
+def make_renderer(logos: LogoLibrary | None = None) -> Renderer:
     return Renderer(
         graphics=graphics,
         fonts=FontSet(graphics),
         width=W,
         height=H,
         tz=TZ,
-        favourite=favourite,
         logos=logos,
     )
 
@@ -152,7 +150,7 @@ def assert_centered(c: AsciiCanvas, y0: int, y1: int, what: str, tolerance: floa
     )
 
 
-def assert_game_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
+def assert_game_layout(c: AsciiCanvas, game: Game) -> None:
     assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
     assert c.row_is_solid(RULE_Y), "horizontal rule missing"
     assert all((HALF - 1, y) in c.pixels for y in range(2, RULE_Y - 3)), "divider missing"
@@ -174,18 +172,14 @@ def assert_game_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
         abbrev_colors = c.colors(x0 + TEXT_LEFT, 0, x0 + 24, SCORE_BASELINE)
         assert team_color(side.abbrev) in abbrev_colors, f"{side.abbrev} not in its team colour"
 
-        # Score colour marks the favourite: amber for them, white otherwise.
         # Sampled right of the abbreviation/score gap already checked above.
         score_colors = c.colors(x0 + 26, 0, right_edge, SCORE_BASELINE)
-        expected = ACCENT if favourite and side.abbrev == favourite else WHITE
-        assert score_colors == {expected}, (
-            f"{side.abbrev} score should be {expected}, got {score_colors}"
-        )
+        assert score_colors == {WHITE}, f"{side.abbrev} score should be white, got {score_colors}"
 
     assert_centered(c, STATUS_TOP, H - 1, "status line")
 
 
-def assert_logo_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
+def assert_logo_layout(c: AsciiCanvas, game: Game) -> None:
     assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
 
     for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
@@ -193,17 +187,13 @@ def assert_logo_layout(c: AsciiCanvas, game: Game, favourite: str = "") -> None:
         assert region, f"no logo drawn for {side.abbrev}"
         assert team_color(side.abbrev) in set(region.values()), f"{side.abbrev} logo colour wrong"
 
-    # Scores sit centred in each half of the middle column. Colour marks
-    # the favourite: amber for them, white otherwise.
+    # Scores sit centred in each half of the middle column.
     for cx, side in ((AWAY_CX, game.away), (HOME_CX, game.home)):
         box = c.bbox(cx - 12, 0, cx + 12, SCORE_BASELINE)
         assert box is not None, f"no score drawn for {side.abbrev}"
         assert abs(box.center_x - cx) <= 1, f"{side.abbrev} score off-centre: {box.center_x}"
-        expected = ACCENT if favourite and side.abbrev == favourite else WHITE
         score_colors = c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
-        assert score_colors == {expected}, (
-            f"{side.abbrev} score should be {expected}, got {score_colors}"
-        )
+        assert score_colors == {WHITE}, f"{side.abbrev} score should be white, got {score_colors}"
 
     mid = (MID_LEFT + MID_RIGHT) // 2
     assert all((mid - 1, y) in c.pixels for y in range(3, SCORE_BASELINE + 1)), "divider missing"
@@ -225,20 +215,20 @@ def status_color(c: AsciiCanvas, x0: int = 0, x1: int = W - 1) -> set:
 
 
 @pytest.mark.parametrize(
-    ("scene", "favourite", "expected_color"),
+    ("scene", "expected_color"),
     [
-        ("live", "", LIVE),
-        ("intermission", "", INTERMISSION),
-        ("final", "", FINAL),
-        ("shootout", "", FINAL),
-        ("pregame", "TOR", PREGAME),
+        ("live", LIVE),
+        ("intermission", INTERMISSION),
+        ("final", FINAL),
+        ("shootout", FINAL),
+        ("pregame", PREGAME),
     ],
 )
-def test_text_layout(games, scene, favourite, expected_color, update_snapshots):
+def test_text_layout(games, scene, expected_color, update_snapshots):
     """Fallback layout, used when a logo is unavailable."""
     game = games[scene]
     c = canvas()
-    make_renderer(favourite).draw_game(c, game)
+    make_renderer().draw_game(c, game)
 
     art = show(
         f"{scene}: {game.away.abbrev} {game.away.score} @ "
@@ -246,7 +236,7 @@ def test_text_layout(games, scene, favourite, expected_color, update_snapshots):
         c,
     )
 
-    assert_game_layout(c, game, favourite)
+    assert_game_layout(c, game)
     assert status_color(c) == {expected_color}
     check_snapshot(f"text_{scene}", art, update_snapshots)
 
@@ -265,26 +255,26 @@ def test_text_layout_two_digit_scores(big_score_game, update_snapshots):
 
 
 @pytest.mark.parametrize(
-    ("scene", "favourite", "expected_color"),
+    ("scene", "expected_color"),
     [
-        ("live", "", LIVE),
-        ("intermission", "", INTERMISSION),
-        ("final", "", FINAL),
-        ("shootout", "", FINAL),
-        ("pregame", "TOR", PREGAME),
+        ("live", LIVE),
+        ("intermission", INTERMISSION),
+        ("final", FINAL),
+        ("shootout", FINAL),
+        ("pregame", PREGAME),
     ],
 )
-def test_logo_layout(games, synthetic_logos, scene, favourite, expected_color, update_snapshots):
+def test_logo_layout(games, synthetic_logos, scene, expected_color, update_snapshots):
     game = games[scene]
     c = canvas()
-    make_renderer(favourite, synthetic_logos).draw_game(c, game)
+    make_renderer(synthetic_logos).draw_game(c, game)
 
     art = show(
         f"logos, {scene}: {game.away.abbrev} {game.away.score} @ "
         f"{game.home.abbrev} {game.home.score} [{game.status_label(TZ)}]",
         c,
     )
-    assert_logo_layout(c, game, favourite)
+    assert_logo_layout(c, game)
     assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {expected_color}
     check_snapshot(f"logo_{scene}", art, update_snapshots)
 
@@ -307,20 +297,6 @@ def test_missing_logo_falls_back_to_text(games, synthetic_logos, tmp_path):
     c = canvas()
     make_renderer(logos=LogoLibrary([only_away])).draw_game(c, games["live"])
     assert_game_layout(c, games["live"])  # full-width rule etc: the text layout's signature
-
-
-def test_favourite_marker_follows_the_team(games):
-    """Same game, favourite on the other side: the amber score moves with it."""
-    game = games["pregame"]  # TOR @ MTL
-    for fav, fav_x0, other_x0 in (("TOR", 0, HALF), ("MTL", HALF, 0)):
-        c = canvas()
-        make_renderer(fav).draw_game(c, game)
-        fav_edge = fav_x0 + HALF - 1 - TEXT_RIGHT_PAD
-        other_edge = other_x0 + HALF - 1 - TEXT_RIGHT_PAD
-        fav_score = c.colors(fav_x0 + 26, 0, fav_edge, SCORE_BASELINE)
-        other_score = c.colors(other_x0 + 26, 0, other_edge, SCORE_BASELINE)
-        assert fav_score == {ACCENT}, f"{fav} score should be amber, got {fav_score}"
-        assert other_score == {WHITE}, f"non-favourite score should stay white, got {other_score}"
 
 
 # --------------------------------------------------------------------------
@@ -610,10 +586,9 @@ def test_goal_score_reflects_the_current_score(games, synthetic_logos):
     assert c.pixels != c2.pixels
 
 
-def test_goal_scene_ignores_favourite_and_situation(games, synthetic_logos):
-    """draw_goal never reads self.favourite or game.situation -- there is
-    nothing to mark as favourite (the whole frame already is) and no room
-    for a power-play band."""
+def test_goal_scene_ignores_situation(games, synthetic_logos):
+    """draw_goal never reads game.situation -- there is no room for a
+    power-play band on the celebration screen."""
     game = games["live"]
     with_situation = dataclasses.replace(
         game,
@@ -626,7 +601,7 @@ def test_goal_scene_ignores_favourite_and_situation(games, synthetic_logos):
         ),
     )
     c1, c2 = canvas(), canvas()
-    r = make_renderer(favourite="CGY", logos=synthetic_logos)
+    r = make_renderer(logos=synthetic_logos)
     r.draw_goal(c1, game)
     r.draw_goal(c2, with_situation)
     assert c1.pixels == c2.pixels
