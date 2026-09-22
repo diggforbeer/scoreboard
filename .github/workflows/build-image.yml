@@ -178,37 +178,13 @@ jobs:
                 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
           echo "::notice title=layer discovery::${msg:-none}"
 
-      - name: Cache APT downloads for the target rootfs
-        # sys_apt_cachedir is a genuine rpi-image-gen feature (layer/base/
-        # sys-build-base.yaml), not something bolted on from outside: it
-        # bind-mounts this directory into the chroot as /var/cache/apt/
-        # archives and skips the cleanup that normally empties it, so
-        # downloaded .debs persist across builds. The tool's own docs mark
-        # it "currently an opt-in experimental feature" -- fine to rely on
-        # here since RPI_IMAGE_GEN_REF is pinned, so its behaviour can't
-        # shift under us without a deliberate version bump. A stale cached
-        # .deb is not a correctness risk: apt always validates against the
-        # current Packages index checksum before using a cached file, and
-        # re-downloads on a mismatch -- caching only ever saves time, never
-        # silently installs something stale.
-        uses: actions/cache@v4
-        with:
-          path: apt-cache
-          key: apt-cache-${{ env.RPI_IMAGE_GEN_REF }}-${{ hashFiles('scoreboard/image/layer/nhl-scoreboard.yaml') }}
-          restore-keys: |
-            apt-cache-${{ env.RPI_IMAGE_GEN_REF }}-
-
       - name: Build image
         working-directory: rpi-image-gen
         run: |
           set -o pipefail
-          # rpi-image-gen requires this directory to exist before it will
-          # accept --apt_cachedir; a cache miss above leaves it absent.
-          mkdir -p "${GITHUB_WORKSPACE}/apt-cache"
           if ! ./rpi-image-gen build \
                 -S "${GITHUB_WORKSPACE}/scoreboard/image" \
                 -c scoreboard.yaml \
-                -- IGconf_sys_apt_cachedir="${GITHUB_WORKSPACE}/apt-cache" \
                 2>&1 | tee /tmp/build.log; then
             # Republish the tail as an ::error:: annotation. Unlike raw job
             # logs, annotations are readable through the public REST API, so
@@ -221,25 +197,6 @@ jobs:
             echo "::error title=rpi-image-gen build failed::${msg}"
             exit 1
           fi
-
-      - name: Fix up apt cache permissions for caching
-        # sys_apt_cachedir bind-mounts this directory into the chroot, so
-        # whatever wrote into it there (apt, running as root inside its own
-        # user/mount namespace) leaves files and directories with owners
-        # and modes the plain host runner user can't read back out --
-        # apt's own partial/ subdirectory in particular. Confirmed by a
-        # real cache-save failure on the first run this was added:
-        # "tar: apt-cache/partial: Cannot open: Permission denied", cache
-        # silently never saved (actions/cache treats a failed save as a
-        # warning, not a job failure, so this went unnoticed until the log
-        # was actually read). sudo is the point here, not a redundant
-        # flourish: only real host root reliably bypasses whatever
-        # namespace-remapped ownership landed on these files, regardless
-        # of the exact subuid/subgid mapping bdebstrap/podman used.
-        # if: always() so a build failure still keeps whatever packages
-        # were downloaded before it failed, useful on a retry.
-        if: always()
-        run: sudo chmod -R a+rX "${GITHUB_WORKSPACE}/apt-cache" 2>/dev/null || true
 
       - name: Locate image
         id: locate

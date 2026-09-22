@@ -40,23 +40,22 @@ takes. This whole gate exists because #21 once merged clean — every
 `Build image` only ran *after* merge back then, so nothing had actually
 gated it. See `CLAUDE.md`'s "Image build facts" for the incident.
 
-Two things are cached across runs, both keyed so a real change
-invalidates them rather than serving something stale:
+**Team logos** are cached across runs (`actions/cache` on
+`assets/logos/32/`, keyed on `scripts/fetch-logos.py` + `display/teams.py`)
+— skips re-fetching and re-rasterising all 32 teams' SVGs when neither
+has changed, ~9-11s. Confirmed working across two consecutive real runs.
+Only pays off from the *second* build with a given cache key onward — the
+first is a normal cold build that populates it.
 
-- **Team logos** (`actions/cache` on `assets/logos/32/`, keyed on
-  `scripts/fetch-logos.py` + `display/teams.py`) — skips re-fetching and
-  re-rasterising all 32 teams' SVGs when neither has changed. ~9-11s.
-- **APT downloads for the target rootfs** (`sys.apt_cachedir`, a genuine
-  rpi-image-gen feature — see the comment above that step in the
-  workflow — not something bolted on from outside) — skips re-downloading
-  packages the base layers and our own layer install, keyed on the pinned
-  `rpi-image-gen` ref plus a hash of `image/layer/nhl-scoreboard.yaml`. A
-  stale cached `.deb` is never a correctness risk: apt validates every
-  cached file against the current package index checksum before using it
-  and re-downloads on a mismatch.
-
-Both only pay off from the *second* build with a given cache key onward —
-the first is a normal cold build that populates the cache for next time.
+Caching APT downloads for the target rootfs was also tried, via
+`sys.apt_cachedir` — a genuine rpi-image-gen feature, not something
+bolted on from outside. It doesn't work: the bind-mount it sets up
+genuinely executes, but the target directory comes back empty
+(`Apt cache: 0 pkgs`) after a real build, confirmed via two consecutive
+runs and the GitHub caches API. See `CLAUDE.md`'s "Image build facts" —
+don't re-attempt this without new information about *why* packages never
+land in the bind-mounted directory; that's a bdebstrap-internals
+question, not a config error in this repo.
 
 ## Releases
 
