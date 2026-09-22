@@ -222,6 +222,18 @@ startup does not celebrate.
   current package index checksum and re-downloads on a mismatch, so
   caching only ever saves time. Both only pay off from the *second*
   build with a given cache key; the first is a normal cold build.
+  **The apt cache directory needs `sudo chmod -R a+rX` before
+  `actions/cache`'s post-job save runs** (a dedicated step right after
+  "Build image", `if: always()`) -- confirmed by an actual failed save
+  on the first real run, not theoretical: `sys_apt_cachedir` bind-mounts
+  the directory into the chroot, so apt (root inside its own namespace,
+  writing `partial/` in particular) leaves files the plain runner user
+  can't read back out for archiving. `actions/cache` treats a failed
+  save as a warning, not a job failure, so this is easy to ship without
+  noticing -- the job goes green and the cache silently never persists.
+  If this cache stops helping, check the "Fix up apt cache permissions"
+  step's log for a tar permission error before assuming the cache key
+  logic is wrong.
 - `nhl-scoreboard.img` is a **required status check** on `main`, and
   `build-image.yml` runs on `pull_request` (unconditionally at the
   trigger level) with the actual path-relevance check done *inside* the
