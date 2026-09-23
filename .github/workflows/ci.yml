@@ -40,7 +40,7 @@ jobs:
       - name: Install
         run: pip install -e '.[dev]'
       - name: Test
-        run: pytest
+        run: pytest --cov --cov-report=term-missing
 
   shell:
     runs-on: ubuntu-latest
