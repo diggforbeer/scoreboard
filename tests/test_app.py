@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -655,3 +656,119 @@ def test_nonzero_dim_brightness_still_renders_the_scene(fake_backend, games, mon
     app.draw()
     assert calls, "dimmed but not blanked: the normal scene is still drawn"
     assert app.matrix.swaps == 1
+
+
+def test_reload_opens_light_sensor_when_auto_brightness_turned_on(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[panel]\nauto_brightness = false\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.light_sensor is None
+
+    path.write_text("[panel]\nauto_brightness = true\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.light_sensor is not None
+
+
+def test_reload_drops_light_sensor_when_auto_brightness_turned_off(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[panel]\nauto_brightness = true\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.light_sensor is not None
+
+    path.write_text("[panel]\nauto_brightness = false\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.light_sensor is None
+
+
+def test_reload_keeps_light_sensor_when_auto_brightness_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[panel]\nauto_brightness = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    old_sensor = app.light_sensor
+
+    path.write_text('[panel]\nauto_brightness = true\n[scoreboard]\nfavourite_team = "TOR"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.light_sensor is old_sensor
+
+
+def test_reload_builds_status_server_when_enabled(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = false\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is None
+
+    path.write_text("[status]\nenabled = true\nport = 9191\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    # Built but not started: run() never ran, so nothing should bind a socket.
+    assert app.status_server is not None
+    assert app.status_server.port == 9191
+
+
+def test_reload_drops_status_server_when_disabled(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = true\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is not None
+
+    path.write_text("[status]\nenabled = false\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.status_server is None
+
+
+def test_reload_rebuilds_status_server_on_port_change(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = true\nport = 9191\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    old_server = app.status_server
+
+    path.write_text("[status]\nenabled = true\nport = 9292\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.status_server is not old_server
+    assert app.status_server is not None
+    assert app.status_server.port == 9292
+
+
+def test_reload_keeps_status_server_when_status_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    old_server = app.status_server
+
+    path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "TOR"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.status_server is old_server
+
+
+def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, tmp_path):
+    """run() only starts the server once, before looping; a live rebuild must start itself."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = false\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app._running = True  # as if inside run()'s loop, without blocking on it
+
+    path.write_text("[status]\nenabled = true\nport = 0\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.status_server is not None
+    try:
+        url = f"http://127.0.0.1:{app.status_server.port}/"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            assert resp.status == 200
+            assert "NHL Scoreboard status" in resp.read().decode("utf-8")
+    finally:
+        app.status_server.stop()

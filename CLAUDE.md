@@ -182,6 +182,22 @@ confirmed from only one real, end-of-season response and not documented
 anywhere; don't act on them without verifying against a few more live
 examples first.
 
+Shots on goal (#70) render in the same indicator band as the PP/EN
+indicator, as a fallback when neither is active -- `_draw_situation`
+(`renderer.py`) tries PP/EN first, then always falls through to
+`TeamSide.sog`. Deliberately **not** a separate fetch: `TeamSide.sog`
+already comes from `score/now` (verified with a real live call before
+building anything -- an earlier draft of this fetched it from
+`gamecenter/{id}/landing` instead, alongside situation, before that
+check turned up that the score feed already had it for free), so SOG
+has none of situation's scoping/caching (`situation_targets`,
+`live_poll_seconds`) -- it's available for every game the app already
+knows about, live or final, in either rotation mode. `TeamSide.sog`
+defaults to `0`, never `None`, so the indicator band's old "nothing to
+show, draw a plain rule" case no longer exists -- `_draw_situation`
+always draws something now, and the plain-rule fallback was removed
+from both `_draw_game_with_logos` and `_draw_game_text`.
+
 Night mode (#92, `[night_mode]`) dims to `dim_brightness` inside a
 `start_time`-`end_time` window (local to `scoreboard.timezone`, may wrap
 midnight) unless a relevant game is live or ended less than
@@ -206,10 +222,11 @@ cut, and a dim-by-default "passive mode" is #94, not this.
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
-- `score/now` has no special-teams data. `gamecenter/{id}/landing` has a
-  `situation` object **only while something is on** (PP / EN / PS);
-  absent at even strength. 4-on-4 arrives as a situation but is not an
-  advantage.
+- `score/now`'s per-team objects include `sog` (shots on goal) directly --
+  no extra fetch needed for that (#70). It has no *special-teams* data
+  though: `gamecenter/{id}/landing` has a `situation` object **only
+  while something is on** (PP / EN / PS); absent at even strength.
+  4-on-4 arrives as a situation but is not an advantage.
 - `club-schedule-season/{TEAM}/now` is ~180KB for the season; cached 1h.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
