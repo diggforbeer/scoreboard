@@ -5,11 +5,11 @@
 | Name                                        |    Stmts |     Miss |   Branch |   BrPart |   Cover |   Missing |
 |-------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | src/nhl\_scoreboard/\_\_init\_\_.py         |        1 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/\_\_main\_\_.py         |       42 |       42 |        8 |        0 |      0% |      3-72 |
-| src/nhl\_scoreboard/app.py                  |      446 |       43 |      182 |       15 |     89% |94-\>98, 115, 149-150, 153-154, 157-181, 186, 239-240, 305, 458, 472, 489-\>486, 533, 557, 564, 615-\>617, 672-\>exit, 679, 737, 740-743 |
+| src/nhl\_scoreboard/\_\_main\_\_.py         |       41 |       41 |        8 |        0 |      0% |      3-71 |
+| src/nhl\_scoreboard/app.py                  |      445 |       43 |      182 |       15 |     89% |93-\>97, 114, 148-149, 152-153, 156-180, 185, 238-239, 304, 457, 471, 488-\>485, 532, 556, 563, 614-\>616, 671-\>exit, 678, 736, 739-742 |
 | src/nhl\_scoreboard/audio.py                |       55 |        1 |       16 |        0 |     99% |        92 |
 | src/nhl\_scoreboard/brightness.py           |        9 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/config.py               |      168 |        2 |       24 |        0 |     99% |   295-296 |
+| src/nhl\_scoreboard/config.py               |      177 |        2 |       24 |        0 |     99% |   319-320 |
 | src/nhl\_scoreboard/display/\_\_init\_\_.py |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/ascii.py        |       54 |        6 |        6 |        3 |     85% |24, 28, 55-56, 60, 84 |
 | src/nhl\_scoreboard/display/fonts.py        |       29 |        2 |        6 |        1 |     91% |     33-34 |
@@ -22,7 +22,7 @@
 | src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
 | src/nhl\_scoreboard/nhl/models.py           |      192 |        0 |       42 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                   | **1487** |  **107** |  **358** |   **20** | **92%** |           |
+| **TOTAL**                                   | **1494** |  **106** |  **358** |   **20** | **92%** |           |
 
 
 ## Setup coverage badge
