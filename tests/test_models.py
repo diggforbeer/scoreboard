@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -100,6 +101,21 @@ def test_missing_fields_do_not_raise():
     assert game.away.abbrev == "???"
     assert game.away.score == 0
     assert game.state == "FUT"
+
+
+def test_explicit_null_abbrev_falls_back_like_a_missing_one():
+    game = Game.from_api({"id": 7, "awayTeam": {"abbrev": None}, "homeTeam": {}})
+    assert game.away.abbrev == "???"
+
+
+def test_explicit_null_game_state_falls_back_like_a_missing_one():
+    game = Game.from_api({"id": 7, "gameState": None})
+    assert game.state == "FUT"
+
+
+def test_malformed_start_time_falls_back_instead_of_raising():
+    game = Game.from_api({"id": 7, "startTimeUTC": "not-a-timestamp"})
+    assert isinstance(game.start_utc, datetime)
 
 
 # -- special teams -----------------------------------------------------------

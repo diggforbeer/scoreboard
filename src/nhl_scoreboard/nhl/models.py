@@ -32,7 +32,7 @@ class TeamSide:
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> TeamSide:
         return cls(
-            abbrev=raw.get("abbrev", "???"),
+            abbrev=raw.get("abbrev") or "???",
             name=_default_str(raw.get("name")),
             score=int(raw.get("score") or 0),
             sog=int(raw.get("sog") or 0),
@@ -124,7 +124,7 @@ class Game:
         descriptor = raw.get("periodDescriptor") or {}
         return cls(
             id=int(raw["id"]),
-            state=str(raw.get("gameState", "FUT")).upper(),
+            state=str(raw.get("gameState") or "FUT").upper(),
             game_type=int(raw.get("gameType") or 2),
             start_utc=_parse_utc(raw.get("startTimeUTC")),
             away=TeamSide.from_api(raw.get("awayTeam") or {}),
@@ -309,11 +309,14 @@ def _codes(value: Any) -> tuple[str, ...]:
 def _default_str(value: Any) -> str:
     """The NHL API wraps localised strings as ``{"default": "Devils"}``."""
     if isinstance(value, dict):
-        return str(value.get("default", ""))
+        return str(value.get("default") or "")
     return str(value or "")
 
 
 def _parse_utc(value: Any) -> datetime:
     if not value:
         return datetime.now(UTC)
-    return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError:
+        return datetime.now(UTC)
