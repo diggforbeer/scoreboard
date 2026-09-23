@@ -220,9 +220,28 @@ class ScoreboardApp:
                     self.ended_at[game.id],
                     "observed" if watched else "estimated",
                 )
+        self._prune_game_state()
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    def _prune_game_state(self) -> None:
+        """Drop bookkeeping for games no longer in today's slate.
+
+        ``_seen_live``, ``ended_at`` and ``_known_favourite_score`` are
+        keyed by game id and otherwise never cleared, growing by one entry
+        per game for as long as the process runs (#64). ``self.games`` is
+        refreshed from the live schedule every poll, so any id no longer in
+        it is done for today and safe to forget.
+        """
+        current_ids = {game.id for game in self.games}
+        self._seen_live &= current_ids
+        for game_id in list(self.ended_at):
+            if game_id not in current_ids:
+                del self.ended_at[game_id]
+        for game_id in list(self._known_favourite_score):
+            if game_id not in current_ids:
+                del self._known_favourite_score[game_id]
 
     def _record_error(self, message: str) -> None:
         """Track the most recent fetch failure, for the status page (#48)."""
@@ -534,10 +553,30 @@ class ScoreboardApp:
             return None
         return Scene("standings", standings=tuple(window))
 
-    def _show_standings_now(self) -> bool:
-        """Alternate standings with the preview/countdown scene, on rotate_seconds' cadence."""
+    def _countdown_or_preview(self, upcoming: Game) -> Scene:
+        cfg = self.settings.scoreboard
+        if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
+            return Scene("countdown", upcoming)
+        return Scene("preview", upcoming)
+
+    def _rotate_idle_scenes(self, upcoming: Game, standings: Scene | None) -> Scene:
+        """Cycle countdown/preview, standings and the idle clock on rotate_seconds' cadence.
+
+        Widened from the old 2-way standings-vs-countdown/preview split to
+        add the idle clock as a slot (opt-in, ``show_clock_between_games``)
+        -- with the flag off, this is exactly the old 2-way (or 1-way, with
+        standings suppressed) math, just generalised over a list instead of
+        a single ``% 2``.
+        """
+        slots: list[Scene] = [self._countdown_or_preview(upcoming)]
+        if standings is not None:
+            slots.append(standings)
+        if self.settings.scoreboard.show_clock_between_games:
+            slots.append(Scene("clock"))
+        if len(slots) == 1:
+            return slots[0]
         period = max(self.settings.scoreboard.rotate_seconds, 1.0)
-        return int(self.monotonic() // period) % 2 == 1
+        return slots[int(self.monotonic() // period) % len(slots)]
 
     def select_scene(self, *, allow_fetch: bool = True) -> Scene:
         """Decide what to show; the draw step only renders the answer.
@@ -597,13 +636,9 @@ class ScoreboardApp:
             else self.next_favourite_game(allow_fetch=allow_fetch)
         )
         standings = self._standings_scene(allow_fetch=allow_fetch)
-        if standings is not None and (upcoming is None or self._show_standings_now()):
-            return standings
         if upcoming is None:
-            return None
-        if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
-            return Scene("countdown", upcoming)
-        return Scene("preview", upcoming)
+            return standings
+        return self._rotate_idle_scenes(upcoming, standings)
 
     def situation_targets(self) -> list[Game]:
         """Live games worth a second request: the favourite's and the on-screen one.
