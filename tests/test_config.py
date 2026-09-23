@@ -90,6 +90,41 @@ def test_inverted_brightness_clamp_is_swapped_not_left_broken(caplog):
     assert "min_brightness" in caplog.text
 
 
+def test_static_brightness_is_clamped_like_min_and_max():
+    from nhl_scoreboard.config import PanelConfig
+
+    assert PanelConfig(brightness=0).brightness == 1
+    assert PanelConfig(brightness=500).brightness == 100
+
+
+def test_bad_poll_intervals_are_floored_instead_of_defeating_rate_limiting(tmp_path, caplog):
+    """A 0 or negative interval must not make the run loop poll every frame (#64)."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        "[scoreboard]\npoll_seconds = 0\nlive_poll_seconds = -5\nrotate_seconds = 0.01\n"
+    )
+    scoreboard = Settings.load(path).scoreboard
+    assert scoreboard.poll_seconds == 1.0
+    assert scoreboard.live_poll_seconds == 1.0
+    assert scoreboard.rotate_seconds == 1.0
+    assert "poll_seconds" in caplog.text
+
+
+def test_bad_brightness_poll_seconds_is_floored(caplog):
+    from nhl_scoreboard.config import PanelConfig
+
+    assert PanelConfig(brightness_poll_seconds=0).brightness_poll_seconds == 1.0
+    assert "brightness_poll_seconds" in caplog.text
+
+
+def test_reasonable_poll_intervals_are_left_alone():
+    settings = Settings()
+    assert settings.scoreboard.poll_seconds == 60.0
+    assert settings.scoreboard.live_poll_seconds == 15.0
+    assert settings.scoreboard.rotate_seconds == 8.0
+    assert settings.panel.brightness_poll_seconds == 5.0
+
+
 def test_save_preserves_comments_and_only_changes_targeted_keys(tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text(

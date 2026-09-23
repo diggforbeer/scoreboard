@@ -184,6 +184,24 @@ def test_api_failure_keeps_previous_games(fake_backend, games):
     assert app.games, "stale data should stay on the board"
 
 
+def test_refresh_prunes_state_for_games_no_longer_in_todays_slate(fake_backend, games):
+    """_seen_live/ended_at/_known_favourite_score must not grow forever (#64)."""
+    app = build_app(fake_backend, games, favourite_team="CGY")
+    app.refresh()
+    live_ids = {g.id for g in app.games if g.is_live}
+    assert live_ids, "fixture should contain a live game"
+    assert app._seen_live == live_ids
+    assert app._known_favourite_score, "favourite's game should have been scored"
+
+    # Tomorrow: none of today's games are on the schedule any more.
+    app.client._games = []
+    app.refresh()
+
+    assert app._seen_live == set()
+    assert app.ended_at == {}
+    assert app._known_favourite_score == {}
+
+
 def test_draw_swaps_the_canvas(fake_backend, games):
     app = build_app(fake_backend, games)
     app.refresh()
