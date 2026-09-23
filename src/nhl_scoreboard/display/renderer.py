@@ -70,9 +70,62 @@ class Renderer:
     def vline(self, canvas: Any, x: int, y0: int, y1: int, rgb: tuple[int, int, int]) -> None:
         self.g.DrawLine(canvas, x, y0, x, y1, self.color(rgb))
 
-    def draw_logo(self, canvas: Any, logo: Logo, x: int, y: int) -> None:
+    def draw_logo(
+        self, canvas: Any, logo: Logo, x: int, y: int, *, skip_left: int = 0, skip_right: int = 0
+    ) -> None:
+        """Draw ``logo`` at ``(x, y)``, optionally cropping columns off one edge.
+
+        ``skip_left``/``skip_right`` drop that many source columns from the
+        logo's centre-facing edge, so it can stay flush against the panel's
+        outer edge while cropped -- see ``_logo_span`` (#38).
+        """
+        lo, hi = skip_left, logo.width - skip_right
         for dx, dy, (r, g, b) in logo.pixels:
-            canvas.SetPixel(x + dx, y + dy, r, g, b)
+            if lo <= dx < hi:
+                canvas.SetPixel(x + dx, y + dy, r, g, b)
+
+    #: Minimum width reserved for the score/divider/status column between
+    #: the two logos. A 128-wide panel (two chained 64x32 panels) has ample
+    #: room and this never binds -- both logos draw in full, same as always.
+    #: A single 64x32 panel doesn't: two full 32px logos would leave zero
+    #: room for scores, so each logo crops its centre-facing edge instead of
+    #: shrinking, down to half its width and no further (#38).
+    _LOGO_MIN_MIDDLE = 32
+
+    def _logo_span(self, away: Logo, home: Logo) -> tuple[int, int, int, int]:
+        """How much of each logo to show, and the resulting middle column.
+
+        Returns ``(away_visible, home_visible, left, right)``. Each logo
+        stays flush against its panel edge; only its centre-facing edge is
+        cropped, so what's lost is the part nearest the score column, not
+        the recognisable outer silhouette.
+        """
+        per_side = (self.width - self._LOGO_MIN_MIDDLE) // 2
+        away_visible = max(away.width // 2, min(away.width, per_side))
+        home_visible = max(home.width // 2, min(home.width, per_side))
+        return away_visible, home_visible, away_visible, self.width - home_visible
+
+    def _draw_logos(self, canvas: Any, away: Logo, home: Logo) -> tuple[int, int]:
+        """Draw both logos flush to their edges, cropped per ``_logo_span``.
+
+        Returns ``(left, right)``: the x-range left over for everything else.
+        """
+        away_visible, home_visible, left, right = self._logo_span(away, home)
+        self.draw_logo(
+            canvas,
+            away,
+            0,
+            (self.height - away.height) // 2,
+            skip_right=away.width - away_visible,
+        )
+        self.draw_logo(
+            canvas,
+            home,
+            self.width - home.width,
+            (self.height - home.height) // 2,
+            skip_left=home.width - home_visible,
+        )
+        return left, right
 
     # -- scenes ----------------------------------------------------------
 
@@ -94,14 +147,13 @@ class Renderer:
         """
         canvas.Clear()
         score_baseline = 13
-        rule_y = 19
+        # One extra blank row above the PP/SOG line (#70) beyond the row
+        # PR #42 already added, so it centers better in the gap before the
+        # status line rather than sitting right under the scores.
+        rule_y = 20
         status_baseline = self.height - 2
 
-        self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
-        self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
-
-        left = away.width
-        right = self.width - home.width
+        left, right = self._draw_logos(canvas, away, home)
         span = right - left
         quarter = span // 4
         centre = left + span // 2
@@ -110,8 +162,7 @@ class Renderer:
         self._draw_score(canvas, game.home.abbrev, game.home.score, right - quarter, score_baseline)
 
         self.vline(canvas, centre - 1, 3, score_baseline, DIM)
-        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y):
-            self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+        self._draw_situation(canvas, game, left + 3, right - 4, rule_y)
         self.text_center(
             canvas,
             self.fonts.small,
@@ -121,26 +172,42 @@ class Renderer:
             game.status_label(self.tz),
         )
 
-    def _draw_situation(self, canvas: Any, game: Game, x0: int, x1: int, baseline: int) -> bool:
-        """Power play / empty net indicator in the band above the status line.
+    def _draw_situation(self, canvas: Any, game: Game, x0: int, x1: int, baseline: int) -> None:
+        """Power play / empty net indicator, or shots on goal as a fallback (#70).
 
-        Drawn in the tiny font, in amber, aligned to the side of the team it
-        applies to. Returns True when something was drawn, so the caller can
-        leave out the rule that normally occupies that band.
+        Always draws something -- TeamSide.sog is always present (defaults
+        to 0, straight from the same score feed already polled every
+        cycle), so there's no "nothing to show" case left the way there
+        was before SOG existed; the plain rule this band used to fall
+        back to is unreachable now and was removed from both callers.
+
+        PP/EN always wins when present -- a penalty needs the room, SOG can
+        wait. 4-on-4 arrives as a Situation but carries neither code (see
+        Situation.indicator_side), so it falls through to SOG same as even
+        strength. PP/EN drawn in the tiny font, amber, aligned to the side
+        of the team it applies to; SOG in the same font, plain white and
+        centred, so it doesn't compete for attention with the indicator
+        colour.
         """
-        situation = game.situation
-        if situation is None:
-            return False
-        side = situation.indicator_side()
-        label = situation.label()
-        if side is None or not label:
-            return False
         font = self.fonts.tiny
-        if side == "away":
-            self.text(canvas, font, x0, baseline, ACCENT, label)
-        else:
-            self.text_right(canvas, font, x1 + 1, baseline, ACCENT, label)
-        return True
+        situation = game.situation
+        if situation is not None:
+            side = situation.indicator_side()
+            label = situation.label()
+            if side is not None and label:
+                if side == "away":
+                    self.text(canvas, font, x0, baseline, ACCENT, label)
+                else:
+                    self.text_right(canvas, font, x1 + 1, baseline, ACCENT, label)
+                return
+        self.text_center(
+            canvas,
+            font,
+            (x0 + x1) // 2,
+            baseline,
+            WHITE,
+            f"SOG {game.away.sog}-{game.home.sog}",
+        )
 
     def _draw_score(self, canvas: Any, abbrev: str, score: int, cx: int, y: int) -> None:
         text = str(score)
@@ -153,15 +220,16 @@ class Renderer:
         canvas.Clear()
         half = self.width // 2
         score_baseline = 13
-        rule_y = 19
+        # One extra blank row above the PP/SOG line (#70), matching
+        # _draw_game_with_logos.
+        rule_y = 20
         status_baseline = self.height - 2
 
         self._draw_side(canvas, game.away.abbrev, game.away.score, 0, half, score_baseline)
         self._draw_side(canvas, game.home.abbrev, game.home.score, half, half, score_baseline)
 
         self.vline(canvas, half - 1, 2, rule_y - 3, DIM)
-        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y):
-            self.hline(canvas, 0, self.width - 1, rule_y, DIM)
+        self._draw_situation(canvas, game, 3, self.width - 4, rule_y)
 
         self.text_center(
             canvas,
@@ -196,10 +264,7 @@ class Renderer:
         goal_baseline = 13
         score_baseline = self.height - 3
 
-        self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
-        self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
-
-        left, right = away.width, self.width - home.width
+        left, right = self._draw_logos(canvas, away, home)
         centre = (left + right) // 2
         self.text_center(canvas, self.fonts.large, centre, goal_baseline, ACCENT, "GOAL")
         self.text_center(
@@ -253,9 +318,7 @@ class Renderer:
             away, home = self.logos.get(game.away.abbrev), self.logos.get(game.home.abbrev)
 
         if away is not None and home is not None:
-            self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
-            self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
-            left, right = away.width, self.width - home.width
+            left, right = self._draw_logos(canvas, away, home)
             centre = (left + right) // 2
             self.text_center(canvas, self.fonts.medium, centre, top_baseline, WHITE, top)
             self.hline(canvas, left + 3, right - 4, rule_y, DIM)

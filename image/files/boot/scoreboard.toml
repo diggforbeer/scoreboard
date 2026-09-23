@@ -90,6 +90,32 @@ horn_dir = ""
 enabled = false
 port = 8080
 
+[night_mode]
+# Dim the board overnight, but never in the middle of a game: while a game is
+# live (and for a while after it ends) the board stays at normal brightness
+# however late it is. Takes priority over auto_brightness below while it's
+# dimming. Off by default.
+enabled = false
+
+# The dim window, 24-hour "HH:MM" in the timezone above. It can wrap past
+# midnight, e.g. 22:30 to 07:00.
+start_time = "22:30"
+end_time = "07:00"
+
+# 0-100 while dimmed. 0 blanks the board completely rather than drawing a
+# screen nobody can see.
+dim_brightness = 0
+
+# Which games hold off dimming.
+#   "tracked"  Only favourite_team's game (with no favourite_team set, this
+#              behaves like "all").
+#   "all"      Any live game in the league today.
+suppress_scope = "tracked"
+
+# How long after that game ends the board stays bright, so the final score
+# is still readable. 0 dims the moment it's over.
+cooldown_minutes = 15
+
 [panel]
 # Defaults describe two 64x32 panels daisy-chained into one 128x32 board.
 rows = 32
