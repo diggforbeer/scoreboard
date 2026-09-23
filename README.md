@@ -6,10 +6,10 @@
 |-------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | src/nhl\_scoreboard/\_\_init\_\_.py         |        1 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/\_\_main\_\_.py         |       41 |       41 |        8 |        0 |      0% |      3-71 |
-| src/nhl\_scoreboard/app.py                  |      446 |        9 |      182 |        9 |     97% |95-\>99, 150-151, 240-241, 306, 459, 473, 490-\>487, 534, 616-\>618, 673-\>exit, 680 |
+| src/nhl\_scoreboard/app.py                  |      456 |        9 |      190 |        9 |     97% |95-\>99, 150-151, 259-260, 325, 478, 492, 509-\>506, 553, 635-\>637, 692-\>exit, 699 |
 | src/nhl\_scoreboard/audio.py                |       55 |        1 |       16 |        0 |     99% |        92 |
 | src/nhl\_scoreboard/brightness.py           |        9 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/config.py               |      177 |        2 |       24 |        0 |     99% |   319-320 |
+| src/nhl\_scoreboard/config.py               |      188 |        2 |       26 |        0 |     99% |   349-350 |
 | src/nhl\_scoreboard/display/\_\_init\_\_.py |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/ascii.py        |       54 |        6 |        6 |        3 |     85% |24, 28, 55-56, 60, 84 |
 | src/nhl\_scoreboard/display/fonts.py        |       29 |        2 |        6 |        1 |     91% |     33-34 |
@@ -22,7 +22,7 @@
 | src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
 | src/nhl\_scoreboard/nhl/models.py           |      192 |        0 |       42 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                   | **1502** |   **72** |  **360** |   **14** | **95%** |           |
+| **TOTAL**                                   | **1523** |   **72** |  **370** |   **14** | **95%** |           |
 
 
 ## Setup coverage badge
