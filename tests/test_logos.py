@@ -91,9 +91,10 @@ def test_cache_loads_once(tmp_path, monkeypatch):
 def test_override_directory_is_checked_before_the_fetched_one():
     from nhl_scoreboard.display.logos import default_directories
 
-    dirs = [str(d) for d in default_directories(32, "dark")]
-    override = next(i for i, d in enumerate(dirs) if d.endswith("logos/overrides/32/dark"))
-    fetched = next(i for i, d in enumerate(dirs) if d.endswith("assets/logos/32/dark"))
+    # Compare path components, not strings: str(Path) uses "\" on Windows.
+    tails = [d.parts[-4:] for d in default_directories(32, "dark")]
+    override = tails.index(("logos", "overrides", "32", "dark"))
+    fetched = tails.index(("assets", "logos", "32", "dark"))
     assert override < fetched, "override tier must be searched first"
 
 
