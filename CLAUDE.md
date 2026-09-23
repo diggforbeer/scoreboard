@@ -182,13 +182,51 @@ confirmed from only one real, end-of-season response and not documented
 anywhere; don't act on them without verifying against a few more live
 examples first.
 
+Shots on goal (#70) render in the same indicator band as the PP/EN
+indicator, as a fallback when neither is active -- `_draw_situation`
+(`renderer.py`) tries PP/EN first, then always falls through to
+`TeamSide.sog`. Deliberately **not** a separate fetch: `TeamSide.sog`
+already comes from `score/now` (verified with a real live call before
+building anything -- an earlier draft of this fetched it from
+`gamecenter/{id}/landing` instead, alongside situation, before that
+check turned up that the score feed already had it for free), so SOG
+has none of situation's scoping/caching (`situation_targets`,
+`live_poll_seconds`) -- it's available for every game the app already
+knows about, live or final, in either rotation mode. `TeamSide.sog`
+defaults to `0`, never `None`, so the indicator band's old "nothing to
+show, draw a plain rule" case no longer exists -- `_draw_situation`
+always draws something now, and the plain-rule fallback was removed
+from both `_draw_game_with_logos` and `_draw_game_text`.
+
+Night mode (#92, `[night_mode]`) dims to `dim_brightness` inside a
+`start_time`-`end_time` window (local to `scoreboard.timezone`, may wrap
+midnight) unless a relevant game is live or ended less than
+`cooldown_minutes` ago (`self.ended_at`, same as `final_hold_minutes`).
+While it's actively dimming it **wins over the ambient sensor**
+(`refresh_brightness()` checks it first), deliberately: a lux sensor in a
+dark TV room would dim a live game, and a lit room would keep a scheduled
+window bright forever -- that's the whole argument of #92. Outside the
+window the sensor behaves exactly as before; with no sensor,
+`panel.brightness` is re-applied each poll, which is what restores the
+panel once the window ends. `suppress_scope` is `tracked` (favourite's
+game only) or `all` (any live game) -- same favourite-vs-all scoping
+precedent as the power-play indicator, goal detection and standings.
+`tracked` with no `favourite_team` silently behaves as `all`; that's a
+valid combination (`rotation = "all"` with night mode on), not a
+misconfiguration, so no warning. `dim_brightness = 0` is zero-power
+blanking: `draw()` clears and swaps the canvas and skips scene selection
+and rendering entirely, rather than trusting brightness 0 alone to be dark
+on every backend. Transitions are instant; eased steps were considered and
+cut, and a dim-by-default "passive mode" is #94, not this.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
-- `score/now` has no special-teams data. `gamecenter/{id}/landing` has a
-  `situation` object **only while something is on** (PP / EN / PS);
-  absent at even strength. 4-on-4 arrives as a situation but is not an
-  advantage.
+- `score/now`'s per-team objects include `sog` (shots on goal) directly --
+  no extra fetch needed for that (#70). It has no *special-teams* data
+  though: `gamecenter/{id}/landing` has a `situation` object **only
+  while something is on** (PP / EN / PS); absent at even strength.
+  4-on-4 arrives as a situation but is not an advantage.
 - `club-schedule-season/{TEAM}/now` is ~180KB for the season; cached 1h.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
