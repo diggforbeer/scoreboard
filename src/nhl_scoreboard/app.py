@@ -11,11 +11,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from types import FrameType
-from zoneinfo import ZoneInfo
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
-from .config import Settings
+from .config import Settings, resolve_timezone
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
@@ -65,10 +64,12 @@ class ScoreboardApp:
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
+        self.sleep = sleep or time.sleep
         self.horn = horn or GoalHornPlayer.default(
             device=settings.audio.device,
             horn_dir=settings.audio.horn_dir,
@@ -84,7 +85,7 @@ class ScoreboardApp:
             self.light_sensor = None
         self._smoothed_lux: float | None = None
         self._applied_brightness = settings.panel.brightness
-        self.tz = ZoneInfo(settings.scoreboard.timezone)
+        self.tz = resolve_timezone(settings.scoreboard.timezone)
         self._config_mtime = self._source_mtime()
         self.client = client or NHLClient()
         self.backend = backend or load_backend()
@@ -177,7 +178,7 @@ class ScoreboardApp:
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
             self.draw()
-            time.sleep(FRAME_INTERVAL)
+            self.sleep(FRAME_INTERVAL)
         self.shutdown()
 
     def shutdown(self) -> None:
@@ -247,8 +248,14 @@ class ScoreboardApp:
         card on another machine, ``nano`` over SSH, or the eventual web
         editor (#48) -- and all three need to pick up a change the same way.
         Most settings are already read fresh from ``self.settings`` every
-        loop iteration; ``[audio]`` and the logo library are not, so those
-        get rebuilt explicitly here. ``[panel]`` geometry
+        loop iteration; ``[audio]``, the logo library, the ambient light
+        sensor (``panel.auto_brightness``) and the status server
+        (``status.enabled``/``status.port``) are built once from it instead,
+        so those get rebuilt explicitly here (#62). A rebuilt status server
+        is only started if ``run()``'s loop is live (``self._running``):
+        ``run()`` starts it exactly once before looping, so a reload outside
+        that loop -- e.g. a test calling this directly -- builds it without
+        binding a socket, just as ``__init__`` does. ``[panel]`` geometry
         (rows/cols/chain_length/hardware_mapping/...) is baked into the
         already-constructed ``RGBMatrix`` and deliberately NOT reloaded --
         that needs a process restart.
@@ -274,11 +281,16 @@ class ScoreboardApp:
             or old.scoreboard.logo_variant != new_settings.scoreboard.logo_variant
         )
         timezone_changed = old.scoreboard.timezone != new_settings.scoreboard.timezone
+        auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
+        status_changed = (old.status.enabled, old.status.port) != (
+            new_settings.status.enabled,
+            new_settings.status.port,
+        )
 
         self.settings = new_settings
 
         if timezone_changed:
-            self.tz = ZoneInfo(new_settings.scoreboard.timezone)
+            self.tz = resolve_timezone(new_settings.scoreboard.timezone, fallback=self.tz)
             self.renderer.tz = self.tz
 
         if audio_changed:
@@ -297,17 +309,49 @@ class ScoreboardApp:
                 )
             self.renderer.logos = logos
 
+        if auto_brightness_changed:
+            # Same lazy probe as __init__: only touch the I2C bus when the
+            # feature is on. Turning it off just drops the sensor, which is
+            # what refresh_brightness() already treats as "feature off".
+            self.light_sensor = LightSensor.open() if new_settings.panel.auto_brightness else None
+
+        if status_changed:
+            # StatusServer's port is fixed at construction, so any change
+            # means stop-and-rebuild rather than reconfigure in place.
+            if self.status_server is not None:
+                self.status_server.stop()
+            if new_settings.status.enabled:
+                self.status_server = StatusServer(
+                    snapshot=self.status_snapshot, port=new_settings.status.port
+                )
+                # run() starts the server once, before its loop; a rebuild
+                # inside the loop has to start itself. Outside the loop,
+                # construct only -- same as __init__ -- so it's run() that
+                # binds the socket, not whoever happened to reload.
+                if self._running:
+                    self.status_server.start()
+            else:
+                self.status_server = None
+
     # -- auto brightness ---------------------------------------------------
 
     def refresh_brightness(self) -> None:
-        """Sample the ambient sensor and re-apply matrix brightness if it moved.
+        """Re-apply matrix brightness: night mode, else the ambient sensor, else static.
 
-        No-op whenever auto_brightness is off (self.light_sensor is None) or
-        the sensor isn't answering -- the panel just keeps the static
-        `brightness` it was constructed with, same as if this feature did
-        not exist.
+        Night mode (#92) wins over the ambient sensor while it's actively
+        dimming -- a scheduled window must dim even with the lights on, and
+        is already held off during a live game, which a lux sensor in a
+        dark TV room can't know about. Outside it, the sensor (if any)
+        drives brightness exactly as before; with no sensor the static
+        ``brightness`` is re-applied, which is what brings the panel back
+        up once a night window ends. A sensor that isn't answering leaves
+        brightness where it is.
         """
+        if self._night_mode_active():
+            self._apply_brightness(self.settings.night_mode.dim_brightness)
+            return
         if self.light_sensor is None:
+            self._apply_brightness(self.settings.panel.brightness)
             return
         lux = self.light_sensor.read_lux()
         if lux is None:
@@ -319,6 +363,9 @@ class ScoreboardApp:
         )
         panel = self.settings.panel
         target = lux_to_brightness(self._smoothed_lux, panel.min_brightness, panel.max_brightness)
+        self._apply_brightness(target)
+
+    def _apply_brightness(self, target: int) -> None:
         if target == self._applied_brightness:
             return
         self._applied_brightness = target
@@ -329,6 +376,43 @@ class ScoreboardApp:
             # settable brightness; a backend that doesn't just keeps
             # whatever it was constructed with.
             log.debug("Backend %s has no settable brightness", self.backend.name)
+
+    # -- night mode (#92) ------------------------------------------------
+
+    def _in_night_window(self) -> bool:
+        cfg = self.settings.night_mode
+        now = self.clock().astimezone(self.tz).time()
+        if cfg.start <= cfg.end:
+            return cfg.start <= now < cfg.end
+        return now >= cfg.start or now < cfg.end
+
+    def _night_mode_suppressed(self) -> bool:
+        """A relevant game is live, or finished less than cooldown_minutes ago.
+
+        "tracked" with no favourite_team has nothing to track, so it
+        behaves as "all" -- a normal combination (rotation = "all" with
+        night mode on), not a misconfiguration worth a warning.
+        """
+        cfg = self.settings.night_mode
+        favourite = self.settings.scoreboard.favourite_team
+        if cfg.suppress_scope == "all" or not favourite:
+            candidates = self.games
+        else:
+            candidates = [g for g in self.games if g.involves(favourite)]
+        if any(g.is_live for g in candidates):
+            return True
+        ended = [self.ended_at[g.id] for g in candidates if g.id in self.ended_at]
+        if not ended:
+            return False
+        return self.clock() - max(ended) < timedelta(minutes=cfg.cooldown_minutes)
+
+    def _night_mode_active(self) -> bool:
+        """Should the panel be at night_mode.dim_brightness right now?"""
+        return (
+            self.settings.night_mode.enabled
+            and self._in_night_window()
+            and not self._night_mode_suppressed()
+        )
 
     # -- goal detection ---------------------------------------------------
 
@@ -631,6 +715,13 @@ class ScoreboardApp:
         return value.astimezone(self.tz).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def draw(self) -> None:
+        if self._night_mode_active() and self.settings.night_mode.dim_brightness == 0:
+            # Blank outright: brightness 0 alone isn't guaranteed dark on
+            # every backend, and there's no point rendering a scene nobody
+            # can see.
+            self.canvas.Clear()
+            self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            return
         scene = self.select_scene()
         r = self.renderer
         if scene.kind == "game":
