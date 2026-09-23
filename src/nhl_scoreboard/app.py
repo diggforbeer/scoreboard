@@ -127,7 +127,13 @@ class ScoreboardApp:
         self.ended_at: dict[int, datetime] = {}
         self._seen_live: set[int] = set()
         self._schedule: tuple[float, list[Game]] | None = None
+        #: monotonic time before which a failed schedule fetch won't retry --
+        #: without this, a schedule outage gets hit every select_scene() call
+        #: (every FRAME_INTERVAL) instead of respecting SCHEDULE_TTL_SECONDS.
+        self._schedule_retry_after: float = 0.0
         self._standings: tuple[float, list[StandingsRow]] | None = None
+        #: same backoff as _schedule_retry_after, for standings failures.
+        self._standings_retry_after: float = 0.0
         #: game id -> the favourite's own score last seen in that game, so a
         #: goal can be detected as an increase. Set on first sighting without
         #: firing, so a game already 3-1 at startup does not fire a goal.
@@ -382,16 +388,14 @@ class ScoreboardApp:
         if not favourite:
             return None
         now_mono = self.monotonic()
-        if allow_fetch and (
-            self._schedule is None or now_mono - self._schedule[0] > SCHEDULE_TTL_SECONDS
-        ):
+        stale = self._schedule is None or now_mono - self._schedule[0] > SCHEDULE_TTL_SECONDS
+        if allow_fetch and stale and now_mono >= self._schedule_retry_after:
             try:
                 self._schedule = (now_mono, self.client.schedule(favourite))
             except NHLApiError as exc:
                 log.warning("Schedule fetch failed: %s", exc)
                 self._record_error(f"schedule fetch: {exc}")
-                if self._schedule is None:
-                    return None
+                self._schedule_retry_after = now_mono + SCHEDULE_TTL_SECONDS
         if self._schedule is None:
             return None
         now = self.clock()
@@ -410,16 +414,14 @@ class ScoreboardApp:
         ``next_favourite_game`` -- for the status page (#61).
         """
         now_mono = self.monotonic()
-        if allow_fetch and (
-            self._standings is None or now_mono - self._standings[0] > STANDINGS_TTL_SECONDS
-        ):
+        stale = self._standings is None or now_mono - self._standings[0] > STANDINGS_TTL_SECONDS
+        if allow_fetch and stale and now_mono >= self._standings_retry_after:
             try:
                 self._standings = (now_mono, self.client.standings())
             except NHLApiError as exc:
                 log.warning("Standings fetch failed: %s", exc)
                 self._record_error(f"standings fetch: {exc}")
-                if self._standings is None:
-                    return None
+                self._standings_retry_after = now_mono + STANDINGS_TTL_SECONDS
         if self._standings is None:
             return None
         return self._standings[1]
