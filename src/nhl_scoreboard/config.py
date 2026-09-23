@@ -60,6 +60,27 @@ DEFAULT_CONFIG_PATHS = (
     Path("/etc/nhl-scoreboard/scoreboard.toml"),
 )
 
+#: Floor for any configurable polling/rotation interval. A `0` or negative
+#: value (a typo in a hand-edited boot TOML) would make the matching
+#: `now >= next_*` check in app.py's run loop non-advancing -- e.g. hitting
+#: the scores endpoint every FRAME_INTERVAL (0.5s) instead of the intended
+#: poll_seconds, defeating the whole point of a poll interval (#64).
+MIN_INTERVAL_SECONDS = 1.0
+
+
+def _clamp_interval(section: str, name: str, value: float) -> float:
+    if value < MIN_INTERVAL_SECONDS:
+        log.warning(
+            "%s.%s (%s) is below the floor of %s seconds; using %s",
+            section,
+            name,
+            value,
+            MIN_INTERVAL_SECONDS,
+            MIN_INTERVAL_SECONDS,
+        )
+        return MIN_INTERVAL_SECONDS
+    return value
+
 
 @dataclass(slots=True)
 class PanelConfig:
@@ -106,6 +127,7 @@ class PanelConfig:
     brightness_poll_seconds: float = 5.0
 
     def __post_init__(self) -> None:
+        self.brightness = max(1, min(100, self.brightness))
         self.min_brightness = max(1, min(100, self.min_brightness))
         self.max_brightness = max(1, min(100, self.max_brightness))
         if self.min_brightness > self.max_brightness:
@@ -115,6 +137,9 @@ class PanelConfig:
                 self.max_brightness,
             )
             self.min_brightness, self.max_brightness = self.max_brightness, self.min_brightness
+        self.brightness_poll_seconds = _clamp_interval(
+            "panel", "brightness_poll_seconds", self.brightness_poll_seconds
+        )
 
     @property
     def width(self) -> int:
@@ -162,6 +187,11 @@ class ScoreboardConfig:
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
         self.logo_variant = self.logo_variant.strip().lower() or "dark"
+        self.poll_seconds = _clamp_interval("scoreboard", "poll_seconds", self.poll_seconds)
+        self.live_poll_seconds = _clamp_interval(
+            "scoreboard", "live_poll_seconds", self.live_poll_seconds
+        )
+        self.rotate_seconds = _clamp_interval("scoreboard", "rotate_seconds", self.rotate_seconds)
         self.rotation = self.rotation.strip().lower() or "favourite"
         if self.rotation not in ("favourite", "all"):
             log.warning("Unknown rotation %r; using 'all'", self.rotation)

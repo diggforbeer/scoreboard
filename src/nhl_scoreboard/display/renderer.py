@@ -70,9 +70,62 @@ class Renderer:
     def vline(self, canvas: Any, x: int, y0: int, y1: int, rgb: tuple[int, int, int]) -> None:
         self.g.DrawLine(canvas, x, y0, x, y1, self.color(rgb))
 
-    def draw_logo(self, canvas: Any, logo: Logo, x: int, y: int) -> None:
+    def draw_logo(
+        self, canvas: Any, logo: Logo, x: int, y: int, *, skip_left: int = 0, skip_right: int = 0
+    ) -> None:
+        """Draw ``logo`` at ``(x, y)``, optionally cropping columns off one edge.
+
+        ``skip_left``/``skip_right`` drop that many source columns from the
+        logo's centre-facing edge, so it can stay flush against the panel's
+        outer edge while cropped -- see ``_logo_span`` (#38).
+        """
+        lo, hi = skip_left, logo.width - skip_right
         for dx, dy, (r, g, b) in logo.pixels:
-            canvas.SetPixel(x + dx, y + dy, r, g, b)
+            if lo <= dx < hi:
+                canvas.SetPixel(x + dx, y + dy, r, g, b)
+
+    #: Minimum width reserved for the score/divider/status column between
+    #: the two logos. A 128-wide panel (two chained 64x32 panels) has ample
+    #: room and this never binds -- both logos draw in full, same as always.
+    #: A single 64x32 panel doesn't: two full 32px logos would leave zero
+    #: room for scores, so each logo crops its centre-facing edge instead of
+    #: shrinking, down to half its width and no further (#38).
+    _LOGO_MIN_MIDDLE = 32
+
+    def _logo_span(self, away: Logo, home: Logo) -> tuple[int, int, int, int]:
+        """How much of each logo to show, and the resulting middle column.
+
+        Returns ``(away_visible, home_visible, left, right)``. Each logo
+        stays flush against its panel edge; only its centre-facing edge is
+        cropped, so what's lost is the part nearest the score column, not
+        the recognisable outer silhouette.
+        """
+        per_side = (self.width - self._LOGO_MIN_MIDDLE) // 2
+        away_visible = max(away.width // 2, min(away.width, per_side))
+        home_visible = max(home.width // 2, min(home.width, per_side))
+        return away_visible, home_visible, away_visible, self.width - home_visible
+
+    def _draw_logos(self, canvas: Any, away: Logo, home: Logo) -> tuple[int, int]:
+        """Draw both logos flush to their edges, cropped per ``_logo_span``.
+
+        Returns ``(left, right)``: the x-range left over for everything else.
+        """
+        away_visible, home_visible, left, right = self._logo_span(away, home)
+        self.draw_logo(
+            canvas,
+            away,
+            0,
+            (self.height - away.height) // 2,
+            skip_right=away.width - away_visible,
+        )
+        self.draw_logo(
+            canvas,
+            home,
+            self.width - home.width,
+            (self.height - home.height) // 2,
+            skip_left=home.width - home_visible,
+        )
+        return left, right
 
     # -- scenes ----------------------------------------------------------
 
@@ -100,11 +153,7 @@ class Renderer:
         rule_y = 20
         status_baseline = self.height - 2
 
-        self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
-        self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
-
-        left = away.width
-        right = self.width - home.width
+        left, right = self._draw_logos(canvas, away, home)
         span = right - left
         quarter = span // 4
         centre = left + span // 2
@@ -215,10 +264,7 @@ class Renderer:
         goal_baseline = 13
         score_baseline = self.height - 3
 
-        self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
-        self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
-
-        left, right = away.width, self.width - home.width
+        left, right = self._draw_logos(canvas, away, home)
         centre = (left + right) // 2
         self.text_center(canvas, self.fonts.large, centre, goal_baseline, ACCENT, "GOAL")
         self.text_center(
@@ -272,9 +318,7 @@ class Renderer:
             away, home = self.logos.get(game.away.abbrev), self.logos.get(game.home.abbrev)
 
         if away is not None and home is not None:
-            self.draw_logo(canvas, away, 0, (self.height - away.height) // 2)
-            self.draw_logo(canvas, home, self.width - home.width, (self.height - home.height) // 2)
-            left, right = away.width, self.width - home.width
+            left, right = self._draw_logos(canvas, away, home)
             centre = (left + right) // 2
             self.text_center(canvas, self.fonts.medium, centre, top_baseline, WHITE, top)
             self.hline(canvas, left + 3, right - 4, rule_y, DIM)

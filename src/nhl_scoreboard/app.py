@@ -220,9 +220,28 @@ class ScoreboardApp:
                     self.ended_at[game.id],
                     "observed" if watched else "estimated",
                 )
+        self._prune_game_state()
         if self.index >= len(self.games):
             self.index = 0
         log.debug("Refreshed: %d games", len(self.games))
+
+    def _prune_game_state(self) -> None:
+        """Drop bookkeeping for games no longer in today's slate.
+
+        ``_seen_live``, ``ended_at`` and ``_known_favourite_score`` are
+        keyed by game id and otherwise never cleared, growing by one entry
+        per game for as long as the process runs (#64). ``self.games`` is
+        refreshed from the live schedule every poll, so any id no longer in
+        it is done for today and safe to forget.
+        """
+        current_ids = {game.id for game in self.games}
+        self._seen_live &= current_ids
+        for game_id in list(self.ended_at):
+            if game_id not in current_ids:
+                del self.ended_at[game_id]
+        for game_id in list(self._known_favourite_score):
+            if game_id not in current_ids:
+                del self._known_favourite_score[game_id]
 
     def _record_error(self, message: str) -> None:
         """Track the most recent fetch failure, for the status page (#48)."""

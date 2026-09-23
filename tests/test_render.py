@@ -795,3 +795,100 @@ def test_goal_scene_ignores_situation(games, synthetic_logos):
     r.draw_goal(c1, game)
     r.draw_goal(c2, with_situation)
     assert c1.pixels == c2.pixels
+
+
+# --------------------------------------------------------------------------
+# narrow panel: a single 64x32 (chain_length=1), not the default 128x32
+# chain -- #38. Two full 32px logos would meet with zero room left for the
+# score column, so each logo crops its centre-facing edge (Renderer.
+# _logo_span) instead of shrinking. NARROW_VISIBLE mirrors that: half the
+# full logo, the floor the renderer never crops past.
+# --------------------------------------------------------------------------
+
+NARROW_W = 64
+NARROW_VISIBLE = LOGO // 2
+NARROW_LEFT, NARROW_RIGHT = NARROW_VISIBLE, NARROW_W - NARROW_VISIBLE
+NARROW_CENTRE = (NARROW_LEFT + NARROW_RIGHT) // 2
+
+
+def make_narrow_renderer(logos: LogoLibrary | None = None) -> Renderer:
+    return Renderer(
+        graphics=graphics, fonts=FontSet(graphics), width=NARROW_W, height=H, tz=TZ, logos=logos
+    )
+
+
+def assert_narrow_logo_layout(c: AsciiCanvas, game: Game) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.home.abbrev)}
+    assert away_px, f"no logo drawn for {game.away.abbrev}"
+    assert home_px, f"no logo drawn for {game.home.abbrev}"
+    # The crop must actually hold: nothing of either logo may reach into the
+    # column reserved for scores, unlike a full 32px logo at this width.
+    assert max(x for x, _ in away_px) < NARROW_LEFT, "away logo bleeds past its cropped edge"
+    assert min(x for x, _ in home_px) >= NARROW_RIGHT, "home logo bleeds past its cropped edge"
+
+    away_box = c.bbox(NARROW_LEFT, 0, NARROW_CENTRE - 1, SCORE_BASELINE)
+    home_box = c.bbox(NARROW_CENTRE, 0, NARROW_RIGHT - 1, SCORE_BASELINE)
+    assert away_box is not None, f"no score drawn for {game.away.abbrev}"
+    assert home_box is not None, f"no score drawn for {game.home.abbrev}"
+    assert away_box.x1 < home_box.x0, "scores collide on a narrow panel"
+
+
+def test_logo_layout_narrow_panel(games, synthetic_logos, update_snapshots):
+    game = games["live"]  # SEA 2 @ CGY 1
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_game(c, game)
+    art = show(
+        f"narrow logos, live: {game.away.abbrev} {game.away.score} @ "
+        f"{game.home.abbrev} {game.home.score}",
+        c,
+    )
+    assert_narrow_logo_layout(c, game)
+    box = c.bbox(NARROW_LEFT, STATUS_TOP, NARROW_RIGHT - 1, H - 1)
+    assert box is not None, "status line missing"
+    assert abs(box.center_x - (NARROW_CENTRE - 0.5)) <= 1, f"status not centred: {box.center_x}"
+    check_snapshot("logo_narrow_live", art, update_snapshots)
+
+
+def test_logo_layout_narrow_panel_two_digit_scores(
+    big_score_game, synthetic_logos, update_snapshots
+):
+    """The tightest case: two-digit scores must still clear each other (#38)."""
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_game(c, big_score_game)
+    art = show("narrow logos, big score: EDM 12 @ CGY 10", c)
+    assert_narrow_logo_layout(c, big_score_game)
+    check_snapshot("logo_narrow_big_score", art, update_snapshots)
+
+
+def test_logo_layout_narrow_panel_goal(games, synthetic_logos, update_snapshots):
+    game = games["live"]
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_goal(c, game)
+    art = show(f"narrow logos, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.home.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    goal_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
+    assert goal_box is not None, "GOAL text missing"
+    check_snapshot("logo_narrow_goal", art, update_snapshots)
+
+
+def test_upcoming_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_preview(c, UPCOMING, PUCK_DROP - timedelta(hours=9))
+    art = show("narrow logos, preview: TONIGHT / 8:00P", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.home.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    top_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
+    assert top_box is not None, "top line missing"
+    check_snapshot("logo_narrow_preview", art, update_snapshots)
