@@ -19,10 +19,10 @@
 | src/nhl\_scoreboard/display/teams.py        |        5 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/light\_sensor.py        |       38 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/nhl/\_\_init\_\_.py     |        3 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/nhl/api.py              |       72 |        9 |        4 |        1 |     87% |62-65, 96-99, 101 |
+| src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
 | src/nhl\_scoreboard/nhl/models.py           |      192 |        0 |       42 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        2 |     97% |105-\>109, 109-\>exit |
-| **TOTAL**                                   | **1420** |  **115** |  **338** |   **24** | **91%** |           |
+| **TOTAL**                                   | **1420** |  **108** |  **338** |   **23** | **91%** |           |
 
 
 ## Setup coverage badge
