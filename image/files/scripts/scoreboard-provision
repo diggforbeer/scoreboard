@@ -44,7 +44,12 @@ STATE_FILE = IWD_DIR / ".scoreboard-managed"
 #: back to "whatever was in the profile before" isn't enough on its own --
 #: this is what actually gets written back into scoreboard.toml on failure.
 LAST_GOOD_FILE = IWD_DIR / ".scoreboard-last-good-wifi.json"
-ZONEINFO = Path("/usr/share/zoneinfo")
+#: Same overridable convention as IWD_DIR above, so tests can exercise
+#: apply_timezone() against real files without touching the actual system's
+#: /usr/share/zoneinfo, /etc/localtime or /etc/timezone.
+ZONEINFO = Path(os.environ.get("NHL_SCOREBOARD_ZONEINFO_DIR", "/usr/share/zoneinfo"))
+LOCALTIME = Path(os.environ.get("NHL_SCOREBOARD_LOCALTIME", "/etc/localtime"))
+TIMEZONE_FILE = Path(os.environ.get("NHL_SCOREBOARD_TIMEZONE_FILE", "/etc/timezone"))
 
 # iwd uses the SSID as the profile filename when it is plainly printable;
 # anything else has to be hex-encoded. See iwd.network(5).
@@ -91,13 +96,12 @@ def apply_timezone(scoreboard: dict) -> None:
     if not (ZONEINFO / tz).exists():
         log.error("Unknown timezone %r; keeping current setting", tz)
         return
-    localtime = Path("/etc/localtime")
     try:
-        if localtime.is_symlink() and localtime.readlink() == ZONEINFO / tz:
+        if LOCALTIME.is_symlink() and LOCALTIME.readlink() == ZONEINFO / tz:
             return
-        localtime.unlink(missing_ok=True)
-        localtime.symlink_to(ZONEINFO / tz)
-        Path("/etc/timezone").write_text(f"{tz}\n")
+        LOCALTIME.unlink(missing_ok=True)
+        LOCALTIME.symlink_to(ZONEINFO / tz)
+        TIMEZONE_FILE.write_text(f"{tz}\n")
         log.info("Timezone set to %s", tz)
     except OSError as exc:
         log.error("Could not set timezone: %s", exc)
