@@ -369,17 +369,22 @@ class ScoreboardApp:
             return None
         return next((g for g in self.games if g.involves(favourite)), None)
 
-    def next_favourite_game(self) -> Game | None:
+    def next_favourite_game(self, *, allow_fetch: bool = True) -> Game | None:
         """The favourite's next game from the season schedule, cached an hour.
 
         Today's game is excluded once it is final so the board moves on to
-        the one after it.
+        the one after it. ``allow_fetch=False`` (used by the status page,
+        #61) skips the network call entirely and answers from whatever is
+        already cached -- the status thread must never race the main loop
+        into the same fetch or block on it.
         """
         favourite = self.settings.scoreboard.favourite_team
         if not favourite:
             return None
         now_mono = self.monotonic()
-        if self._schedule is None or now_mono - self._schedule[0] > SCHEDULE_TTL_SECONDS:
+        if allow_fetch and (
+            self._schedule is None or now_mono - self._schedule[0] > SCHEDULE_TTL_SECONDS
+        ):
             try:
                 self._schedule = (now_mono, self.client.schedule(favourite))
             except NHLApiError as exc:
@@ -387,6 +392,8 @@ class ScoreboardApp:
                 self._record_error(f"schedule fetch: {exc}")
                 if self._schedule is None:
                     return None
+        if self._schedule is None:
+            return None
         now = self.clock()
         finished = {g.id for g in self.games if g.is_final}
         for game in self._schedule[1]:
@@ -396,10 +403,16 @@ class ScoreboardApp:
                 return game
         return None
 
-    def _refresh_standings(self) -> list[StandingsRow] | None:
-        """League standings, cached for ``STANDINGS_TTL_SECONDS`` like the schedule."""
+    def _refresh_standings(self, *, allow_fetch: bool = True) -> list[StandingsRow] | None:
+        """League standings, cached for ``STANDINGS_TTL_SECONDS`` like the schedule.
+
+        ``allow_fetch=False`` answers from cache only, same reasoning as
+        ``next_favourite_game`` -- for the status page (#61).
+        """
         now_mono = self.monotonic()
-        if self._standings is None or now_mono - self._standings[0] > STANDINGS_TTL_SECONDS:
+        if allow_fetch and (
+            self._standings is None or now_mono - self._standings[0] > STANDINGS_TTL_SECONDS
+        ):
             try:
                 self._standings = (now_mono, self.client.standings())
             except NHLApiError as exc:
@@ -407,9 +420,11 @@ class ScoreboardApp:
                 self._record_error(f"standings fetch: {exc}")
                 if self._standings is None:
                     return None
+        if self._standings is None:
+            return None
         return self._standings[1]
 
-    def _standings_scene(self) -> Scene | None:
+    def _standings_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's conference neighbourhood, or None if there's nothing to show.
 
         Suppressed entirely until the favourite has actually played a game
@@ -422,7 +437,7 @@ class ScoreboardApp:
         favourite = cfg.favourite_team
         if not cfg.show_standings or not favourite:
             return None
-        rows = self._refresh_standings()
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
         if not rows:
             return None
         favourite_row = next((r for r in rows if r.abbrev == favourite), None)
@@ -438,18 +453,25 @@ class ScoreboardApp:
         period = max(self.settings.scoreboard.rotate_seconds, 1.0)
         return int(self.monotonic() // period) % 2 == 1
 
-    def select_scene(self) -> Scene:
-        """Decide what to show; the draw step only renders the answer."""
-        scene = self._select_base_scene()
+    def select_scene(self, *, allow_fetch: bool = True) -> Scene:
+        """Decide what to show; the draw step only renders the answer.
+
+        ``allow_fetch=False`` (the status page, #61) must never trigger a
+        network call or mutate ``_schedule``/``_standings``/``last_error``
+        from the status thread -- that would race the main loop into
+        duplicate fetches, or block a "read-only" page on a slow NHL
+        response.
+        """
+        scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
 
-    def _select_base_scene(self) -> Scene:
+    def _select_base_scene(self, *, allow_fetch: bool = True) -> Scene:
         if self.last_success is None:
             return Scene("connecting")
         if self.is_stale():
             return Scene("no_data")
         if self.settings.scoreboard.rotation == "favourite":
-            scene = self._favourite_scene()
+            scene = self._favourite_scene(allow_fetch=allow_fetch)
             if scene is not None:
                 return scene
         if self.games:
@@ -472,7 +494,7 @@ class ScoreboardApp:
             return scene
         return Scene("goal", scene.game)
 
-    def _favourite_scene(self) -> Scene | None:
+    def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         cfg = self.settings.scoreboard
         today = self.favourite_game_today()
         if today is not None:
@@ -483,8 +505,12 @@ class ScoreboardApp:
                 hold = timedelta(minutes=cfg.final_hold_minutes)
                 if ended is not None and self.clock() - ended < hold:
                     return Scene("game", today)
-        upcoming = today if today is not None and today.is_pregame else self.next_favourite_game()
-        standings = self._standings_scene()
+        upcoming = (
+            today
+            if today is not None and today.is_pregame
+            else self.next_favourite_game(allow_fetch=allow_fetch)
+        )
+        standings = self._standings_scene(allow_fetch=allow_fetch)
         if standings is not None and (upcoming is None or self._show_standings_now()):
             return standings
         if upcoming is None:
@@ -571,8 +597,15 @@ class ScoreboardApp:
     # -- status page (#48) ------------------------------------------------
 
     def status_snapshot(self) -> dict[str, str]:
-        """Everything the status page shows -- state already sitting in memory."""
-        scene = self.select_scene()
+        """Everything the status page shows -- state already sitting in memory.
+
+        Called from the status server's own request thread (#61): must
+        never trigger a network fetch or mutate shared state concurrently
+        with the main loop, hence ``allow_fetch=False`` -- a slow NHL
+        response must not block a "read-only" status page, and the two
+        threads must not race into duplicate fetches.
+        """
+        scene = self.select_scene(allow_fetch=False)
         cfg = self.settings.scoreboard
         return {
             "scene": scene.kind,
