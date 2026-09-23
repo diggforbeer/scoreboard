@@ -11,7 +11,9 @@
 # data, since the start sector is never moved -- but the running kernel
 # has already cached the old, smaller table in memory and only ever
 # re-reads it fresh at boot, so resize2fs cannot act on the new size
-# until after a reboot.
+# until after a reboot. The reboot request is non-blocking and could fail
+# or be skipped, so stage 2 checks one really happened (below) rather
+# than trusting the stage-1 marker alone.
 #
 # Safe by construction:
 #   - refuses unless the root partition is the LAST partition on the disk
@@ -23,6 +25,11 @@
 #     commits its new layout atomically (no partial writes to recover
 #     from), and resize2fs is a documented no-op when there is nothing
 #     left to grow
+#   - stage 2 only runs after a real reboot: the stage-1 marker records
+#     the kernel's boot ID, and a matching ID means the kernel still has
+#     the old table cached, where resize2fs would be a silent no-op that
+#     then marks the whole job done for good. If the boot ID can't be
+#     read, stage 2 trusts the marker exactly as it did before this check
 #   - MBR only (matches this image's layout); GPT would additionally need
 #     its backup header relocated, which this script does not attempt
 #
@@ -35,6 +42,12 @@ set -eu
 STATE_DIR="${NHL_SCOREBOARD_STATE_DIR:-/var/lib/nhl-scoreboard}"
 GROWN_MARKER="$STATE_DIR/rootfs-partition-grown"
 DONE_MARKER="$STATE_DIR/rootfs-grown"
+#: A fresh random UUID every real boot (boot_id(5); see systemd/journalctl's
+#: own use of the same file). Overridable so tests can simulate "no reboot
+#: happened yet" (same value across two runs) vs. "a real reboot happened"
+#: (different value) without an actual reboot.
+BOOT_ID_FILE="${NHL_SCOREBOARD_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
+CURRENT_BOOT_ID=$(cat "$BOOT_ID_FILE" 2>/dev/null || echo "")
 
 log() {
     logger -t nhl-scoreboard-grow-rootfs "$1"
@@ -52,7 +65,14 @@ PART_NUM=$(echo "$ROOT_PART" | grep -o '[0-9]*$')
 
 if [ -f "$GROWN_MARKER" ]; then
     # Stage 2: we grew the partition table on a previous boot and have
-    # since rebooted, so the kernel now sees the larger partition.
+    # since rebooted, so the kernel now sees the larger partition --
+    # unless the marker's boot ID says we haven't rebooted after all.
+    MARKER_BOOT_ID=$(cat "$GROWN_MARKER")
+    if [ -n "$CURRENT_BOOT_ID" ] && [ "$MARKER_BOOT_ID" = "$CURRENT_BOOT_ID" ]; then
+        log "Partition grown but no reboot has happened yet; requesting it again"
+        systemctl --no-block reboot
+        exit 1
+    fi
     log "Growing filesystem on $ROOT_PART to fill its partition"
     if resize2fs "$ROOT_PART"; then
         touch "$DONE_MARKER"
@@ -86,6 +106,6 @@ if ! printf '%s,+\n' "$PART_START" | sfdisk --no-reread -N "$PART_NUM" "$ROOT_DE
     exit 1
 fi
 
-touch "$GROWN_MARKER"
+printf '%s\n' "$CURRENT_BOOT_ID" > "$GROWN_MARKER"
 log "Partition table grown; rebooting so the kernel picks it up"
 systemctl --no-block reboot
