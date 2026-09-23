@@ -61,6 +61,12 @@ jobs:
           # override of baked-in model instructions via an appended system
           # prompt, not a supported switch, so don't treat it as guaranteed;
           # verify with a real `@claude` run before relying on it.
+          #
+          # `gh issue create`/`gh issue list` added after a real run tried
+          # both and got rejected before execution -- it could open its own
+          # PR but couldn't file the issues its own research turned up, or
+          # check for duplicates first. Same allowlist mechanism as above,
+          # not a new one.
           claude_args: |
-            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*)"
+            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*)"
             --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Every other default instruction still applies."
