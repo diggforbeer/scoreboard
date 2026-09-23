@@ -147,7 +147,10 @@ class Renderer:
         """
         canvas.Clear()
         score_baseline = 13
-        rule_y = 19
+        # One extra blank row above the PP/SOG line (#70) beyond the row
+        # PR #42 already added, so it centers better in the gap before the
+        # status line rather than sitting right under the scores.
+        rule_y = 20
         status_baseline = self.height - 2
 
         left, right = self._draw_logos(canvas, away, home)
@@ -159,8 +162,7 @@ class Renderer:
         self._draw_score(canvas, game.home.abbrev, game.home.score, right - quarter, score_baseline)
 
         self.vline(canvas, centre - 1, 3, score_baseline, DIM)
-        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y):
-            self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+        self._draw_situation(canvas, game, left + 3, right - 4, rule_y)
         self.text_center(
             canvas,
             self.fonts.small,
@@ -170,26 +172,42 @@ class Renderer:
             game.status_label(self.tz),
         )
 
-    def _draw_situation(self, canvas: Any, game: Game, x0: int, x1: int, baseline: int) -> bool:
-        """Power play / empty net indicator in the band above the status line.
+    def _draw_situation(self, canvas: Any, game: Game, x0: int, x1: int, baseline: int) -> None:
+        """Power play / empty net indicator, or shots on goal as a fallback (#70).
 
-        Drawn in the tiny font, in amber, aligned to the side of the team it
-        applies to. Returns True when something was drawn, so the caller can
-        leave out the rule that normally occupies that band.
+        Always draws something -- TeamSide.sog is always present (defaults
+        to 0, straight from the same score feed already polled every
+        cycle), so there's no "nothing to show" case left the way there
+        was before SOG existed; the plain rule this band used to fall
+        back to is unreachable now and was removed from both callers.
+
+        PP/EN always wins when present -- a penalty needs the room, SOG can
+        wait. 4-on-4 arrives as a Situation but carries neither code (see
+        Situation.indicator_side), so it falls through to SOG same as even
+        strength. PP/EN drawn in the tiny font, amber, aligned to the side
+        of the team it applies to; SOG in the same font, plain white and
+        centred, so it doesn't compete for attention with the indicator
+        colour.
         """
-        situation = game.situation
-        if situation is None:
-            return False
-        side = situation.indicator_side()
-        label = situation.label()
-        if side is None or not label:
-            return False
         font = self.fonts.tiny
-        if side == "away":
-            self.text(canvas, font, x0, baseline, ACCENT, label)
-        else:
-            self.text_right(canvas, font, x1 + 1, baseline, ACCENT, label)
-        return True
+        situation = game.situation
+        if situation is not None:
+            side = situation.indicator_side()
+            label = situation.label()
+            if side is not None and label:
+                if side == "away":
+                    self.text(canvas, font, x0, baseline, ACCENT, label)
+                else:
+                    self.text_right(canvas, font, x1 + 1, baseline, ACCENT, label)
+                return
+        self.text_center(
+            canvas,
+            font,
+            (x0 + x1) // 2,
+            baseline,
+            WHITE,
+            f"SOG {game.away.sog}-{game.home.sog}",
+        )
 
     def _draw_score(self, canvas: Any, abbrev: str, score: int, cx: int, y: int) -> None:
         text = str(score)
@@ -202,15 +220,16 @@ class Renderer:
         canvas.Clear()
         half = self.width // 2
         score_baseline = 13
-        rule_y = 19
+        # One extra blank row above the PP/SOG line (#70), matching
+        # _draw_game_with_logos.
+        rule_y = 20
         status_baseline = self.height - 2
 
         self._draw_side(canvas, game.away.abbrev, game.away.score, 0, half, score_baseline)
         self._draw_side(canvas, game.home.abbrev, game.home.score, half, half, score_baseline)
 
         self.vline(canvas, half - 1, 2, rule_y - 3, DIM)
-        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y):
-            self.hline(canvas, 0, self.width - 1, rule_y, DIM)
+        self._draw_situation(canvas, game, 3, self.width - 4, rule_y)
 
         self.text_center(
             canvas,

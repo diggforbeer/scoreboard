@@ -70,7 +70,9 @@ class LightSensor:
         try:
             self.bus.write_byte(self.address, _CONTINUOUS_HIGH_RES_MODE)
             data = self.bus.read_i2c_block_data(self.address, _CONTINUOUS_HIGH_RES_MODE, 2)
-        except OSError as exc:
-            log.debug("Light sensor read failed: %s", exc)
+            # Decoded inside the try: a short read from flaky wiring raises
+            # IndexError here, and must degrade to None like a bus error (#63).
+            return ((data[0] << 8) | data[1]) / 1.2
+        except (OSError, IndexError) as exc:
+            log.debug("Light sensor read failed: %r", exc)
             return None
-        return ((data[0] << 8) | data[1]) / 1.2

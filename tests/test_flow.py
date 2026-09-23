@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import ScoreboardApp
+from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
@@ -293,6 +293,25 @@ def test_schedule_failure_falls_back_to_rotation(day):
     assert kind == "game" and gid in {9, 1}, "no schedule: fall back to today's rotation"
 
 
+def test_schedule_failure_backs_off_instead_of_polling_every_frame(day):
+    """A schedule outage must not be re-hit on every select_scene() call (#60)."""
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL")
+    client.fail_schedule = True
+    tick(app, clock, hours=9)
+    tick(app, clock, hours=1)  # hold expired: first schedule attempt happens here
+    scene(app)
+    assert client.schedule_calls == 1
+
+    for _ in range(20):  # simulate ~10s of FRAME_INTERVAL polling with no time passing
+        app.select_scene()
+    assert client.schedule_calls == 1, "retries should back off, not fire every frame"
+
+    tick(app, clock, seconds=SCHEDULE_TTL_SECONDS + 1)  # keeps refresh() fresh, unlike advance()
+    app.select_scene()
+    assert client.schedule_calls == 2, "a retry is still expected once the backoff elapses"
+
+
 def test_all_rotation_ignores_favourite_flow(day):
     app, _, _ = day
     app.settings.scoreboard.rotation = "all"
@@ -568,6 +587,24 @@ def test_standings_fetch_failure_falls_back_to_preview(day):
     app, _clock, client = day
     client.fail_standings = True
     assert scene(app)[0] == "preview"
+
+
+def test_standings_failure_backs_off_instead_of_polling_every_frame(day):
+    """A standings outage must not be re-hit on every select_scene() call (#60)."""
+    app, clock, client = day
+    client.fail_standings = True
+    app.settings.scoreboard.rotate_seconds = 10
+
+    scene(app)  # first attempt
+    assert client.standings_calls == 1
+
+    for _ in range(20):  # simulate ~10s of FRAME_INTERVAL polling with no time passing
+        app.select_scene()
+    assert client.standings_calls == 1, "retries should back off, not fire every frame"
+
+    tick(app, clock, seconds=STANDINGS_TTL_SECONDS + 1)  # keeps refresh() fresh, unlike advance()
+    app.select_scene()
+    assert client.standings_calls == 2, "a retry is still expected once the backoff elapses"
 
 
 def test_draw_dispatches_standings_scene(fake_backend):

@@ -10,11 +10,49 @@ from __future__ import annotations
 import logging
 import os
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import tomlkit
 
 log = logging.getLogger(__name__)
+
+#: Nashville's zone, used whenever a configured timezone can't be resolved
+#: and there is no previous value worth keeping instead (boot, --dump).
+DEFAULT_TIMEZONE = "America/Chicago"
+
+
+def resolve_timezone(name: str, fallback: ZoneInfo | None = None) -> ZoneInfo:
+    """``ZoneInfo`` for ``name``, degrading instead of raising on a bad value.
+
+    A typo in ``scoreboard.toml``'s ``timezone`` (e.g. "America/Chicagoo")
+    must not crash the board -- see CLAUDE.md's config-conventions section
+    and #80. On an unknown zone, this logs a warning and returns
+    ``fallback`` if one was given (the currently running zone, so a bad
+    live-reload keeps the board on whatever already worked) or else
+    ``DEFAULT_TIMEZONE`` (boot and ``--dump`` have no previous value to
+    keep).
+    """
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        result = fallback if fallback is not None else ZoneInfo(DEFAULT_TIMEZONE)
+        log.warning("Unknown timezone %r; using %s", name, result.key)
+        return result
+
+
+class ConfigWriteError(Exception):
+    """Raised when Settings.save() cannot read or write the config file.
+
+    Deliberately not swallowed: a save that silently didn't happen (boot
+    partition full or read-only) needs to surface to whoever is editing the
+    config, not vanish (#51).
+    """
+
 
 DEFAULT_CONFIG_PATHS = (
     Path("/boot/firmware/scoreboard.toml"),
@@ -99,7 +137,7 @@ class ScoreboardConfig:
     #: Pinned to the front of the rotation and eligible for the special-teams
     #: indicator. Nashville unless the boot-partition config says otherwise.
     favourite_team: str = "NSH"
-    timezone: str = "America/Chicago"
+    timezone: str = DEFAULT_TIMEZONE
     rotate_seconds: float = 8.0
     poll_seconds: float = 60.0
     live_poll_seconds: float = 15.0
@@ -159,11 +197,62 @@ class StatusServerConfig:
 
 
 @dataclass(slots=True)
+class NightModeConfig:
+    """Scheduled dimming that stays out of the way of a live game (#92).
+
+    Off by default: a board nobody asked to dim shouldn't go dark at
+    22:30 on its own.
+    """
+
+    enabled: bool = False
+    #: 24-hour "HH:MM", local to ``scoreboard.timezone``. The window may
+    #: wrap midnight (the usual case: 22:30 -> 07:00).
+    start_time: str = "22:30"
+    end_time: str = "07:00"
+    #: 0-100. Unlike panel.brightness this may be 0, which blanks the
+    #: canvas outright rather than drawing scenes nobody can see.
+    dim_brightness: int = 0
+    #: "tracked": only the favourite's game holds off dimming. "all": any
+    #: live game today does. Same favourite-vs-all scoping as the power-play
+    #: indicator and goal detection.
+    suppress_scope: str = "tracked"
+    #: How long after the relevant game goes final the board stays at
+    #: normal brightness, so the final score is still readable. 0 is valid:
+    #: dim the moment it ends.
+    cooldown_minutes: float = 15.0
+    #: Parsed start_time/end_time, so the app never re-parses the strings.
+    start: time = field(init=False, repr=False)
+    end: time = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.start_time, self.start = _parse_hhmm("start_time", self.start_time, "22:30")
+        self.end_time, self.end = _parse_hhmm("end_time", self.end_time, "07:00")
+        self.dim_brightness = max(0, min(100, self.dim_brightness))
+        self.suppress_scope = str(self.suppress_scope).strip().lower()
+        if self.suppress_scope not in ("tracked", "all"):
+            log.warning(
+                "Unknown night_mode.suppress_scope %r; using 'tracked'", self.suppress_scope
+            )
+            self.suppress_scope = "tracked"
+        self.cooldown_minutes = max(0.0, float(self.cooldown_minutes))
+
+
+def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
+    """Parse a 24-hour "HH:MM", warning and falling back to ``default`` if it isn't one."""
+    try:
+        return value, datetime.strptime(str(value), "%H:%M").time()
+    except ValueError:
+        log.warning("night_mode.%s %r is not 24-hour HH:MM; using %s", name, value, default)
+        return default, datetime.strptime(default, "%H:%M").time()
+
+
+@dataclass(slots=True)
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
+    night_mode: NightModeConfig = field(default_factory=NightModeConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -192,7 +281,50 @@ class Settings:
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
+            night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
         )
+
+    def save(self, updates: Mapping[str, Mapping[str, Any]]) -> None:
+        """Write ``updates`` into the source file, in place, keeping everything else.
+
+        ``updates`` is ``{section: {key: value}}``, e.g.
+        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``.
+        Only those keys are touched -- parsed and re-emitted with ``tomlkit``
+        rather than ``tomllib`` + a plain writer, so every comment in the
+        heavily-annotated boot-partition template survives untouched (#51).
+
+        Updates this object's in-memory settings from the same file afterwards,
+        via the normal load path, so the caller sees the merged result without
+        a separate reload.
+        """
+        if self.source_path is None:
+            raise ConfigWriteError("no source file loaded; nothing to save to")
+        try:
+            doc = tomlkit.parse(self.source_path.read_text())
+        except OSError as exc:
+            raise ConfigWriteError(f"could not read {self.source_path}: {exc}") from exc
+
+        for section, values in updates.items():
+            table = doc.get(section)
+            if table is None:
+                table = tomlkit.table()
+                doc[section] = table
+            for key, value in values.items():
+                table[key] = value
+
+        tmp_path = self.source_path.with_name(self.source_path.name + ".tmp")
+        try:
+            tmp_path.write_text(tomlkit.dumps(doc))
+            tmp_path.replace(self.source_path)
+        except OSError as exc:
+            raise ConfigWriteError(f"could not write {self.source_path}: {exc}") from exc
+
+        reloaded = Settings.from_toml(self.source_path)
+        self.panel = reloaded.panel
+        self.scoreboard = reloaded.scoreboard
+        self.audio = reloaded.audio
+        self.status = reloaded.status
+        self.night_mode = reloaded.night_mode
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:
@@ -202,7 +334,8 @@ def _build(cls: type, raw: dict[str, Any]) -> Any:
     file on the boot partition should never end up with a board that refuses
     to start because of one typo.
     """
-    known = {f.name for f in fields(cls)}
+    # init=False fields are derived (e.g. NightModeConfig.start), not settable.
+    known = {f.name for f in fields(cls) if f.init}
     kwargs = {}
     for key, value in raw.items():
         if key in known:
