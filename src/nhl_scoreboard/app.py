@@ -300,14 +300,22 @@ class ScoreboardApp:
     # -- auto brightness ---------------------------------------------------
 
     def refresh_brightness(self) -> None:
-        """Sample the ambient sensor and re-apply matrix brightness if it moved.
+        """Re-apply matrix brightness: night mode, else the ambient sensor, else static.
 
-        No-op whenever auto_brightness is off (self.light_sensor is None) or
-        the sensor isn't answering -- the panel just keeps the static
-        `brightness` it was constructed with, same as if this feature did
-        not exist.
+        Night mode (#92) wins over the ambient sensor while it's actively
+        dimming -- a scheduled window must dim even with the lights on, and
+        is already held off during a live game, which a lux sensor in a
+        dark TV room can't know about. Outside it, the sensor (if any)
+        drives brightness exactly as before; with no sensor the static
+        ``brightness`` is re-applied, which is what brings the panel back
+        up once a night window ends. A sensor that isn't answering leaves
+        brightness where it is.
         """
+        if self._night_mode_active():
+            self._apply_brightness(self.settings.night_mode.dim_brightness)
+            return
         if self.light_sensor is None:
+            self._apply_brightness(self.settings.panel.brightness)
             return
         lux = self.light_sensor.read_lux()
         if lux is None:
@@ -319,6 +327,9 @@ class ScoreboardApp:
         )
         panel = self.settings.panel
         target = lux_to_brightness(self._smoothed_lux, panel.min_brightness, panel.max_brightness)
+        self._apply_brightness(target)
+
+    def _apply_brightness(self, target: int) -> None:
         if target == self._applied_brightness:
             return
         self._applied_brightness = target
@@ -329,6 +340,43 @@ class ScoreboardApp:
             # settable brightness; a backend that doesn't just keeps
             # whatever it was constructed with.
             log.debug("Backend %s has no settable brightness", self.backend.name)
+
+    # -- night mode (#92) ------------------------------------------------
+
+    def _in_night_window(self) -> bool:
+        cfg = self.settings.night_mode
+        now = self.clock().astimezone(self.tz).time()
+        if cfg.start <= cfg.end:
+            return cfg.start <= now < cfg.end
+        return now >= cfg.start or now < cfg.end
+
+    def _night_mode_suppressed(self) -> bool:
+        """A relevant game is live, or finished less than cooldown_minutes ago.
+
+        "tracked" with no favourite_team has nothing to track, so it
+        behaves as "all" -- a normal combination (rotation = "all" with
+        night mode on), not a misconfiguration worth a warning.
+        """
+        cfg = self.settings.night_mode
+        favourite = self.settings.scoreboard.favourite_team
+        if cfg.suppress_scope == "all" or not favourite:
+            candidates = self.games
+        else:
+            candidates = [g for g in self.games if g.involves(favourite)]
+        if any(g.is_live for g in candidates):
+            return True
+        ended = [self.ended_at[g.id] for g in candidates if g.id in self.ended_at]
+        if not ended:
+            return False
+        return self.clock() - max(ended) < timedelta(minutes=cfg.cooldown_minutes)
+
+    def _night_mode_active(self) -> bool:
+        """Should the panel be at night_mode.dim_brightness right now?"""
+        return (
+            self.settings.night_mode.enabled
+            and self._in_night_window()
+            and not self._night_mode_suppressed()
+        )
 
     # -- goal detection ---------------------------------------------------
 
@@ -631,6 +679,13 @@ class ScoreboardApp:
         return value.astimezone(self.tz).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def draw(self) -> None:
+        if self._night_mode_active() and self.settings.night_mode.dim_brightness == 0:
+            # Blank outright: brightness 0 alone isn't guaranteed dark on
+            # every backend, and there's no point rendering a scene nobody
+            # can see.
+            self.canvas.Clear()
+            self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            return
         scene = self.select_scene()
         r = self.renderer
         if scene.kind == "game":
