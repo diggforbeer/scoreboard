@@ -62,6 +62,12 @@ goal_flash_seconds = 6
 # Only appears once favourite_team has actually played a game this season.
 show_standings = true
 
+# In "favourite" rotation, also cycle the clock into the countdown/preview
+# (and standings, if shown) alternation whenever the favourite isn't live --
+# separate from show_clock_when_idle above, which only covers "no games
+# left to preview at all".
+show_clock_between_games = false
+
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
 # scores. The board has no other way to make sound: the HUB75 panel needs
