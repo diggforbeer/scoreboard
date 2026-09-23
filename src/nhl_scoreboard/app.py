@@ -247,8 +247,14 @@ class ScoreboardApp:
         card on another machine, ``nano`` over SSH, or the eventual web
         editor (#48) -- and all three need to pick up a change the same way.
         Most settings are already read fresh from ``self.settings`` every
-        loop iteration; ``[audio]`` and the logo library are not, so those
-        get rebuilt explicitly here. ``[panel]`` geometry
+        loop iteration; ``[audio]``, the logo library, the ambient light
+        sensor (``panel.auto_brightness``) and the status server
+        (``status.enabled``/``status.port``) are built once from it instead,
+        so those get rebuilt explicitly here (#62). A rebuilt status server
+        is only started if ``run()``'s loop is live (``self._running``):
+        ``run()`` starts it exactly once before looping, so a reload outside
+        that loop -- e.g. a test calling this directly -- builds it without
+        binding a socket, just as ``__init__`` does. ``[panel]`` geometry
         (rows/cols/chain_length/hardware_mapping/...) is baked into the
         already-constructed ``RGBMatrix`` and deliberately NOT reloaded --
         that needs a process restart.
@@ -274,6 +280,11 @@ class ScoreboardApp:
             or old.scoreboard.logo_variant != new_settings.scoreboard.logo_variant
         )
         timezone_changed = old.scoreboard.timezone != new_settings.scoreboard.timezone
+        auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
+        status_changed = (old.status.enabled, old.status.port) != (
+            new_settings.status.enabled,
+            new_settings.status.port,
+        )
 
         self.settings = new_settings
 
@@ -296,6 +307,30 @@ class ScoreboardApp:
                     variant=new_settings.scoreboard.logo_variant,
                 )
             self.renderer.logos = logos
+
+        if auto_brightness_changed:
+            # Same lazy probe as __init__: only touch the I2C bus when the
+            # feature is on. Turning it off just drops the sensor, which is
+            # what refresh_brightness() already treats as "feature off".
+            self.light_sensor = LightSensor.open() if new_settings.panel.auto_brightness else None
+
+        if status_changed:
+            # StatusServer's port is fixed at construction, so any change
+            # means stop-and-rebuild rather than reconfigure in place.
+            if self.status_server is not None:
+                self.status_server.stop()
+            if new_settings.status.enabled:
+                self.status_server = StatusServer(
+                    snapshot=self.status_snapshot, port=new_settings.status.port
+                )
+                # run() starts the server once, before its loop; a rebuild
+                # inside the loop has to start itself. Outside the loop,
+                # construct only -- same as __init__ -- so it's run() that
+                # binds the socket, not whoever happened to reload.
+                if self._running:
+                    self.status_server.start()
+            else:
+                self.status_server = None
 
     # -- auto brightness ---------------------------------------------------
 
