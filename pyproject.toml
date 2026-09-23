@@ -57,6 +57,10 @@ addopts = "-q"
 [tool.coverage.run]
 branch = true
 source = ["src/nhl_scoreboard"]
+# Required by py-cov-action/python-coverage-comment-action: it matches
+# .coverage's recorded paths against the PR's changed files, which only
+# works with paths relative to the repo root, not absolute runner paths.
+relative_files = true
 
 [tool.coverage.report]
 show_missing = true
