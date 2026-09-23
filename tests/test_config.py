@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.config import ConfigWriteError, Settings
+from nhl_scoreboard.config import ConfigWriteError, Settings, resolve_timezone
 
 
 def test_defaults_describe_two_chained_64x32_panels():
@@ -88,6 +88,23 @@ def test_inverted_brightness_clamp_is_swapped_not_left_broken(caplog):
     panel = PanelConfig(min_brightness=80, max_brightness=20)
     assert (panel.min_brightness, panel.max_brightness) == (20, 80)
     assert "min_brightness" in caplog.text
+
+
+def test_resolve_timezone_passes_through_a_valid_zone():
+    assert str(resolve_timezone("America/New_York")) == "America/New_York"
+
+
+def test_resolve_timezone_falls_back_to_the_default_with_no_fallback_given(caplog):
+    assert str(resolve_timezone("America/Chicagoo")) == "America/Chicago"
+    assert "America/Chicagoo" in caplog.text
+
+
+def test_resolve_timezone_keeps_the_given_fallback_instead_of_the_default(caplog):
+    from zoneinfo import ZoneInfo
+
+    fallback = ZoneInfo("America/New_York")
+    assert resolve_timezone("America/Chicagoo", fallback=fallback) is fallback
+    assert "America/Chicagoo" in caplog.text
 
 
 def test_save_preserves_comments_and_only_changes_targeted_keys(tmp_path):
