@@ -183,6 +183,12 @@ class ScoreboardConfig:
     #: Show the favourite's conference playoff picture, interleaved with the
     #: preview/countdown screen, once their season has actually started.
     show_standings: bool = True
+    #: Cycle the idle clock into the favourite rotation's countdown/preview
+    #: (and standings, if shown) alternation whenever the favourite isn't
+    #: live -- separate from show_clock_when_idle, which only covers "no
+    #: games left to preview at all". Off by default: existing installs get
+    #: the same rotation they always had unless they opt in.
+    show_clock_between_games: bool = False
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
