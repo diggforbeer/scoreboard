@@ -5,7 +5,7 @@
 | Name                                        |    Stmts |     Miss |   Branch |   BrPart |   Cover |   Missing |
 |-------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | src/nhl\_scoreboard/\_\_init\_\_.py         |        1 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/\_\_main\_\_.py         |       41 |       41 |        8 |        0 |      0% |      3-71 |
+| src/nhl\_scoreboard/\_\_main\_\_.py         |       41 |        7 |        8 |        2 |     82% | 42-48, 71 |
 | src/nhl\_scoreboard/app.py                  |      464 |        9 |      194 |        9 |     97% |95-\>99, 150-151, 259-260, 325, 478, 492, 509-\>506, 553, 651-\>653, 708-\>exit, 715 |
 | src/nhl\_scoreboard/audio.py                |       55 |        1 |       16 |        0 |     99% |        92 |
 | src/nhl\_scoreboard/brightness.py           |        9 |        0 |        0 |        0 |    100% |           |
@@ -22,7 +22,7 @@
 | src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
 | src/nhl\_scoreboard/nhl/models.py           |      192 |        0 |       42 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                   | **1544** |   **72** |  **376** |   **14** | **95%** |           |
+| **TOTAL**                                   | **1544** |   **38** |  **376** |   **16** | **97%** |           |
 
 
 ## Setup coverage badge
