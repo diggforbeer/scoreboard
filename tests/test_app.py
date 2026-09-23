@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import ScoreboardApp
+from nhl_scoreboard.app import FRAME_INTERVAL, STALE_AFTER_SECONDS, ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
@@ -136,6 +137,51 @@ def build_app(fake_backend, games, **scoreboard_kwargs) -> ScoreboardApp:
     for key, value in scoreboard_kwargs.items():
         setattr(settings.scoreboard, key, value)
     return ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+
+
+class FakeClockSource:
+    """A monotonic clock that only advances when told to -- by a fake sleep."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self.now = start
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class FakeStatusServer:
+    def __init__(self) -> None:
+        self.started = False
+        self.stopped = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
+def run_for_frames(app: ScoreboardApp, src: FakeClockSource, frames: int) -> None:
+    """Run the real loop for exactly ``frames`` iterations, then stop it.
+
+    Piggybacks the frame count on the fake sleep so the loop body (refresh,
+    advance, brightness, draw) actually executes ``frames`` times -- the
+    only way to exercise run()'s scheduling without a real time.sleep.
+    """
+    remaining = frames
+
+    def sleep(seconds: float) -> None:
+        nonlocal remaining
+        src.sleep(seconds)
+        remaining -= 1
+        if remaining <= 0:
+            app._running = False
+
+    app.sleep = sleep
+    app.run()
 
 
 def test_favourite_team_is_pinned_to_the_front(fake_backend, games):
@@ -462,3 +508,178 @@ def test_reload_does_not_touch_the_already_built_matrix(fake_backend, games, tmp
 
     assert app.matrix is old_matrix
     assert app.settings.panel.chain_length == 1
+
+
+# -- run() loop scheduling (#76) -------------------------------------------
+#
+# run() itself calls time.sleep(); these drive it for real via an injected
+# sleep that advances a fake monotonic clock, so the actual scheduling
+# (poll/rotate/brightness cadence, config reload, signal shutdown) executes
+# under test instead of only refresh()/advance()/draw() called by hand.
+
+
+def _non_live_games(games: list[Game]) -> list[Game]:
+    """Games that never bump poll_interval() to live_poll_seconds, so a test's
+    expected poll count doesn't depend on which games happen to be live."""
+    return [g for g in games if not g.is_live]
+
+
+def test_run_polls_at_poll_interval_not_every_frame(fake_backend, games):
+    final_games = _non_live_games(games)
+    assert final_games
+    settings = Settings()
+    settings.scoreboard.poll_seconds = 3 * FRAME_INTERVAL
+    settings.scoreboard.rotate_seconds = 1_000_000
+    settings.panel.brightness_poll_seconds = 1_000_000
+    src = FakeClockSource()
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(final_games),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+    )
+    run_for_frames(app, src, 7)
+    # Frame 1 always polls (next_poll starts at 0); then every 3 frames: 4, 7.
+    assert app.client.calls == 3
+
+
+def test_run_rotates_at_rotate_seconds(fake_backend, games):
+    final_games = _non_live_games(games)
+    assert len(final_games) >= 2
+    settings = Settings()
+    settings.scoreboard.poll_seconds = 1_000_000
+    settings.scoreboard.rotate_seconds = 3 * FRAME_INTERVAL
+    settings.panel.brightness_poll_seconds = 1_000_000
+    src = FakeClockSource()
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(final_games),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+    )
+    advances = []
+    original_advance = app.advance
+
+    def counting_advance():
+        advances.append(app.index)
+        original_advance()
+
+    app.advance = counting_advance
+    run_for_frames(app, src, 7)
+    assert len(advances) == 3
+
+
+def test_run_samples_brightness_at_brightness_poll_seconds(fake_backend, games):
+    final_games = _non_live_games(games)
+    settings = Settings()
+    settings.scoreboard.poll_seconds = 1_000_000
+    settings.scoreboard.rotate_seconds = 1_000_000
+    settings.panel.brightness_poll_seconds = 3 * FRAME_INTERVAL
+    src = FakeClockSource()
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(final_games),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+    )
+    calls = []
+    original = app.refresh_brightness
+
+    def counting_refresh_brightness():
+        calls.append(True)
+        original()
+
+    app.refresh_brightness = counting_refresh_brightness
+    run_for_frames(app, src, 7)
+    assert len(calls) == 3
+
+
+def test_run_reloads_config_every_iteration(fake_backend, games):
+    settings = Settings()
+    settings.scoreboard.poll_seconds = 1_000_000
+    settings.scoreboard.rotate_seconds = 1_000_000
+    settings.panel.brightness_poll_seconds = 1_000_000
+    src = FakeClockSource()
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(_non_live_games(games)),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+    )
+    calls = []
+    original = app.reload_config_if_changed
+
+    def counting_reload():
+        calls.append(True)
+        return original()
+
+    app.reload_config_if_changed = counting_reload
+    run_for_frames(app, src, 5)
+    assert len(calls) == 5
+
+
+def test_run_stops_on_sigterm_and_shuts_down(fake_backend, games):
+    settings = Settings()
+    settings.scoreboard.poll_seconds = 1_000_000
+    settings.scoreboard.rotate_seconds = 1_000_000
+    settings.panel.brightness_poll_seconds = 1_000_000
+    src = FakeClockSource()
+    status = FakeStatusServer()
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(_non_live_games(games)),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+        status_server=status,
+    )
+    frame_count = 0
+
+    def sleep(seconds: float) -> None:
+        nonlocal frame_count
+        src.sleep(seconds)
+        frame_count += 1
+        if frame_count == 2:
+            app._handle_signal(signal.SIGTERM, None)
+
+    app.sleep = sleep
+    app.run()
+
+    assert frame_count == 2, "loop should stop right after the signal, not run extra frames"
+    assert status.started
+    assert status.stopped
+    assert app.client.closed
+
+
+# -- draw() scene dispatch (#76) --------------------------------------------
+
+
+def test_draw_dispatches_no_data_when_stale(fake_backend, games):
+    app = build_app(fake_backend, games)
+    app.last_success = app.monotonic() - (STALE_AFTER_SECONDS + 1)
+    calls = []
+    app.renderer.draw_message = lambda canvas, *args: calls.append(args)
+    app.draw()
+    assert calls == [("NO DATA", "CHECK NETWORK")]
+
+
+def test_draw_dispatches_clock_when_idle(fake_backend, games):
+    app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=True)
+    app.last_success = app.monotonic()
+    calls = []
+    app.renderer.draw_clock = lambda canvas, now: calls.append(now)
+    app.draw()
+    assert len(calls) == 1
+
+
+def test_draw_dispatches_no_games_when_idle_clock_disabled(fake_backend, games):
+    app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=False)
+    app.last_success = app.monotonic()
+    calls = []
+    app.renderer.draw_message = lambda canvas, *args: calls.append(args)
+    app.draw()
+    assert calls == [("NO GAMES",)]
