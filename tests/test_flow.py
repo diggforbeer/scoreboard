@@ -553,6 +553,53 @@ def test_standings_alternates_with_preview_on_rotate_cadence(day):
     assert scene(app)[0] == "preview"
 
 
+def test_clock_stays_out_of_rotation_by_default(day):
+    """show_clock_between_games is off by default -- existing installs see no change."""
+    app, clock, _client = day
+    for _ in range(6):
+        assert scene(app)[0] != "clock"
+        tick(app, clock, seconds=8)  # default rotate_seconds
+
+
+def test_clock_joins_idle_rotation_when_enabled(day):
+    app, clock, _client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+
+    assert scene(app)[0] == "preview"
+
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "clock"
+
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "preview"
+
+
+def test_clock_rotates_alongside_standings_and_preview(day):
+    app, clock, client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+
+    kinds = []
+    for _ in range(4):
+        kinds.append(scene(app)[0])
+        tick(app, clock, seconds=10)
+    assert set(kinds) == {"preview", "standings", "clock"}, kinds
+    # A full cycle is 3 slots wide; the 4th sample must repeat the 1st.
+    assert kinds[3] == kinds[0]
+
+
+def test_clock_between_games_never_interrupts_a_live_or_final_held_game(day):
+    app, clock, client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert scene(app) == ("game", 1)
+
+
 def test_standings_shown_when_no_more_games_are_scheduled(fake_backend):
     client = FlowClient()
     client.today = []
