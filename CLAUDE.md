@@ -186,14 +186,29 @@ live call while filing #40), and `games_played` is the only signal on
 hand for "is this actually the current season." Only scoped to
 `rotation = "favourite"`, same precedent as the power-play indicator and
 goal detection above -- shown interleaved with the preview/countdown
-scene, alternating on `rotate_seconds`' own cadence (`_show_standings_
-now()`), never in place of a live game or a held final. Standings are
-polled on an hourly TTL (`STANDINGS_TTL_SECONDS`), the same idea as
-`SCHEDULE_TTL_SECONDS` for the season schedule. `clinchIndicator` values
-are parsed onto `StandingsRow` but not rendered or colour-coded -- they're
-confirmed from only one real, end-of-season response and not documented
-anywhere; don't act on them without verifying against a few more live
-examples first.
+scene, alternating on `rotate_seconds`' own cadence, never in place of a
+live game or a held final. Standings are polled on an hourly TTL
+(`STANDINGS_TTL_SECONDS`), the same idea as `SCHEDULE_TTL_SECONDS` for the
+season schedule. `clinchIndicator` values are parsed onto `StandingsRow`
+but not rendered or colour-coded -- they're confirmed from only one real,
+end-of-season response and not documented anywhere; don't act on them
+without verifying against a few more live examples first. Note that the
+window itself is a straight `conferenceSequence` cut (favourite ± a few
+spots by overall conference rank), not the NHL's actual playoff line
+(top 3 per division + next 2 wild cards, conference-wide) -- `StandingsRow.
+in_playoff_position` already computes the real rule from `division_sequence`/
+`wildcard_sequence` (both parsed, both unused by the renderer today), so a
+correction wouldn't need a new API call, just wiring it in; flagged, not
+yet decided on.
+
+`_favourite_scene`'s non-live branch (`_rotate_idle_scenes`) cycles
+countdown/preview, standings (when shown) and, opt-in via
+`show_clock_between_games` (default `false`), the idle clock -- same
+`rotate_seconds` cadence as the standings alternation, now generalised
+over a list instead of a single `% 2`. Off by default so existing
+installs see no change; distinct from `show_clock_when_idle`, which only
+covers the unrelated "no games left to preview at all" case (`_select_
+base_scene`'s fallback when `_favourite_scene` returns `None` entirely).
 
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
