@@ -64,10 +64,12 @@ class ScoreboardApp:
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
+        self.sleep = sleep or time.sleep
         self.horn = horn or GoalHornPlayer.default(
             device=settings.audio.device,
             horn_dir=settings.audio.horn_dir,
@@ -176,7 +178,7 @@ class ScoreboardApp:
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
             self.draw()
-            time.sleep(FRAME_INTERVAL)
+            self.sleep(FRAME_INTERVAL)
         self.shutdown()
 
     def shutdown(self) -> None:
