@@ -52,6 +52,8 @@ Early development. Working today:
 - [x] Team logos, rasterised at build time from the NHL's own artwork
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
+- [x] Shots on goal, live, for every game; favourite's power play/empty net indicator
+- [x] Favourite's conference standings, interleaved with the idle rotation
 - [x] Goal horn and GOAL celebration screen
 - [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Scheduled night mode that stays bright while a game is live
@@ -97,15 +99,19 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 [scoreboard]
 favourite_team = "NSH"      # "" for none
 rotation = "favourite"      # follow the favourite's day; "all" rotates every game
+prefer_favourite = true     # in "all" rotation, still show the favourite's game first
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
 timezone = "America/Chicago"
-rotate_seconds = 8          # dwell per game in "all" rotation
+rotate_seconds = 8          # dwell per game in "all" rotation, and per idle scene below
 poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
+show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
+show_standings = true       # favourite's conference playoff picture, once their season starts
+show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
 
 [audio]
 enabled = true
@@ -115,6 +121,14 @@ horn_dir = ""                # override the search path for {ABBR}.wav horn file
 [status]
 enabled = false              # a read-only web status page, for headless debugging
 port = 8080
+
+[night_mode]
+enabled = false              # dim overnight; never in the middle of a game
+start_time = "22:30"         # 24-hour, local to timezone above; can wrap midnight
+end_time = "07:00"
+dim_brightness = 0           # 0-100; 0 blanks the panel outright instead of a dim screen
+suppress_scope = "tracked"   # "tracked" = only the favourite's game holds off dimming; "all" = any live game
+cooldown_minutes = 15        # how long after that game ends before dimming resumes
 
 [panel]
 rows = 32
@@ -145,10 +159,18 @@ In the default `rotation = "favourite"`, the board follows your team's day:
 | After that | Preview of the next game on the schedule |
 
 The next game comes from the team's season schedule, fetched once an hour.
-With `rotation = "all"` the board instead rotates through every game in the
-league today, `rotate_seconds` each, favourite first. The GOAL screen and the
-horn both still only ever fire for your favourite team's own goal, regardless
-of rotation mode.
+While there's no favourite game to show live, the board alternates the
+preview/countdown with two more scenes on `rotate_seconds`' cadence: your
+**conference standings** (`show_standings`, once your team's season has
+actually started) and, if `show_clock_between_games` is on, the **idle
+clock**. With `rotation = "all"` the board instead rotates through every
+game in the league today, `rotate_seconds` each, favourite first
+(`prefer_favourite`). The GOAL screen and the horn both still only ever fire
+for your favourite team's own goal, regardless of rotation mode.
+
+Overnight, `[night_mode]` can dim the panel on a schedule — but never while
+a tracked game is live or was held recently, so a late finish stays
+readable.
 
 ## Audio
 
@@ -189,11 +211,13 @@ With logos (the default):
 └──────────────────────────────────────┘
 ```
 
-During a power play or with a goalie pulled, the rule under the scores gives
-way to an amber indicator on the side of the team it applies to — `PP 1:23`,
+The line under the scores shows shots on goal, `SOG 12-9`, for every game.
+During a power play or with a goalie pulled it's replaced by an amber
+indicator on the side of the team it applies to instead — `PP 1:23`,
 `5v3 0:41`, `EN`. That state comes from a second, per-game API call, which is
 made only for your favourite team's game and whichever game is on screen, so
-other games in the rotation show even strength.
+other games in the rotation show shots on goal even when a penalty is
+actually in effect.
 
 Text fallback, used when `show_logos = false` or a team's artwork is missing:
 

@@ -59,6 +59,10 @@ class Rig:
         self.state_dir = tmp_path / "state"
         self.call_log = tmp_path / "calls.log"
         self.sfdisk_stdin = tmp_path / "sfdisk_stdin"
+        # Stands in for /proc/sys/kernel/random/boot_id: same value across
+        # runs = no reboot in between, a different one = a real reboot.
+        self.boot_id_file = tmp_path / "boot_id"
+        self.set_boot_id("boot-a")
 
         write_fake(self.bindir, "findmnt", 'echo "${FAKE_ROOT_PART:-/dev/mmcblk0p2}"')
         write_fake(self.bindir, "lsblk", 'echo "${FAKE_ROOT_DISK:-mmcblk0}"')
@@ -70,6 +74,14 @@ class Rig:
         write_fake(self.bindir, "systemctl", "exit 0")
         write_fake(self.bindir, "logger", "exit 0")
 
+    def set_boot_id(self, value: str) -> None:
+        self.boot_id_file.write_text(f"{value}\n")
+
+    def write_grown_marker(self, boot_id: str) -> None:
+        """Put the rig in stage 2, as if stage 1 ran during boot `boot_id`."""
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        grown_marker(self.state_dir).write_text(f"{boot_id}\n")
+
     def run(self, *, env_extra: dict | None = None) -> subprocess.CompletedProcess:
         import os
 
@@ -80,6 +92,7 @@ class Rig:
             "FAKE_PARTED_OUT": TWO_PART_DISK,
             "FAKE_SFDISK_STDIN": str(self.sfdisk_stdin),
             "NHL_SCOREBOARD_STATE_DIR": str(self.state_dir),
+            "NHL_SCOREBOARD_BOOT_ID_FILE": str(self.boot_id_file),
             **(env_extra or {}),
         }
         result = subprocess.run(
@@ -117,6 +130,9 @@ def test_stage1_grows_the_last_partition_and_requests_a_reboot(rig):
     assert "systemctl" in result.calls and "reboot" in result.calls
 
     assert grown_marker(rig.state_dir).is_file()
+    # Records which boot grew the table, so stage 2 can tell whether a
+    # reboot has actually happened since (#69).
+    assert grown_marker(rig.state_dir).read_text().strip() == "boot-a"
     assert not done_marker(rig.state_dir).is_file()
 
 
@@ -151,8 +167,8 @@ def test_stage1_sfdisk_failure_is_retryable_not_permanent(rig):
 
 
 def test_stage2_runs_resize2fs_and_finishes(rig):
-    rig.state_dir.mkdir(parents=True, exist_ok=True)
-    grown_marker(rig.state_dir).touch()
+    rig.write_grown_marker("boot-a")
+    rig.set_boot_id("boot-b")  # rebooted since stage 1
 
     result = rig.run()
     assert result.returncode == 0, result.stderr
@@ -163,13 +179,56 @@ def test_stage2_runs_resize2fs_and_finishes(rig):
 
 
 def test_stage2_resize2fs_failure_is_retryable(rig):
-    rig.state_dir.mkdir(parents=True, exist_ok=True)
-    grown_marker(rig.state_dir).touch()
+    rig.write_grown_marker("boot-a")
+    rig.set_boot_id("boot-b")
 
     result = rig.run(env_extra={"FAKE_RESIZE2FS_EXIT": "1"})
     assert result.returncode == 1
     assert not done_marker(rig.state_dir).is_file()
     assert grown_marker(rig.state_dir).is_file(), "stays in stage 2 for next boot"
+
+
+def test_stage2_refuses_until_a_reboot_has_actually_happened(rig):
+    """#69: the reboot request is non-blocking and can fail or be skipped.
+    Re-run in the same boot, the kernel still has the old, smaller table
+    cached; resize2fs would no-op and DONE_MARKER would end it for good."""
+    rig.write_grown_marker("boot-a")  # same boot id as the rig's current one
+
+    result = rig.run()
+    assert result.returncode == 1, "retryable, like every other failure here"
+    assert "resize2fs" not in result.calls
+    assert "sfdisk" not in result.calls
+    assert "systemctl" in result.calls and "reboot" in result.calls, "asks again"
+    assert not done_marker(rig.state_dir).is_file()
+    assert grown_marker(rig.state_dir).read_text().strip() == "boot-a", "left untouched"
+
+
+def test_full_cycle_across_a_failed_reboot_then_a_real_one(rig):
+    rig.run()  # stage 1 during boot-a
+    rig.run()  # reboot never happened: still boot-a
+    assert not done_marker(rig.state_dir).is_file()
+
+    rig.set_boot_id("boot-b")
+    result = rig.run()
+    assert result.returncode == 0, result.stderr
+    assert "resize2fs" in result.calls
+    assert done_marker(rig.state_dir).is_file()
+
+
+def test_unreadable_boot_id_falls_back_to_trusting_the_marker(rig):
+    """No boot id available must never be worse than before the check
+    existed: stage 1 still records its marker, and stage 2 still runs
+    resize2fs rather than waiting forever for a reboot it can't detect."""
+    missing = {"NHL_SCOREBOARD_BOOT_ID_FILE": str(rig.tmp_path / "no-such-file")}
+
+    result = rig.run(env_extra=missing)
+    assert result.returncode == 0, result.stderr
+    assert grown_marker(rig.state_dir).read_text().strip() == ""
+
+    result = rig.run(env_extra=missing)
+    assert result.returncode == 0, result.stderr
+    assert "resize2fs" in result.calls
+    assert done_marker(rig.state_dir).is_file()
 
 
 # --------------------------------------------------------------------------

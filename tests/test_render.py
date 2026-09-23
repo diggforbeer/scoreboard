@@ -63,7 +63,7 @@ GAME_STATUS_TOP = GAME_RULE_Y + 1
 LOGO = 32
 MID_LEFT, MID_RIGHT = LOGO, W - LOGO  # the column between the logos
 AWAY_CX, HOME_CX = MID_LEFT + 16, MID_RIGHT - 16
-FIXTURE_TEAMS = ("SEA", "CGY", "CAR", "FLA", "NYI", "NJD", "WSH", "BOS", "TOR", "MTL", "EDM")
+FIXTURE_TEAMS = ("SEA", "CGY", "CAR", "FLA", "NYI", "NJD", "WSH", "BOS", "TOR", "MTL", "EDM", "NSH")
 
 
 # --------------------------------------------------------------------------
@@ -688,13 +688,19 @@ FAVOURITE_WINDOW = [
 ]
 
 
-def assert_standings_layout(c: AsciiCanvas, rows: list[StandingsRow], favourite: str) -> None:
+def assert_standings_layout(
+    c: AsciiCanvas, rows: list[StandingsRow], favourite: str, *, logo_width: int = 0
+) -> None:
     assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    if logo_width:
+        logo_region = c.lit(0, 0, logo_width - 1, H - 1)
+        assert logo_region, "no logo drawn for the favourite"
+        assert team_color(favourite) in set(logo_region.values()), "favourite logo colour wrong"
     for i, row in enumerate(rows):
         y0, y1 = i * STANDINGS_ROW_HEIGHT, i * STANDINGS_ROW_HEIGHT + STANDINGS_ROW_HEIGHT - 1
-        band = c.bbox(0, y0, W - 1, y1)
+        band = c.bbox(logo_width, y0, W - 1, y1)
         assert band is not None, f"row {i} ({row.abbrev}) not drawn"
-        colors = c.colors(0, y0, W - 1, y1)
+        colors = c.colors(logo_width, y0, W - 1, y1)
         highlight = ACCENT if row.abbrev == favourite else WHITE
         assert colors <= {highlight, team_color(row.abbrev)}, (
             f"row {i} ({row.abbrev}) has unexpected colours: {colors}"
@@ -702,17 +708,17 @@ def assert_standings_layout(c: AsciiCanvas, rows: list[StandingsRow], favourite:
         assert team_color(row.abbrev) in colors, f"row {i} ({row.abbrev}) not in its team colour"
 
 
-def test_standings_layout_favourite_centred(update_snapshots):
+def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
     c = canvas()
-    make_renderer().draw_standings(c, FAVOURITE_WINDOW, "NSH")
-    art = show("standings, favourite centred (NSH 6th)", c)
+    make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    art = show("standings w/ logo, favourite centred (NSH 6th)", c)
 
-    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH")
-    assert ACCENT in c.colors(0, 2 * STANDINGS_ROW_HEIGHT, W - 1, 3 * STANDINGS_ROW_HEIGHT - 1)
-    check_snapshot("standings_favourite_centred", art, update_snapshots)
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH", logo_width=LOGO)
+    assert ACCENT in c.colors(LOGO, 2 * STANDINGS_ROW_HEIGHT, W - 1, 3 * STANDINGS_ROW_HEIGHT - 1)
+    check_snapshot("standings_logo_favourite_centred", art, update_snapshots)
 
 
-def test_standings_layout_favourite_clamped_to_top(update_snapshots):
+def test_standings_logo_layout_favourite_clamped_to_top(synthetic_logos, update_snapshots):
     window = [
         standings_row("NSH", 1, 50),
         standings_row("WPG", 2, 48),
@@ -721,20 +727,42 @@ def test_standings_layout_favourite_clamped_to_top(update_snapshots):
         standings_row("COL", 5, 42),
     ]
     c = canvas()
-    make_renderer().draw_standings(c, window, "NSH")
-    art = show("standings, favourite 1st (extra rows below)", c)
+    make_renderer(logos=synthetic_logos).draw_standings(c, window, "NSH")
+    art = show("standings w/ logo, favourite 1st (extra rows below)", c)
 
-    assert_standings_layout(c, window, "NSH")
-    assert ACCENT in c.colors(0, 0, W - 1, STANDINGS_ROW_HEIGHT - 1)
-    check_snapshot("standings_favourite_top", art, update_snapshots)
+    assert_standings_layout(c, window, "NSH", logo_width=LOGO)
+    assert ACCENT in c.colors(LOGO, 0, W - 1, STANDINGS_ROW_HEIGHT - 1)
+    check_snapshot("standings_logo_favourite_top", art, update_snapshots)
 
 
-def test_standings_layout_only_favourite_is_highlighted():
+def test_standings_text_layout_no_logo_library(update_snapshots):
+    """No ``LogoLibrary`` at all -- same fallback precedent as the game scene."""
     c = canvas()
     make_renderer().draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    art = show("standings, no logo library", c)
+
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH")
+    check_snapshot("standings_text_fallback", art, update_snapshots)
+
+
+def test_standings_missing_favourite_logo_falls_back_to_text(synthetic_logos, tmp_path):
+    """A library that just doesn't have the favourite's crest: same fallback."""
+    from PIL import Image
+
+    without_nsh = tmp_path / "partial"
+    without_nsh.mkdir()
+    Image.open(synthetic_logos.path_for("SEA")).save(without_nsh / "SEA.png")
+    c = canvas()
+    make_renderer(logos=LogoLibrary([without_nsh])).draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH")  # logo_width=0: the text layout's signature
+
+
+def test_standings_layout_only_favourite_is_highlighted(synthetic_logos):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")
     for i, row in enumerate(FAVOURITE_WINDOW):
         y0, y1 = i * STANDINGS_ROW_HEIGHT, i * STANDINGS_ROW_HEIGHT + STANDINGS_ROW_HEIGHT - 1
-        colors = c.colors(0, y0, W - 1, y1)
+        colors = c.colors(LOGO, y0, W - 1, y1)
         if row.abbrev == "NSH":
             assert ACCENT in colors
         else:
