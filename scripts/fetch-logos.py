@@ -74,10 +74,15 @@ def main(argv: list[str] | None = None) -> int:
             target = out_dir / f"{abbrev}.png"
             try:
                 rasterise(fetch(abbrev, variant), args.size).save(target)
-                print(f"  {variant:<5} {abbrev}  -> {target.relative_to(REPO_ROOT)}")
             except Exception as exc:  # one bad logo must not stop the rest
                 failures.append(f"{abbrev} ({variant}): {exc}")
                 print(f"  {variant:<5} {abbrev}  FAILED: {exc}", file=sys.stderr)
+                continue
+            try:
+                display = target.relative_to(REPO_ROOT)
+            except ValueError:  # --out points outside the repo
+                display = target
+            print(f"  {variant:<5} {abbrev}  -> {display}")
 
     if failures:
         print(f"\n{len(failures)} logo(s) failed:", file=sys.stderr)

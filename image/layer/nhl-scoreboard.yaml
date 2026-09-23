@@ -227,3 +227,24 @@ mmdebstrap:
         python3 -c "import rgbmatrix, rgbmatrix.graphics"
       '
       echo "rgbmatrix bindings still import correctly after the purge"
+
+    # ---- app import smoke test ----------------------------------------
+    # The rgbmatrix check above only proves the compiled binding survived
+    # the purge -- it says nothing about the app itself, which is a plain
+    # source tree on PYTHONPATH (apt packages, not pip: see the top of
+    # this file), kept in sync with pyproject.toml's deps entirely by
+    # hand. A dependency added to pyproject.toml but not to this layer's
+    # apt package list would pass the CI test job (pip installs it) and
+    # pass the rest of this build (nothing else imports it), then crash
+    # the board on first boot -- same failure class as #21's
+    # libpython3.13. Import every module nhl-scoreboard.service's
+    # ExecStart actually loads, with the same PYTHONPATH, plus every
+    # other module that starts up alongside it, so a missing apt package
+    # fails the image build instead of shipping.
+    - |-
+      set -eu
+      chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server"
+        python3 -m nhl_scoreboard --help >/dev/null
+      '
+      echo "nhl_scoreboard app modules import correctly"
