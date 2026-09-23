@@ -34,6 +34,21 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   Code Pro/Max subscription, not metered API usage: needs the
   `CLAUDE_CODE_OAUTH_TOKEN` repo secret set (Settings → Secrets and
   variables → Actions), generated locally with `claude setup-token`.
+- **It can run this repo's own tests and lint, and (best-effort) open its
+  own PR.** The action's tag-mode default `--allowedTools` is a fixed,
+  narrow list with no general Bash (confirmed by reading
+  `anthropics/claude-code-action`'s own source, not assumed) — `claude.yml`
+  extends it via `claude_args` to allow setting up the venv, `pytest`,
+  `ruff check`/`format`, and `gh pr create`, and instructs it (via
+  `--append-system-prompt`) to actually run the test/lint suite before
+  claiming success and to call `gh pr create` itself for issue-triggered
+  runs. That second part overrides a default that's hard-coded into the
+  action's own base prompt (issue-triggered runs are told to only leave a
+  compare/quick_pull link) — there's no dedicated toggle for it, so it's a
+  best-effort prompt override, not guaranteed; verify it actually opened a
+  PR rather than just a link before trusting it. Either way, review what
+  it produces the same as any other PR — a real test run doesn't make the
+  *change* correct, only that it doesn't fail the suite as written.
 
 ## Commands
 
@@ -86,10 +101,10 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   Hardware, emulator and tests must render identically.
 - Layout constants live in the renderer and are mirrored in
   `tests/test_render.py` (`SCORE_BASELINE=13`, `RULE_Y=19`, status
-  baseline `H-2`, logos 32px at each edge). Change both together. The
-  favourite marker is amber score digits (`ACCENT` colour), not an
-  underline -- `UNDERLINE_Y` was removed when #5 changed this; don't
-  reintroduce a reference to it.
+  baseline `H-2`, logos 32px at each edge). Change both together. There is
+  no favourite-team marker on the game scene at all -- #5 tried amber score
+  digits, #33 removed them outright; don't reintroduce one without a new
+  decision to do so.
 - Fonts are vendored BDF (`fonts/`): `7x13B` scores/abbrevs, `6x10` preview
   day, `5x7` status, `4x6` power-play indicator. Glyphs can have a blank
   edge column, so alignment assertions allow 1px.
@@ -143,6 +158,30 @@ preview, or a different game mid-rotation. The baseline score for a game is
 recorded on first sighting *without* firing, so a game already 3-1 at
 startup does not celebrate.
 
+The `standings` scene (#40) is the favourite's conference playoff picture:
+`conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
+favourite's conference by `conferenceSequence` and trim it to the
+favourite plus up to two teams on either side, clamped at either end of
+the conference so a team sitting 1st or last still gets a full-size
+window. Layout is Option C from #40 (favourite ± a few spots, one screen,
+no pagination) -- Option A (paginate the full 8) and Option B
+(favourite-centric single line) were considered and explicitly not
+chosen. Suppressed entirely until the favourite's own `games_played > 0`:
+`standings/now` keeps serving the just-finished season's *final* table
+all through the off-season rather than an empty result (verified with a
+live call while filing #40), and `games_played` is the only signal on
+hand for "is this actually the current season." Only scoped to
+`rotation = "favourite"`, same precedent as the power-play indicator and
+goal detection above -- shown interleaved with the preview/countdown
+scene, alternating on `rotate_seconds`' own cadence (`_show_standings_
+now()`), never in place of a live game or a held final. Standings are
+polled on an hourly TTL (`STANDINGS_TTL_SECONDS`), the same idea as
+`SCHEDULE_TTL_SECONDS` for the season schedule. `clinchIndicator` values
+are parsed onto `StandingsRow` but not rendered or colour-coded -- they're
+confirmed from only one real, end-of-season response and not documented
+anywhere; don't act on them without verifying against a few more live
+examples first.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
@@ -165,6 +204,13 @@ startup does not celebrate.
   onboard audio share the PWM peripheral. Audio → USB. Not the 3.5mm jack,
   not I2S (GPIO 21 is LAT).
 - Pixel pitch (`pitch_mm`) is informational; the driver never sees it.
+- Panel spec sheet (the actual purchased hardware): 64×32 / 2048 dots,
+  160×80mm at P2.5, 1R1G1B, ≥140° viewing angle, 1/16 scan, HUB75 header,
+  ≤12W at 5V/2.5A per panel (fed through the adapter board's VH4 header,
+  not the Pi). 1/16 scan is the standard scan rate for a 32-row panel --
+  matches `PanelConfig`'s `rows=32` default with no multiplexing/
+  `row_address_type` override needed. Two panels chained (`chain_length=2`
+  default) means a ~24W supply budget, not 12W -- size accordingly.
 - The goal horn's default siren (`assets/horns/_default.wav`) is committed
   to the repo, unlike logos or the HUB75 driver source: it's synthesized
   (`scripts/generate-default-horn.py`, stdlib `wave`, no external assets),

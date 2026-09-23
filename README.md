@@ -20,6 +20,7 @@ it a couple of minutes on the very first power-up.
 | Adapter | Seengreat-style RGB Matrix Adapter Board (also sold as XICOOLEE, WatangTech) |
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
+| Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -52,10 +53,12 @@ Early development. Working today:
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [x] Goal horn and GOAL celebration screen
+- [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Root filesystem grows to fill the SD card on first boot
 - [x] Boot splash: "CONNECTING" then the board's LAN IP until the first
       successful poll, falling back to the offline indicator if that never
       happens
+- [x] Optional read-only web status page for headless debugging
 - [ ] Verified on real hardware
 
 ## Development
@@ -111,6 +114,10 @@ enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
 
+[status]
+enabled = false              # a read-only web status page, for headless debugging
+port = 8080
+
 [panel]
 rows = 32
 cols = 64
@@ -120,6 +127,10 @@ pixel_mapper = ""           # e.g. "U-mapper" to stack two panels into 64x64
 hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60
+auto_brightness = false     # dim from a BH1750 ambient light sensor on I2C instead (#44)
+min_brightness = 10         # clamp range for auto_brightness
+max_brightness = 100
+brightness_poll_seconds = 5
 ```
 
 ## What it shows
@@ -154,6 +165,18 @@ recording named `{ABBR}.wav` (e.g. `NSH.wav`) into the horn directory to use
 your team's actual horn instead; it's checked first, and the default plays
 whenever a team-specific file isn't found. See `[audio]` in
 [Configuration](#configuration).
+
+## Status page
+
+The board is headless by design, so diagnosing "why is it stuck" normally
+means SSH-ing in and reading `journalctl -u nhl-scoreboard`. Set
+`[status] enabled = true` in the config and the board also serves a tiny
+read-only HTML page at `http://<board's-ip>:8080/` showing the current
+scene, the last successful API poll, the last error (if any), the
+favourite team and the rotation mode -- enough to check on the board from
+a phone on the same network. It's stdlib `http.server`, no framework, and
+has no login: it binds the local network the board is already trusted on,
+not the internet, so don't port-forward it.
 
 ## Layout
 

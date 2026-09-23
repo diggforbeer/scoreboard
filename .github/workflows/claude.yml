@@ -34,7 +34,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # Full history, not a shallow single-commit clone: the git
+          # fetch/merge allowlist entries above need real common-ancestor
+          # history to resolve a merge conflict against main, which a
+          # fetch-depth: 1 checkout doesn't have. Shipping the tool
+          # allowlist without this would be a half-working fix.
+          fetch-depth: 0
 
       - name: Run Claude Code
         id: claude
@@ -44,3 +49,48 @@ jobs:
           # metered API usage. Generate with `claude setup-token` (opens a
           # browser login) and store as this secret -- not ANTHROPIC_API_KEY.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # The action's tag-mode default --allowedTools is a fixed, narrow
+          # list (Glob/Grep/LS/Read, a couple of comment/CI MCP tools, git
+          # add/commit/push) -- confirmed by reading src/modes/tag/index.ts
+          # in anthropics/claude-code-action, not assumed. No general Bash,
+          # so it can't run this repo's own test/lint commands. claude_args
+          # is appended after that built-in list (same file), which is the
+          # documented way to extend it (docs/configuration.md).
+          #
+          # --append-system-prompt's gh-pr-create instruction overrides a
+          # DIFFERENT default that's hard-coded into the base prompt itself
+          # (src/create-prompt/index.ts): issue-triggered runs are told to
+          # only leave a compare/quick_pull link, never call `gh pr create`.
+          # There is no dedicated toggle for that -- this is a best-effort
+          # override of baked-in model instructions via an appended system
+          # prompt, not a supported switch, so don't treat it as guaranteed;
+          # verify with a real `@claude` run before relying on it.
+          #
+          # `gh issue create`/`gh issue list` added after a real run tried
+          # both and got rejected before execution -- it could open its own
+          # PR but couldn't file the issues its own research turned up, or
+          # check for duplicates first. Same allowlist mechanism as above,
+          # not a new one.
+          #
+          # `gh issue close`/`gh issue view`/`gh label list` added the same
+          # way, one run later: it filed #59-#69 fine but couldn't close
+          # the review issue (#57) that spawned them, or read/label-check
+          # other issues. Deliberately still not `Bash(gh:*)` -- `gh` can
+          # do far more than issue/PR management (gh api, gh secret set,
+          # gh repo delete, ...) and this workflow triggers off issue/PR
+          # content, which isn't fully trusted input even with GitHub's
+          # own write-access gate as the first layer. Keep extending this
+          # list one confirmed-blocked command at a time, not widening it
+          # preemptively.
+          #
+          # `git fetch`/`git merge`/`gh pr view` added after PR #72 hit a
+          # real merge conflict against main and the run couldn't resolve
+          # it itself -- the base tagModeTools list (src/modes/tag/
+          # index.ts) only ever included `git add`/`git commit`/`git push`/
+          # `git rm`, never fetch or merge, so a run's checkout (fetch-
+          # depth: 1, one commit) had no way to even pull in main's side of
+          # a conflict, let alone resolve one.
+          claude_args: |
+            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*)"
+            --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Every other default instruction still applies."

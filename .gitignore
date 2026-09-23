@@ -33,3 +33,9 @@ scoreboard.local.toml
 # since git won't descend into an ignored directory even for a negated
 # path underneath -- ignoring only the fetched pattern avoids that.
 assets/logos/[0-9]*/
+
+# team-specific goal horns are a user drop-in slot -- real recordings,
+# likely copyrighted, same reasoning as logos not being redistributed.
+# Never committed, unlike _default.wav (synthesized, no such issue).
+assets/horns/*.wav
+!assets/horns/_default.wav

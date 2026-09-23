@@ -116,6 +116,9 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
   on each boot and applies Wi-Fi, timezone and regulatory domain
 - `dtparam=audio=off` in `config.txt` and `isolcpus=3` in `cmdline.txt`, both
   required for a stable, flicker-free panel refresh
+- `dtparam=i2c_arm=on` in `config.txt`, for an optional BH1750 ambient light
+  sensor (#44, `auto_brightness` in `scoreboard.toml`); harmless if you
+  haven't wired one up
 - `nhl-scoreboard-grow-rootfs.service`, which grows the root filesystem to
   fill the SD card on first boot (see below)
 

@@ -10,11 +10,24 @@ from __future__ import annotations
 import logging
 import os
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+import tomlkit
+
 log = logging.getLogger(__name__)
+
+
+class ConfigWriteError(Exception):
+    """Raised when Settings.save() cannot read or write the config file.
+
+    Deliberately not swallowed: a save that silently didn't happen (boot
+    partition full or read-only) needs to surface to whoever is editing the
+    config, not vanish (#51).
+    """
+
 
 DEFAULT_CONFIG_PATHS = (
     Path("/boot/firmware/scoreboard.toml"),
@@ -42,6 +55,8 @@ class PanelConfig:
     gpio_slowdown: int = 4
     pwm_bits: int = 11
     pwm_lsb_nanoseconds: int = 130
+    #: Static brightness, and the fallback used whenever auto_brightness is
+    #: off or the ambient sensor (#44) isn't answering.
     brightness: int = 60
     limit_refresh_rate_hz: int = 0
     disable_hardware_pulsing: bool = False
@@ -50,6 +65,31 @@ class PanelConfig:
     #: or "Rotate:180" / "Mirror:H" for a panel mounted flipped. Chain
     #: several with ";", e.g. "U-mapper;Rotate:90". Empty means none.
     pixel_mapper: str = ""
+
+    #: Dim/brighten the panel from a BH1750 ambient light sensor on the I2C
+    #: bus instead of a fixed `brightness`. Off by default: not every board
+    #: has the sensor wired up, and `LightSensor` degrades to `brightness`
+    #: on its own if this is on but nothing answers, so there's no harm in
+    #: leaving it on for a board without the sensor -- it's just extra I2C
+    #: probing for nothing.
+    auto_brightness: bool = False
+    min_brightness: int = 10
+    max_brightness: int = 100
+    #: How often the sensor is sampled and brightness re-applied. Smoothed
+    #: on top of this (see ScoreboardApp.refresh_brightness) so this can be
+    #: fairly frequent without the panel visibly flickering.
+    brightness_poll_seconds: float = 5.0
+
+    def __post_init__(self) -> None:
+        self.min_brightness = max(1, min(100, self.min_brightness))
+        self.max_brightness = max(1, min(100, self.max_brightness))
+        if self.min_brightness > self.max_brightness:
+            log.warning(
+                "panel.min_brightness (%d) > max_brightness (%d); swapping",
+                self.min_brightness,
+                self.max_brightness,
+            )
+            self.min_brightness, self.max_brightness = self.max_brightness, self.min_brightness
 
     @property
     def width(self) -> int:
@@ -90,6 +130,9 @@ class ScoreboardConfig:
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.
     final_hold_minutes: float = 30.0
+    #: Show the favourite's conference playoff picture, interleaved with the
+    #: preview/countdown screen, once their season has actually started.
+    show_standings: bool = True
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
@@ -116,10 +159,24 @@ class AudioConfig:
 
 
 @dataclass(slots=True)
+class StatusServerConfig:
+    """Read-only web status page for headless debugging (#48).
+
+    Off by default so it isn't one more thing that has to be reasoned about
+    for every board. No auth: it binds the local network only, for a device
+    already trusted there -- do not port-forward it to the internet.
+    """
+
+    enabled: bool = False
+    port: int = 8080
+
+
+@dataclass(slots=True)
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    status: StatusServerConfig = field(default_factory=StatusServerConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -147,7 +204,49 @@ class Settings:
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
             audio=_build(AudioConfig, raw.get("audio", {})),
+            status=_build(StatusServerConfig, raw.get("status", {})),
         )
+
+    def save(self, updates: Mapping[str, Mapping[str, Any]]) -> None:
+        """Write ``updates`` into the source file, in place, keeping everything else.
+
+        ``updates`` is ``{section: {key: value}}``, e.g.
+        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``.
+        Only those keys are touched -- parsed and re-emitted with ``tomlkit``
+        rather than ``tomllib`` + a plain writer, so every comment in the
+        heavily-annotated boot-partition template survives untouched (#51).
+
+        Updates this object's in-memory settings from the same file afterwards,
+        via the normal load path, so the caller sees the merged result without
+        a separate reload.
+        """
+        if self.source_path is None:
+            raise ConfigWriteError("no source file loaded; nothing to save to")
+        try:
+            doc = tomlkit.parse(self.source_path.read_text())
+        except OSError as exc:
+            raise ConfigWriteError(f"could not read {self.source_path}: {exc}") from exc
+
+        for section, values in updates.items():
+            table = doc.get(section)
+            if table is None:
+                table = tomlkit.table()
+                doc[section] = table
+            for key, value in values.items():
+                table[key] = value
+
+        tmp_path = self.source_path.with_name(self.source_path.name + ".tmp")
+        try:
+            tmp_path.write_text(tomlkit.dumps(doc))
+            tmp_path.replace(self.source_path)
+        except OSError as exc:
+            raise ConfigWriteError(f"could not write {self.source_path}: {exc}") from exc
+
+        reloaded = Settings.from_toml(self.source_path)
+        self.panel = reloaded.panel
+        self.scoreboard = reloaded.scoreboard
+        self.audio = reloaded.audio
+        self.status = reloaded.status
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:

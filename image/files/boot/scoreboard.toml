@@ -57,6 +57,11 @@ logo_variant = "dark"
 # to the normal live score.
 goal_flash_seconds = 6
 
+# Show the favourite's conference playoff picture (their spot plus a few
+# teams on either side), interleaved with the preview/countdown screen.
+# Only appears once favourite_team has actually played a game this season.
+show_standings = true
+
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
 # scores. The board has no other way to make sound: the HUB75 panel needs
@@ -75,6 +80,15 @@ device = ""
 # Team-specific horns are not included -- broadcast goal horns are
 # copyrighted -- so this is a slot to drop your own recording into.
 horn_dir = ""
+
+[status]
+# A tiny read-only web page showing what the board currently thinks is going
+# on (current scene, last successful poll, last error, favourite team,
+# rotation) -- handy for checking on a headless board without SSH-ing in.
+# Off by default. No login: this binds the local network the board is on,
+# not the internet -- do not port-forward it.
+enabled = false
+port = 8080
 
 [panel]
 # Defaults describe two 64x32 panels daisy-chained into one 128x32 board.
@@ -105,8 +119,23 @@ pixel_mapper = ""
 #   "adafruit-hat-pwm" Adafruit board with the GPIO4-GPIO18 solder mod.
 hardware_mapping = "regular"
 
-# 0-100. Lower brightness means less current draw and a cooler panel.
+# 0-100. Lower brightness means less current draw and a cooler panel. Used
+# as-is unless auto_brightness is on and the sensor below is answering.
 brightness = 60
+
+# Auto-dim from a BH1750 ambient light sensor on the I2C bus (#44) instead
+# of the fixed brightness above. Leave off if you haven't wired one up --
+# it degrades to the fixed brightness on its own if nothing answers, but
+# there's no reason to have the board probe the I2C bus for a sensor that
+# isn't there.
+auto_brightness = false
+# Clamp range the sensor reading is mapped into, regardless of how dark or
+# bright the room gets.
+min_brightness = 10
+max_brightness = 100
+# How often the sensor is sampled, in seconds. The applied brightness is
+# smoothed on top of this, so lowering it won't make the panel flicker.
+brightness_poll_seconds = 5
 
 # Raise if the display shows flicker or garbled pixels; 4 suits a Pi 4,
 # 2 is usually right for a Pi 3.

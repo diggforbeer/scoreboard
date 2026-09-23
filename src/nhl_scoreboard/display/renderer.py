@@ -7,11 +7,12 @@ sensibly -- just with less or more breathing room.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game
+from ..nhl.models import Game, StandingsRow
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color
@@ -34,7 +35,6 @@ class Renderer:
         width: int,
         height: int,
         tz: ZoneInfo,
-        favourite: str = "",
         logos: LogoLibrary | None = None,
     ) -> None:
         self.g = graphics
@@ -42,7 +42,6 @@ class Renderer:
         self.width = width
         self.height = height
         self.tz = tz
-        self.favourite = favourite.strip().upper()
         self.logos = logos
         self._colors: dict[tuple[int, int, int], Any] = {}
 
@@ -111,7 +110,7 @@ class Renderer:
         self._draw_score(canvas, game.home.abbrev, game.home.score, right - quarter, score_baseline)
 
         self.vline(canvas, centre - 1, 3, score_baseline, DIM)
-        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y - 1):
+        if not self._draw_situation(canvas, game, left + 3, right - 4, rule_y):
             self.hline(canvas, left + 3, right - 4, rule_y, DIM)
         self.text_center(
             canvas,
@@ -147,8 +146,7 @@ class Renderer:
         text = str(score)
         width = text_width(self.fonts.large, text)
         x = cx - width // 2
-        color = ACCENT if self.favourite and abbrev == self.favourite else WHITE
-        self.text(canvas, self.fonts.large, x, y, color, text)
+        self.text(canvas, self.fonts.large, x, y, WHITE, text)
 
     def _draw_game_text(self, canvas: Any, game: Game) -> None:
         """Fallback when a logo is missing: abbreviation and score per side."""
@@ -162,7 +160,7 @@ class Renderer:
         self._draw_side(canvas, game.home.abbrev, game.home.score, half, half, score_baseline)
 
         self.vline(canvas, half - 1, 2, rule_y - 3, DIM)
-        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y - 1):
+        if not self._draw_situation(canvas, game, 3, self.width - 4, rule_y):
             self.hline(canvas, 0, self.width - 1, rule_y, DIM)
 
         self.text_center(
@@ -176,8 +174,7 @@ class Renderer:
 
     def _draw_side(self, canvas: Any, abbrev: str, score: int, x0: int, span: int, y: int) -> None:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
-        color = ACCENT if self.favourite and abbrev == self.favourite else WHITE
-        self.text_right(canvas, self.fonts.large, x0 + span - 3, y, color, str(score))
+        self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
 
     def draw_goal(self, canvas: Any, game: Game) -> None:
         """A goal celebration: GOAL in big amber type, current score below.
@@ -293,6 +290,35 @@ class Renderer:
         x = self.width // 2 - sum(text_width(font, t) for t, _ in parts) // 2
         for text, color in parts:
             x += self.text(canvas, font, x, y, color, text)
+
+    #: Fixed left edges/right edge for each standings column, so values of
+    #: different widths (a 1- vs 2-digit rank, a 5- vs 7-char W-L-OT record)
+    #: still line up between rows instead of drifting with their own width.
+    _STANDINGS_RANK_X = 1
+    _STANDINGS_ABBREV_X = 12
+    _STANDINGS_RECORD_X = 28
+    _STANDINGS_POINTS_RIGHT = 68
+
+    def draw_standings(self, canvas: Any, rows: Sequence[StandingsRow], favourite: str) -> None:
+        """The favourite's conference neighbourhood: rank, abbrev, record, points.
+
+        No logos -- eight rows of 32px artwork plus text doesn't fit
+        regardless of variant; this stays abbreviation + text, like the
+        game scene's text fallback. One row per team, tightest face
+        (``4x6``) so up to five rows fit the panel height.
+        """
+        canvas.Clear()
+        font = self.fonts.tiny
+        row_height = 6
+        for i, row in enumerate(rows):
+            y = 1 + i * row_height + (row_height - 2)
+            color = ACCENT if row.abbrev == favourite else WHITE
+            self.text(
+                canvas, font, self._STANDINGS_RANK_X, y, color, f"{row.conference_sequence:>2}"
+            )
+            self.text(canvas, font, self._STANDINGS_ABBREV_X, y, team_color(row.abbrev), row.abbrev)
+            self.text(canvas, font, self._STANDINGS_RECORD_X, y, color, row.record_label())
+            self.text_right(canvas, font, self._STANDINGS_POINTS_RIGHT, y, color, str(row.points))
 
     def draw_clock(self, canvas: Any, now: datetime) -> None:
         """Idle scene: the time, for when there is no hockey to show."""
