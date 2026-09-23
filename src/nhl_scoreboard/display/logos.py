@@ -106,7 +106,13 @@ class LogoLibrary:
 def decode(abbrev: str, image, size: int) -> Logo:
     """Flatten an RGBA image into lit pixels, composited over black."""
     if image.size != (size, size):
-        image = image.resize((size, size))
+        # Lazy, like _load's: Pillow is optional. Callers only get here with an
+        # image Pillow already decoded, so no ImportError guard is needed.
+        # LANCZOS matches fetch-logos.py; the default filter mushes fine
+        # linework at 32px, which is the whole point of the override slot.
+        from PIL import Image
+
+        image = image.resize((size, size), resample=Image.LANCZOS)
     pixels: list[tuple[int, int, RGB]] = []
     data = image.load()
     for y in range(size):

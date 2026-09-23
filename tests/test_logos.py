@@ -60,6 +60,23 @@ def test_decode_resizes_off_size_input():
     assert len(logo.pixels) == 32 * 32
 
 
+def test_decode_resize_uses_lanczos(monkeypatch):
+    """A mis-sized override must get fetch-logos.py's filter, not Pillow's default."""
+    calls = []
+    real_resize = Image.Image.resize
+
+    def spy(self, *args, **kwargs):
+        calls.append(kwargs.get("resample", args[1] if len(args) > 1 else None))
+        return real_resize(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "resize", spy)
+    logo = decode("T", Image.new("RGBA", (64, 64), (255, 255, 255, 255)), 32)
+    assert (logo.width, logo.height) == (32, 32)
+    # Pillow re-enters resize() for RGBA (premultiplied pass), so only the
+    # outermost call -- decode()'s own -- is ours.
+    assert calls[0] == Image.LANCZOS
+
+
 def test_cache_loads_once(tmp_path, monkeypatch):
     make_logo(tmp_path / "TOR.png")
     lib = LogoLibrary([tmp_path])
