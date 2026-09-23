@@ -1,10 +1,15 @@
-"""scoreboard-provision's Wi-Fi rollback (#51), the script run for real.
+"""scoreboard-provision run for real: Wi-Fi rollback (#51) plus the other
+things it applies on every boot (#78) -- timezone and hex-encoded SSIDs.
 
 Same approach as test_grow_rootfs.py: the actual script, invoked as a
 subprocess, with every external tool it shells out to (iw, iwctl, systemctl)
 faked on a prepended PATH so this runs without root or real Wi-Fi hardware.
 IWD_DIR is redirected to a tmp directory via NHL_SCOREBOARD_IWD_DIR (the same
-override convention nhl-scoreboard-grow-rootfs uses for its own state dir).
+override convention nhl-scoreboard-grow-rootfs uses for its own state dir);
+apply_timezone()'s ZONEINFO/LOCALTIME/TIMEZONE_FILE are redirected the same
+way via NHL_SCOREBOARD_ZONEINFO_DIR/NHL_SCOREBOARD_LOCALTIME/
+NHL_SCOREBOARD_TIMEZONE_FILE so these tests never touch the real system's
+/etc/localtime or /etc/timezone.
 
 What this does NOT verify: that iwd actually reconnects to a known profile
 the way ``is_connected``/``wifi_device`` assume, or that ``iwctl station ...
@@ -46,6 +51,10 @@ class Rig:
         self.bindir.mkdir()
         self.iwd_dir = tmp_path / "iwd"
         self.iwd_dir.mkdir()
+        self.zoneinfo_dir = tmp_path / "zoneinfo"
+        self.zoneinfo_dir.mkdir()
+        self.localtime_path = tmp_path / "localtime"
+        self.timezone_file = tmp_path / "timezone"
         self.call_log = tmp_path / "calls.log"
         self.config_path = tmp_path / "scoreboard.toml"
 
@@ -82,14 +91,25 @@ class Rig:
             json.dumps({"ssid": ssid, "password": password, "country": country})
         )
 
-    def run(self, wifi_toml: str, *, env_extra: dict | None = None) -> subprocess.CompletedProcess:
+    def seed_zone(self, tz: str) -> None:
+        """Create a fake zoneinfo entry; contents don't matter, only existence."""
+        path = self.zoneinfo_dir / tz
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"TZif-fake")
+
+    def run(
+        self, config_toml: str, *, env_extra: dict | None = None
+    ) -> subprocess.CompletedProcess:
         self.call_log.write_text("")
-        self.config_path.write_text(wifi_toml)
+        self.config_path.write_text(config_toml)
         repo_src = str(Path(__file__).resolve().parents[1] / "src")
         env = {
             "PATH": f"{self.bindir}:{os.environ['PATH']}",
             "FAKE_CALL_LOG": str(self.call_log),
             "NHL_SCOREBOARD_IWD_DIR": str(self.iwd_dir),
+            "NHL_SCOREBOARD_ZONEINFO_DIR": str(self.zoneinfo_dir),
+            "NHL_SCOREBOARD_LOCALTIME": str(self.localtime_path),
+            "NHL_SCOREBOARD_TIMEZONE_FILE": str(self.timezone_file),
             "NHL_SCOREBOARD_WIFI_TIMEOUT": "1",
             "NHL_SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
             "PYTHONPATH": repo_src,
@@ -221,3 +241,89 @@ def test_no_ssid_leaves_iwd_untouched(rig):
     assert result.returncode == 0, result.stderr
     assert "systemctl" not in result.calls
     assert "iwctl" not in result.calls
+
+
+# --------------------------------------------------------------------------
+# hex-encoded iwd profile names (SAFE_SSID rejects apostrophes, non-ASCII,
+# and a leading dot -- iwd.network(5)'s "=" + hex + ".psk" branch)
+# --------------------------------------------------------------------------
+
+HEX_SSID_CASES = [
+    "Mark's iPhone",  # apostrophe
+    "Café",  # non-ASCII
+    ".hidden",  # leading dot -- SAFE_SSID's charset allows it, the explicit check doesn't
+]
+
+
+@pytest.mark.parametrize("ssid", HEX_SSID_CASES)
+def test_ssid_needing_escaping_gets_hex_encoded_profile_name(rig, ssid):
+    expected_name = "=" + ssid.encode().hex() + ".psk"
+
+    result = rig.run(
+        WIFI_TOML.format(ssid=ssid, password="pw"),
+        env_extra={"FAKE_IWCTL_STATE": "connected", "FAKE_IWCTL_SSID": ssid},
+    )
+    assert result.returncode == 0, result.stderr
+
+    assert (rig.iwd_dir / expected_name).is_file()
+    assert not (rig.iwd_dir / f"{ssid}.psk").exists()
+    assert (rig.iwd_dir / ".scoreboard-managed").read_text().strip() == expected_name
+
+
+# --------------------------------------------------------------------------
+# apply_timezone()
+# --------------------------------------------------------------------------
+
+SCOREBOARD_TZ_TOML = '[scoreboard]\ntimezone = "{tz}"\n'
+
+
+def test_apply_timezone_valid_zone_creates_symlink_and_writes_timezone_file(rig):
+    rig.seed_zone("America/Chicago")
+
+    result = rig.run(SCOREBOARD_TZ_TOML.format(tz="America/Chicago"))
+    assert result.returncode == 0, result.stderr
+
+    assert rig.localtime_path.is_symlink()
+    assert rig.localtime_path.readlink() == rig.zoneinfo_dir / "America/Chicago"
+    assert rig.timezone_file.read_text() == "America/Chicago\n"
+
+
+def test_apply_timezone_unknown_zone_is_rejected_and_leaves_current_setting(rig):
+    rig.seed_zone("America/Chicago")
+    rig.localtime_path.symlink_to(rig.zoneinfo_dir / "America/Chicago")
+
+    result = rig.run(SCOREBOARD_TZ_TOML.format(tz="Mars/Olympus_Mons"))
+    assert result.returncode == 0, result.stderr
+
+    assert rig.localtime_path.readlink() == rig.zoneinfo_dir / "America/Chicago"
+    assert not rig.timezone_file.exists()
+    assert "Unknown timezone" in result.stderr
+
+
+def test_apply_timezone_unchanged_zone_is_a_noop(rig):
+    rig.seed_zone("America/Chicago")
+    rig.localtime_path.symlink_to(rig.zoneinfo_dir / "America/Chicago")
+    rig.timezone_file.write_text("sentinel-untouched\n")
+
+    result = rig.run(SCOREBOARD_TZ_TOML.format(tz="America/Chicago"))
+    assert result.returncode == 0, result.stderr
+
+    # If this re-ran the write, the sentinel content would be replaced.
+    assert rig.timezone_file.read_text() == "sentinel-untouched\n"
+
+
+# --------------------------------------------------------------------------
+# malformed scoreboard.toml
+# --------------------------------------------------------------------------
+
+
+def test_malformed_toml_is_logged_and_leaves_system_untouched(rig):
+    result = rig.run("this is not [ valid toml")
+    assert result.returncode == 0, result.stderr
+    assert "Could not parse" in result.stderr
+
+    # main() bails out before touching Wi-Fi or timezone state at all.
+    assert result.calls == ""
+    assert not rig.timezone_file.exists()
+    assert not rig.localtime_path.exists()
+    assert not any(rig.iwd_dir.iterdir())
