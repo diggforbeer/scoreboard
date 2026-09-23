@@ -56,6 +56,21 @@ def test_a_sensor_that_recovers_is_read_again_not_latched_off():
     assert sensor.read_lux() == 400 / 1.2
 
 
+def test_short_read_reads_as_none_not_raised():
+    # One byte instead of two: flaky wiring, not a bus error (#63).
+    bus = FakeBus(response=[0x01])
+    sensor = LightSensor(bus)
+    assert sensor.read_lux() is None
+
+
+def test_a_sensor_that_recovers_from_a_short_read_is_read_again():
+    bus = FakeBus(response=[0x01])
+    sensor = LightSensor(bus)
+    assert sensor.read_lux() is None
+    bus.response = [0x01, 0x90]
+    assert sensor.read_lux() == 400 / 1.2
+
+
 def test_custom_address_is_used():
     bus = FakeBus()
     sensor = LightSensor(bus, address=0x5C)
