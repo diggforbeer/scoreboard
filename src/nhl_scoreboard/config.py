@@ -15,10 +15,34 @@ from dataclasses import dataclass, field, fields
 from datetime import datetime, time
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import tomlkit
 
 log = logging.getLogger(__name__)
+
+#: Nashville's zone, used whenever a configured timezone can't be resolved
+#: and there is no previous value worth keeping instead (boot, --dump).
+DEFAULT_TIMEZONE = "America/Chicago"
+
+
+def resolve_timezone(name: str, fallback: ZoneInfo | None = None) -> ZoneInfo:
+    """``ZoneInfo`` for ``name``, degrading instead of raising on a bad value.
+
+    A typo in ``scoreboard.toml``'s ``timezone`` (e.g. "America/Chicagoo")
+    must not crash the board -- see CLAUDE.md's config-conventions section
+    and #80. On an unknown zone, this logs a warning and returns
+    ``fallback`` if one was given (the currently running zone, so a bad
+    live-reload keeps the board on whatever already worked) or else
+    ``DEFAULT_TIMEZONE`` (boot and ``--dump`` have no previous value to
+    keep).
+    """
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        result = fallback if fallback is not None else ZoneInfo(DEFAULT_TIMEZONE)
+        log.warning("Unknown timezone %r; using %s", name, result.key)
+        return result
 
 
 class ConfigWriteError(Exception):
@@ -113,7 +137,7 @@ class ScoreboardConfig:
     #: Pinned to the front of the rotation and eligible for the special-teams
     #: indicator. Nashville unless the boot-partition config says otherwise.
     favourite_team: str = "NSH"
-    timezone: str = "America/Chicago"
+    timezone: str = DEFAULT_TIMEZONE
     rotate_seconds: float = 8.0
     poll_seconds: float = 60.0
     live_poll_seconds: float = 15.0

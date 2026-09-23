@@ -451,6 +451,36 @@ def test_reload_updates_timezone_on_renderer_too(fake_backend, games, tmp_path):
     assert str(app.renderer.tz) == "America/New_York"
 
 
+def test_boot_with_unknown_timezone_falls_back_instead_of_crashing(fake_backend, games, tmp_path):
+    """A typo must not stop the board booting (#80) -- same rule as unknown keys."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\ntimezone = "America/Chicagoo"\n')
+
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+
+    assert str(app.tz) == "America/Chicago"
+    app.draw()  # does not raise
+    assert app.matrix.swaps == 1
+
+
+def test_reload_with_unknown_timezone_keeps_the_previous_one(fake_backend, games, tmp_path):
+    """A bad live-edit keeps the board on whatever timezone already worked, not the default."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\ntimezone = "America/New_York"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert str(app.tz) == "America/New_York"
+
+    path.write_text('[scoreboard]\ntimezone = "America/New_Yorkk"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert str(app.tz) == "America/New_York"
+    assert str(app.renderer.tz) == "America/New_York"
+    # The rest of the reload still applies -- a bad timezone doesn't roll back
+    # unrelated settings from the same edit.
+    assert app.settings.scoreboard.timezone == "America/New_Yorkk"
+
+
 def test_reload_does_not_touch_the_already_built_matrix(fake_backend, games, tmp_path):
     """[panel] geometry is baked into RGBMatrix at construction; reload must not rebuild it."""
     path = tmp_path / "scoreboard.toml"

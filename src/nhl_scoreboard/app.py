@@ -11,11 +11,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from types import FrameType
-from zoneinfo import ZoneInfo
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
-from .config import Settings
+from .config import Settings, resolve_timezone
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
@@ -84,7 +83,7 @@ class ScoreboardApp:
             self.light_sensor = None
         self._smoothed_lux: float | None = None
         self._applied_brightness = settings.panel.brightness
-        self.tz = ZoneInfo(settings.scoreboard.timezone)
+        self.tz = resolve_timezone(settings.scoreboard.timezone)
         self._config_mtime = self._source_mtime()
         self.client = client or NHLClient()
         self.backend = backend or load_backend()
@@ -289,7 +288,7 @@ class ScoreboardApp:
         self.settings = new_settings
 
         if timezone_changed:
-            self.tz = ZoneInfo(new_settings.scoreboard.timezone)
+            self.tz = resolve_timezone(new_settings.scoreboard.timezone, fallback=self.tz)
             self.renderer.tz = self.tz
 
         if audio_changed:

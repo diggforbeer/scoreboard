@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from zoneinfo import ZoneInfo
 
-from .config import Settings
+from .config import Settings, resolve_timezone
 from .nhl.api import NHLApiError, NHLClient
 
 
@@ -50,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dump(settings: Settings) -> int:
-    tz = ZoneInfo(settings.scoreboard.timezone)
+    tz = resolve_timezone(settings.scoreboard.timezone)
     try:
         with NHLClient() as client:
             games = client.scores()
