@@ -85,6 +85,7 @@ class FakeClient:
         self.situations: dict[int, Situation | None] = {}
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
+        self.schedule_calls = 0
 
     def scores(self, date: str = "now") -> list[Game]:
         self.calls += 1
@@ -99,6 +100,7 @@ class FakeClient:
         return self.situations.get(game_id)
 
     def schedule(self, team: str) -> list[Game]:
+        self.schedule_calls += 1
         if self.fail:
             raise NHLApiError("boom")
         return [g for g in self._games if g.involves(team)]
@@ -325,6 +327,39 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     snapshot = app.status_snapshot()
     assert "score refresh" in snapshot["last error"]
     assert snapshot["last error at"] != ""
+
+
+def test_status_snapshot_never_fetches_or_mutates_shared_state(fake_backend, games):
+    """#61: the status page's select_scene() must not race the main loop's.
+
+    EDM has no game today in the fixture, so a fetch-allowed select_scene()
+    would hit both the schedule and standings endpoints to find the next
+    game / conference window. status_snapshot() must not: it is called from
+    the status server's own request thread and must answer from whatever is
+    already cached, never trigger a network call or mutate _schedule/
+    _standings/last_error concurrently with the main loop.
+    """
+    app = build_app(fake_backend, games, favourite_team="EDM")
+    app.refresh()
+    assert app.favourite_game_today() is None, "fixture should have no EDM game today"
+
+    snapshot = app.status_snapshot()
+    assert snapshot["scene"]
+    assert app.client.schedule_calls == 0
+    assert app.client.standings_calls == 0
+    assert app._schedule is None
+    assert app._standings is None
+    assert app.last_error is None
+
+    # The main loop's own path is untouched: it still fetches and caches.
+    app.select_scene()
+    assert app.client.schedule_calls == 1
+    assert app.client.standings_calls == 1
+
+    # A second status_snapshot() reads the now-cached values without refetching.
+    app.status_snapshot()
+    assert app.client.schedule_calls == 1
+    assert app.client.standings_calls == 1
 
 
 # -- config reload (#51) ---------------------------------------------------
