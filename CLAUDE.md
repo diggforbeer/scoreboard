@@ -54,7 +54,7 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
 
 ```bash
 source .venv/bin/activate            # python3 -m venv .venv && pip install -e '.[dev]' first time
-pytest                               # 93 tests, ~1s, fully offline
+pytest                               # 199 tests, ~1s, fully offline
 pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
 ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (RUF100)
@@ -105,6 +105,19 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   no favourite-team marker on the game scene at all -- #5 tried amber score
   digits, #33 removed them outright; don't reintroduce one without a new
   decision to do so.
+- The game/goal/preview scenes are computed from `self.width`, not
+  hardcoded to 128 -- but at the default 128px (two chained 64x32 panels),
+  two full 32px logos leave the 64px column between them untouched, while
+  on a single 64x32 panel (`chain_length = 1`) they'd meet with zero room
+  left for the score column (#38). `Renderer._logo_span` handles this by
+  cropping each logo's centre-facing edge -- never its outer, panel-flush
+  edge -- down to half its width and no further, rather than shrinking the
+  artwork to a smaller square; `Renderer._LOGO_MIN_MIDDLE` is the reserved
+  middle-column width that decision is tuned against (32px, so two-digit
+  scores still clear each other at 64px). Alternatives considered and
+  rejected in #38: shrinking to smaller logos (loses recognisable detail
+  faster than cropping does) and alternating a single full-size team per
+  frame (changes the scene's information density, not just its size).
 - Fonts are vendored BDF (`fonts/`): `7x13B` scores/abbrevs, `6x10` preview
   day, `5x7` status, `4x6` power-play indicator. Glyphs can have a blank
   edge column, so alignment assertions allow 1px.
@@ -182,13 +195,51 @@ confirmed from only one real, end-of-season response and not documented
 anywhere; don't act on them without verifying against a few more live
 examples first.
 
+Shots on goal (#70) render in the same indicator band as the PP/EN
+indicator, as a fallback when neither is active -- `_draw_situation`
+(`renderer.py`) tries PP/EN first, then always falls through to
+`TeamSide.sog`. Deliberately **not** a separate fetch: `TeamSide.sog`
+already comes from `score/now` (verified with a real live call before
+building anything -- an earlier draft of this fetched it from
+`gamecenter/{id}/landing` instead, alongside situation, before that
+check turned up that the score feed already had it for free), so SOG
+has none of situation's scoping/caching (`situation_targets`,
+`live_poll_seconds`) -- it's available for every game the app already
+knows about, live or final, in either rotation mode. `TeamSide.sog`
+defaults to `0`, never `None`, so the indicator band's old "nothing to
+show, draw a plain rule" case no longer exists -- `_draw_situation`
+always draws something now, and the plain-rule fallback was removed
+from both `_draw_game_with_logos` and `_draw_game_text`.
+
+Night mode (#92, `[night_mode]`) dims to `dim_brightness` inside a
+`start_time`-`end_time` window (local to `scoreboard.timezone`, may wrap
+midnight) unless a relevant game is live or ended less than
+`cooldown_minutes` ago (`self.ended_at`, same as `final_hold_minutes`).
+While it's actively dimming it **wins over the ambient sensor**
+(`refresh_brightness()` checks it first), deliberately: a lux sensor in a
+dark TV room would dim a live game, and a lit room would keep a scheduled
+window bright forever -- that's the whole argument of #92. Outside the
+window the sensor behaves exactly as before; with no sensor,
+`panel.brightness` is re-applied each poll, which is what restores the
+panel once the window ends. `suppress_scope` is `tracked` (favourite's
+game only) or `all` (any live game) -- same favourite-vs-all scoping
+precedent as the power-play indicator, goal detection and standings.
+`tracked` with no `favourite_team` silently behaves as `all`; that's a
+valid combination (`rotation = "all"` with night mode on), not a
+misconfiguration, so no warning. `dim_brightness = 0` is zero-power
+blanking: `draw()` clears and swaps the canvas and skips scene selection
+and rendering entirely, rather than trusting brightness 0 alone to be dark
+on every backend. Transitions are instant; eased steps were considered and
+cut, and a dim-by-default "passive mode" is #94, not this.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
-- `score/now` has no special-teams data. `gamecenter/{id}/landing` has a
-  `situation` object **only while something is on** (PP / EN / PS);
-  absent at even strength. 4-on-4 arrives as a situation but is not an
-  advantage.
+- `score/now`'s per-team objects include `sog` (shots on goal) directly --
+  no extra fetch needed for that (#70). It has no *special-teams* data
+  though: `gamecenter/{id}/landing` has a `situation` object **only
+  while something is on** (PP / EN / PS); absent at even strength.
+  4-on-4 arrives as a situation but is not an advantage.
 - `club-schedule-season/{TEAM}/now` is ~180KB for the season; cached 1h.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
