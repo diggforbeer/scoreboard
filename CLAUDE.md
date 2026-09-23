@@ -198,6 +198,27 @@ show, draw a plain rule" case no longer exists -- `_draw_situation`
 always draws something now, and the plain-rule fallback was removed
 from both `_draw_game_with_logos` and `_draw_game_text`.
 
+Night mode (#92, `[night_mode]`) dims to `dim_brightness` inside a
+`start_time`-`end_time` window (local to `scoreboard.timezone`, may wrap
+midnight) unless a relevant game is live or ended less than
+`cooldown_minutes` ago (`self.ended_at`, same as `final_hold_minutes`).
+While it's actively dimming it **wins over the ambient sensor**
+(`refresh_brightness()` checks it first), deliberately: a lux sensor in a
+dark TV room would dim a live game, and a lit room would keep a scheduled
+window bright forever -- that's the whole argument of #92. Outside the
+window the sensor behaves exactly as before; with no sensor,
+`panel.brightness` is re-applied each poll, which is what restores the
+panel once the window ends. `suppress_scope` is `tracked` (favourite's
+game only) or `all` (any live game) -- same favourite-vs-all scoping
+precedent as the power-play indicator, goal detection and standings.
+`tracked` with no `favourite_team` silently behaves as `all`; that's a
+valid combination (`rotation = "all"` with night mode on), not a
+misconfiguration, so no warning. `dim_brightness = 0` is zero-power
+blanking: `draw()` clears and swaps the canvas and skips scene selection
+and rendering entirely, rather than trusting brightness 0 alone to be dark
+on every backend. Transitions are instant; eased steps were considered and
+cut, and a dim-by-default "passive mode" is #94, not this.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.

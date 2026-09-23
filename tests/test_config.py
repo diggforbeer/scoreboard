@@ -155,3 +155,76 @@ def test_physical_size_follows_pitch():
 
     settings.panel.pitch_mm = 2.0
     assert settings.panel.physical_mm == (256.0, 64.0)
+
+
+def test_night_mode_defaults_off_without_a_section(tmp_path):
+    from datetime import time
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    night = Settings.load(path).night_mode
+    assert night.enabled is False
+    assert (night.start, night.end) == (time(22, 30), time(7, 0))
+    assert night.dim_brightness == 0
+    assert night.suppress_scope == "tracked"
+    assert night.cooldown_minutes == 15.0
+
+
+def test_night_mode_parses_valid_times(tmp_path):
+    from datetime import time
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[night_mode]\nenabled = true\nstart_time = "23:15"\nend_time = "06:45"\n')
+    night = Settings.load(path).night_mode
+    assert night.enabled is True
+    assert (night.start, night.end) == (time(23, 15), time(6, 45))
+
+
+@pytest.mark.parametrize("bad", ["25:99", "not-a-time", ""])
+def test_night_mode_malformed_times_fall_back_with_a_warning(bad, caplog):
+    from datetime import time
+
+    from nhl_scoreboard.config import NightModeConfig
+
+    night = NightModeConfig(start_time=bad, end_time=bad)
+    assert (night.start_time, night.end_time) == ("22:30", "07:00")
+    assert (night.start, night.end) == (time(22, 30), time(7, 0))
+    assert "start_time" in caplog.text
+    assert "end_time" in caplog.text
+
+
+@pytest.mark.parametrize(("given", "expected"), [(-10, 0), (0, 0), (40, 40), (250, 100)])
+def test_night_mode_dim_brightness_clamped_to_0_100(given, expected):
+    from nhl_scoreboard.config import NightModeConfig
+
+    assert NightModeConfig(dim_brightness=given).dim_brightness == expected
+
+
+def test_night_mode_bad_suppress_scope_falls_back_to_tracked(caplog):
+    from nhl_scoreboard.config import NightModeConfig
+
+    assert NightModeConfig(suppress_scope="everyone").suppress_scope == "tracked"
+    assert "suppress_scope" in caplog.text
+
+
+@pytest.mark.parametrize(("given", "expected"), [("tracked", "tracked"), (" ALL ", "all")])
+def test_night_mode_valid_suppress_scope_passes_through(given, expected, caplog):
+    from nhl_scoreboard.config import NightModeConfig
+
+    assert NightModeConfig(suppress_scope=given).suppress_scope == expected
+    assert "suppress_scope" not in caplog.text
+
+
+def test_night_mode_cooldown_clamped_to_zero():
+    from nhl_scoreboard.config import NightModeConfig
+
+    assert NightModeConfig(cooldown_minutes=-5).cooldown_minutes == 0
+    assert NightModeConfig(cooldown_minutes=0).cooldown_minutes == 0
+
+
+def test_night_mode_derived_times_are_not_settable_from_toml(tmp_path, caplog):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[night_mode]\nstart = "01:00"\n')
+    night = Settings.load(path).night_mode  # must not raise
+    assert night.start_time == "22:30"
+    assert "start" in caplog.text
