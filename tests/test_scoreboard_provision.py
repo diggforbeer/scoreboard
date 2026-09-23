@@ -244,6 +244,38 @@ def test_no_ssid_leaves_iwd_untouched(rig):
 
 
 # --------------------------------------------------------------------------
+# regulatory domain (#67)
+# --------------------------------------------------------------------------
+
+
+def test_country_without_ssid_still_sets_regulatory_domain(rig):
+    """Ethernet-only board: regdom used to be skipped along with the Wi-Fi setup."""
+    result = rig.run('[wifi]\nssid = ""\ncountry = "us"\n')
+    assert result.returncode == 0, result.stderr
+    assert "reg set US" in result.calls
+    # Still nothing Wi-Fi-related beyond regdom.
+    assert "systemctl" not in result.calls
+    assert "iwctl" not in result.calls
+
+
+def test_country_with_ssid_sets_regulatory_domain(rig):
+    result = rig.run(
+        WIFI_TOML.format(ssid="NewNet", password="newpass") + 'country = "CA"\n',
+        env_extra={"FAKE_IWCTL_STATE": "connected", "FAKE_IWCTL_SSID": "NewNet"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "reg set CA" in result.calls
+    assert (rig.iwd_dir / "NewNet.psk").is_file()
+
+
+@pytest.mark.parametrize("country", ["", "USA", "1A", "12", "U"])
+def test_invalid_country_does_not_set_regulatory_domain(rig, country):
+    result = rig.run(f'[wifi]\nssid = ""\ncountry = "{country}"\n')
+    assert result.returncode == 0, result.stderr
+    assert "reg set" not in result.calls
+
+
+# --------------------------------------------------------------------------
 # hex-encoded iwd profile names (SAFE_SSID rejects apostrophes, non-ASCII,
 # and a leading dot -- iwd.network(5)'s "=" + hex + ".psk" branch)
 # --------------------------------------------------------------------------

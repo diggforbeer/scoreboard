@@ -112,11 +112,14 @@ def apply_wifi(wifi: dict, config_path: Path) -> None:
     password = str(wifi.get("password") or "")
     country = str(wifi.get("country") or "").strip().upper()
 
+    # Before the SSID check, not after: the image promises regdom is applied
+    # from scoreboard.toml every boot, and an ethernet-only board with a
+    # country set is still owed that (#67).
+    apply_regulatory_domain(country)
+
     if not ssid:
         log.info("No Wi-Fi SSID configured; relying on ethernet")
         return
-
-    apply_regulatory_domain(country)
 
     profile = IWD_DIR / iwd_profile_name(ssid)
     contents = "[Security]\nPassphrase={}\n".format(password)
@@ -177,14 +180,12 @@ def iwd_profile_name(ssid: str) -> str:
 
 
 def apply_regulatory_domain(country: str) -> None:
+    # `iw reg set` talks straight to the kernel's cfg80211, which carries its
+    # own regulatory database; no userspace agent or config file is involved.
+    # This used to also write /etc/default/crda, but crda isn't installed in
+    # this image (Debian dropped the package), so nothing ever read it (#67).
     if len(country) != 2 or not country.isalpha():
         return
-    conf = Path("/etc/default/crda")
-    try:
-        Path("/etc/iwd").mkdir(parents=True, exist_ok=True)
-        conf.write_text(f"REGDOMAIN={country}\n")
-    except OSError:
-        pass
     run(["iw", "reg", "set", country])
 
 
