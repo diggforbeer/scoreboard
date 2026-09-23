@@ -116,7 +116,9 @@ class ScoreboardApp:
             self.status_server = status_server
         elif settings.status.enabled:
             self.status_server = StatusServer(
-                snapshot=self.status_snapshot, port=settings.status.port
+                snapshot=self.status_snapshot,
+                port=settings.status.port,
+                settings=lambda: self.settings,
             )
         else:
             self.status_server = None
@@ -341,7 +343,9 @@ class ScoreboardApp:
                 self.status_server.stop()
             if new_settings.status.enabled:
                 self.status_server = StatusServer(
-                    snapshot=self.status_snapshot, port=new_settings.status.port
+                    snapshot=self.status_snapshot,
+                    port=new_settings.status.port,
+                    settings=lambda: self.settings,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,

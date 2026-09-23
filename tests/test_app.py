@@ -6,9 +6,12 @@ scheduling and selection logic against a stand-in that records draw calls.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import signal
+import threading
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -20,6 +23,7 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
 from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
+from nhl_scoreboard.status_server import _FIELDS_BY_SECTION
 
 
 class FakeCanvas:
@@ -1041,3 +1045,118 @@ def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, t
             assert "NHL Scoreboard status" in resp.read().decode("utf-8")
     finally:
         app.status_server.stop()
+
+
+# -- status page config editor (#110) --------------------------------------
+
+
+def _form_for(settings: Settings, section: str, **overrides: object) -> dict[str, str]:
+    """A full form submission for ``section``, same helper as test_status_server.py."""
+    data: dict[str, str] = {"section": section}
+    for field in _FIELDS_BY_SECTION[section]:
+        value = (
+            overrides[field.key]
+            if field.key in overrides
+            else getattr(getattr(settings, section), field.key)
+        )
+        if field.kind == "bool":
+            if value:
+                data[field.key] = "true"
+        else:
+            data[field.key] = str(value)
+    return data
+
+
+def _post(port: int, data: dict[str, str]) -> int:
+    body = urllib.parse.urlencode(data)
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        conn.request(
+            "POST",
+            "/save",
+            body=body,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": f"http://127.0.0.1:{port}",
+            },
+        )
+        resp = conn.getresponse()
+        resp.read()
+        return resp.status
+    finally:
+        conn.close()
+
+
+def test_status_page_post_writes_file_and_reload_picks_it_up(fake_backend, games, tmp_path):
+    """do_POST (#110) only ever writes the file; reload_config_if_changed() (#51) -- polled
+    every main-loop tick -- is what actually applies the change to the running app."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is not None
+    app.status_server.start()
+    try:
+        status = _post(
+            app.status_server.port, _form_for(app.settings, "scoreboard", favourite_team="tor")
+        )
+        assert status == 303
+    finally:
+        app.status_server.stop()
+
+    # Not applied yet -- the request thread never touches the live Settings.
+    assert app.settings.scoreboard.favourite_team == "NSH"
+    _touch_later(path, app)
+    assert app.reload_config_if_changed() is True
+    assert app.settings.scoreboard.favourite_team == "TOR"
+
+
+def test_status_page_post_disabling_status_does_not_crash_in_flight_request(
+    fake_backend, games, tmp_path
+):
+    """The status page can disable itself (#110 SS4); the in-flight response must still
+    complete normally -- the teardown only happens on the next reload tick."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = true\nport = 0\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is not None
+    app.status_server.start()
+    try:
+        status = _post(app.status_server.port, _form_for(app.settings, "status", enabled=False))
+        assert status == 303
+    finally:
+        app.status_server.stop()
+
+    _touch_later(path, app)
+    assert app.reload_config_if_changed() is True
+    assert app.status_server is None
+
+
+def test_status_page_post_concurrent_with_reload_does_not_raise(fake_backend, games, tmp_path):
+    """A POST from the request thread and reload_config_if_changed() on the main thread
+    running at the same time must not raise or deadlock (#110 SS1)."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app.status_server.start()
+    errors: list[Exception] = []
+
+    def hammer_reload() -> None:
+        for _ in range(20):
+            try:
+                app.reload_config_if_changed()
+            except Exception as exc:
+                errors.append(exc)
+
+    try:
+        thread = threading.Thread(target=hammer_reload)
+        thread.start()
+        for i in range(20):
+            team = "tor" if i % 2 else "nsh"
+            _post(
+                app.status_server.port, _form_for(app.settings, "scoreboard", favourite_team=team)
+            )
+        thread.join(timeout=5)
+    finally:
+        app.status_server.stop()
+
+    assert errors == []
