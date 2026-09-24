@@ -259,6 +259,20 @@ cut, and a dim-by-default "passive mode" is #94, not this.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
+- `clock.inIntermission` lags the period actually ending -- confirmed
+  against a real live game (NSH @ CAR, 2026-09-24) sitting at
+  `timeRemaining: "00:00"`, `running: false`, `inIntermission: false` for
+  well over one `live_poll_seconds` cycle, on both `score/now` and
+  `gamecenter/{id}/landing`, not just a one-frame flicker. `Game.
+  in_intermission` (`nhl/models.py`) now infers intermission itself from
+  `timeRemaining == "00:00" and not running` whenever the flag hasn't
+  caught up, gated on the game actually being live (`LIVE`/`CRIT`) --
+  a `FINAL`/`OFF` game's clock sits at `00:00`/not-running too, and is
+  not an intermission, so the state check matters, not just the clock
+  values. This one field feeds the status label text, the status colour
+  (`_status_color`, checks `in_intermission` *before* `is_final`), the
+  situation-poll skip, and `poll_interval()`'s slowdown -- fixed once at
+  the parse site rather than patched separately at each read site.
 
 ## Hardware facts (verified, don't relearn)
 
