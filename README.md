@@ -145,6 +145,24 @@ max_brightness = 100
 brightness_poll_seconds = 5
 ```
 
+## SSH access
+
+The board is headless — no monitor, no keyboard — so SSH is the way in for
+anything the boot-partition TOML or the [status page](#status-page) can't
+cover.
+
+| | |
+|---|---|
+| Username | `scoreboard` |
+| Password | `Scoreboard1!` |
+| Host | the board's IP on your network (check your router's DHCP client list — there's no `.local`/mDNS name set up) |
+
+**Change the password** (`passwd`) before putting the board on any network
+you don't fully trust — this default is baked into every flashed image and
+is public in this repository's source (`image/config/scoreboard.yaml`), the
+same way a router's printed default password is. The account can `sudo`
+(password-protected, not passwordless) for anything that needs it.
+
 ## What it shows
 
 In the default `rotation = "favourite"`, the board follows your team's day:
