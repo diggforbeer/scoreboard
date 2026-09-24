@@ -59,6 +59,7 @@ Early development. Working today:
 - [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
 - [x] Optional read-only web status page for headless debugging
+- [x] `--demo` mode that loops every scene with synthetic data, no network needed
 - [ ] Verified on real hardware
 
 ## Development
@@ -80,6 +81,10 @@ nhl-scoreboard --dump
 # Run the board in the emulator, then open http://localhost:8888
 cp image/files/boot/scoreboard.toml scoreboard.local.toml   # edit favourite_team etc.
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
+
+# Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
+# ~4s each, until Ctrl-C -- also works on the real panel with no network
+nhl-scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team NSH
