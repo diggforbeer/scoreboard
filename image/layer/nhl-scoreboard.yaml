@@ -196,7 +196,13 @@ mmdebstrap:
       fi
 
     # ---- enable units ------------------------------------------------
-    - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
+    # nhl-scoreboard-grow-rootfs: DISABLED (#120) -- a real first-boot on a
+    # Pi 4 never came up (no DHCP lease on wifi *or* ethernet, LED matrix
+    # never showed anything, root partition never grew), on hardware that
+    # previously booted fine before this unit was added. Root cause not
+    # yet isolated; the script/service/tests stay in the tree, just not
+    # wired to run, until #120 is resolved. Re-add this line once it is.
+    # - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
     - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
     - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard
 
