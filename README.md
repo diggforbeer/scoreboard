@@ -16,14 +16,14 @@
 | src/nhl\_scoreboard/display/fonts.py        |       29 |        2 |        6 |        1 |     91% |     33-34 |
 | src/nhl\_scoreboard/display/logos.py        |       86 |        9 |       22 |        1 |     89% |41, 91-95, 99-101 |
 | src/nhl\_scoreboard/display/matrix.py       |       43 |        0 |        4 |        0 |    100% |           |
-| src/nhl\_scoreboard/display/renderer.py     |      209 |        0 |       38 |        0 |    100% |           |
-| src/nhl\_scoreboard/display/teams.py        |        5 |        0 |        0 |        0 |    100% |           |
+| src/nhl\_scoreboard/display/renderer.py     |      215 |        0 |       38 |        0 |    100% |           |
+| src/nhl\_scoreboard/display/teams.py        |        8 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/light\_sensor.py        |       38 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/nhl/\_\_init\_\_.py     |        3 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
 | src/nhl\_scoreboard/nhl/models.py           |      195 |        0 |       42 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                   | **1615** |   **34** |  **390** |   **16** | **97%** |           |
+| **TOTAL**                                   | **1624** |   **34** |  **390** |   **16** | **97%** |           |
 
 
 ## Setup coverage badge
