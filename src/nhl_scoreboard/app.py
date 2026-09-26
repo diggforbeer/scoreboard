@@ -774,7 +774,7 @@ class ScoreboardApp:
         elif scene.kind == "connecting":
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "clock":
-            r.draw_clock(self.canvas, self.clock())
+            r.draw_clock(self.canvas, self.clock(), self.settings.scoreboard.favourite_team)
         else:
             r.draw_message(self.canvas, "NO GAMES")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
