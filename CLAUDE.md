@@ -247,6 +247,20 @@ and rendering entirely, rather than trusting brightness 0 alone to be dark
 on every backend. Transitions are instant; eased steps were considered and
 cut, and a dim-by-default "passive mode" is #94, not this.
 
+Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
+data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
+like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`
+deliberately bypasses the real state machine -- no `select_scene()`,
+`refresh()`, situation/brightness sampling, config reload or NHL client
+call -- and hands synthetic `Scene`s straight to `draw_scene()` (the
+dispatch half of `draw()`, split out for this). Coercing real game data
+into every state on demand isn't possible, and a bench board may have no
+network. It never plays the goal horn: only `refresh()`'s
+`_detect_goals()` reaches `_on_goal()`, and `draw_scene()`'s goal branch
+only draws. Both layouts are shown by toggling `renderer.logos` per step
+between the configured library and `None` (text fallback), restored on
+exit; with `show_logos = false` every step is just text.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
