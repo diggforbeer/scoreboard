@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game, StandingsRow
+from ..nhl.models import Game, GoalEvent, StandingsRow
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color
@@ -283,6 +283,60 @@ class Renderer:
         self.text_center(canvas, self.fonts.large, self.width // 2, goal_baseline, ACCENT, "GOAL")
         matchup = f"{game.away.abbrev} {game.away.score}-{game.home.score} {game.home.abbrev}"
         self.text_center(canvas, self.fonts.small, self.width // 2, score_baseline, WHITE, matchup)
+
+    def draw_goal_detail(self, canvas: Any, game: Game, event: GoalEvent) -> None:
+        """Who scored: name, season goal total, assist(s) -- #122 phase 2.
+
+        Only ever fires for the favourite's own goal (the app never calls
+        this otherwise, see ScoreboardApp.refresh_goal_details), so
+        ``event.team_abbrev`` is always one of ``game``'s two sides. Reuses
+        draw_goal's own two-logo layout and its narrow-panel crop
+        (_logo_span, #38) rather than a new single-logo layout with no such
+        guarantee: the reserved middle column (_LOGO_MIN_MIDDLE, 32px even
+        on the narrowest supported panel) keeps every line here off the
+        panel edge. Unlike "GOAL" or a score, a scorer/assister's name has
+        no fixed max length, so on the narrowest panel a long one can still
+        visually run into the cropped logo art beside it -- accepted rather
+        than truncating names (#122 explicitly wants no truncation logic).
+        """
+        canvas.Clear()
+        if self.logos is not None:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                left, right = self._draw_logos(canvas, away, home)
+                self._draw_goal_detail_content(canvas, event, left, right)
+                return
+        self._draw_goal_detail_content(canvas, event, 0, self.width)
+
+    def _draw_goal_detail_content(
+        self, canvas: Any, event: GoalEvent, left: int, right: int
+    ) -> None:
+        cx = (left + right) // 2
+        name_baseline = 9
+        self.text_center(canvas, self.fonts.small, cx, name_baseline, ACCENT, event.scorer_name)
+        if event.strength != "ev":
+            self.text_right(
+                canvas, self.fonts.tiny, right, name_baseline, ACCENT, event.strength.upper()
+            )
+        self.text_center(
+            canvas,
+            self.fonts.tiny,
+            cx,
+            17,
+            WHITE,
+            f"GOAL #{event.scorer_goals_to_date}",
+        )
+        lines = self._assist_lines(event)
+        baselines = (25,) if len(lines) == 1 else (23, 30)
+        for baseline, line in zip(baselines, lines, strict=True):
+            self.text_center(canvas, self.fonts.tiny, cx, baseline, SUBDUED, line)
+
+    @staticmethod
+    def _assist_lines(event: GoalEvent) -> tuple[str, ...]:
+        if not event.assists:
+            return ("UNASSISTED",)
+        return tuple(f"{a.name} {a.assists_to_date}" for a in event.assists)
 
     def draw_preview(self, canvas: Any, game: Game, now: datetime) -> None:
         """The favourite's next game: who, which day, what time."""

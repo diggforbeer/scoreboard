@@ -102,6 +102,72 @@ class Situation:
 
 
 @dataclass(frozen=True, slots=True)
+class AssistDetail:
+    """One assister on a ``GoalEvent`` -- 0, 1 or 2 of these per goal."""
+
+    name: str
+    assists_to_date: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> AssistDetail:
+        return cls(
+            name=_default_str(raw.get("name")),
+            assists_to_date=int(raw.get("assistsToDate") or 0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalEvent:
+    """One entry from ``gamecenter/{id}/landing``'s ``summary.scoring`` (#122).
+
+    Confirmed free in that payload against two real live games: scorer name
+    (already compact "F. Lastname"), the scorer's season goal total
+    (``goalsToDate``, confirmed genuinely cumulative-season, not per-game),
+    each assister's name/season assist total, and ``strength``
+    ("ev"/"pp"/"sh"). NOT confirmed free, and deliberately not modelled here:
+    jersey number (the scorer's own entry has none, unlike an assist's
+    ``sweaterNumber``), total points for either player, and explicit
+    primary/secondary assist labelling -- see #124, split out because
+    closing those gaps needs a second API call this issue doesn't.
+    """
+
+    team_abbrev: str
+    scorer_name: str
+    scorer_goals_to_date: int
+    assists: tuple[AssistDetail, ...]
+    strength: str
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> GoalEvent:
+        return cls(
+            team_abbrev=_default_str(raw.get("teamAbbrev")).upper(),
+            scorer_name=_default_str(raw.get("name")),
+            scorer_goals_to_date=int(raw.get("goalsToDate") or 0),
+            assists=tuple(AssistDetail.from_api(a) for a in (raw.get("assists") or [])),
+            strength=str(raw.get("strength") or "ev").lower(),
+        )
+
+
+def goal_events_from_landing(raw: dict[str, Any] | None) -> tuple[GoalEvent, ...]:
+    """Every goal in ``summary.scoring``, across all periods, in scoring order.
+
+    One malformed entry is skipped rather than losing the rest -- same
+    precedent as ``_parse_items`` in ``nhl/api.py`` for scores/standings.
+    """
+    if not raw:
+        return ()
+    periods = (raw.get("summary") or {}).get("scoring") or []
+    events = []
+    for period in periods:
+        for goal in period.get("goals") or []:
+            try:
+                events.append(GoalEvent.from_api(goal))
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+    return tuple(events)
+
+
+@dataclass(frozen=True, slots=True)
 class Game:
     id: int
     state: str
