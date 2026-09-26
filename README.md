@@ -9,7 +9,7 @@
 | src/nhl\_scoreboard/app.py                  |      464 |        9 |      194 |        9 |     97% |95-\>99, 150-151, 259-260, 325, 478, 492, 509-\>506, 553, 651-\>653, 708-\>exit, 715 |
 | src/nhl\_scoreboard/audio.py                |       55 |        1 |       16 |        0 |     99% |        92 |
 | src/nhl\_scoreboard/brightness.py           |        9 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/config.py               |      189 |        2 |       26 |        0 |     99% |   355-356 |
+| src/nhl\_scoreboard/config.py               |      190 |        2 |       26 |        0 |     99% |   365-366 |
 | src/nhl\_scoreboard/display/\_\_init\_\_.py |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/ascii.py        |       54 |        6 |        6 |        3 |     85% |24, 28, 55-56, 60, 84 |
 | src/nhl\_scoreboard/display/fonts.py        |       29 |        2 |        6 |        1 |     91% |     33-34 |
@@ -22,7 +22,7 @@
 | src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
 | src/nhl\_scoreboard/nhl/models.py           |      195 |        0 |       42 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                   | **1547** |   **38** |  **376** |   **16** | **97%** |           |
+| **TOTAL**                                   | **1548** |   **38** |  **376** |   **16** | **97%** |           |
 
 
 ## Setup coverage badge
