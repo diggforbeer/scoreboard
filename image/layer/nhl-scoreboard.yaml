@@ -48,6 +48,16 @@ mmdebstrap:
     # apt like python3-requests/python3-pil do, not pyproject.toml's deps.
     - python3-tomlkit
     - iw
+    # WiFi AP + captive-portal DHCP/DNS for first-boot setup mode (#131),
+    # when neither ethernet nor a configured Wi-Fi profile leaves the board
+    # online. A genuinely new dependency, flagged explicitly rather than
+    # snuck in quietly -- the project has otherwise stuck to stdlib/
+    # essential packages. The AP side itself is iwd's own AccessPoint
+    # support (no hostapd needed); dnsmasq only supplies DHCP leases and
+    # wildcard DNS on the AP interface. Its own dnsmasq.service is masked
+    # below -- only our own instance, scoped to wlan0 and started from
+    # nhl-scoreboard-setup-ap.service, ever runs.
+    - dnsmasq
     - ca-certificates
     - alsa-utils
     # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
@@ -163,6 +173,23 @@ mmdebstrap:
       install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard-grow-rootfs.service" \
         "$1/etc/systemd/system/"
 
+    # ---- WiFi AP + captive-portal setup mode (#131) --------------------
+    # Masking dnsmasq's own unit stops the package's default, unscoped
+    # instance from starting on every boot (it would otherwise listen on
+    # every interface) -- nhl-scoreboard-setup-ap.service runs the binary
+    # itself, directly, bound to only the AP interface. Done as the plain
+    # symlink-to-/dev/null that `systemctl mask` itself creates, same as
+    # $BDEBSTRAP_HOOKS/enable-units does for our own units below, rather
+    # than invoking systemctl inside the chroot -- there is no running
+    # init here for it to talk to.
+    - |-
+      set -eu
+      install -m 0755 "$IGconf_sb_assetdir/scripts/nhl-scoreboard-setup-ap" \
+        "$1/usr/local/sbin/nhl-scoreboard-setup-ap"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard-setup-ap.service" \
+        "$1/etc/systemd/system/"
+      ln -sf /dev/null "$1/etc/systemd/system/dnsmasq.service"
+
     # ---- boot partition settings file --------------------------------
     - |-
       set -eu
@@ -230,6 +257,7 @@ mmdebstrap:
     # rest of the image is trusted -- see #129.
     - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
     - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
+    - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-setup-ap
     - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard
 
     # ---- trim the build toolchain -------------------------------------

@@ -446,6 +446,68 @@ exit; with `show_logos = false` every step is just text.
   branch trigger) -- a human pushing a real release tag by hand should
   get a build regardless of what changed.
 
+## WiFi AP + captive-portal setup mode (#131)
+
+Infrastructure phase only, sub-issue of #116 -- gets a phone able to reach
+the board at all when it has no working network yet. No setup page (#132)
+and no wiring into the credential-submission/rollback flow (#133) here.
+
+- **Trigger condition** (`image/files/scripts/nhl-scoreboard-setup-ap`,
+  `cmd_check`/`is_online`): "has a default route", checked with
+  `ip route show default`, not "no `[wifi]` configured" -- scoreboard-
+  provision's `apply_wifi()` already treats a bare config as "relying on
+  ethernet" and does nothing, so re-checking that here would needlessly
+  pop an AP on every ethernet-only boot. A default route is used instead
+  of matching specific interface names (eth0 vs enp0s0 vs a USB dongle
+  vary by hardware) -- it is also exactly what the app itself needs to
+  reach `api-web.nhle.com`, so "no default route" and "board can't do its
+  job" are the same condition. `nhl-scoreboard-setup-ap.service` orders
+  itself `After=scoreboard-provision.service`, which already blocks up to
+  its own `WIFI_CONNECT_TIMEOUT` resolving any configured Wi-Fi (connect,
+  or roll back) before returning -- so by the time this script runs, that
+  outcome is already settled and it needs no wait/retry loop of its own.
+- **AP mode is iwd's own** (`net.connman.iwd.AccessPoint`, via `iwctl ap`),
+  not hostapd -- this image already depends on iwd (`CLAUDE.md`: "Wi-Fi is
+  iwd, not NetworkManager"), so this adds no second WiFi daemon. iwd's AP
+  support only handles the 802.11 side; it does not assign the interface
+  an IP or hand out leases, so the script still sets a static IP itself
+  (`10.42.0.1/24` by default) before calling `iwctl ap`.
+- **`iwctl ap <dev> start-open`** (an open, unencrypted network) is tried
+  first, falling back to a fixed-passphrase WPA2-PSK network if that
+  fails. **Not verified against real hardware or a known iwd version**
+  (#4) -- start-open needs a newer iwd than could be confirmed against
+  whatever this image's Debian release actually ships without a real
+  board to check. Treat the open-network path as the intended default,
+  not a confirmed one, until it's checked on hardware.
+- **dnsmasq is a genuinely new dependency** (`image/layer/nhl-scoreboard.
+  yaml`), added for DHCP leases + wildcard DNS (`address=/#/<ap-addr>`, so
+  every hostname a phone's OS probes resolves to the board -- that's what
+  actually triggers the OS's captive-portal prompt). Flagged here as a
+  real tradeoff per #131, not snuck in quietly -- the project has
+  otherwise stuck to stdlib/essential packages. Its own `dnsmasq.service`
+  is masked at image-build time (a plain `ln -sf /dev/null` symlink, the
+  same thing `systemctl mask` itself creates -- not `systemctl mask`
+  directly, since there's no running init inside the mmdebstrap chroot for
+  it to talk to): only the scoped instance `nhl-scoreboard-setup-ap`
+  starts directly, `--conf-file`'d and `bind-interfaces`'d to the AP
+  interface only, ever runs.
+- **No self-monitoring teardown loop.** A WiFi radio cannot be an AP and a
+  station at the same time, so there is nothing meaningful for this
+  script to poll for on its own interface once the AP is up. `stop` (also
+  run from `ExecStopPost`, so it fires however the service is asked to
+  end) is meant to be driven by #133's submission flow once *it* confirms
+  a real network joined -- not by this script guessing.
+- Tested the same way as `nhl-scoreboard-grow-rootfs`/`scoreboard-
+  provision`: the real script, run as a subprocess, with `ip`/`iwctl`/
+  `dnsmasq`/`logger` faked on the PATH (`tests/test_setup_ap.py`). What
+  that does *not* prove: that `start-open` exists, that a real phone shows
+  a captive-portal prompt for the result, or that iwd AP mode and dnsmasq
+  actually cooperate on a real radio -- all #4.
+- CI's `shell` job (`.github/workflows/ci.yml`) does not yet shellcheck
+  this script -- adding it needs a change to a workflow file, which is
+  outside this change's own write access; tracked as a follow-up rather
+  than silently skipped.
+
 ## Disk-destructive code (grow-rootfs)
 
 `image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
