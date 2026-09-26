@@ -142,6 +142,7 @@ chain_length = 2            # two panels daisy-chained = 128x32
 pitch_mm = 2.5              # informational; 128x32 at P2.5 is 320x80 mm
 pixel_mapper = ""           # e.g. "U-mapper" to stack two panels into 64x64
 hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
+rgb_sequence = "RGB"        # "RBG" if yellow looks pink / blue looks green (swapped wiring)
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60
 auto_brightness = false     # dim from a BH1750 ambient light sensor on I2C instead (#44)
@@ -149,6 +150,24 @@ min_brightness = 10         # clamp range for auto_brightness
 max_brightness = 100
 brightness_poll_seconds = 5
 ```
+
+## SSH access
+
+The board is headless — no monitor, no keyboard — so SSH is the way in for
+anything the boot-partition TOML or the [status page](#status-page) can't
+cover.
+
+| | |
+|---|---|
+| Username | `scoreboard` |
+| Password | `Scoreboard1!` |
+| Host | the board's IP on your network (check your router's DHCP client list — there's no `.local`/mDNS name set up) |
+
+**Change the password** (`passwd`) before putting the board on any network
+you don't fully trust — this default is baked into every flashed image and
+is public in this repository's source (`image/config/scoreboard.yaml`), the
+same way a router's printed default password is. The account can `sudo`
+(password-protected, not passwordless) for anything that needs it.
 
 ## What it shows
 

@@ -122,9 +122,12 @@ class Game:
     def from_api(cls, raw: dict[str, Any]) -> Game:
         clock = raw.get("clock") or {}
         descriptor = raw.get("periodDescriptor") or {}
+        state = str(raw.get("gameState") or "FUT").upper()
+        clock_time = str(clock.get("timeRemaining") or "00:00")
+        clock_running = bool(clock.get("running"))
         return cls(
             id=int(raw["id"]),
-            state=str(raw.get("gameState") or "FUT").upper(),
+            state=state,
             game_type=int(raw.get("gameType") or 2),
             start_utc=_parse_utc(raw.get("startTimeUTC")),
             away=TeamSide.from_api(raw.get("awayTeam") or {}),
@@ -132,9 +135,22 @@ class Game:
             period=int(raw.get("period") or descriptor.get("number") or 0),
             period_type=str(descriptor.get("periodType") or "REG").upper(),
             max_regulation_periods=int(descriptor.get("maxRegulationPeriods") or 3),
-            clock_time=str(clock.get("timeRemaining") or "00:00"),
-            clock_running=bool(clock.get("running")),
-            in_intermission=bool(clock.get("inIntermission")),
+            clock_time=clock_time,
+            clock_running=clock_running,
+            # The API's own inIntermission flag lags briefly right at a period's
+            # end -- confirmed against a real live game sitting at
+            # timeRemaining "00:00"/running false with inIntermission still
+            # false, on both score/now and gamecenter/landing, for well over
+            # one poll cycle. A *live* period clock can only read 00:00 once
+            # play has stopped (periods start at 20:00/5:00, never count down
+            # to it mid-play), so treat that combination as intermission
+            # ourselves rather than trust the flag alone -- this also fixes
+            # the situation-poll skip and poll_interval() slowdown that key
+            # off the same field, not just the displayed label. Gated on
+            # state being live: a FINAL/OFF game's clock sits at 00:00/not
+            # running too, and is not an intermission.
+            in_intermission=bool(clock.get("inIntermission"))
+            or (state in LIVE_STATES and clock_time == "00:00" and not clock_running),
         )
 
     # -- state helpers ---------------------------------------------------

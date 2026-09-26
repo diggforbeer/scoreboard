@@ -273,6 +273,20 @@ exit; with `show_logos = false` every step is just text.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
+- `clock.inIntermission` lags the period actually ending -- confirmed
+  against a real live game (NSH @ CAR, 2026-09-24) sitting at
+  `timeRemaining: "00:00"`, `running: false`, `inIntermission: false` for
+  well over one `live_poll_seconds` cycle, on both `score/now` and
+  `gamecenter/{id}/landing`, not just a one-frame flicker. `Game.
+  in_intermission` (`nhl/models.py`) now infers intermission itself from
+  `timeRemaining == "00:00" and not running` whenever the flag hasn't
+  caught up, gated on the game actually being live (`LIVE`/`CRIT`) --
+  a `FINAL`/`OFF` game's clock sits at `00:00`/not-running too, and is
+  not an intermission, so the state check matters, not just the clock
+  values. This one field feeds the status label text, the status colour
+  (`_status_color`, checks `in_intermission` *before* `is_final`), the
+  situation-poll skip, and `poll_interval()`'s slowdown -- fixed once at
+  the parse site rather than patched separately at each read site.
 
 ## Hardware facts (verified, don't relearn)
 
@@ -467,6 +481,21 @@ same bar as everything else in this repo.
   script, mutation-test the change the way the start-sector assertion
   was verified: deliberately break the thing the test is supposed to
   catch and confirm it fails before trusting it passes.
+- **DISABLED as of #120** -- not removed, just not wired to run. A real
+  Pi 4 first boot never came up at all (no DHCP lease on wifi *or*
+  ethernet, LED matrix never showed anything, `sudo fdisk`/Disk Management
+  from another machine showed the root partition still at its original
+  shipped size -- the `sfdisk` grow never even landed) on hardware that
+  the owner says previously booted fine, before this unit existed. #4's
+  hardware-verification checklist had this box checked with zero
+  corroborating detail (no `journalctl` excerpt, nothing) -- don't trust
+  that checkmark as confirmation this ever actually worked on real
+  hardware; treat it as unverified until #120 finds the real cause.
+  `image/layer/nhl-scoreboard.yaml`'s `enable-units` call for this
+  service is commented out, so freshly built images boot on their
+  original small root partition (a real but survivable inconvenience --
+  less disk headroom, not a bricked board) until this is resolved. Don't
+  re-enable it without addressing #120 first.
 
 ## Config conventions
 
