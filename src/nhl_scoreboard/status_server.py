@@ -521,7 +521,8 @@ def _make_handler(
                 wifi_restart()
 
             self.send_response(HTTPStatus.SEE_OTHER)
-            safe_section = urllib.parse.quote(section, safe="")
+            redirect_section = section if section in _FIELDS_BY_SECTION else ""
+            safe_section = urllib.parse.quote(redirect_section, safe="")
             self.send_header("Location", f"/?saved={safe_section}")
             self.send_header("Content-Length", "0")
             self.end_headers()
