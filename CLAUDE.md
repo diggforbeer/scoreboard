@@ -449,9 +449,8 @@ exit; with `show_logos = false` every step is just text.
 ## WiFi AP + captive-portal setup mode (#131)
 
 Infrastructure phase only, sub-issue of #116 -- gets a phone able to reach
-the board at all when it has no working network yet. No setup page and no
-wiring into the credential-submission/rollback flow; those are separate,
-later sub-issues.
+the board at all when it has no working network yet. No setup page (#132)
+and no wiring into the credential-submission/rollback flow (#133) here.
 
 - **Trigger condition** (`image/files/scripts/nhl-scoreboard-setup-ap`,
   `cmd_check`/`is_online`): "has a default route", checked with
@@ -496,8 +495,8 @@ later sub-issues.
   station at the same time, so there is nothing meaningful for this
   script to poll for on its own interface once the AP is up. `stop` (also
   run from `ExecStopPost`, so it fires however the service is asked to
-  end) is meant to be driven by the eventual wifi-submission flow once
-  *it* confirms a real network joined -- not by this script guessing.
+  end) is meant to be driven by #133's submission flow once *it* confirms
+  a real network joined -- not by this script guessing.
 - Tested the same way as `nhl-scoreboard-grow-rootfs`/`scoreboard-
   provision`: the real script, run as a subprocess, with `ip`/`iwctl`/
   `dnsmasq`/`logger` faked on the PATH (`tests/test_setup_ap.py`). What

@@ -1,9 +1,8 @@
 #!/bin/sh
 # Bring up a WiFi access point + captive-portal DHCP/DNS when the board has
 # no other working network path (#131, infrastructure phase of #116). This
-# is deliberately just the AP/DHCP/DNS plumbing -- no setup page (see the
-# follow-up issue for that) and no wiring into the wifi-join/rollback flow
-# in scoreboard-provision; see #116 for those.
+# is deliberately just the AP/DHCP/DNS plumbing -- no setup page (#132) and
+# no wiring into the wifi-join/rollback flow in scoreboard-provision (#133).
 #
 # Trigger condition: NOT simply "no [wifi] configured" -- scoreboard-
 # provision already treats that as "relying on ethernet" and does nothing
@@ -40,10 +39,10 @@
 # No self-monitoring teardown loop: a WiFi radio cannot be an AP and a
 # station at the same time, so there is nothing meaningful to poll for on
 # this interface once the AP is up. Teardown (`stop`) is meant to be driven
-# by the eventual wifi-submission flow once it confirms a real network
-# joined successfully, not by this script guessing -- systemd's
-# ExecStopPost also runs it on any `systemctl stop`, so it fires however
-# the service is asked to end.
+# by #133's submission flow once it confirms a real network joined
+# successfully, not by this script guessing -- systemd's ExecStopPost
+# also runs it on any `systemctl stop`, so it fires however the service
+# is asked to end.
 set -eu
 
 IFACE="${NHL_SCOREBOARD_AP_IFACE:-wlan0}"
