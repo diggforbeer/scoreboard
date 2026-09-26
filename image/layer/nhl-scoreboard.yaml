@@ -217,13 +217,18 @@ mmdebstrap:
         > "$1/etc/modprobe.d/blacklist-nhl-scoreboard-audio.conf"
 
     # ---- enable units ------------------------------------------------
-    # nhl-scoreboard-grow-rootfs: DISABLED (#120) -- a real first-boot on a
-    # Pi 4 never came up (no DHCP lease on wifi *or* ethernet, LED matrix
-    # never showed anything, root partition never grew), on hardware that
-    # previously booted fine before this unit was added. Root cause not
-    # yet isolated; the script/service/tests stay in the tree, just not
-    # wired to run, until #120 is resolved. Re-add this line once it is.
-    # - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
+    # nhl-scoreboard-grow-rootfs: re-enabled (#129) after having been
+    # DISABLED (#121) since #120's first-boot hang. #120's own
+    # investigation found the actual cause was an outdated SPI EEPROM
+    # bootloader on that specific board (misreporting RAM size), unrelated
+    # to this repo or to grow-rootfs -- a board with grow-rootfs already
+    # disabled still failed to boot the same way before the EEPROM was
+    # reflashed, so the hang was never actually observed independent of
+    # that issue. Re-enabling on that basis; still needs a real
+    # resize-and-reboot cycle confirmed on hardware (the EEPROM/#126 fixes
+    # only proved the board boots at all) before trusting this the way the
+    # rest of the image is trusted -- see #129.
+    - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
     - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
     - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard
 

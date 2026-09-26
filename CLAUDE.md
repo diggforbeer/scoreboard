@@ -481,21 +481,30 @@ same bar as everything else in this repo.
   script, mutation-test the change the way the start-sector assertion
   was verified: deliberately break the thing the test is supposed to
   catch and confirm it fails before trusting it passes.
-- **DISABLED as of #120** -- not removed, just not wired to run. A real
-  Pi 4 first boot never came up at all (no DHCP lease on wifi *or*
-  ethernet, LED matrix never showed anything, `sudo fdisk`/Disk Management
-  from another machine showed the root partition still at its original
-  shipped size -- the `sfdisk` grow never even landed) on hardware that
-  the owner says previously booted fine, before this unit existed. #4's
-  hardware-verification checklist had this box checked with zero
-  corroborating detail (no `journalctl` excerpt, nothing) -- don't trust
-  that checkmark as confirmation this ever actually worked on real
-  hardware; treat it as unverified until #120 finds the real cause.
-  `image/layer/nhl-scoreboard.yaml`'s `enable-units` call for this
-  service is commented out, so freshly built images boot on their
-  original small root partition (a real but survivable inconvenience --
-  less disk headroom, not a bricked board) until this is resolved. Don't
-  re-enable it without addressing #120 first.
+- **Was disabled #121-#129, re-enabled by #129.** A real Pi 4 first boot
+  once never came up at all (no DHCP lease on wifi *or* ethernet, LED
+  matrix never showed anything, `sudo fdisk`/Disk Management from another
+  machine showed the root partition still at its original shipped size --
+  the `sfdisk` grow never even landed), which #121 responded to by
+  commenting out `image/layer/nhl-scoreboard.yaml`'s `enable-units` call
+  for this service as a precaution. #120's own investigation later found
+  the actual cause was an outdated SPI EEPROM bootloader on that specific
+  board (misreporting RAM size) -- unrelated to this repo or to
+  grow-rootfs, confirmed because a board with grow-rootfs already
+  disabled still failed to boot the same way before the EEPROM was
+  reflashed. So the hang was never actually observed independent of the
+  EEPROM issue; #4's hardware-verification checklist having this box
+  checked with zero corroborating detail (no `journalctl` excerpt,
+  nothing) was never real evidence either way. #129 re-enabled the
+  `enable-units` line on that basis, once a board existed that booted
+  reliably (post EEPROM reflash, post #126's audio/panel fix) -- but that
+  re-enable has **not itself** been confirmed against a real
+  resize-and-reboot cycle on hardware yet (root partition actually grows,
+  board comes back up). Don't treat the line being present as equivalent
+  to that having happened; if a real board ever hangs on first boot again
+  with this enabled, that's the first real evidence of an actual
+  grow-rootfs bug (as opposed to the EEPROM red herring) -- capture it
+  (HDMI console, `journalctl`) before changing anything, per #129.
 
 ## Config conventions
 
