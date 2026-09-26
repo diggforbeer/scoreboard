@@ -6,24 +6,24 @@
 |-------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | src/nhl\_scoreboard/\_\_init\_\_.py         |        1 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/\_\_main\_\_.py         |       45 |        3 |       10 |        2 |     91% | 58-59, 82 |
-| src/nhl\_scoreboard/app.py                  |      487 |        9 |      204 |        9 |     97% |97-\>101, 155-156, 304-305, 370, 523, 537, 554-\>551, 598, 696-\>698, 753-\>exit, 760 |
+| src/nhl\_scoreboard/app.py                  |      548 |       10 |      238 |       12 |     97% |107-\>111, 177-178, 314-\>313, 317-\>316, 333-334, 399, 613, 627, 644-\>641, 688, 776, 808-\>810, 865-\>exit, 872 |
 | src/nhl\_scoreboard/audio.py                |       55 |        1 |       16 |        0 |     99% |        92 |
 | src/nhl\_scoreboard/brightness.py           |        9 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/config.py               |      190 |        2 |       26 |        0 |     99% |   365-366 |
+| src/nhl\_scoreboard/config.py               |      191 |        2 |       26 |        0 |     99% |   370-371 |
 | src/nhl\_scoreboard/demo.py                 |       40 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/\_\_init\_\_.py |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/ascii.py        |       54 |        6 |        6 |        3 |     85% |24, 28, 55-56, 60, 84 |
 | src/nhl\_scoreboard/display/fonts.py        |       29 |        2 |        6 |        1 |     91% |     33-34 |
 | src/nhl\_scoreboard/display/logos.py        |       86 |        9 |       22 |        1 |     89% |41, 91-95, 99-101 |
 | src/nhl\_scoreboard/display/matrix.py       |       43 |        0 |        4 |        0 |    100% |           |
-| src/nhl\_scoreboard/display/renderer.py     |      215 |        0 |       38 |        0 |    100% |           |
+| src/nhl\_scoreboard/display/renderer.py     |      241 |        0 |       48 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/teams.py        |        8 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/light\_sensor.py        |       38 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/nhl/\_\_init\_\_.py     |        3 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/nhl/api.py              |       72 |        2 |        4 |        0 |     97% |     98-99 |
-| src/nhl\_scoreboard/nhl/models.py           |      195 |        0 |       42 |        0 |    100% |           |
+| src/nhl\_scoreboard/nhl/api.py              |       79 |        5 |        4 |        0 |     94% |86-88, 112-113 |
+| src/nhl\_scoreboard/nhl/models.py           |      224 |        0 |       48 |        0 |    100% |           |
 | src/nhl\_scoreboard/status\_server.py       |       54 |        0 |        8 |        0 |    100% |           |
-| **TOTAL**                                   | **1624** |   **34** |  **390** |   **16** | **97%** |           |
+| **TOTAL**                                   | **1748** |   **38** |  **440** |   **19** | **97%** |           |
 
 
 ## Setup coverage badge
