@@ -93,11 +93,12 @@ device = ""
 horn_dir = ""
 
 [status]
-# A tiny read-only web page showing what the board currently thinks is going
-# on (current scene, last successful poll, last error, favourite team,
-# rotation) -- handy for checking on a headless board without SSH-ing in.
-# Off by default. No login: this binds the local network the board is on,
-# not the internet -- do not port-forward it.
+# A small web page showing what the board currently thinks is going on
+# (current scene, last successful poll, last error, favourite team,
+# rotation) plus a form to edit this file from a phone on the same
+# network -- handy for a headless board without SSH-ing in. Off by
+# default. No login: this binds the local network the board is on, not
+# the internet -- do not port-forward it.
 enabled = false
 port = 8080
 
