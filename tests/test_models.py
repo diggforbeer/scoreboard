@@ -46,6 +46,20 @@ def test_intermission_beats_period_clock(games):
     assert intermission.status_label(TZ) == "INT2"
 
 
+def test_clock_at_zero_not_running_is_intermission_even_if_the_flag_lags(score_payload):
+    """A real live game was observed stuck at 00:00/not-running with
+    inIntermission still false, on both score/now and gamecenter/landing,
+    for well over one poll cycle -- the flag itself lags the period ending.
+    A period clock can only read 00:00 once play has stopped (periods start
+    at 20:00/5:00, never count down to it mid-play), so this combination is
+    inferred as intermission regardless of the flag."""
+    raw = next(g for g in score_payload["games"] if g["awayTeam"]["abbrev"] == "SEA")
+    raw = {**raw, "clock": {"timeRemaining": "00:00", "running": False, "inIntermission": False}}
+    game = Game.from_api(raw)
+    assert game.in_intermission
+    assert game.status_label(TZ) == f"INT{game.period}"
+
+
 def test_pregame_shows_local_start_time(games):
     future = next(g for g in games if g.state == "FUT")
     # 23:00 UTC is 18:00 in Chicago (CDT).

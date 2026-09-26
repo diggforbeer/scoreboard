@@ -186,14 +186,29 @@ live call while filing #40), and `games_played` is the only signal on
 hand for "is this actually the current season." Only scoped to
 `rotation = "favourite"`, same precedent as the power-play indicator and
 goal detection above -- shown interleaved with the preview/countdown
-scene, alternating on `rotate_seconds`' own cadence (`_show_standings_
-now()`), never in place of a live game or a held final. Standings are
-polled on an hourly TTL (`STANDINGS_TTL_SECONDS`), the same idea as
-`SCHEDULE_TTL_SECONDS` for the season schedule. `clinchIndicator` values
-are parsed onto `StandingsRow` but not rendered or colour-coded -- they're
-confirmed from only one real, end-of-season response and not documented
-anywhere; don't act on them without verifying against a few more live
-examples first.
+scene, alternating on `rotate_seconds`' own cadence, never in place of a
+live game or a held final. Standings are polled on an hourly TTL
+(`STANDINGS_TTL_SECONDS`), the same idea as `SCHEDULE_TTL_SECONDS` for the
+season schedule. `clinchIndicator` values are parsed onto `StandingsRow`
+but not rendered or colour-coded -- they're confirmed from only one real,
+end-of-season response and not documented anywhere; don't act on them
+without verifying against a few more live examples first. Note that the
+window itself is a straight `conferenceSequence` cut (favourite ± a few
+spots by overall conference rank), not the NHL's actual playoff line
+(top 3 per division + next 2 wild cards, conference-wide) -- `StandingsRow.
+in_playoff_position` already computes the real rule from `division_sequence`/
+`wildcard_sequence` (both parsed, both unused by the renderer today), so a
+correction wouldn't need a new API call, just wiring it in; flagged, not
+yet decided on.
+
+`_favourite_scene`'s non-live branch (`_rotate_idle_scenes`) cycles
+countdown/preview, standings (when shown) and, opt-in via
+`show_clock_between_games` (default `false`), the idle clock -- same
+`rotate_seconds` cadence as the standings alternation, now generalised
+over a list instead of a single `% 2`. Off by default so existing
+installs see no change; distinct from `show_clock_when_idle`, which only
+covers the unrelated "no games left to preview at all" case (`_select_
+base_scene`'s fallback when `_favourite_scene` returns `None` entirely).
 
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
@@ -232,6 +247,20 @@ and rendering entirely, rather than trusting brightness 0 alone to be dark
 on every backend. Transitions are instant; eased steps were considered and
 cut, and a dim-by-default "passive mode" is #94, not this.
 
+Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
+data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
+like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`
+deliberately bypasses the real state machine -- no `select_scene()`,
+`refresh()`, situation/brightness sampling, config reload or NHL client
+call -- and hands synthetic `Scene`s straight to `draw_scene()` (the
+dispatch half of `draw()`, split out for this). Coercing real game data
+into every state on demand isn't possible, and a bench board may have no
+network. It never plays the goal horn: only `refresh()`'s
+`_detect_goals()` reaches `_on_goal()`, and `draw_scene()`'s goal branch
+only draws. Both layouts are shown by toggling `renderer.logos` per step
+between the configured library and `None` (text fallback), restored on
+exit; with `show_logos = false` every step is just text.
+
 ## NHL API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
@@ -244,6 +273,20 @@ cut, and a dim-by-default "passive mode" is #94, not this.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
+- `clock.inIntermission` lags the period actually ending -- confirmed
+  against a real live game (NSH @ CAR, 2026-09-24) sitting at
+  `timeRemaining: "00:00"`, `running: false`, `inIntermission: false` for
+  well over one `live_poll_seconds` cycle, on both `score/now` and
+  `gamecenter/{id}/landing`, not just a one-frame flicker. `Game.
+  in_intermission` (`nhl/models.py`) now infers intermission itself from
+  `timeRemaining == "00:00" and not running` whenever the flag hasn't
+  caught up, gated on the game actually being live (`LIVE`/`CRIT`) --
+  a `FINAL`/`OFF` game's clock sits at `00:00`/not-running too, and is
+  not an intermission, so the state check matters, not just the clock
+  values. This one field feeds the status label text, the status colour
+  (`_status_color`, checks `in_intermission` *before* `is_final`), the
+  situation-poll skip, and `poll_interval()`'s slowdown -- fixed once at
+  the parse site rather than patched separately at each read site.
 
 ## Hardware facts (verified, don't relearn)
 
@@ -438,6 +481,21 @@ same bar as everything else in this repo.
   script, mutation-test the change the way the start-sector assertion
   was verified: deliberately break the thing the test is supposed to
   catch and confirm it fails before trusting it passes.
+- **DISABLED as of #120** -- not removed, just not wired to run. A real
+  Pi 4 first boot never came up at all (no DHCP lease on wifi *or*
+  ethernet, LED matrix never showed anything, `sudo fdisk`/Disk Management
+  from another machine showed the root partition still at its original
+  shipped size -- the `sfdisk` grow never even landed) on hardware that
+  the owner says previously booted fine, before this unit existed. #4's
+  hardware-verification checklist had this box checked with zero
+  corroborating detail (no `journalctl` excerpt, nothing) -- don't trust
+  that checkmark as confirmation this ever actually worked on real
+  hardware; treat it as unverified until #120 finds the real cause.
+  `image/layer/nhl-scoreboard.yaml`'s `enable-units` call for this
+  service is commented out, so freshly built images boot on their
+  original small root partition (a real but survivable inconvenience --
+  less disk headroom, not a bricked board) until this is resolved. Don't
+  re-enable it without addressing #120 first.
 
 ## Config conventions
 

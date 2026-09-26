@@ -62,6 +62,12 @@ goal_flash_seconds = 6
 # Only appears once favourite_team has actually played a game this season.
 show_standings = true
 
+# In "favourite" rotation, also cycle the clock into the countdown/preview
+# (and standings, if shown) alternation whenever the favourite isn't live --
+# separate from show_clock_when_idle above, which only covers "no games
+# left to preview at all".
+show_clock_between_games = false
+
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
 # scores. The board has no other way to make sound: the HUB75 panel needs
@@ -144,6 +150,13 @@ pixel_mapper = ""
 #   "adafruit-hat"     Adafruit RGB Matrix Bonnet or HAT, stock.
 #   "adafruit-hat-pwm" Adafruit board with the GPIO4-GPIO18 solder mod.
 hardware_mapping = "regular"
+
+# The order the three colour wires are actually driven in. Leave at "RGB"
+# unless colours look wrong -- if yellow renders pink and/or blue renders
+# green, your panel's green/blue wires are swapped from the driver's
+# default and "RBG" fixes it. Other panels may need "GRB", "GBR", "BRG",
+# or "BGR" instead; try each if "RBG" doesn't fix it.
+rgb_sequence = "RGB"
 
 # 0-100. Lower brightness means less current draw and a cooler panel. Used
 # as-is unless auto_brightness is on and the sensor below is answering.

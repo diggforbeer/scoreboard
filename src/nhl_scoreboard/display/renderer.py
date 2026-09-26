@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from ..nhl.models import Game, StandingsRow
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
-from .teams import team_color
+from .teams import team_color, team_secondary_color
 
 WHITE = (255, 255, 255)
 DIM = (48, 48, 48)
@@ -354,48 +354,79 @@ class Renderer:
         for text, color in parts:
             x += self.text(canvas, font, x, y, color, text)
 
-    #: Fixed left edges/right edge for each standings column, so values of
-    #: different widths (a 1- vs 2-digit rank, a 5- vs 7-char W-L-OT record)
-    #: still line up between rows instead of drifting with their own width.
-    _STANDINGS_RANK_X = 1
-    _STANDINGS_ABBREV_X = 12
-    _STANDINGS_RECORD_X = 28
-    _STANDINGS_POINTS_RIGHT = 68
+    #: Column offsets relative to the content area's left edge (past the
+    #: favourite's logo, when there is one), so values of different widths
+    #: (a 1- vs 2-digit rank, a 5- vs 7-char W-L-OT record) still line up
+    #: between rows instead of drifting with their own width.
+    _STANDINGS_RANK_DX = 2
+    _STANDINGS_ABBREV_DX = 13
+    _STANDINGS_RECORD_DX = 29
+    #: Right edges are measured from the panel's own right edge instead,
+    #: since they don't move when a logo appears on the left.
+    _STANDINGS_GP_RIGHT_PAD = 20
+    _STANDINGS_POINTS_RIGHT_PAD = 1
 
     def draw_standings(self, canvas: Any, rows: Sequence[StandingsRow], favourite: str) -> None:
-        """The favourite's conference neighbourhood: rank, abbrev, record, points.
+        """The favourite's conference neighbourhood: logo, rank, abbrev, record, GP, points.
 
-        No logos -- eight rows of 32px artwork plus text doesn't fit
-        regardless of variant; this stays abbreviation + text, like the
-        game scene's text fallback. One row per team, tightest face
-        (``4x6``) so up to five rows fit the panel height.
+        The favourite's own logo anchors the left edge -- full panel height,
+        same treatment as the game scene -- freeing the row content to widen
+        into a games-played column that a bare table had no room for. Falls
+        back to no logo (columns shifted flush left) if the library has none
+        for the favourite, same fallback precedent as the game scene's text
+        layout. One row per team, tightest face (``4x6``) so up to five rows
+        fit the panel height.
         """
         canvas.Clear()
         font = self.fonts.tiny
         row_height = 6
+
+        logo = self.logos.get(favourite) if self.logos is not None else None
+        if logo is not None:
+            self.draw_logo(canvas, logo, 0, (self.height - logo.height) // 2)
+            left = logo.width
+        else:
+            left = 0
+
+        rank_x = left + self._STANDINGS_RANK_DX
+        abbrev_x = left + self._STANDINGS_ABBREV_DX
+        record_x = left + self._STANDINGS_RECORD_DX
+        gp_right = self.width - self._STANDINGS_GP_RIGHT_PAD
+        points_right = self.width - self._STANDINGS_POINTS_RIGHT_PAD
+
         for i, row in enumerate(rows):
             y = 1 + i * row_height + (row_height - 2)
             color = ACCENT if row.abbrev == favourite else WHITE
-            self.text(
-                canvas, font, self._STANDINGS_RANK_X, y, color, f"{row.conference_sequence:>2}"
-            )
-            self.text(canvas, font, self._STANDINGS_ABBREV_X, y, team_color(row.abbrev), row.abbrev)
-            self.text(canvas, font, self._STANDINGS_RECORD_X, y, color, row.record_label())
-            self.text_right(canvas, font, self._STANDINGS_POINTS_RIGHT, y, color, str(row.points))
+            self.text(canvas, font, rank_x, y, color, f"{row.conference_sequence:>2}")
+            self.text(canvas, font, abbrev_x, y, team_color(row.abbrev), row.abbrev)
+            self.text(canvas, font, record_x, y, color, row.record_label())
+            self.text_right(canvas, font, gp_right, y, color, str(row.games_played))
+            self.text_right(canvas, font, points_right, y, color, str(row.points))
 
-    def draw_clock(self, canvas: Any, now: datetime) -> None:
-        """Idle scene: the time, for when there is no hockey to show."""
+    def draw_clock(self, canvas: Any, now: datetime, favourite: str | None = None) -> None:
+        """Idle scene: the time, for when there is no hockey to show.
+
+        Coloured with the favourite team's colours when one is configured
+        (#123); otherwise WHITE/SUBDUED exactly as before, same
+        graceful-fallback precedent as every other favourite-scoped feature.
+        The date line uses the secondary colour dimmed rather than at full
+        saturation, to keep the same "time leads, date is deemphasized"
+        hierarchy that SUBDUED gave it -- a straight colour swap would have
+        both lines competing for attention instead.
+        """
         canvas.Clear()
         local = now.astimezone(self.tz)
+        time_color = team_color(favourite) if favourite else WHITE
+        date_color = self._dim(team_secondary_color(favourite)) if favourite else SUBDUED
         self.text_center(
-            canvas, self.fonts.large, self.width // 2, 15, WHITE, local.strftime("%-I:%M %p")
+            canvas, self.fonts.large, self.width // 2, 15, time_color, local.strftime("%-I:%M %p")
         )
         self.text_center(
             canvas,
             self.fonts.small,
             self.width // 2,
             self.height - 2,
-            SUBDUED,
+            date_color,
             local.strftime("%a %b %-d").upper(),
         )
 
@@ -412,6 +443,11 @@ class Renderer:
             )
 
     # -- helpers ---------------------------------------------------------
+
+    @staticmethod
+    def _dim(color: tuple[int, int, int], factor: float = 0.5) -> tuple[int, int, int]:
+        r, g, b = color
+        return (round(r * factor), round(g * factor), round(b * factor))
 
     @staticmethod
     def _status_color(game: Game) -> tuple[int, int, int]:

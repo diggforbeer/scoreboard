@@ -172,6 +172,80 @@ def test_unchanged_profile_short_circuits_without_touching_iwd(rig):
 
 
 # --------------------------------------------------------------------------
+# "already current" compares only [Security] Passphrase (#68). Whether real
+# iwd appends exactly [Settings] can't be confirmed without hardware (#4);
+# these prove any extra section is ignored, whatever its name.
+# --------------------------------------------------------------------------
+
+
+def test_iwd_appended_section_does_not_trigger_rewrite(rig):
+    profile = rig.iwd_dir / "SameNet.psk"
+    seeded = "[Security]\nPassphrase=samepass\n[Settings]\nAutoConnect=true\n"
+    profile.write_text(seeded)
+    rig.seed_state("SameNet.psk")
+
+    result = rig.run(WIFI_TOML.format(ssid="SameNet", password="samepass"))
+    assert result.returncode == 0, result.stderr
+    assert "already current" in result.stderr
+    assert profile.read_text() == seeded
+    assert "systemctl" not in result.calls
+    assert "iwctl" not in result.calls
+
+
+def test_changed_passphrase_is_still_rewritten_despite_extra_sections(rig):
+    profile = rig.iwd_dir / "SameNet.psk"
+    profile.write_text("[Security]\nPassphrase=oldpass\n[Settings]\nAutoConnect=true\n")
+    rig.seed_state("SameNet.psk")
+
+    result = rig.run(
+        WIFI_TOML.format(ssid="SameNet", password="newpass"),
+        env_extra={"FAKE_IWCTL_STATE": "connected", "FAKE_IWCTL_SSID": "SameNet"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "already current" not in result.stderr
+    assert profile.read_text() == "[Security]\nPassphrase=newpass\n"
+    assert "systemctl restart iwd" in result.calls
+
+
+def test_passphrase_containing_percent_matches_without_raising(rig):
+    # configparser's default BasicInterpolation raises on a bare '%', which is
+    # a legal WPA passphrase character.
+    password = "100%pure%(x"
+    profile = rig.seed_profile("SameNet", password)
+    rig.seed_state("SameNet.psk")
+
+    result = rig.run(WIFI_TOML.format(ssid="SameNet", password=password))
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+    assert "already current" in result.stderr
+    assert profile.read_text() == f"[Security]\nPassphrase={password}\n"
+    assert "systemctl" not in result.calls
+
+
+@pytest.mark.parametrize(
+    "garbage",
+    [
+        b"[Security\nPassphrase=samepass\n",  # unterminated section header
+        b"Passphrase=samepass\n",  # option before any section header
+        b"\xff\xfe\x00\x81binary junk\x00",  # not valid UTF-8 at all
+    ],
+)
+def test_corrupt_profile_is_rewritten_not_fatal(rig, garbage):
+    profile = rig.iwd_dir / "SameNet.psk"
+    profile.write_bytes(garbage)
+
+    result = rig.run(
+        WIFI_TOML.format(ssid="SameNet", password="samepass"),
+        env_extra={"FAKE_IWCTL_STATE": "connected", "FAKE_IWCTL_SSID": "SameNet"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+    assert profile.read_text() == "[Security]\nPassphrase=samepass\n"
+    assert "systemctl restart iwd" in result.calls
+    assert (rig.iwd_dir / ".scoreboard-managed").read_text().strip() == "SameNet.psk"
+
+
+# --------------------------------------------------------------------------
 # failed connect -> rollback (mutation-tested: the point of #51)
 # --------------------------------------------------------------------------
 
@@ -241,6 +315,38 @@ def test_no_ssid_leaves_iwd_untouched(rig):
     assert result.returncode == 0, result.stderr
     assert "systemctl" not in result.calls
     assert "iwctl" not in result.calls
+
+
+# --------------------------------------------------------------------------
+# regulatory domain (#67)
+# --------------------------------------------------------------------------
+
+
+def test_country_without_ssid_still_sets_regulatory_domain(rig):
+    """Ethernet-only board: regdom used to be skipped along with the Wi-Fi setup."""
+    result = rig.run('[wifi]\nssid = ""\ncountry = "us"\n')
+    assert result.returncode == 0, result.stderr
+    assert "reg set US" in result.calls
+    # Still nothing Wi-Fi-related beyond regdom.
+    assert "systemctl" not in result.calls
+    assert "iwctl" not in result.calls
+
+
+def test_country_with_ssid_sets_regulatory_domain(rig):
+    result = rig.run(
+        WIFI_TOML.format(ssid="NewNet", password="newpass") + 'country = "CA"\n',
+        env_extra={"FAKE_IWCTL_STATE": "connected", "FAKE_IWCTL_SSID": "NewNet"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "reg set CA" in result.calls
+    assert (rig.iwd_dir / "NewNet.psk").is_file()
+
+
+@pytest.mark.parametrize("country", ["", "USA", "1A", "12", "U"])
+def test_invalid_country_does_not_set_regulatory_domain(rig, country):
+    result = rig.run(f'[wifi]\nssid = ""\ncountry = "{country}"\n')
+    assert result.returncode == 0, result.stderr
+    assert "reg set" not in result.calls
 
 
 # --------------------------------------------------------------------------
