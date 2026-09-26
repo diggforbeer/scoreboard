@@ -35,7 +35,7 @@ from nhl_scoreboard.display.renderer import (
     WHITE,
     Renderer,
 )
-from nhl_scoreboard.display.teams import team_color
+from nhl_scoreboard.display.teams import team_color, team_secondary_color
 from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
@@ -326,7 +326,23 @@ def test_clock_scene(update_snapshots):
     assert not c.out_of_bounds
     assert_centered(c, 0, 16, "time")
     assert_centered(c, 20, H - 1, "date")
+    assert c.colors(0, 0, W - 1, 16) == {WHITE}
+    assert c.colors(0, 20, W - 1, H - 1) == {SUBDUED}
     check_snapshot("clock", art, update_snapshots)
+
+
+def test_clock_scene_favourite(update_snapshots):
+    """A favourite configured colours the clock; #123."""
+    c = canvas()
+    make_renderer().draw_clock(c, datetime(2026, 9, 20, 23, 5, tzinfo=UTC), favourite="NSH")
+    art = show("clock, favourite NSH", c)
+
+    assert not c.out_of_bounds
+    assert_centered(c, 0, 16, "time")
+    assert_centered(c, 20, H - 1, "date")
+    assert c.colors(0, 0, W - 1, 16) == {team_color("NSH")}
+    assert c.colors(0, 20, W - 1, H - 1) == {Renderer._dim(team_secondary_color("NSH"))}
+    check_snapshot("clock_favourite", art, update_snapshots)
 
 
 @pytest.mark.parametrize(

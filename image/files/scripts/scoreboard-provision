@@ -22,6 +22,7 @@ attempt forever.
 
 from __future__ import annotations
 
+import configparser
 import json
 import logging
 import os
@@ -112,16 +113,19 @@ def apply_wifi(wifi: dict, config_path: Path) -> None:
     password = str(wifi.get("password") or "")
     country = str(wifi.get("country") or "").strip().upper()
 
+    # Before the SSID check, not after: the image promises regdom is applied
+    # from scoreboard.toml every boot, and an ethernet-only board with a
+    # country set is still owed that (#67).
+    apply_regulatory_domain(country)
+
     if not ssid:
         log.info("No Wi-Fi SSID configured; relying on ethernet")
         return
 
-    apply_regulatory_domain(country)
-
     profile = IWD_DIR / iwd_profile_name(ssid)
     contents = "[Security]\nPassphrase={}\n".format(password)
 
-    if profile.exists() and profile.read_text() == contents:
+    if _profile_matches(profile, password):
         log.info("Wi-Fi profile for %r already current", ssid)
         return
 
@@ -156,6 +160,29 @@ def apply_wifi(wifi: dict, config_path: Path) -> None:
         rollback_config(config_path)
 
 
+def _profile_matches(profile: Path, password: str) -> bool:
+    """Whether the existing profile's [Security] Passphrase already matches.
+
+    Checks only the field this script actually manages, not the whole file
+    byte-for-byte -- iwd itself commonly appends other sections (e.g.
+    [Settings]) after a successful connection, and a byte-for-byte compare
+    would treat that as "changed" and rewrite/restart iwd every boot even
+    though nothing we manage actually changed (#68).
+    """
+    if not profile.exists():
+        return False
+    # interpolation=None: '%' is legal in a WPA passphrase, and the default
+    # BasicInterpolation raises on a bare one.
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read(profile, encoding="utf-8")
+    except (configparser.Error, OSError, UnicodeDecodeError):
+        # Unreadable or corrupt profile: rewrite it rather than crash-loop
+        # provisioning over it, same as read_config() does for bad TOML.
+        return False
+    return parser.get("Security", "Passphrase", fallback=None) == password
+
+
 def read_state_file() -> str:
     if not STATE_FILE.is_file():
         return ""
@@ -177,14 +204,12 @@ def iwd_profile_name(ssid: str) -> str:
 
 
 def apply_regulatory_domain(country: str) -> None:
+    # `iw reg set` talks straight to the kernel's cfg80211, which carries its
+    # own regulatory database; no userspace agent or config file is involved.
+    # This used to also write /etc/default/crda, but crda isn't installed in
+    # this image (Debian dropped the package), so nothing ever read it (#67).
     if len(country) != 2 or not country.isalpha():
         return
-    conf = Path("/etc/default/crda")
-    try:
-        Path("/etc/iwd").mkdir(parents=True, exist_ok=True)
-        conf.write_text(f"REGDOMAIN={country}\n")
-    except OSError:
-        pass
     run(["iw", "reg", "set", country])
 
 
