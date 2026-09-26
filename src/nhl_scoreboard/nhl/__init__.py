@@ -1,6 +1,6 @@
 """NHL data access."""
 
 from .api import NHLApiError, NHLClient
-from .models import Game, Situation, TeamSide
+from .models import Game, GoalEvent, Situation, TeamSide
 
-__all__ = ["Game", "NHLApiError", "NHLClient", "Situation", "TeamSide"]
+__all__ = ["Game", "GoalEvent", "NHLApiError", "NHLClient", "Situation", "TeamSide"]

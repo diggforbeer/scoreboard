@@ -21,7 +21,14 @@ from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
 from .light_sensor import LightSensor
 from .nhl.api import NHLApiError, NHLClient
-from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
+from .nhl.models import (
+    Game,
+    GoalEvent,
+    Situation,
+    StandingsRow,
+    conference_standings,
+    standings_window,
+)
 from .status_server import StatusServer
 
 log = logging.getLogger(__name__)
@@ -45,14 +52,17 @@ DEMO_SCENE_SECONDS = 4.0
 class Scene:
     """What the board should show right now.
 
-    ``kind`` is one of ``game`` (live or final scoreboard), ``countdown``,
-    ``preview``, ``standings``, ``clock``, ``no_games``, ``connecting``,
-    ``no_data``.
+    ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
+    ``goal_detail``, ``countdown``, ``preview``, ``standings``, ``clock``,
+    ``no_games``, ``connecting``, ``no_data``.
     """
 
     kind: str
     game: Game | None = None
     standings: tuple[StandingsRow, ...] | None = None
+    #: Set only for ``goal_detail`` -- who scored, and their/their
+    #: assisters' season totals (#122).
+    goal_event: GoalEvent | None = None
 
 
 class ScoreboardApp:
@@ -144,6 +154,18 @@ class ScoreboardApp:
         #: (game id, monotonic time) of the most recent favourite goal, for
         #: how long the goal scene stays up.
         self.last_goal: tuple[int, float] | None = None
+        #: game id -> (fetched at, favourite's own GoalEvents seen so far in
+        #: that game's scoring array). Favourite-only, same scoping
+        #: precedent as goal detection and the PP indicator (#122).
+        self._goal_events: dict[int, tuple[float, tuple[GoalEvent, ...]]] = {}
+        #: game id -> how many of the favourite's goal_events already had a
+        #: goal_detail screen shown, so a late scorer/assist correction never
+        #: re-fires for the same goal. Set to the full count on first
+        #: sighting without firing, same precedent as _known_favourite_score.
+        self._shown_goal_events: dict[int, int] = {}
+        #: (game id, monotonic time, event) of the most recent goal_detail
+        #: screen, for how long it stays up.
+        self._goal_detail: tuple[int, float, GoalEvent] | None = None
         #: The configured logo library, held by run_demo() while it toggles
         #: renderer.logos between it and None for the text layout.
         self._demo_real_logos: LogoLibrary | None = logos
@@ -182,6 +204,7 @@ class ScoreboardApp:
                 self.refresh_brightness()
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
+            self.refresh_goal_details()
             self.draw()
             self.sleep(FRAME_INTERVAL)
         self.shutdown()
@@ -287,6 +310,12 @@ class ScoreboardApp:
         for game_id in list(self._known_favourite_score):
             if game_id not in current_ids:
                 del self._known_favourite_score[game_id]
+        for game_id in list(self._goal_events):
+            if game_id not in current_ids:
+                del self._goal_events[game_id]
+        for game_id in list(self._shown_goal_events):
+            if game_id not in current_ids:
+                del self._shown_goal_events[game_id]
 
     def _record_error(self, message: str) -> None:
         """Track the most recent fetch failure, for the status page (#48)."""
@@ -515,6 +544,67 @@ class ScoreboardApp:
         self.last_goal = (game.id, self.monotonic())
         self.horn.play(favourite)
 
+    # -- goal detail (#122 phase 2) ---------------------------------------
+
+    def refresh_goal_details(self) -> None:
+        """Poll the favourite's live game for scorer/assist detail, phase 2 of #122.
+
+        Deliberately decoupled from ``_detect_goals``: the score-increase
+        that drives the ``goal`` scene comes from ``score/now`` and can tick
+        up before ``gamecenter/{id}/landing``'s ``summary.scoring`` has
+        caught up with that specific goal's entry. Rather than make the
+        ``goal`` scene wait on data that might not be ready, this polls the
+        favourite's own scoring array independently and fires once a new
+        entry actually shows up -- possibly well after the ``goal`` scene's
+        own flash has already ended.
+
+        Scoped to the favourite's own live game only, same precedent as
+        goal detection and the PP indicator. A separate request to the same
+        landing URL ``refresh_situations()`` already polls (not a new
+        endpoint), on the same ``live_poll_seconds`` cadence, skipped during
+        intermission for the same reason situation is.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return
+        game = next((g for g in self.games if g.is_live and g.involves(favourite)), None)
+        if game is None:
+            return
+        now = self.monotonic()
+        interval = self.settings.scoreboard.live_poll_seconds
+        fetched_at, events = self._goal_events.get(game.id, (None, ()))
+        if fetched_at is not None and now - fetched_at < interval:
+            return
+        if game.in_intermission:
+            self._goal_events[game.id] = (now, events)
+            return
+        try:
+            all_events = self.client.goal_scoring(game.id)
+        except NHLApiError as exc:
+            log.debug("Goal scoring fetch for %s failed: %s", game.id, exc)
+            all_events = events
+        favourite_events = tuple(e for e in all_events if e.team_abbrev == favourite)
+        self._goal_events[game.id] = (now, favourite_events)
+        self._detect_goal_detail(game.id, favourite_events)
+
+    def _detect_goal_detail(self, game_id: int, events: tuple[GoalEvent, ...]) -> None:
+        """The favourite's scoring array grew by one entry: show it, once.
+
+        Tracks a count per game rather than matching goals by identity --
+        the simplest approach that still can't refire for the same goal on
+        a later scorer/assist correction (the array only ever grows).
+        Baseline on first sighting without firing, same precedent as
+        ``_detect_goals``, so a game already several goals in at startup
+        doesn't dump a backlog of detail screens.
+        """
+        previous = self._shown_goal_events.get(game_id)
+        if previous is None:
+            self._shown_goal_events[game_id] = len(events)
+            return
+        if len(events) > previous:
+            self._shown_goal_events[game_id] = previous + 1
+            self._goal_detail = (game_id, self.monotonic(), events[previous])
+
     # -- favourite mode --------------------------------------------------
 
     def favourite_game_today(self) -> Game | None:
@@ -649,13 +739,22 @@ class ScoreboardApp:
         return Scene("clock" if self.settings.scoreboard.show_clock_when_idle else "no_games")
 
     def _apply_goal_override(self, scene: Scene) -> Scene:
-        """Show the goal screen in place of the game it just happened in.
+        """Show the goal (or later, goal_detail) screen over the game it happened in.
 
         Only ever replaces a "game" scene for the exact game the goal
         belongs to -- it never interrupts a countdown, preview or a
         different game mid-rotation to force attention to the favourite.
+        goal_detail wins when both are pending: it fires strictly after the
+        goal scene's own score-increase trigger (see refresh_goal_details),
+        so by the time it is ready there is no point re-showing the plainer
+        "GOAL" + score flash for the same goal.
         """
-        if scene.kind != "game" or self.last_goal is None:
+        if scene.kind != "game":
+            return scene
+        detail = self._goal_detail_override(scene.game.id)
+        if detail is not None:
+            return detail
+        if self.last_goal is None:
             return scene
         goal_game_id, goal_time = self.last_goal
         if scene.game.id != goal_game_id:
@@ -663,6 +762,19 @@ class ScoreboardApp:
         if self.monotonic() - goal_time >= self.settings.scoreboard.goal_flash_seconds:
             return scene
         return Scene("goal", scene.game)
+
+    def _goal_detail_override(self, game_id: int) -> Scene | None:
+        if self._goal_detail is None:
+            return None
+        detail_game_id, detail_time, event = self._goal_detail
+        if detail_game_id != game_id:
+            return None
+        if self.monotonic() - detail_time >= self.settings.scoreboard.goal_detail_seconds:
+            return None
+        game = next((g for g in self.games if g.id == game_id), None)
+        if game is None:
+            return None
+        return Scene("goal_detail", game, goal_event=event)
 
     def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         cfg = self.settings.scoreboard
@@ -810,6 +922,8 @@ class ScoreboardApp:
             r.draw_game(self.canvas, self.with_situation(scene.game))
         elif scene.kind == "goal":
             r.draw_goal(self.canvas, scene.game)
+        elif scene.kind == "goal_detail":
+            r.draw_goal_detail(self.canvas, scene.game, scene.goal_event)
         elif scene.kind == "countdown":
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
