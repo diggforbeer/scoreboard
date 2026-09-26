@@ -1,0 +1,54 @@
+name: Update PR branches
+
+# Keeps every open PR's branch current with main automatically. Combined
+# with GitHub's own auto-merge (enabled per-PR), this lets several PRs be
+# queued up to close on their own as soon as each one's branch is up to
+# date and its checks pass, instead of manually clicking "Update branch"
+# on each one after every merge to main.
+#
+# Uses the "Update pull request branch" REST API (the same thing GitHub's
+# own "Update branch" button calls) rather than checking out each branch
+# and running `git merge`/`git push` by hand -- it's the same merge
+# GitHub already knows how to do safely, including for PRs from forks,
+# without this workflow needing to manage git credentials or push access
+# itself.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  # A second push to main while this is still running would just redo the
+  # same updates; no need to pile up runs.
+  group: update-pr-branches
+  cancel-in-progress: true
+
+jobs:
+  update-branches:
+    name: Merge main into open PR branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update each open PR's branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prs="$(gh pr list --state open --base main --json number --jq '.[].number')"
+          if [ -z "$prs" ]; then
+            echo "No open PRs targeting main."
+            exit 0
+          fi
+          for pr in $prs; do
+            echo "Updating PR #$pr..."
+            # A non-clean merge (real conflicts with main) is expected and
+            # fine -- that PR just doesn't get updated this round, no
+            # notice needed. Don't let one conflicting PR fail the rest.
+            if gh api -X PUT "repos/${{ github.repository }}/pulls/$pr/update-branch" >/dev/null 2>&1; then
+              echo "PR #$pr: updated"
+            else
+              echo "PR #$pr: not updated (conflict or not mergeable) -- skipping"
+            fi
+          done

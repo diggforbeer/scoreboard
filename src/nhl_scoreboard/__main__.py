@@ -23,6 +23,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print today's scores to stdout and exit (no matrix needed)",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help=(
+            "Cycle every scene with synthetic data instead of live NHL data "
+            "(needs the real matrix backend)"
+        ),
+    )
     parser.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING, ERROR")
     return parser
 
@@ -44,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
 
     app = ScoreboardApp(settings, backend=load_backend(args.backend))
     app.install_signal_handlers()
+    if args.demo:
+        app.run_demo()
+        return 0
     app.run()
     return 0
 
