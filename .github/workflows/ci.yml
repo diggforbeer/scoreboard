@@ -27,6 +27,14 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # Needed for the coverage-comment step below: pull-requests:write to
+    # post/edit the sticky comment, contents:write to push coverage data
+    # to the persistent branch that action uses for diff-coverage across
+    # commits. Scoped to this job only, not the whole workflow -- lint/
+    # shell/layer-lint don't need either.
+    permissions:
+      pull-requests: write
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -34,13 +42,25 @@ jobs:
         python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # the coverage-comment action auths its own git ops with the token passed to it below
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: pip install -e '.[dev]'
       - name: Test
-        run: pytest
+        run: pytest --cov --cov-report=term-missing
+
+      # Runs once, not once per matrix leg -- coverage is identical between
+      # 3.11/3.13 (confirmed: both report 88.81% locally and in CI), and
+      # posting twice would just be two competing comment updates. Picked
+      # 3.13 since that's what the shipped image actually runs.
+      - name: Post coverage comment
+        if: matrix.python-version == '3.13'
+        uses: py-cov-action/python-coverage-comment-action@v4.1
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
 
   shell:
     runs-on: ubuntu-latest

@@ -9,13 +9,14 @@ is not contractual -- every call is wrapped so that a bad response degrades to
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import Game, Situation
+from .models import Game, Situation, StandingsRow
 
 log = logging.getLogger(__name__)
 
@@ -52,24 +53,37 @@ class NHLClient:
     def scores(self, date: str = "now") -> list[Game]:
         """Every game for ``date`` (``YYYY-MM-DD`` or ``now``), display-ordered."""
         payload = self._get(f"/score/{date}")
-        games = [Game.from_api(raw) for raw in payload.get("games", [])]
+        games = _parse_items(payload.get("games") or [], Game.from_api, "game")
         games.sort(key=Game.sort_key)
         return games
 
     def schedule(self, team: str) -> list[Game]:
         """Every game on ``team``'s season schedule, in start order."""
         payload = self._get(f"/club-schedule-season/{team.strip().upper()}/now")
-        games = [Game.from_api(raw) for raw in payload.get("games", [])]
+        games = _parse_items(payload.get("games") or [], Game.from_api, "game")
         games.sort(key=lambda g: g.start_utc)
         return games
 
     def situation(self, game_id: int) -> Situation | None:
         """Special-teams state for one live game; None at even strength."""
         payload = self._get(f"/gamecenter/{game_id}/landing")
-        return Situation.from_api(payload.get("situation"))
+        try:
+            return Situation.from_api(payload.get("situation"))
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Skipping malformed situation for game %s: %s", game_id, exc)
+            return None
 
-    def standings(self, date: str = "now") -> list[dict[str, Any]]:
-        return list(self._get(f"/standings/{date}").get("standings", []))
+    def standings(self, date: str = "now") -> list[StandingsRow]:
+        """Every team's current standings line, unsorted across conferences.
+
+        During the off-season this endpoint keeps serving the just-finished
+        season's final standings rather than an empty result (verified with
+        a live call) -- callers that care about "has the current season
+        actually started" need a signal beyond just "rows came back", e.g.
+        the favourite's own ``games_played``.
+        """
+        payload = self._get(f"/standings/{date}")
+        return _parse_items(payload.get("standings") or [], StandingsRow.from_api, "standings row")
 
     # -- plumbing --------------------------------------------------------
 
@@ -86,6 +100,20 @@ class NHLClient:
         if not isinstance(payload, dict):
             raise NHLApiError(f"GET {url} returned {type(payload).__name__}, expected object")
         return payload
+
+
+def _parse_items(raw_items: list[Any], parse: Callable[[Any], Any], label: str) -> list[Any]:
+    """Parse each entry with ``parse``, skipping and logging one that's malformed.
+
+    One bad game/row must not abort the whole response -- see #59.
+    """
+    items = []
+    for raw in raw_items:
+        try:
+            items.append(parse(raw))
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Skipping malformed %s entry: %s", label, exc)
+    return items
 
 
 def _build_session() -> requests.Session:

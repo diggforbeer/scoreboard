@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from zoneinfo import ZoneInfo
 
-from .config import Settings
+from .config import Settings, resolve_timezone
 from .nhl.api import NHLApiError, NHLClient
 
 
@@ -23,6 +22,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--dump",
         action="store_true",
         help="Print today's scores to stdout and exit (no matrix needed)",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help=(
+            "Cycle every scene with synthetic data instead of live NHL data "
+            "(needs the real matrix backend)"
+        ),
     )
     parser.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING, ERROR")
     return parser
@@ -45,12 +52,15 @@ def main(argv: list[str] | None = None) -> int:
 
     app = ScoreboardApp(settings, backend=load_backend(args.backend))
     app.install_signal_handlers()
+    if args.demo:
+        app.run_demo()
+        return 0
     app.run()
     return 0
 
 
 def _dump(settings: Settings) -> int:
-    tz = ZoneInfo(settings.scoreboard.timezone)
+    tz = resolve_timezone(settings.scoreboard.timezone)
     try:
         with NHLClient() as client:
             games = client.scores()

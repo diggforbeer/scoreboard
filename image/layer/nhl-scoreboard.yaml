@@ -42,9 +42,18 @@ mmdebstrap:
     # Runtime
     - python3
     - python3-requests
+    # config.py's Settings.save() (#51) round-trips scoreboard.toml through
+    # tomlkit so hand-written comments survive an edit -- the app is a plain
+    # source tree on PYTHONPATH, not pip-installed, so this has to come from
+    # apt like python3-requests/python3-pil do, not pyproject.toml's deps.
+    - python3-tomlkit
     - iw
     - ca-certificates
     - alsa-utils
+    # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
+    # over I2C via this. Harmless if no sensor is wired up -- LightSensor
+    # .open() degrades to None the same as a missing /dev/i2c-* would.
+    - python3-smbus
     # For nhl-scoreboard-grow-rootfs: partition inspection (parted) and
     # filesystem growth (resize2fs). util-linux (findmnt, lsblk, sfdisk)
     # is essential and always present, so not listed explicitly.
@@ -165,22 +174,56 @@ mmdebstrap:
     # The matrix driver uses the PWM hardware that the onboard analogue
     # audio also claims; they cannot coexist. Isolating a core stops the
     # scheduler from interrupting the refresh thread and causing flicker.
+    # i2c_arm is unconditional, not gated behind auto_brightness (#44): the
+    # scoreboard user is already unconditionally in the i2c group, enabling
+    # the bus costs nothing on a board with no sensor wired up, and
+    # LightSensor already degrades to the static brightness on its own when
+    # nothing answers on it.
+    #
+    # Verified live on real hardware (a board that wouldn't display anything
+    # despite booting fine): appending 'dtparam=audio=off' after the base
+    # image's own 'dtparam=audio=on' is not enough on its own. The firmware
+    # translates each dtparam=audio= occurrence into its own
+    # snd_bcm2835.enable_headphones=/enable_hdmi= pair on the kernel cmdline
+    # rather than collapsing repeats to one final value, so with both lines
+    # present the *last* value for each individual flag wins independently --
+    # which left enable_headphones=1 in effect even with our 'off' appended
+    # last. Stripping the base image's 'on' line outright, not just
+    # overriding it, avoids that. Separately, even with a clean
+    # enable_headphones=0/enable_hdmi=0 cmdline, the snd_bcm2835 kernel
+    # module still loaded (verified via lsmod) -- rpi-rgb-led-matrix's own
+    # startup check is just "is the module loaded", not whether its outputs
+    # are enabled, so it still refused to start. The upstream README's
+    # troubleshooting section is right: blacklisting the module is the part
+    # that actually stops it loading, not the dtparam alone.
     - |-
       set -eu
       CONFIG="$1/boot/firmware/config.txt"
+      sed -i '/^dtparam=audio=on$/d' "$CONFIG"
       if ! grep -q '^# nhl-scoreboard' "$CONFIG" 2>/dev/null; then
-        printf '\n%s\n%s\n%s\n' \
+        printf '\n%s\n%s\n%s\n%s\n%s\n' \
           '# nhl-scoreboard: the HUB75 driver needs exclusive use of the PWM' \
           '# peripheral, which the onboard audio output otherwise occupies.' \
-          'dtparam=audio=off' >> "$CONFIG"
+          'dtparam=audio=off' \
+          '# nhl-scoreboard: I2C bus for an optional BH1750 ambient light' \
+          'dtparam=i2c_arm=on' >> "$CONFIG"
       fi
       CMDLINE="$1/boot/firmware/cmdline.txt"
       if [ -n "${IGconf_sb_isolated_cpu:-}" ] && ! grep -q 'isolcpus=' "$CMDLINE"; then
         sed -i "1s/\$/ isolcpus=${IGconf_sb_isolated_cpu}/" "$CMDLINE"
       fi
+      install -d -m 0755 "$1/etc/modprobe.d"
+      printf '%s\n' 'blacklist snd_bcm2835' \
+        > "$1/etc/modprobe.d/blacklist-nhl-scoreboard-audio.conf"
 
     # ---- enable units ------------------------------------------------
-    - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
+    # nhl-scoreboard-grow-rootfs: DISABLED (#120) -- a real first-boot on a
+    # Pi 4 never came up (no DHCP lease on wifi *or* ethernet, LED matrix
+    # never showed anything, root partition never grew), on hardware that
+    # previously booted fine before this unit was added. Root cause not
+    # yet isolated; the script/service/tests stay in the tree, just not
+    # wired to run, until #120 is resolved. Re-add this line once it is.
+    # - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard-grow-rootfs
     - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
     - $BDEBSTRAP_HOOKS/enable-units "$1" nhl-scoreboard
 
@@ -211,3 +254,24 @@ mmdebstrap:
         python3 -c "import rgbmatrix, rgbmatrix.graphics"
       '
       echo "rgbmatrix bindings still import correctly after the purge"
+
+    # ---- app import smoke test ----------------------------------------
+    # The rgbmatrix check above only proves the compiled binding survived
+    # the purge -- it says nothing about the app itself, which is a plain
+    # source tree on PYTHONPATH (apt packages, not pip: see the top of
+    # this file), kept in sync with pyproject.toml's deps entirely by
+    # hand. A dependency added to pyproject.toml but not to this layer's
+    # apt package list would pass the CI test job (pip installs it) and
+    # pass the rest of this build (nothing else imports it), then crash
+    # the board on first boot -- same failure class as #21's
+    # libpython3.13. Import every module nhl-scoreboard.service's
+    # ExecStart actually loads, with the same PYTHONPATH, plus every
+    # other module that starts up alongside it, so a missing apt package
+    # fails the image build instead of shipping.
+    - |-
+      set -eu
+      chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server"
+        python3 -m nhl_scoreboard --help >/dev/null
+      '
+      echo "nhl_scoreboard app modules import correctly"

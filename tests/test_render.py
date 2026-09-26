@@ -35,8 +35,8 @@ from nhl_scoreboard.display.renderer import (
     WHITE,
     Renderer,
 )
-from nhl_scoreboard.display.teams import team_color
-from nhl_scoreboard.nhl.models import Game, Situation
+from nhl_scoreboard.display.teams import team_color, team_secondary_color
+from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -47,15 +47,23 @@ SNAPSHOTS = Path(__file__).parent / "snapshots"
 
 # Layout constants the renderer uses; asserting on them keeps the two honest.
 SCORE_BASELINE = 13
-RULE_Y = 19
+RULE_Y = 19  # preview/countdown/goal only -- _draw_upcoming/draw_goal, untouched by #70
 STATUS_TOP = RULE_Y + 1
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
-INDICATOR_TOP, INDICATOR_BOTTOM = SCORE_BASELINE + 1, RULE_Y - 1  # the band the rule normally uses
+# The live-game rule/indicator band moved to row 20 for #70 (one more blank
+# row above the PP/SOG line than PR #42 already added), independent of the
+# RULE_Y=19 above -- that one belongs to _draw_upcoming/draw_goal, which
+# didn't change.
+GAME_RULE_Y = 20
+INDICATOR_TOP, INDICATOR_BOTTOM = SCORE_BASELINE + 2, GAME_RULE_Y
+# Old STATUS_TOP (=20) now collides with GAME_RULE_Y (also 20) -- the game
+# layout's status-line sampling needs its own boundary one row further down.
+GAME_STATUS_TOP = GAME_RULE_Y + 1
 LOGO = 32
 MID_LEFT, MID_RIGHT = LOGO, W - LOGO  # the column between the logos
 AWAY_CX, HOME_CX = MID_LEFT + 16, MID_RIGHT - 16
-FIXTURE_TEAMS = ("SEA", "CGY", "CAR", "FLA", "NYI", "NJD", "WSH", "BOS", "TOR", "MTL", "EDM")
+FIXTURE_TEAMS = ("SEA", "CGY", "CAR", "FLA", "NYI", "NJD", "WSH", "BOS", "TOR", "MTL", "EDM", "NSH")
 
 
 # --------------------------------------------------------------------------
@@ -152,8 +160,11 @@ def assert_centered(c: AsciiCanvas, y0: int, y1: int, what: str, tolerance: floa
 
 def assert_game_layout(c: AsciiCanvas, game: Game) -> None:
     assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
-    assert c.row_is_solid(RULE_Y), "horizontal rule missing"
-    assert all((HALF - 1, y) in c.pixels for y in range(2, RULE_Y - 3)), "divider missing"
+    # TeamSide.sog is always present, so the indicator band always shows
+    # SOG here rather than a plain rule (#70) -- unless a situation (PP/EN)
+    # is active, which none of this helper's callers set up.
+    assert_sog(c, TEXT_LEFT, W - 4, allow={DIM})
+    assert all((HALF - 1, y) in c.pixels for y in range(2, GAME_RULE_Y - 3)), "divider missing"
 
     for x0, side in ((0, game.away), (HALF, game.home)):
         # Stop short of the divider column, which sits at HALF - 1.
@@ -176,7 +187,7 @@ def assert_game_layout(c: AsciiCanvas, game: Game) -> None:
         score_colors = c.colors(x0 + 26, 0, right_edge, SCORE_BASELINE)
         assert score_colors == {WHITE}, f"{side.abbrev} score should be white, got {score_colors}"
 
-    assert_centered(c, STATUS_TOP, H - 1, "status line")
+    assert_centered(c, GAME_STATUS_TOP, H - 1, "status line")
 
 
 def assert_logo_layout(c: AsciiCanvas, game: Game) -> None:
@@ -197,16 +208,18 @@ def assert_logo_layout(c: AsciiCanvas, game: Game) -> None:
 
     mid = (MID_LEFT + MID_RIGHT) // 2
     assert all((mid - 1, y) in c.pixels for y in range(3, SCORE_BASELINE + 1)), "divider missing"
-    rule = c.lit(MID_LEFT + 3, RULE_Y, MID_RIGHT - 4, RULE_Y)
-    assert len(rule) == MID_RIGHT - 4 - (MID_LEFT + 3) + 1, "rule should span the middle column"
+    # TeamSide.sog is always present, so the indicator band always shows
+    # SOG here rather than a plain rule (#70) -- unless a situation (PP/EN)
+    # is active, which none of this helper's callers set up.
+    assert_sog(c, MID_LEFT + 3, MID_RIGHT - 4)
 
-    box = c.bbox(MID_LEFT, STATUS_TOP, MID_RIGHT - 1, H - 1)
+    box = c.bbox(MID_LEFT, GAME_STATUS_TOP, MID_RIGHT - 1, H - 1)
     assert box is not None, "status line missing"
     assert abs(box.center_x - (mid - 0.5)) <= 1, f"status not centred: {box.center_x}"
 
 
-def status_color(c: AsciiCanvas, x0: int = 0, x1: int = W - 1) -> set:
-    return c.colors(x0, STATUS_TOP, x1, H - 1)
+def status_color(c: AsciiCanvas, x0: int = 0, x1: int = W - 1, y0: int = STATUS_TOP) -> set:
+    return c.colors(x0, y0, x1, H - 1)
 
 
 # --------------------------------------------------------------------------
@@ -237,7 +250,7 @@ def test_text_layout(games, scene, expected_color, update_snapshots):
     )
 
     assert_game_layout(c, game)
-    assert status_color(c) == {expected_color}
+    assert status_color(c, y0=GAME_STATUS_TOP) == {expected_color}
     check_snapshot(f"text_{scene}", art, update_snapshots)
 
 
@@ -275,7 +288,7 @@ def test_logo_layout(games, synthetic_logos, scene, expected_color, update_snaps
         c,
     )
     assert_logo_layout(c, game)
-    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {expected_color}
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1, y0=GAME_STATUS_TOP) == {expected_color}
     check_snapshot(f"logo_{scene}", art, update_snapshots)
 
 
@@ -313,7 +326,23 @@ def test_clock_scene(update_snapshots):
     assert not c.out_of_bounds
     assert_centered(c, 0, 16, "time")
     assert_centered(c, 20, H - 1, "date")
+    assert c.colors(0, 0, W - 1, 16) == {WHITE}
+    assert c.colors(0, 20, W - 1, H - 1) == {SUBDUED}
     check_snapshot("clock", art, update_snapshots)
+
+
+def test_clock_scene_favourite(update_snapshots):
+    """A favourite configured colours the clock; #123."""
+    c = canvas()
+    make_renderer().draw_clock(c, datetime(2026, 9, 20, 23, 5, tzinfo=UTC), favourite="NSH")
+    art = show("clock, favourite NSH", c)
+
+    assert not c.out_of_bounds
+    assert_centered(c, 0, 16, "time")
+    assert_centered(c, 20, H - 1, "date")
+    assert c.colors(0, 0, W - 1, 16) == {team_color("NSH")}
+    assert c.colors(0, 20, W - 1, H - 1) == {Renderer._dim(team_secondary_color("NSH"))}
+    check_snapshot("clock_favourite", art, update_snapshots)
 
 
 @pytest.mark.parametrize(
@@ -358,6 +387,17 @@ def with_situation(game: Game, away=(), home=(), away_strength=5, home_strength=
     )
 
 
+def with_sog(game: Game, away_sog: int, home_sog: int) -> Game:
+    """Distinct SOG values, via TeamSide.sog -- always present on a real
+    Game already (#70 turned out to be able to use it directly, straight
+    from the score feed, rather than a separate fetch)."""
+    return dataclasses.replace(
+        game,
+        away=dataclasses.replace(game.away, sog=away_sog),
+        home=dataclasses.replace(game.home, sog=home_sog),
+    )
+
+
 def assert_indicator(c: AsciiCanvas, side: str, x0: int, x1: int, allow=frozenset()) -> None:
     """Amber text in the indicator band, hugging the given side; no rule.
 
@@ -375,7 +415,19 @@ def assert_indicator(c: AsciiCanvas, side: str, x0: int, x1: int, allow=frozense
         assert x0 <= min(xs) <= x0 + 1, f"away indicator should start at x={x0}, got {min(xs)}"
     else:
         assert x1 - 1 <= max(xs) <= x1, f"home indicator should end at x={x1}, got {max(xs)}"
-    assert not c.lit(x0, RULE_Y, x1, RULE_Y), "rule should give way to the indicator"
+
+
+def assert_sog(c: AsciiCanvas, x0: int, x1: int, allow=frozenset()) -> None:
+    """Plain white, centred text in the indicator band (#70) -- never amber,
+    so it can't be mistaken for the PP/EN indicator it's a fallback for."""
+    band = {xy: rgb for xy, rgb in c.lit(x0, INDICATOR_TOP, x1, INDICATOR_BOTTOM).items()}
+    white = {xy for xy, rgb in band.items() if rgb == WHITE}
+    assert white, "SOG not drawn"
+    colours = set(band.values())
+    assert colours <= {WHITE, *allow}, f"unexpected colours in SOG band: {colours}"
+    xs = [x for x, _ in white]
+    centre = (x0 + x1) // 2
+    assert abs((min(xs) + max(xs)) / 2 - centre) <= 2, f"SOG not centred: got {xs}"
 
 
 @pytest.mark.parametrize(
@@ -398,7 +450,7 @@ def test_logo_layout_special_teams(games, synthetic_logos, name, kwargs, side, u
     # Scores and status are untouched by the indicator.
     for cx in (AWAY_CX, HOME_CX):
         assert WHITE in c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
-    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {LIVE}
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1, y0=GAME_STATUS_TOP) == {LIVE}
     check_snapshot(f"logo_{name}", art, update_snapshots)
 
 
@@ -410,17 +462,55 @@ def test_text_layout_special_teams(games, update_snapshots):
 
     assert not c.out_of_bounds
     assert_indicator(c, "home", TEXT_LEFT, W - 4, allow={DIM})
-    assert status_color(c) == {LIVE}
+    assert status_color(c, y0=GAME_STATUS_TOP) == {LIVE}
     check_snapshot("text_pp_home", art, update_snapshots)
 
 
-def test_even_strength_situation_draws_nothing_special(games, synthetic_logos):
-    """4-on-4 arrives as a situation object but is not an advantage."""
-    game = with_situation(games["live"], away_strength=4, home_strength=4)
+def test_logo_layout_sog(games, synthetic_logos, update_snapshots):
+    """5v5, no PP/EN -- shots on goal fill the indicator band instead (#70)."""
+    game = with_sog(games["live"], away_sog=18, home_sog=14)
     c = canvas()
     make_renderer(logos=synthetic_logos).draw_game(c, game)
-    assert_logo_layout(c, game)  # includes: the rule is present
-    assert not c.lit(MID_LEFT + 3, INDICATOR_TOP, MID_RIGHT - 4, INDICATOR_BOTTOM)
+    art = show(f"logos, sog: {game.away.sog}-{game.home.sog}", c)
+
+    assert not c.out_of_bounds
+    assert_sog(c, MID_LEFT + 3, MID_RIGHT - 4)
+    for cx in (AWAY_CX, HOME_CX):
+        assert WHITE in c.colors(cx - 12, 0, cx + 12, SCORE_BASELINE)
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1, y0=GAME_STATUS_TOP) == {LIVE}
+    check_snapshot("logo_sog", art, update_snapshots)
+
+
+def test_text_layout_sog(games, update_snapshots):
+    game = with_sog(games["live"], away_sog=18, home_sog=14)
+    c = canvas()
+    make_renderer().draw_game(c, game)
+    art = show(f"text, sog: {game.away.sog}-{game.home.sog}", c)
+
+    assert not c.out_of_bounds
+    assert_sog(c, TEXT_LEFT, W - 4, allow={DIM})
+    assert status_color(c, y0=GAME_STATUS_TOP) == {LIVE}
+    check_snapshot("text_sog", art, update_snapshots)
+
+
+def test_sog_suppressed_when_situation_is_active(games, synthetic_logos):
+    """PP always wins over SOG, even when both are available (#70)."""
+    game = with_sog(with_situation(games["live"], home=["PP"], away_strength=4), 18, 14)
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_game(c, game)
+    assert_indicator(c, "home", MID_LEFT + 3, MID_RIGHT - 4)
+    band = c.lit(MID_LEFT + 3, INDICATOR_TOP, MID_RIGHT - 4, INDICATOR_BOTTOM)
+    assert WHITE not in band.values(), "SOG should not appear alongside an active PP"
+
+
+def test_sog_shown_at_4_on_4(games, synthetic_logos):
+    """4-on-4 is a Situation with no indicator code -- falls through to SOG,
+    same as plain even strength (#70 removed the old "draws nothing
+    special" case entirely: TeamSide.sog is always present now)."""
+    game = with_sog(with_situation(games["live"], away_strength=4, home_strength=4), 10, 11)
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_game(c, game)
+    assert_sog(c, MID_LEFT + 3, MID_RIGHT - 4, allow={DIM})
 
 
 # --------------------------------------------------------------------------
@@ -586,6 +676,122 @@ def test_goal_score_reflects_the_current_score(games, synthetic_logos):
     assert c.pixels != c2.pixels
 
 
+def standings_row(abbrev: str, seq: int, points: int, record=(10, 5, 2)) -> StandingsRow:
+    wins, losses, otl = record
+    return StandingsRow(
+        abbrev=abbrev,
+        conference="W",
+        division="C",
+        division_sequence=1,
+        wildcard_sequence=0,
+        conference_sequence=seq,
+        clinch_indicator="",
+        points=points,
+        games_played=sum(record),
+        wins=wins,
+        losses=losses,
+        ot_losses=otl,
+    )
+
+
+STANDINGS_ROW_HEIGHT = 6
+FAVOURITE_WINDOW = [
+    standings_row("STL", 4, 45),
+    standings_row("WPG", 5, 43),
+    standings_row("NSH", 6, 42),
+    standings_row("DAL", 7, 40),
+    standings_row("COL", 8, 38),
+]
+
+
+def assert_standings_layout(
+    c: AsciiCanvas, rows: list[StandingsRow], favourite: str, *, logo_width: int = 0
+) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    if logo_width:
+        logo_region = c.lit(0, 0, logo_width - 1, H - 1)
+        assert logo_region, "no logo drawn for the favourite"
+        assert team_color(favourite) in set(logo_region.values()), "favourite logo colour wrong"
+    for i, row in enumerate(rows):
+        y0, y1 = i * STANDINGS_ROW_HEIGHT, i * STANDINGS_ROW_HEIGHT + STANDINGS_ROW_HEIGHT - 1
+        band = c.bbox(logo_width, y0, W - 1, y1)
+        assert band is not None, f"row {i} ({row.abbrev}) not drawn"
+        colors = c.colors(logo_width, y0, W - 1, y1)
+        highlight = ACCENT if row.abbrev == favourite else WHITE
+        assert colors <= {highlight, team_color(row.abbrev)}, (
+            f"row {i} ({row.abbrev}) has unexpected colours: {colors}"
+        )
+        assert team_color(row.abbrev) in colors, f"row {i} ({row.abbrev}) not in its team colour"
+
+
+def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    art = show("standings w/ logo, favourite centred (NSH 6th)", c)
+
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH", logo_width=LOGO)
+    assert ACCENT in c.colors(LOGO, 2 * STANDINGS_ROW_HEIGHT, W - 1, 3 * STANDINGS_ROW_HEIGHT - 1)
+    check_snapshot("standings_logo_favourite_centred", art, update_snapshots)
+
+
+def test_standings_logo_layout_favourite_clamped_to_top(synthetic_logos, update_snapshots):
+    window = [
+        standings_row("NSH", 1, 50),
+        standings_row("WPG", 2, 48),
+        standings_row("DAL", 3, 46),
+        standings_row("STL", 4, 44),
+        standings_row("COL", 5, 42),
+    ]
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_standings(c, window, "NSH")
+    art = show("standings w/ logo, favourite 1st (extra rows below)", c)
+
+    assert_standings_layout(c, window, "NSH", logo_width=LOGO)
+    assert ACCENT in c.colors(LOGO, 0, W - 1, STANDINGS_ROW_HEIGHT - 1)
+    check_snapshot("standings_logo_favourite_top", art, update_snapshots)
+
+
+def test_standings_text_layout_no_logo_library(update_snapshots):
+    """No ``LogoLibrary`` at all -- same fallback precedent as the game scene."""
+    c = canvas()
+    make_renderer().draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    art = show("standings, no logo library", c)
+
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH")
+    check_snapshot("standings_text_fallback", art, update_snapshots)
+
+
+def test_standings_missing_favourite_logo_falls_back_to_text(synthetic_logos, tmp_path):
+    """A library that just doesn't have the favourite's crest: same fallback."""
+    from PIL import Image
+
+    without_nsh = tmp_path / "partial"
+    without_nsh.mkdir()
+    Image.open(synthetic_logos.path_for("SEA")).save(without_nsh / "SEA.png")
+    c = canvas()
+    make_renderer(logos=LogoLibrary([without_nsh])).draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    assert_standings_layout(c, FAVOURITE_WINDOW, "NSH")  # logo_width=0: the text layout's signature
+
+
+def test_standings_layout_only_favourite_is_highlighted(synthetic_logos):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")
+    for i, row in enumerate(FAVOURITE_WINDOW):
+        y0, y1 = i * STANDINGS_ROW_HEIGHT, i * STANDINGS_ROW_HEIGHT + STANDINGS_ROW_HEIGHT - 1
+        colors = c.colors(LOGO, y0, W - 1, y1)
+        if row.abbrev == "NSH":
+            assert ACCENT in colors
+        else:
+            assert ACCENT not in colors
+
+
+def test_standings_layout_no_favourite_uses_no_accent():
+    """Shouldn't happen in practice, but nothing should crash or highlight wrongly."""
+    c = canvas()
+    make_renderer().draw_standings(c, FAVOURITE_WINDOW, "ZZZ")
+    assert ACCENT not in c.colors()
+
+
 def test_goal_scene_ignores_situation(games, synthetic_logos):
     """draw_goal never reads game.situation -- there is no room for a
     power-play band on the celebration screen."""
@@ -605,3 +811,100 @@ def test_goal_scene_ignores_situation(games, synthetic_logos):
     r.draw_goal(c1, game)
     r.draw_goal(c2, with_situation)
     assert c1.pixels == c2.pixels
+
+
+# --------------------------------------------------------------------------
+# narrow panel: a single 64x32 (chain_length=1), not the default 128x32
+# chain -- #38. Two full 32px logos would meet with zero room left for the
+# score column, so each logo crops its centre-facing edge (Renderer.
+# _logo_span) instead of shrinking. NARROW_VISIBLE mirrors that: half the
+# full logo, the floor the renderer never crops past.
+# --------------------------------------------------------------------------
+
+NARROW_W = 64
+NARROW_VISIBLE = LOGO // 2
+NARROW_LEFT, NARROW_RIGHT = NARROW_VISIBLE, NARROW_W - NARROW_VISIBLE
+NARROW_CENTRE = (NARROW_LEFT + NARROW_RIGHT) // 2
+
+
+def make_narrow_renderer(logos: LogoLibrary | None = None) -> Renderer:
+    return Renderer(
+        graphics=graphics, fonts=FontSet(graphics), width=NARROW_W, height=H, tz=TZ, logos=logos
+    )
+
+
+def assert_narrow_logo_layout(c: AsciiCanvas, game: Game) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.home.abbrev)}
+    assert away_px, f"no logo drawn for {game.away.abbrev}"
+    assert home_px, f"no logo drawn for {game.home.abbrev}"
+    # The crop must actually hold: nothing of either logo may reach into the
+    # column reserved for scores, unlike a full 32px logo at this width.
+    assert max(x for x, _ in away_px) < NARROW_LEFT, "away logo bleeds past its cropped edge"
+    assert min(x for x, _ in home_px) >= NARROW_RIGHT, "home logo bleeds past its cropped edge"
+
+    away_box = c.bbox(NARROW_LEFT, 0, NARROW_CENTRE - 1, SCORE_BASELINE)
+    home_box = c.bbox(NARROW_CENTRE, 0, NARROW_RIGHT - 1, SCORE_BASELINE)
+    assert away_box is not None, f"no score drawn for {game.away.abbrev}"
+    assert home_box is not None, f"no score drawn for {game.home.abbrev}"
+    assert away_box.x1 < home_box.x0, "scores collide on a narrow panel"
+
+
+def test_logo_layout_narrow_panel(games, synthetic_logos, update_snapshots):
+    game = games["live"]  # SEA 2 @ CGY 1
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_game(c, game)
+    art = show(
+        f"narrow logos, live: {game.away.abbrev} {game.away.score} @ "
+        f"{game.home.abbrev} {game.home.score}",
+        c,
+    )
+    assert_narrow_logo_layout(c, game)
+    box = c.bbox(NARROW_LEFT, STATUS_TOP, NARROW_RIGHT - 1, H - 1)
+    assert box is not None, "status line missing"
+    assert abs(box.center_x - (NARROW_CENTRE - 0.5)) <= 1, f"status not centred: {box.center_x}"
+    check_snapshot("logo_narrow_live", art, update_snapshots)
+
+
+def test_logo_layout_narrow_panel_two_digit_scores(
+    big_score_game, synthetic_logos, update_snapshots
+):
+    """The tightest case: two-digit scores must still clear each other (#38)."""
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_game(c, big_score_game)
+    art = show("narrow logos, big score: EDM 12 @ CGY 10", c)
+    assert_narrow_logo_layout(c, big_score_game)
+    check_snapshot("logo_narrow_big_score", art, update_snapshots)
+
+
+def test_logo_layout_narrow_panel_goal(games, synthetic_logos, update_snapshots):
+    game = games["live"]
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_goal(c, game)
+    art = show(f"narrow logos, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.home.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    goal_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
+    assert goal_box is not None, "GOAL text missing"
+    check_snapshot("logo_narrow_goal", art, update_snapshots)
+
+
+def test_upcoming_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_preview(c, UPCOMING, PUCK_DROP - timedelta(hours=9))
+    art = show("narrow logos, preview: TONIGHT / 8:00P", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.home.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    top_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
+    assert top_box is not None, "top line missing"
+    check_snapshot("logo_narrow_preview", art, update_snapshots)

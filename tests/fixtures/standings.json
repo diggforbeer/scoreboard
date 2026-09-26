@@ -1,0 +1,204 @@
+{
+ "wildCardIndicator": true,
+ "date": "2026-11-15",
+ "standings": [
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "C",
+   "divisionName": "Central",
+   "divisionSequence": 1,
+   "wildcardSequence": 0,
+   "conferenceSequence": 1,
+   "leagueSequence": 1,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "WPG"
+   },
+   "teamName": {
+    "default": "Jets"
+   },
+   "gamesPlayed": 18,
+   "wins": 13,
+   "losses": 3,
+   "otLosses": 2,
+   "points": 28
+  },
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "C",
+   "divisionName": "Central",
+   "divisionSequence": 2,
+   "wildcardSequence": 0,
+   "conferenceSequence": 2,
+   "leagueSequence": 2,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "DAL"
+   },
+   "teamName": {
+    "default": "Stars"
+   },
+   "gamesPlayed": 18,
+   "wins": 12,
+   "losses": 4,
+   "otLosses": 2,
+   "points": 26
+  },
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "C",
+   "divisionName": "Central",
+   "divisionSequence": 3,
+   "wildcardSequence": 0,
+   "conferenceSequence": 3,
+   "leagueSequence": 3,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "STL"
+   },
+   "teamName": {
+    "default": "Blues"
+   },
+   "gamesPlayed": 19,
+   "wins": 11,
+   "losses": 6,
+   "otLosses": 2,
+   "points": 24
+  },
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "P",
+   "divisionName": "Pacific",
+   "divisionSequence": 1,
+   "wildcardSequence": 0,
+   "conferenceSequence": 4,
+   "leagueSequence": 4,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "VGK"
+   },
+   "teamName": {
+    "default": "Golden Knights"
+   },
+   "gamesPlayed": 18,
+   "wins": 10,
+   "losses": 6,
+   "otLosses": 2,
+   "points": 22
+  },
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "C",
+   "divisionName": "Central",
+   "divisionSequence": 4,
+   "wildcardSequence": 1,
+   "conferenceSequence": 5,
+   "leagueSequence": 5,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "NSH"
+   },
+   "teamName": {
+    "default": "Predators"
+   },
+   "gamesPlayed": 19,
+   "wins": 9,
+   "losses": 8,
+   "otLosses": 2,
+   "points": 20
+  },
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "P",
+   "divisionName": "Pacific",
+   "divisionSequence": 2,
+   "wildcardSequence": 2,
+   "conferenceSequence": 6,
+   "leagueSequence": 6,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "LAK"
+   },
+   "teamName": {
+    "default": "Kings"
+   },
+   "gamesPlayed": 18,
+   "wins": 9,
+   "losses": 7,
+   "otLosses": 2,
+   "points": 20
+  },
+  {
+   "conferenceAbbrev": "W",
+   "conferenceName": "Western",
+   "divisionAbbrev": "P",
+   "divisionName": "Pacific",
+   "divisionSequence": 3,
+   "wildcardSequence": 3,
+   "conferenceSequence": 7,
+   "leagueSequence": 7,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "CGY"
+   },
+   "teamName": {
+    "default": "Flames"
+   },
+   "gamesPlayed": 19,
+   "wins": 8,
+   "losses": 9,
+   "otLosses": 2,
+   "points": 18
+  },
+  {
+   "conferenceAbbrev": "E",
+   "conferenceName": "Eastern",
+   "divisionAbbrev": "A",
+   "divisionName": "Atlantic",
+   "divisionSequence": 1,
+   "wildcardSequence": 0,
+   "conferenceSequence": 1,
+   "leagueSequence": 8,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "TOR"
+   },
+   "teamName": {
+    "default": "Maple Leafs"
+   },
+   "gamesPlayed": 18,
+   "wins": 12,
+   "losses": 4,
+   "otLosses": 2,
+   "points": 26
+  },
+  {
+   "conferenceAbbrev": "E",
+   "conferenceName": "Eastern",
+   "divisionAbbrev": "M",
+   "divisionName": "Metropolitan",
+   "divisionSequence": 1,
+   "wildcardSequence": 0,
+   "conferenceSequence": 2,
+   "leagueSequence": 9,
+   "clinchIndicator": "",
+   "teamAbbrev": {
+    "default": "CAR"
+   },
+   "teamName": {
+    "default": "Hurricanes"
+   },
+   "gamesPlayed": 18,
+   "wins": 11,
+   "losses": 5,
+   "otLosses": 2,
+   "points": 24
+  }
+ ]
+}

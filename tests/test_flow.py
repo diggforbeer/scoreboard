@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import ScoreboardApp
+from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game
+from nhl_scoreboard.nhl.models import Game, StandingsRow
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -85,6 +85,9 @@ class FlowClient:
         self.season: list[Game] = []
         self.schedule_calls = 0
         self.fail_schedule = False
+        self.standings_rows: list[StandingsRow] = []
+        self.standings_calls = 0
+        self.fail_standings = False
 
     def scores(self, date="now"):
         return list(self.today)
@@ -97,6 +100,12 @@ class FlowClient:
         if self.fail_schedule:
             raise NHLApiError("boom")
         return sorted(self.season, key=lambda g: g.start_utc)
+
+    def standings(self, date="now"):
+        self.standings_calls += 1
+        if self.fail_standings:
+            raise NHLApiError("boom")
+        return list(self.standings_rows)
 
     def close(self):
         pass
@@ -284,6 +293,25 @@ def test_schedule_failure_falls_back_to_rotation(day):
     assert kind == "game" and gid in {9, 1}, "no schedule: fall back to today's rotation"
 
 
+def test_schedule_failure_backs_off_instead_of_polling_every_frame(day):
+    """A schedule outage must not be re-hit on every select_scene() call (#60)."""
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL")
+    client.fail_schedule = True
+    tick(app, clock, hours=9)
+    tick(app, clock, hours=1)  # hold expired: first schedule attempt happens here
+    scene(app)
+    assert client.schedule_calls == 1
+
+    for _ in range(20):  # simulate ~10s of FRAME_INTERVAL polling with no time passing
+        app.select_scene()
+    assert client.schedule_calls == 1, "retries should back off, not fire every frame"
+
+    tick(app, clock, seconds=SCHEDULE_TTL_SECONDS + 1)  # keeps refresh() fresh, unlike advance()
+    app.select_scene()
+    assert client.schedule_calls == 2, "a retry is still expected once the backoff elapses"
+
+
 def test_all_rotation_ignores_favourite_flow(day):
     app, _, _ = day
     app.settings.scoreboard.rotation = "all"
@@ -446,3 +474,193 @@ def test_draw_dispatches_goal_scene(day):
     assert scene(app) == ("goal", 1)
     app.draw()  # must not raise; exercises Renderer.draw_goal via the real dispatch
     assert app.matrix.swaps >= 1
+
+
+# --------------------------------------------------------------------------
+# standings (playoff picture) scene -- #40
+# --------------------------------------------------------------------------
+
+
+def standings_row(abbrev, seq, points=20, games_played=19, conference="W"):
+    return StandingsRow(
+        abbrev=abbrev,
+        conference=conference,
+        division="C",
+        division_sequence=1,
+        wildcard_sequence=0,
+        conference_sequence=seq,
+        clinch_indicator="",
+        points=points,
+        games_played=games_played,
+        wins=8,
+        losses=8,
+        ot_losses=3,
+    )
+
+
+def west_standings():
+    """Ranked 4th-10th in a synthetic Western conference; NSH sits 6th."""
+    return [
+        standings_row("STL", 4, 45),
+        standings_row("WPG", 5, 43),
+        standings_row(FAV, 6, 42),
+        standings_row("DAL", 7, 40),
+        standings_row("COL", 8, 38),
+        standings_row("CGY", 9, 36),
+        standings_row("VGK", 10, 34),
+    ]
+
+
+def test_standings_suppressed_before_favourite_has_played(day):
+    """games_played == 0 is the only signal the off-season final table isn't current (#40)."""
+    app, clock, client = day
+    client.standings_rows = [standings_row(FAV, 6, 42, games_played=0)]
+    app.settings.scoreboard.rotate_seconds = 10
+    tick(app, clock, seconds=10)  # lands in the "standings" half of the cadence
+    assert scene(app)[0] == "preview"
+
+
+def test_standings_suppressed_when_favourite_missing_from_standings(day):
+    app, clock, client = day
+    client.standings_rows = [standings_row("STL", 1, 45)]
+    app.settings.scoreboard.rotate_seconds = 10
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "preview"
+
+
+def test_standings_suppressed_when_disabled(day):
+    app, clock, client = day
+    app.settings.scoreboard.show_standings = False
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "preview"
+
+
+def test_standings_alternates_with_preview_on_rotate_cadence(day):
+    app, clock, client = day
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+
+    assert scene(app)[0] == "preview"
+
+    tick(app, clock, seconds=10)
+    s = app.select_scene()
+    assert s.kind == "standings"
+    assert [r.abbrev for r in s.standings] == ["STL", "WPG", FAV, "DAL", "COL"]
+
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "preview"
+
+
+def test_clock_stays_out_of_rotation_by_default(day):
+    """show_clock_between_games is off by default -- existing installs see no change."""
+    app, clock, _client = day
+    for _ in range(6):
+        assert scene(app)[0] != "clock"
+        tick(app, clock, seconds=8)  # default rotate_seconds
+
+
+def test_clock_joins_idle_rotation_when_enabled(day):
+    app, clock, _client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+
+    assert scene(app)[0] == "preview"
+
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "clock"
+
+    tick(app, clock, seconds=10)
+    assert scene(app)[0] == "preview"
+
+
+def test_clock_rotates_alongside_standings_and_preview(day):
+    app, clock, client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+
+    kinds = []
+    for _ in range(4):
+        kinds.append(scene(app)[0])
+        tick(app, clock, seconds=10)
+    assert set(kinds) == {"preview", "standings", "clock"}, kinds
+    # A full cycle is 3 slots wide; the 4th sample must repeat the 1st.
+    assert kinds[3] == kinds[0]
+
+
+def test_clock_between_games_never_interrupts_a_live_or_final_held_game(day):
+    app, clock, client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert scene(app) == ("game", 1)
+
+
+def test_standings_shown_when_no_more_games_are_scheduled(fake_backend):
+    client = FlowClient()
+    client.today = []
+    client.season = []
+    client.standings_rows = west_standings()
+    app = make_app(fake_backend, Clock(PUCK_DROP), client)
+    app.refresh()
+    assert scene(app) == ("standings", None)
+
+
+def test_standings_never_interrupts_a_live_or_final_held_game(day):
+    app, clock, client = day
+    client.standings_rows = west_standings()
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert scene(app) == ("game", 1)
+
+
+def test_standings_cached_for_an_hour(day):
+    app, clock, client = day
+    client.standings_rows = west_standings()
+    for _ in range(5):
+        app.select_scene()
+    assert client.standings_calls == 1
+
+    tick(app, clock, hours=1, seconds=1)
+    app.select_scene()
+    assert client.standings_calls == 2
+
+
+def test_standings_fetch_failure_falls_back_to_preview(day):
+    app, _clock, client = day
+    client.fail_standings = True
+    assert scene(app)[0] == "preview"
+
+
+def test_standings_failure_backs_off_instead_of_polling_every_frame(day):
+    """A standings outage must not be re-hit on every select_scene() call (#60)."""
+    app, clock, client = day
+    client.fail_standings = True
+    app.settings.scoreboard.rotate_seconds = 10
+
+    scene(app)  # first attempt
+    assert client.standings_calls == 1
+
+    for _ in range(20):  # simulate ~10s of FRAME_INTERVAL polling with no time passing
+        app.select_scene()
+    assert client.standings_calls == 1, "retries should back off, not fire every frame"
+
+    tick(app, clock, seconds=STANDINGS_TTL_SECONDS + 1)  # keeps refresh() fresh, unlike advance()
+    app.select_scene()
+    assert client.standings_calls == 2, "a retry is still expected once the backoff elapses"
+
+
+def test_draw_dispatches_standings_scene(fake_backend):
+    client = FlowClient()
+    client.today = []
+    client.season = []
+    client.standings_rows = west_standings()
+    app = make_app(fake_backend, Clock(PUCK_DROP), client)
+    app.refresh()
+    assert scene(app)[0] == "standings"
+    app.draw()  # must not raise; exercises Renderer.draw_standings via the real dispatch
+    assert app.matrix.swaps == 1

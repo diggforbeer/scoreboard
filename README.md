@@ -20,6 +20,7 @@ it a couple of minutes on the very first power-up.
 | Adapter | Seengreat-style RGB Matrix Adapter Board (also sold as XICOOLEE, WatangTech) |
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
+| Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -51,8 +52,14 @@ Early development. Working today:
 - [x] Team logos, rasterised at build time from the NHL's own artwork
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
+- [x] Shots on goal, live, for every game; favourite's power play/empty net indicator
+- [x] Favourite's conference standings, interleaved with the idle rotation
 - [x] Goal horn and GOAL celebration screen
+- [x] Auto-dim from an optional BH1750 ambient light sensor
+- [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
+- [x] Optional read-only web status page for headless debugging
+- [x] `--demo` mode that loops every scene with synthetic data, no network needed
 - [ ] Verified on real hardware
 
 ## Development
@@ -75,6 +82,10 @@ nhl-scoreboard --dump
 cp image/files/boot/scoreboard.toml scoreboard.local.toml   # edit favourite_team etc.
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
+# Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
+# ~4s each, until Ctrl-C -- also works on the real panel with no network
+nhl-scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
+
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team NSH
 python scripts/preview.py --fixture      # offline, uses the test fixture
@@ -93,20 +104,36 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 [scoreboard]
 favourite_team = "NSH"      # "" for none
 rotation = "favourite"      # follow the favourite's day; "all" rotates every game
+prefer_favourite = true     # in "all" rotation, still show the favourite's game first
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
 timezone = "America/Chicago"
-rotate_seconds = 8          # dwell per game in "all" rotation
+rotate_seconds = 8          # dwell per game in "all" rotation, and per idle scene below
 poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
+show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
+show_standings = true       # favourite's conference playoff picture, once their season starts
+show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
 
 [audio]
 enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
+
+[status]
+enabled = false              # a read-only web status page, for headless debugging
+port = 8080
+
+[night_mode]
+enabled = false              # dim overnight; never in the middle of a game
+start_time = "22:30"         # 24-hour, local to timezone above; can wrap midnight
+end_time = "07:00"
+dim_brightness = 0           # 0-100; 0 blanks the panel outright instead of a dim screen
+suppress_scope = "tracked"   # "tracked" = only the favourite's game holds off dimming; "all" = any live game
+cooldown_minutes = 15        # how long after that game ends before dimming resumes
 
 [panel]
 rows = 32
@@ -115,9 +142,32 @@ chain_length = 2            # two panels daisy-chained = 128x32
 pitch_mm = 2.5              # informational; 128x32 at P2.5 is 320x80 mm
 pixel_mapper = ""           # e.g. "U-mapper" to stack two panels into 64x64
 hardware_mapping = "regular"  # "adafruit-hat" for an Adafruit Bonnet/HAT
+rgb_sequence = "RGB"        # "RBG" if yellow looks pink / blue looks green (swapped wiring)
 gpio_slowdown = 4           # 4 suits a Pi 4; try 2 on a Pi 3
 brightness = 60
+auto_brightness = false     # dim from a BH1750 ambient light sensor on I2C instead (#44)
+min_brightness = 10         # clamp range for auto_brightness
+max_brightness = 100
+brightness_poll_seconds = 5
 ```
+
+## SSH access
+
+The board is headless — no monitor, no keyboard — so SSH is the way in for
+anything the boot-partition TOML or the [status page](#status-page) can't
+cover.
+
+| | |
+|---|---|
+| Username | `scoreboard` |
+| Password | `Scoreboard1!` |
+| Host | the board's IP on your network (check your router's DHCP client list — there's no `.local`/mDNS name set up) |
+
+**Change the password** (`passwd`) before putting the board on any network
+you don't fully trust — this default is baked into every flashed image and
+is public in this repository's source (`image/config/scoreboard.yaml`), the
+same way a router's printed default password is. The account can `sudo`
+(password-protected, not passwordless) for anything that needs it.
 
 ## What it shows
 
@@ -133,10 +183,18 @@ In the default `rotation = "favourite"`, the board follows your team's day:
 | After that | Preview of the next game on the schedule |
 
 The next game comes from the team's season schedule, fetched once an hour.
-With `rotation = "all"` the board instead rotates through every game in the
-league today, `rotate_seconds` each, favourite first. The GOAL screen and the
-horn both still only ever fire for your favourite team's own goal, regardless
-of rotation mode.
+While there's no favourite game to show live, the board alternates the
+preview/countdown with two more scenes on `rotate_seconds`' cadence: your
+**conference standings** (`show_standings`, once your team's season has
+actually started) and, if `show_clock_between_games` is on, the **idle
+clock**. With `rotation = "all"` the board instead rotates through every
+game in the league today, `rotate_seconds` each, favourite first
+(`prefer_favourite`). The GOAL screen and the horn both still only ever fire
+for your favourite team's own goal, regardless of rotation mode.
+
+Overnight, `[night_mode]` can dim the panel on a schedule — but never while
+a tracked game is live or was held recently, so a late finish stays
+readable.
 
 ## Audio
 
@@ -152,6 +210,18 @@ your team's actual horn instead; it's checked first, and the default plays
 whenever a team-specific file isn't found. See `[audio]` in
 [Configuration](#configuration).
 
+## Status page
+
+The board is headless by design, so diagnosing "why is it stuck" normally
+means SSH-ing in and reading `journalctl -u nhl-scoreboard`. Set
+`[status] enabled = true` in the config and the board also serves a tiny
+read-only HTML page at `http://<board's-ip>:8080/` showing the current
+scene, the last successful API poll, the last error (if any), the
+favourite team and the rotation mode -- enough to check on the board from
+a phone on the same network. It's stdlib `http.server`, no framework, and
+has no login: it binds the local network the board is already trusted on,
+not the internet, so don't port-forward it.
+
 ## Layout
 
 With logos (the default):
@@ -165,11 +235,13 @@ With logos (the default):
 └──────────────────────────────────────┘
 ```
 
-During a power play or with a goalie pulled, the rule under the scores gives
-way to an amber indicator on the side of the team it applies to — `PP 1:23`,
+The line under the scores shows shots on goal, `SOG 12-9`, for every game.
+During a power play or with a goalie pulled it's replaced by an amber
+indicator on the side of the team it applies to instead — `PP 1:23`,
 `5v3 0:41`, `EN`. That state comes from a second, per-game API call, which is
 made only for your favourite team's game and whichever game is on screen, so
-other games in the rotation show even strength.
+other games in the rotation show shots on goal even when a penalty is
+actually in effect.
 
 Text fallback, used when `show_logos = false` or a team's artwork is missing:
 
