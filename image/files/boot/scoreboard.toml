@@ -57,6 +57,11 @@ logo_variant = "dark"
 # to the normal live score.
 goal_flash_seconds = 6
 
+# How long the follow-up scorer/assist detail screen stays up once it
+# fires (later than the GOAL screen above, once the NHL's play-by-play
+# catches up with who actually scored).
+goal_detail_seconds = 8
+
 # Show the favourite's conference playoff picture (their spot plus a few
 # teams on either side), interleaved with the preview/countdown screen.
 # Only appears once favourite_team has actually played a game this season.

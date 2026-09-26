@@ -29,7 +29,7 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow
 from nhl_scoreboard.status_server import _FIELDS_BY_SECTION
 
 
@@ -97,6 +97,8 @@ class FakeClient:
         self.closed = False
         self.situation_calls: list[int] = []
         self.situations: dict[int, Situation | None] = {}
+        self.goal_scoring_calls: list[int] = []
+        self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
         self.schedule_calls = 0
@@ -112,6 +114,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return self.situations.get(game_id)
+
+    def goal_scoring(self, game_id: int) -> tuple[GoalEvent, ...]:
+        self.goal_scoring_calls.append(game_id)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.goal_events.get(game_id, ())
 
     def schedule(self, team: str) -> list[Game]:
         self.schedule_calls += 1
@@ -371,6 +379,142 @@ def test_situation_fetch_failure_keeps_last_value(fake_backend, games):
     app.client.fail = True
     app.refresh_situations()
     assert app.with_situation(game).situation is not None
+
+
+# -- goal detail polling: favourite's live game only (#122) ------------------
+
+
+def goal_event(team="CGY", scorer="F. FORSBERG", goals=1, strength="ev") -> GoalEvent:
+    return GoalEvent(
+        team_abbrev=team,
+        scorer_name=scorer,
+        scorer_goals_to_date=goals,
+        assists=(),
+        strength=strength,
+    )
+
+
+def test_goal_detail_first_sighting_does_not_fire(fake_backend, games):
+    """A game already several goals in at startup must not dump a backlog (baseline)."""
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY")
+    app.refresh()
+    cgy_game = next(g for g in app.games if g.involves("CGY"))
+    app.client.goal_events[cgy_game.id] = (goal_event(), goal_event(scorer="B. JOHNSON"))
+
+    app.refresh_goal_details()
+
+    assert app._goal_detail is None
+    assert app._shown_goal_events[cgy_game.id] == 2
+
+
+def test_goal_detail_fires_once_for_a_new_scoring_entry(fake_backend, games):
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=0)
+    app.refresh()
+    cgy_game = next(g for g in app.games if g.involves("CGY"))
+    app.refresh_goal_details()  # baseline: no events yet
+    assert app._goal_detail is None
+
+    event = goal_event()
+    app.client.goal_events[cgy_game.id] = (event,)
+    app.refresh_goal_details()
+
+    assert app._goal_detail is not None
+    detail_game_id, _fired_at, detail_event = app._goal_detail
+    assert detail_game_id == cgy_game.id
+    assert detail_event == event
+
+
+def test_goal_detail_never_fires_twice_for_the_same_goal(fake_backend, games):
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=0)
+    app.refresh()
+    cgy_game = next(g for g in app.games if g.involves("CGY"))
+    app.refresh_goal_details()
+
+    app.client.goal_events[cgy_game.id] = (goal_event(),)
+    app.refresh_goal_details()
+    assert app._goal_detail is not None
+
+    app._goal_detail = None  # as if the on-screen window already elapsed
+    app.refresh_goal_details()  # same single entry, e.g. a late correction
+
+    assert app._goal_detail is None, "must not refire for a goal already shown"
+
+
+def test_goal_detail_fires_again_for_a_second_new_entry(fake_backend, games):
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=0)
+    app.refresh()
+    cgy_game = next(g for g in app.games if g.involves("CGY"))
+    app.refresh_goal_details()
+
+    first = goal_event(scorer="F. FORSBERG")
+    app.client.goal_events[cgy_game.id] = (first,)
+    app.refresh_goal_details()
+    assert app._goal_detail[2] == first
+
+    second = goal_event(scorer="B. JOHNSON")
+    app.client.goal_events[cgy_game.id] = (first, second)
+    app.refresh_goal_details()
+    assert app._goal_detail[2] == second
+
+
+def test_goal_detail_skipped_during_intermission(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="CAR")  # CAR @ FLA is in intermission
+    app.refresh()
+    app.refresh_goal_details()
+    assert app.client.goal_scoring_calls == []
+
+
+def test_goal_detail_not_refetched_within_live_interval(fake_backend, games):
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=15)
+    app.refresh()
+    app.refresh_goal_details()
+    app.refresh_goal_details()
+    assert len(app.client.goal_scoring_calls) == 1
+
+
+def test_goal_detail_fetch_failure_keeps_previous_state(fake_backend, games):
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=0)
+    app.refresh()
+    cgy_game = next(g for g in app.games if g.involves("CGY"))
+    app.client.goal_events[cgy_game.id] = (goal_event(),)
+    app.refresh_goal_details()
+    assert app._shown_goal_events[cgy_game.id] == 1
+
+    app.client.fail = True
+    app.refresh_goal_details()
+
+    assert app._shown_goal_events[cgy_game.id] == 1
+    assert app._goal_detail is None
+
+
+def test_goal_detail_noop_without_a_favourite_team(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="")
+    app.refresh()
+    app.refresh_goal_details()
+    assert app.client.goal_scoring_calls == []
+
+
+def test_goal_detail_state_pruned_with_the_rest(fake_backend, games):
+    """_goal_events/_shown_goal_events must not grow forever either (#64)."""
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="CGY", live_poll_seconds=0)
+    app.refresh()
+    cgy_game = next(g for g in app.games if g.involves("CGY"))
+    app.client.goal_events[cgy_game.id] = (goal_event(),)
+    app.refresh_goal_details()
+    assert app._goal_events and app._shown_goal_events
+
+    app.client._games = []
+    app.refresh()
+
+    assert app._goal_events == {}
+    assert app._shown_goal_events == {}
 
 
 def test_status_server_off_by_default(fake_backend, games):

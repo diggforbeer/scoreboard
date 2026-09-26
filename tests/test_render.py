@@ -36,7 +36,7 @@ from nhl_scoreboard.display.renderer import (
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color, team_secondary_color
-from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import AssistDetail, Game, GoalEvent, Situation, StandingsRow
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -814,6 +814,120 @@ def test_goal_scene_ignores_situation(games, synthetic_logos):
 
 
 # --------------------------------------------------------------------------
+# goal detail (#122 phase 2): scorer + season goals, assister(s) + season assists
+# --------------------------------------------------------------------------
+
+
+def goal_event(team: str, scorer="F. FORSBERG", goals=12, assists=(), strength="ev") -> GoalEvent:
+    return GoalEvent(
+        team_abbrev=team,
+        scorer_name=scorer,
+        scorer_goals_to_date=goals,
+        assists=tuple(AssistDetail(name=n, assists_to_date=a) for n, a in assists),
+        strength=strength,
+    )
+
+
+def assert_goal_detail_layout(c: AsciiCanvas, left: int, right: int) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    cx = (left + right) // 2
+
+    name_box = c.bbox(left, 0, right - 1, 8)
+    assert name_box is not None, "scorer name missing"
+    assert abs(name_box.center_x - cx) <= 2, f"scorer name not centred: {name_box.center_x}"
+    assert ACCENT in c.colors(left, 0, right - 1, 8), "scorer name should be amber"
+
+    assert c.bbox(left, 12, right - 1, 16) is not None, "season goal total missing"
+    assert c.colors(left, 12, right - 1, 16) == {WHITE}
+
+    assist_region = c.lit(left, 18, right - 1, H - 1)
+    assert assist_region, "assist line missing"
+    assert set(assist_region.values()) == {SUBDUED}
+
+
+@pytest.mark.parametrize(
+    ("name", "assists"),
+    [
+        ("unassisted", ()),
+        ("one_assist", (("J. SMITH", 5),)),
+        ("two_assists", (("J. SMITH", 5), ("B. JOHNSON", 9))),
+    ],
+)
+def test_logo_layout_goal_detail(games, synthetic_logos, name, assists, update_snapshots):
+    game = games["live"]  # SEA 2 @ CGY 1
+    event = goal_event(game.home.abbrev, assists=assists)
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_goal_detail(c, game, event)
+    art = show(f"logos, goal detail ({name}): {event.scorer_name} #{event.scorer_goals_to_date}", c)
+
+    assert_goal_detail_layout(c, MID_LEFT, MID_RIGHT)
+    for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
+        logo_colors = c.colors(x0, 0, x0 + LOGO - 1, H - 1)
+        assert team_color(side.abbrev) in logo_colors, f"{side.abbrev} logo"
+    check_snapshot(f"logo_goal_detail_{name}", art, update_snapshots)
+
+
+def test_text_layout_goal_detail(games, update_snapshots):
+    game = games["live"]
+    event = goal_event(game.home.abbrev, assists=(("J. SMITH", 5),))
+    c = canvas()
+    make_renderer().draw_goal_detail(c, game, event)
+    art = show(f"text, goal detail: {event.scorer_name} #{event.scorer_goals_to_date}", c)
+
+    assert_goal_detail_layout(c, 0, W)
+    check_snapshot("text_goal_detail", art, update_snapshots)
+
+
+def test_goal_detail_strength_badge_only_shown_when_not_even_strength(games, synthetic_logos):
+    game = games["live"]
+    ev = goal_event(game.home.abbrev, scorer="T. NOVAK", strength="ev")
+    pp = goal_event(game.home.abbrev, scorer="T. NOVAK", strength="pp")
+    r = make_renderer(logos=synthetic_logos)
+
+    c_ev = canvas()
+    r.draw_goal_detail(c_ev, game, ev)
+    # Same scorer name in both cases -> the name's own pixels land in the
+    # same place regardless of strength; the badge (if any) is to its right.
+    name_box = c_ev.bbox(MID_LEFT, 0, MID_RIGHT - 1, 8)
+    assert c_ev.colors(name_box.x1 + 1, 0, MID_RIGHT - 1, 8) == set(), "no badge at even strength"
+
+    c_pp = canvas()
+    r.draw_goal_detail(c_pp, game, pp)
+    assert ACCENT in c_pp.colors(name_box.x1 + 1, 0, MID_RIGHT - 1, 8), "PP badge missing"
+
+
+def test_goal_detail_falls_back_to_text_when_a_logo_is_missing(games, synthetic_logos, tmp_path):
+    """Same fallback precedent as draw_game/draw_standings: a library missing
+    just one side's crest still gets the text layout, not a crash."""
+    from PIL import Image
+
+    game = games["live"]
+    event = goal_event(game.home.abbrev)
+    without_home = tmp_path / "partial"
+    without_home.mkdir()
+    Image.open(synthetic_logos.path_for(game.away.abbrev)).save(
+        without_home / f"{game.away.abbrev}.png"
+    )
+    c = canvas()
+    make_renderer(logos=LogoLibrary([without_home])).draw_goal_detail(c, game, event)
+    assert_goal_detail_layout(c, 0, W)  # full width: the text layout's signature
+
+
+def test_goal_detail_reflects_the_actual_event(games, synthetic_logos):
+    """A distinct scorer/assist must actually show up, not a stale one."""
+    game = games["live"]
+    c1 = canvas()
+    make_renderer(logos=synthetic_logos).draw_goal_detail(
+        c1, game, goal_event(game.home.abbrev, scorer="A. AHO", goals=30)
+    )
+    c2 = canvas()
+    make_renderer(logos=synthetic_logos).draw_goal_detail(
+        c2, game, goal_event(game.home.abbrev, scorer="J. TKACHUK", goals=2)
+    )
+    assert c1.pixels != c2.pixels
+
+
+# --------------------------------------------------------------------------
 # narrow panel: a single 64x32 (chain_length=1), not the default 128x32
 # chain -- #38. Two full 32px logos would meet with zero room left for the
 # score column, so each logo crops its centre-facing edge (Renderer.
@@ -908,3 +1022,18 @@ def test_upcoming_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
     top_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
     assert top_box is not None, "top line missing"
     check_snapshot("logo_narrow_preview", art, update_snapshots)
+
+
+def test_goal_detail_narrow_panel_stays_on_panel(games, synthetic_logos):
+    """No dedicated crop guarantee for this scene's text the way _logo_span
+    gives game/goal/preview (#38): a scorer/assister name has no fixed max
+    length the way a score or "GOAL" does. This only promises no off-panel
+    pixels on the narrowest supported panel, not zero visual overlap with
+    the cropped logo art beside it for an unusually long name."""
+    game = games["live"]
+    event = goal_event(
+        game.home.abbrev, scorer="F. FORSBERG", assists=(("B. JOHNSON", 9),), strength="pp"
+    )
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_goal_detail(c, game, event)
+    assert not c.out_of_bounds
