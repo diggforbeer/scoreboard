@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -146,3 +147,37 @@ def test_backend_rejects_anything_else(capsys):
         cli.build_parser().parse_args(["--backend", "hub75"])
 
     assert "hub75" in capsys.readouterr().err
+
+
+def test_demo_goes_through_the_matrix_backend_path_and_runs_the_demo_loop(monkeypatch, tmp_path):
+    # The opposite of --dump: --demo needs a real matrix, so it must take the
+    # same lazy app/backend import and construction as a normal run, then
+    # call run_demo() instead of run(). Stand-in modules sit where the lazy
+    # imports look, so reaching them proves the import happened; the loops
+    # themselves are covered in test_app.py.
+    calls = []
+
+    class FakeApp:
+        def __init__(self, settings, backend=None):
+            calls.append(("init", backend))
+
+        def install_signal_handlers(self):
+            calls.append("signals")
+
+        def run_demo(self):
+            calls.append("run_demo")
+
+        def run(self):
+            calls.append("run")
+
+    fake_app = types.ModuleType("nhl_scoreboard.app")
+    fake_app.ScoreboardApp = FakeApp
+    fake_matrix = types.ModuleType("nhl_scoreboard.display.matrix")
+    fake_matrix.load_backend = lambda name=None: f"backend:{name}"
+    monkeypatch.setitem(sys.modules, "nhl_scoreboard.app", fake_app)
+    monkeypatch.setitem(sys.modules, "nhl_scoreboard.display.matrix", fake_matrix)
+
+    argv = ["--demo", "--backend", "RGBMatrixEmulator", "-c", str(tmp_path / "absent.toml")]
+    assert cli.main(argv) == 0
+
+    assert calls == [("init", "backend:RGBMatrixEmulator"), "signals", "run_demo"]
