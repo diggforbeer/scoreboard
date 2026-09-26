@@ -129,6 +129,7 @@ def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -
         clock=lambda: clock.now,
         monotonic=lambda: clock.mono,
         horn=horn or RecordingHorn(),
+        local_ip=lambda: None,
     )
 
 
@@ -458,6 +459,7 @@ def test_no_favourite_team_never_detects_goals(fake_backend):
         clock=lambda: PUCK_DROP,
         monotonic=lambda: 1000.0,
         horn=RecordingHorn(),
+        local_ip=lambda: None,
     )
     settings_app.refresh()
     client.today[0] = score(client.today[0], home=1)

@@ -58,6 +58,9 @@ Early development. Working today:
 - [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
+- [x] Boot splash: "CONNECTING" then the board's LAN IP until the first
+      successful poll, falling back to the offline indicator if that never
+      happens
 - [x] Optional read-only web status page for headless debugging
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
 - [ ] Verified on real hardware

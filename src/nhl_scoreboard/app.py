@@ -20,6 +20,7 @@ from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
 from .light_sensor import LightSensor
+from .network import local_ip as _local_ip
 from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
 from .status_server import StatusServer
@@ -48,10 +49,13 @@ class Scene:
     ``kind`` is one of ``game`` (live or final scoreboard), ``countdown``,
     ``preview``, ``standings``, ``clock``, ``no_games``, ``connecting``,
     ``no_data``.
+    ``detail`` is only used by ``connecting``: the board's LAN IP once DHCP
+    has handed one out, for headless troubleshooting, or None before that.
     """
 
     kind: str
     game: Game | None = None
+    detail: str | None = None
     standings: tuple[StandingsRow, ...] | None = None
 
 
@@ -64,6 +68,7 @@ class ScoreboardApp:
         clock: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
         horn: GoalHornPlayer | None = None,
+        local_ip: Callable[[], str | None] | None = None,
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
         sleep: Callable[[float], None] | None = None,
@@ -71,6 +76,7 @@ class ScoreboardApp:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
+        self.local_ip = local_ip or _local_ip
         self.sleep = sleep or time.sleep
         self.horn = horn or GoalHornPlayer.default(
             device=settings.audio.device,
@@ -109,6 +115,11 @@ class ScoreboardApp:
         self.games: list[Game] = []
         self.index = 0
         self.last_success: float | None = None
+        #: When we started trying, so a boot that never reaches a first
+        #: successful poll (dead Wi-Fi, unreachable API) still falls through
+        #: to the same "no_data" offline indicator a lost connection would,
+        #: instead of showing "connecting" forever.
+        self._boot_monotonic = self.monotonic()
         #: Wall-clock companions to last_success, for the status page (#48) --
         #: last_success itself is monotonic and not meaningful to a human.
         self.last_success_at: datetime | None = None
@@ -637,7 +648,9 @@ class ScoreboardApp:
 
     def _select_base_scene(self, *, allow_fetch: bool = True) -> Scene:
         if self.last_success is None:
-            return Scene("connecting")
+            if self.monotonic() - self._boot_monotonic > STALE_AFTER_SECONDS:
+                return Scene("no_data")
+            return Scene("connecting", detail=self.local_ip())
         if self.is_stale():
             return Scene("no_data")
         if self.settings.scoreboard.rotation == "favourite":
@@ -819,7 +832,7 @@ class ScoreboardApp:
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":
-            r.draw_message(self.canvas, "NHL", "CONNECTING")
+            r.draw_message(self.canvas, "NHL", scene.detail or "CONNECTING")
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), self.settings.scoreboard.favourite_team)
         else:
