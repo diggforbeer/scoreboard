@@ -183,6 +183,11 @@ class ScoreboardConfig:
     #: How long a goal celebration screen stays up before returning to the
     #: normal game scene.
     goal_flash_seconds: float = 6.0
+    #: How long the scorer/assist detail screen (#122 phase 2) stays up once
+    #: it fires. Longer than goal_flash_seconds by default: there is
+    #: meaningfully more to read (name, season totals, assist(s)) than the
+    #: "GOAL" + score flash.
+    goal_detail_seconds: float = 8.0
     #: "favourite": follow the favourite's game -- countdown, live, final,
     #: then a preview of the next one. "all": rotate every game today.
     rotation: str = "favourite"

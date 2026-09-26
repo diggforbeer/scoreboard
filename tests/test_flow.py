@@ -17,7 +17,7 @@ from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, Scor
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -88,12 +88,16 @@ class FlowClient:
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
         self.fail_standings = False
+        self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
 
     def scores(self, date="now"):
         return list(self.today)
 
     def situation(self, game_id):
         return None
+
+    def goal_scoring(self, game_id):
+        return self.goal_events.get(game_id, ())
 
     def schedule(self, team):
         self.schedule_calls += 1
@@ -473,6 +477,134 @@ def test_draw_dispatches_goal_scene(day):
     tick(app, clock, seconds=1)
     assert scene(app) == ("goal", 1)
     app.draw()  # must not raise; exercises Renderer.draw_goal via the real dispatch
+    assert app.matrix.swaps >= 1
+
+
+# --------------------------------------------------------------------------
+# goal detail (#122 phase 2) -- fires later, decoupled from the goal scene
+# --------------------------------------------------------------------------
+
+
+def goal_event(team=FAV, scorer="F. FORSBERG", goals=1, strength="ev") -> GoalEvent:
+    return GoalEvent(
+        team_abbrev=team,
+        scorer_name=scorer,
+        scorer_goals_to_date=goals,
+        assists=(),
+        strength=strength,
+    )
+
+
+def _score_the_favourite(client) -> None:
+    """Live the tonight game and bump its score by one, as the earlier goal tests do."""
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+
+
+def test_goal_detail_fires_after_the_goal_scene_once_landing_catches_up(day):
+    """The score ticks up (score/now) before scoring (landing) has the entry -- #122's
+    whole reason for two phases: goal detail must not wait on, or require, that."""
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 1)
+
+    app.refresh_goal_details()  # landing still hasn't caught up: baseline only
+    assert scene(app) == ("goal", 1)
+
+    event = goal_event()
+    client.goal_events[1] = (event,)
+    app.refresh_goal_details()
+
+    assert scene(app) == ("goal_detail", 1)
+    assert app.select_scene().goal_event == event
+
+
+def test_goal_detail_wins_over_the_goal_flash_when_both_are_pending(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    app.refresh_goal_details()  # baseline
+    client.goal_events[1] = (goal_event(),)
+    app.refresh_goal_details()  # landing already caught up within the same flash window
+
+    assert scene(app) == ("goal_detail", 1)
+
+
+def test_goal_detail_reverts_to_the_game_scene_after_goal_detail_seconds(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    app.settings.scoreboard.goal_detail_seconds = 10
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    app.refresh_goal_details()  # baseline
+    client.goal_events[1] = (goal_event(),)
+    app.refresh_goal_details()
+    assert scene(app) == ("goal_detail", 1)
+
+    clock.advance(seconds=9)
+    assert scene(app) == ("goal_detail", 1), "still inside the detail window"
+
+    clock.advance(seconds=2)
+    assert scene(app) == ("game", 1), "detail window elapsed: back to the normal scene"
+
+
+def test_goal_detail_override_does_not_leak_onto_a_different_game(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    app.refresh_goal_details()  # baseline
+    client.goal_events[1] = (goal_event(),)
+    app.refresh_goal_details()
+    assert app._goal_detail is not None and app._goal_detail[0] == 1
+
+    from nhl_scoreboard.app import Scene
+
+    unrelated = Scene("game", client.today[0])  # SEA @ CGY, unrelated game
+    assert app._apply_goal_override(unrelated) is unrelated
+
+
+def test_goal_detail_does_not_override_countdown_or_preview(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    app.refresh_goal_details()  # baseline
+    client.goal_events[1] = (goal_event(),)
+    app.refresh_goal_details()
+
+    from nhl_scoreboard.app import Scene
+
+    preview = Scene("preview", client.season[2])
+    assert app._apply_goal_override(preview) is preview
+    countdown = Scene("countdown", client.season[2])
+    assert app._apply_goal_override(countdown) is countdown
+
+
+def test_draw_dispatches_goal_detail_scene(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    app.refresh_goal_details()  # baseline
+    client.goal_events[1] = (goal_event(),)
+    app.refresh_goal_details()
+    assert scene(app) == ("goal_detail", 1)
+    app.draw()  # must not raise; exercises Renderer.draw_goal_detail via the real dispatch
     assert app.matrix.swaps >= 1
 
 

@@ -319,3 +319,73 @@ def test_standings_window_shrinks_for_a_small_conference():
 def test_standings_window_missing_team_is_empty():
     rows = [_row(f"T{i}", i) for i in range(8)]
     assert standings_window(rows, "ZZZ") == []
+
+
+# -- goal detail (#122) -------------------------------------------------------
+
+from nhl_scoreboard.nhl.models import (  # noqa: E402
+    AssistDetail,
+    GoalEvent,
+    goal_events_from_landing,
+)
+
+
+def _goal_raw(team="NSH", scorer="F. Forsberg", goals=12, assists=(), strength="ev"):
+    return {
+        "teamAbbrev": team,
+        "name": {"default": scorer},
+        "goalsToDate": goals,
+        "assists": [{"name": {"default": n}, "assistsToDate": a} for n, a in assists],
+        "strength": strength,
+    }
+
+
+def test_goal_event_parses_scorer_and_assists():
+    event = GoalEvent.from_api(
+        _goal_raw(assists=[("J. Smith", 5), ("B. Johnson", 9)], strength="pp")
+    )
+    assert event.team_abbrev == "NSH"
+    assert event.scorer_name == "F. Forsberg"
+    assert event.scorer_goals_to_date == 12
+    assert event.assists == (
+        AssistDetail(name="J. Smith", assists_to_date=5),
+        AssistDetail(name="B. Johnson", assists_to_date=9),
+    )
+    assert event.strength == "pp"
+
+
+def test_goal_event_defaults_to_even_strength_and_no_assists():
+    event = GoalEvent.from_api(_goal_raw())
+    assert event.strength == "ev"
+    assert event.assists == ()
+
+
+def test_goal_events_from_landing_flattens_every_period_in_order():
+    raw = {
+        "summary": {
+            "scoring": [
+                {"goals": [_goal_raw(scorer="A")]},
+                {"goals": [_goal_raw(scorer="B"), _goal_raw(scorer="C")]},
+            ]
+        }
+    }
+    events = goal_events_from_landing(raw)
+    assert [e.scorer_name for e in events] == ["A", "B", "C"]
+
+
+def test_goal_events_from_landing_absent_is_empty():
+    assert goal_events_from_landing(None) == ()
+    assert goal_events_from_landing({}) == ()
+    assert goal_events_from_landing({"summary": {}}) == ()
+
+
+def test_goal_events_from_landing_skips_a_malformed_goal_without_losing_the_rest():
+    raw = {
+        "summary": {
+            "scoring": [
+                {"goals": [{"goalsToDate": "not-a-number"}, _goal_raw(scorer="OK")]},
+            ]
+        }
+    }
+    events = goal_events_from_landing(raw)
+    assert [e.scorer_name for e in events] == ["OK"]

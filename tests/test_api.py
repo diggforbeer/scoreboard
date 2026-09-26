@@ -212,6 +212,45 @@ def test_situation_returns_none_when_key_is_absent():
 
 
 @responses.activate
+def test_goal_scoring_url_and_parsed_payload():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/42/landing",
+        json={
+            "summary": {
+                "scoring": [
+                    {
+                        "goals": [
+                            {
+                                "teamAbbrev": "NSH",
+                                "name": {"default": "F. Forsberg"},
+                                "goalsToDate": 12,
+                                "assists": [{"name": {"default": "J. Smith"}, "assistsToDate": 5}],
+                                "strength": "pp",
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        events = client.goal_scoring(42)
+    assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/landing"
+    assert [e.scorer_name for e in events] == ["F. Forsberg"]
+    assert events[0].team_abbrev == "NSH"
+    assert events[0].strength == "pp"
+
+
+@responses.activate
+def test_goal_scoring_returns_empty_when_scoring_is_absent():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
+    with NHLClient() as client:
+        assert client.goal_scoring(1) == ()
+
+
+@responses.activate
 def test_standings_hits_standings_date():
     responses.add(responses.GET, f"{BASE_URL}/standings/now", json={"standings": []}, status=200)
     with NHLClient() as client:
