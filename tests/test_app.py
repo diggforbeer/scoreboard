@@ -18,8 +18,15 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import FRAME_INTERVAL, STALE_AFTER_SECONDS, ScoreboardApp
+from nhl_scoreboard.app import (
+    DEMO_SCENE_SECONDS,
+    FRAME_INTERVAL,
+    STALE_AFTER_SECONDS,
+    Scene,
+    ScoreboardApp,
+)
 from nhl_scoreboard.config import Settings
+from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
 from nhl_scoreboard.nhl.models import Game, Situation, StandingsRow
@@ -1160,3 +1167,203 @@ def test_status_page_post_concurrent_with_reload_does_not_raise(fake_backend, ga
         app.status_server.stop()
 
     assert errors == []
+
+
+# -- demo mode (#47) ----------------------------------------------------------
+
+
+class RecordingHorn:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def play(self, abbrev: str) -> bool:
+        self.calls.append(abbrev)
+        return True
+
+
+DEMO_NOW = datetime(2026, 10, 14, 23, 0, tzinfo=UTC)
+TICKS_PER_SCENE = round(DEMO_SCENE_SECONDS / FRAME_INTERVAL)
+
+
+def demo_app(fake_backend, games, **panel_kwargs) -> tuple[ScoreboardApp, FakeClockSource]:
+    src = FakeClockSource()
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        clock=lambda: DEMO_NOW,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+        horn=RecordingHorn(),
+    )
+    return app, src
+
+
+def spy_draw_scene(app: ScoreboardApp) -> list[tuple]:
+    """Record (scene, renderer.logos, monotonic time) at every draw_scene call."""
+    calls = []
+    original = app.draw_scene
+
+    def spy(scene):
+        calls.append((scene, app.renderer.logos, app.monotonic()))
+        original(scene)
+
+    app.draw_scene = spy
+    return calls
+
+
+def stub_renderer(app: ScoreboardApp) -> None:
+    # The fake graphics can't lay out real glyphs, and pregame labels use
+    # "%-I" (which Windows rejects); the real rendering of every step is
+    # covered by test_demo.py. These tests are about the loop.
+    for name in (
+        "draw_game",
+        "draw_goal",
+        "draw_countdown",
+        "draw_preview",
+        "draw_standings",
+        "draw_message",
+        "draw_clock",
+    ):
+        setattr(app.renderer, name, lambda *args: None)
+
+
+def run_demo_for_frames(app: ScoreboardApp, src: FakeClockSource, frames: int) -> None:
+    remaining = frames
+
+    def sleep(seconds: float) -> None:
+        nonlocal remaining
+        src.sleep(seconds)
+        remaining -= 1
+        if remaining <= 0:
+            app._running = False
+
+    app.sleep = sleep
+    app.run_demo()
+
+
+def test_demo_draws_each_step_in_order_for_demo_scene_seconds(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    calls = spy_draw_scene(app)
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    run_demo_for_frames(app, src, 3 * TICKS_PER_SCENE)
+
+    assert [c[0] for c in calls] == [s.scene for s in steps[:3]]
+    assert [c[2] for c in calls] == [0.0, DEMO_SCENE_SECONDS, 2 * DEMO_SCENE_SECONDS]
+    assert app.matrix.swaps == 3
+
+
+def test_demo_loops_back_to_the_first_step(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    calls = spy_draw_scene(app)
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    run_demo_for_frames(app, src, (len(steps) + 1) * TICKS_PER_SCENE)
+
+    assert [c[0] for c in calls] == [s.scene for s in steps] + [steps[0].scene]
+
+
+def test_demo_never_touches_the_real_state_machine(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    forbidden = []
+    for name in (
+        "refresh",
+        "select_scene",
+        "refresh_situations",
+        "refresh_brightness",
+        "reload_config_if_changed",
+        "_on_goal",
+    ):
+        setattr(app, name, lambda *a, _name=name, **k: forbidden.append(_name))
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
+
+    assert forbidden == []
+    assert app.client.calls == 0
+    assert app.client.situation_calls == []
+    assert app.client.schedule_calls == 0
+    assert app.client.standings_calls == 0
+
+
+def test_demo_goal_scenes_never_play_the_horn(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    calls = spy_draw_scene(app)
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    run_demo_for_frames(app, src, 2 * len(steps) * TICKS_PER_SCENE)
+
+    assert any(c[0].kind == "goal" for c in calls), "the cycle should include a goal"
+    assert app.horn.calls == []
+    assert app.last_goal is None
+
+
+def test_demo_stops_within_one_frame_of_a_signal(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    status = FakeStatusServer()
+    app.status_server = status
+    frames = 0
+
+    def sleep(seconds: float) -> None:
+        nonlocal frames
+        src.sleep(seconds)
+        frames += 1
+        if frames == 2:
+            app._handle_signal(signal.SIGINT, None)
+
+    app.sleep = sleep
+    app.run_demo()
+
+    assert frames == 2, "should stop mid-scene, not wait out DEMO_SCENE_SECONDS"
+    assert src.now == 2 * FRAME_INTERVAL
+    assert app.client.closed
+    assert status.stopped
+
+
+def test_demo_toggles_logos_per_step_and_restores_them(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    library = object()
+    app.renderer.logos = library
+    calls = spy_draw_scene(app)
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
+
+    assert len(calls) == len(steps)
+    for step, (_scene, logos, _t) in zip(steps, calls, strict=True):
+        assert logos is (library if step.use_logos else None)
+    assert {c[1] is None for c in calls} == {True, False}, "both layouts must be drawn"
+    assert app.renderer.logos is library
+
+
+def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    app.renderer.logos = None  # show_logos = false
+    calls = spy_draw_scene(app)
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
+
+    assert len(calls) == len(steps)
+    assert all(c[1] is None for c in calls)
+
+
+def test_draw_scene_dispatches_goal_without_the_horn(fake_backend, games):
+    app, _src = demo_app(fake_backend, games)
+    drawn = []
+    app.renderer.draw_goal = lambda canvas, game: drawn.append(game)
+    live = next(g for g in games if g.is_live)
+
+    app.draw_scene(Scene("goal", live))
+
+    assert drawn == [live]
+    assert app.horn.calls == []
+    assert app.matrix.swaps == 1

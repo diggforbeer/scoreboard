@@ -37,6 +37,8 @@ STANDINGS_TTL_SECONDS = 60 * 60
 #: this is what keeps a cloud passing over a window, or a hand briefly
 #: covering the sensor, from visibly flickering the panel.
 BRIGHTNESS_SMOOTHING = 0.3
+#: How long each scene stays up in ``--demo`` (#47).
+DEMO_SCENE_SECONDS = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +146,9 @@ class ScoreboardApp:
         #: (game id, monotonic time) of the most recent favourite goal, for
         #: how long the goal scene stays up.
         self.last_goal: tuple[int, float] | None = None
+        #: The configured logo library, held by run_demo() while it toggles
+        #: renderer.logos between it and None for the text layout.
+        self._demo_real_logos: LogoLibrary | None = logos
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -182,6 +187,46 @@ class ScoreboardApp:
             self.draw()
             self.sleep(FRAME_INTERVAL)
         self.shutdown()
+
+    def run_demo(self) -> None:
+        """Loop every scene with synthetic data until stopped (#47).
+
+        Deliberately bypasses the real state machine: no ``refresh()``,
+        ``select_scene()``, situation/brightness sampling or config reload,
+        and no NHL client call at all -- coercing live data into every state
+        on demand isn't possible, and a bench board may have no network.
+        Goals drawn here never reach ``_on_goal()`` (only ``refresh()``'s
+        ``_detect_goals()`` does), so the horn stays silent.
+        """
+        # Imported here: demo builds Scene objects, so a top-level import
+        # would be circular.
+        from .demo import demo_steps
+
+        self._running = True
+        self._demo_real_logos = self.renderer.logos
+        ticks_per_scene = max(1, round(DEMO_SCENE_SECONDS / FRAME_INTERVAL))
+        while self._running:
+            # Rebuilt each pass so the preview/countdown stay relative to now.
+            steps = demo_steps(self.settings.scoreboard.favourite_team, self.clock())
+            for step in steps:
+                if not self._running:
+                    break
+                self._set_demo_logos(step.use_logos)
+                self.draw_scene(step.scene)
+                for _ in range(ticks_per_scene):
+                    if not self._running:
+                        break
+                    self.sleep(FRAME_INTERVAL)
+        self.renderer.logos = self._demo_real_logos
+        self.shutdown()
+
+    def _set_demo_logos(self, use_logos: bool) -> None:
+        """Show the text fallback layout on demand, whatever the board has configured.
+
+        With ``show_logos`` off there was never a library, so logo steps
+        simply draw as text too.
+        """
+        self.renderer.logos = self._demo_real_logos if use_logos else None
 
     def shutdown(self) -> None:
         try:
@@ -761,7 +806,9 @@ class ScoreboardApp:
             self.canvas.Clear()
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
             return
-        scene = self.select_scene()
+        self.draw_scene(self.select_scene())
+
+    def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
         if scene.kind == "game":
             r.draw_game(self.canvas, self.with_situation(scene.game))
