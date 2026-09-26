@@ -27,6 +27,7 @@ def test_build_options_translates_every_panel_field():
         chain_length=2,
         parallel=1,
         hardware_mapping="regular",
+        rgb_sequence="RGB",
         gpio_slowdown=4,
         pwm_bits=11,
         pwm_lsb_nanoseconds=130,
@@ -41,6 +42,7 @@ def test_build_options_translates_every_panel_field():
     assert options.chain_length == 2
     assert options.parallel == 1
     assert options.hardware_mapping == "regular"
+    assert options.led_rgb_sequence == "RGB"
     assert options.gpio_slowdown == 4
     assert options.pwm_bits == 11
     assert options.pwm_lsb_nanoseconds == 130
@@ -55,6 +57,13 @@ def test_pixel_mapper_passed_through_as_pixel_mapper_config():
     panel = PanelConfig(pixel_mapper="U-mapper")
     options = build_options(fake_backend(), panel)
     assert options.pixel_mapper_config == "U-mapper"
+
+
+def test_rgb_sequence_passed_through_as_led_rgb_sequence():
+    """The binding's field is 'led_rgb_sequence'; ours is the shorter 'rgb_sequence'."""
+    panel = PanelConfig(rgb_sequence="RBG")
+    options = build_options(fake_backend(), panel)
+    assert options.led_rgb_sequence == "RBG"
 
 
 def test_chained_pixel_mappers_pass_through_unmodified():

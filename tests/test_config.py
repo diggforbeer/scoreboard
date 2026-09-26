@@ -9,6 +9,7 @@ def test_defaults_describe_two_chained_64x32_panels():
     settings = Settings()
     assert (settings.panel.width, settings.panel.height) == (128, 32)
     assert settings.panel.hardware_mapping == "regular"
+    assert settings.panel.rgb_sequence == "RGB"
 
 
 def test_default_favourite_is_nashville_but_overridable(tmp_path):

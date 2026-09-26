@@ -68,6 +68,7 @@ def build_options(backend: Backend, panel: PanelConfig) -> Any:
         "chain_length": panel.chain_length,
         "parallel": panel.parallel,
         "hardware_mapping": panel.hardware_mapping,
+        "led_rgb_sequence": panel.rgb_sequence,
         "gpio_slowdown": panel.gpio_slowdown,
         "pwm_bits": panel.pwm_bits,
         "pwm_lsb_nanoseconds": panel.pwm_lsb_nanoseconds,
