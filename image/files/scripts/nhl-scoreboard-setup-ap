@@ -1,0 +1,133 @@
+#!/bin/sh
+# Bring up a WiFi access point + captive-portal DHCP/DNS when the board has
+# no other working network path (#131, infrastructure phase of #116). This
+# is deliberately just the AP/DHCP/DNS plumbing -- no setup page (see the
+# follow-up issue for that) and no wiring into the wifi-join/rollback flow
+# in scoreboard-provision; see #116 for those.
+#
+# Trigger condition: NOT simply "no [wifi] configured" -- scoreboard-
+# provision already treats that as "relying on ethernet" and does nothing
+# (apply_wifi() there). This only needs to run when the board genuinely has
+# no way online after boot, however it happens to be configured. A default
+# route is used as the "online" signal rather than checking specific
+# interface names (eth0 vs enp0s0 vs a USB dongle vary by hardware, and
+# hardcoding one would be guessing) -- it is also exactly what the app
+# itself needs to reach api-web.nhle.com, so "no default route" and "board
+# can't do its job" are the same condition.
+#
+# nhl-scoreboard-setup-ap.service orders itself after
+# scoreboard-provision.service, which already blocks for up to
+# WIFI_CONNECT_TIMEOUT seconds resolving any configured Wi-Fi (connect, or
+# roll back) before returning -- so by the time this script runs, that
+# outcome is already settled and this needs no wait/retry loop of its own.
+#
+# iwd's own AccessPoint support (net.connman.iwd.AccessPoint, via `iwctl
+# ap`) is used instead of adding hostapd as a second WiFi daemon -- this
+# image already depends on iwd. iwd's AP mode only handles the 802.11 side;
+# it does not assign the interface an IP or hand out leases, so this script
+# still sets a static IP itself and starts dnsmasq for DHCP + wildcard DNS
+# (`address=/#/<ap-addr>`, so every hostname a phone's OS probes resolves
+# to the board -- that's what actually triggers the "Sign in to network"
+# captive-portal prompt).
+#
+# `iwctl ap <dev> start-open` (an open, unencrypted network) is tried
+# first, falling back to a WPA2-PSK network with a fixed passphrase if it's
+# unavailable -- start-open needs a newer iwd than could be confirmed
+# against the image's actual shipped Debian release without hardware.
+# NOT verified against real hardware (#4); whichever mode actually started
+# is logged so that can be checked on a real board.
+#
+# No self-monitoring teardown loop: a WiFi radio cannot be an AP and a
+# station at the same time, so there is nothing meaningful to poll for on
+# this interface once the AP is up. Teardown (`stop`) is meant to be driven
+# by the eventual wifi-submission flow once it confirms a real network
+# joined successfully, not by this script guessing -- systemd's
+# ExecStopPost also runs it on any `systemctl stop`, so it fires however
+# the service is asked to end.
+set -eu
+
+IFACE="${NHL_SCOREBOARD_AP_IFACE:-wlan0}"
+SSID="${NHL_SCOREBOARD_AP_SSID:-NHL-Scoreboard-Setup}"
+PASSPHRASE="${NHL_SCOREBOARD_AP_PASSPHRASE:-scoreboard}"
+AP_ADDR="${NHL_SCOREBOARD_AP_ADDR:-10.42.0.1}"
+AP_PREFIX="${NHL_SCOREBOARD_AP_PREFIX:-24}"
+DHCP_RANGE="${NHL_SCOREBOARD_AP_DHCP_RANGE:-10.42.0.10,10.42.0.200,12h}"
+DNSMASQ_CONF="${NHL_SCOREBOARD_AP_DNSMASQ_CONF:-/run/nhl-scoreboard-setup-ap-dnsmasq.conf}"
+DNSMASQ_BIN="${NHL_SCOREBOARD_AP_DNSMASQ_BIN:-dnsmasq}"
+
+log() {
+    logger -t nhl-scoreboard-setup-ap "$1"
+    echo "$1"
+}
+
+is_online() {
+    [ -n "$(ip route show default 2>/dev/null)" ]
+}
+
+write_dnsmasq_conf() {
+    # bind-interfaces + interface=: scoped to the AP interface only, so
+    # this never competes with any resolver already listening elsewhere on
+    # the board. no-resolv: this instance is a captive-portal responder,
+    # not a general recursive resolver -- it should never forward.
+    cat > "$DNSMASQ_CONF" <<EOF
+interface=$IFACE
+bind-interfaces
+except-interface=lo
+no-resolv
+dhcp-range=$DHCP_RANGE
+dhcp-option=3,$AP_ADDR
+dhcp-option=6,$AP_ADDR
+address=/#/$AP_ADDR
+EOF
+}
+
+cmd_check() {
+    if is_online; then
+        log "Board has a default route; AP mode not needed"
+        return 0
+    fi
+    log "No default route; AP mode needed"
+    return 1
+}
+
+cmd_start() {
+    if is_online; then
+        log "Already online; not starting AP mode"
+        return 0
+    fi
+
+    log "Bringing up $IFACE as $SSID ($AP_ADDR/$AP_PREFIX)"
+    ip addr flush dev "$IFACE"
+    ip addr add "$AP_ADDR/$AP_PREFIX" dev "$IFACE"
+    ip link set "$IFACE" up
+
+    if iwctl ap "$IFACE" start-open "$SSID"; then
+        log "AP mode: open network (no passphrase)"
+    elif iwctl ap "$IFACE" start "$SSID" "$PASSPHRASE"; then
+        log "AP mode: iwd start-open unavailable; fell back to WPA2-PSK"
+    else
+        log "Could not start AP mode on $IFACE"
+        return 1
+    fi
+
+    write_dnsmasq_conf
+    log "Starting dnsmasq for DHCP + captive-portal DNS on $IFACE"
+    exec "$DNSMASQ_BIN" --no-daemon --conf-file="$DNSMASQ_CONF"
+}
+
+cmd_stop() {
+    log "Tearing down AP mode on $IFACE"
+    iwctl ap "$IFACE" stop 2>/dev/null || true
+    ip addr flush dev "$IFACE" 2>/dev/null || true
+    rm -f "$DNSMASQ_CONF"
+}
+
+case "${1:-start}" in
+    check) cmd_check ;;
+    start) cmd_start ;;
+    stop) cmd_stop ;;
+    *)
+        echo "usage: $0 {check|start|stop}" >&2
+        exit 2
+        ;;
+esac
