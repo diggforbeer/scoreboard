@@ -235,8 +235,18 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          stamp="$(date -u +%Y%m%d)"
-          out="${IMAGE_NAME}-${stamp}-$(git -C scoreboard rev-parse --short HEAD).img"
+          # Match the release tag exactly (e.g. nhl-scoreboard-v2026.09.26.9.img)
+          # when this run was triggered from one, so the filename and the
+          # release it's attached to are trivially comparable at a glance --
+          # no cross-referencing a commit SHA against the release notes.
+          # Falls back to a date+SHA name for a workflow_dispatch run on a
+          # plain branch, which has no tag to match.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="$(date -u +%Y%m%d)-$(git -C scoreboard rev-parse --short HEAD)"
+          fi
+          out="${IMAGE_NAME}-${version}.img"
           mkdir -p deploy
           mv "${{ steps.locate.outputs.path }}" "deploy/${out}"
 
