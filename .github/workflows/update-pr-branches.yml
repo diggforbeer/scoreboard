@@ -36,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          prs="$(gh pr list --state open --base main --json number --jq '.[].number')"
+          prs="$(gh pr list --repo "${{ github.repository }}" --state open --base main --json number --jq '.[].number')"
           if [ -z "$prs" ]; then
             echo "No open PRs targeting main."
             exit 0

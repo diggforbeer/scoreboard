@@ -48,3 +48,52 @@ DEFAULT_COLOR = (220, 220, 220)
 
 def team_color(abbrev: str) -> tuple[int, int, int]:
     return TEAM_COLORS.get(abbrev.strip().upper(), DEFAULT_COLOR)
+
+
+#: abbrev -> (r, g, b), a second accent colour distinct from TEAM_COLORS.
+#:
+#: Scoped to the idle clock scene (#123): kept separate from TEAM_COLORS so
+#: nothing that already depends on team_color()'s single-colour contract
+#: (game score text, standings rows, and the tests asserting on them) has to
+#: change. Real secondaries that are black, near-black, or otherwise too dim
+#: to read on an LED matrix are substituted the same way TEAM_COLORS already
+#: does for navy/burgundy primaries -- usually with the team's actual gold,
+#: red, or blue accent instead of a literal black-to-white swap.
+TEAM_SECONDARY_COLORS: dict[str, tuple[int, int, int]] = {
+    "ANA": (190, 160, 100),  # gold
+    "BOS": (255, 255, 255),  # black -> white
+    "BUF": (0, 90, 180),  # navy, lifted (primary already uses BUF's gold)
+    "CAR": (185, 190, 195),  # "storm surge" grey
+    "CBJ": (206, 17, 38),  # red
+    "CGY": (250, 190, 40),  # gold
+    "CHI": (240, 180, 60),  # old gold
+    "COL": (35, 140, 210),  # blue
+    "DAL": (190, 190, 190),  # silver
+    "DET": (255, 255, 255),  # white
+    "EDM": (30, 100, 200),  # navy, lifted
+    "FLA": (200, 165, 90),  # gold
+    "LAK": (60, 110, 190),  # forum blue
+    "MIN": (220, 175, 60),  # gold
+    "MTL": (30, 70, 180),  # blue
+    "NJD": (255, 255, 255),  # black -> white
+    "NSH": (30, 100, 190),  # navy, lifted (primary already uses NSH's gold)
+    "NYI": (255, 140, 0),  # orange
+    "NYR": (220, 20, 50),  # red
+    "OTT": (200, 160, 60),  # gold
+    "PHI": (255, 255, 255),  # black -> white
+    "PIT": (255, 255, 255),  # black -> white
+    "SEA": (233, 20, 40),  # "boot red"
+    "SJS": (234, 120, 20),  # burnt orange
+    "STL": (250, 180, 20),  # gold
+    "TBL": (255, 255, 255),  # white
+    "TOR": (255, 255, 255),  # white
+    "UTA": (255, 255, 255),  # white
+    "VAN": (20, 80, 170),  # navy, lifted
+    "VGK": (200, 20, 44),  # red
+    "WPG": (200, 20, 40),  # red
+    "WSH": (20, 90, 190),  # navy, lifted
+}
+
+
+def team_secondary_color(abbrev: str) -> tuple[int, int, int]:
+    return TEAM_SECONDARY_COLORS.get(abbrev.strip().upper(), DEFAULT_COLOR)

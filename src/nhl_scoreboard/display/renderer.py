@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from ..nhl.models import Game, GoalEvent, StandingsRow
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
-from .teams import team_color
+from .teams import team_color, team_secondary_color
 
 WHITE = (255, 255, 255)
 DIM = (48, 48, 48)
@@ -457,19 +457,30 @@ class Renderer:
             self.text_right(canvas, font, gp_right, y, color, str(row.games_played))
             self.text_right(canvas, font, points_right, y, color, str(row.points))
 
-    def draw_clock(self, canvas: Any, now: datetime) -> None:
-        """Idle scene: the time, for when there is no hockey to show."""
+    def draw_clock(self, canvas: Any, now: datetime, favourite: str | None = None) -> None:
+        """Idle scene: the time, for when there is no hockey to show.
+
+        Coloured with the favourite team's colours when one is configured
+        (#123); otherwise WHITE/SUBDUED exactly as before, same
+        graceful-fallback precedent as every other favourite-scoped feature.
+        The date line uses the secondary colour dimmed rather than at full
+        saturation, to keep the same "time leads, date is deemphasized"
+        hierarchy that SUBDUED gave it -- a straight colour swap would have
+        both lines competing for attention instead.
+        """
         canvas.Clear()
         local = now.astimezone(self.tz)
+        time_color = team_color(favourite) if favourite else WHITE
+        date_color = self._dim(team_secondary_color(favourite)) if favourite else SUBDUED
         self.text_center(
-            canvas, self.fonts.large, self.width // 2, 15, WHITE, local.strftime("%-I:%M %p")
+            canvas, self.fonts.large, self.width // 2, 15, time_color, local.strftime("%-I:%M %p")
         )
         self.text_center(
             canvas,
             self.fonts.small,
             self.width // 2,
             self.height - 2,
-            SUBDUED,
+            date_color,
             local.strftime("%a %b %-d").upper(),
         )
 
@@ -486,6 +497,11 @@ class Renderer:
             )
 
     # -- helpers ---------------------------------------------------------
+
+    @staticmethod
+    def _dim(color: tuple[int, int, int], factor: float = 0.5) -> tuple[int, int, int]:
+        r, g, b = color
+        return (round(r * factor), round(g * factor), round(b * factor))
 
     @staticmethod
     def _status_color(game: Game) -> tuple[int, int, int]:

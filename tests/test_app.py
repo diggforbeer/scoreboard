@@ -872,7 +872,7 @@ def test_draw_dispatches_clock_when_idle(fake_backend, games):
     app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=True)
     app.last_success = app.monotonic()
     calls = []
-    app.renderer.draw_clock = lambda canvas, now: calls.append(now)
+    app.renderer.draw_clock = lambda canvas, now, favourite=None: calls.append(now)
     app.draw()
     assert len(calls) == 1
 
