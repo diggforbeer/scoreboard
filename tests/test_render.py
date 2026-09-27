@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -366,6 +367,84 @@ def test_message_scene(name, title, subtitle, update_snapshots):
     else:
         assert_centered(c, 0, H - 1, "title")
     check_snapshot(name, art, update_snapshots)
+
+
+# --------------------------------------------------------------------------
+# AP setup (#131 follow-up): SSID/password + join QR code
+# --------------------------------------------------------------------------
+
+
+def test_ap_setup_scene_wpa(update_snapshots):
+    """A deliberately small, hand-built matrix -- qrcode's own output is
+    exercised at the app.py level; this only needs *some* module grid to
+    check the renderer positions and colours it correctly."""
+    c = canvas()
+    qr_matrix = tuple(tuple((x + y) % 3 == 0 for x in range(21)) for y in range(21))
+    make_renderer().draw_ap_setup(c, "NHL-Scoreboard-Setup", "scoreboard", qr_matrix)
+    art = show("ap_setup_wpa", c)
+
+    assert not c.out_of_bounds
+    # The QR's white background fill covers the entire right half exactly --
+    # confined there so it never straddles the seam between the two chained
+    # 64x32 panels at x=64. Dark QR modules are pure black, which
+    # AsciiCanvas (like the real SetPixel binding) treats as "off"/unlit,
+    # not a second tracked colour -- so the right half reads as solid WHITE
+    # here even though the QR pattern is visible in the snapshot's ASCII art.
+    box = c.bbox(HALF, 0, W - 1, H - 1)
+    assert box is not None
+    assert (box.x0, box.y0, box.x1, box.y1) == (HALF, 0, W - 1, H - 1)
+    assert c.colors(HALF, 0, W - 1, H - 1) == {WHITE}
+    # Left half: SSID/password text only, never spilling into the QR's own
+    # half (that would show up as an unexpected colour above).
+    assert c.colors(0, 0, HALF - 1, H - 1) <= {WHITE, SUBDUED}
+    check_snapshot("ap_setup_wpa", art, update_snapshots)
+
+
+def test_ap_setup_scene_open_network_shows_no_password(update_snapshots):
+    c = canvas()
+    make_renderer().draw_ap_setup(c, "TestNet", None, None)
+    art = show("ap_setup_open", c)
+
+    assert not c.out_of_bounds
+    assert c.colors(0, 0, HALF - 1, H - 1) <= {WHITE, SUBDUED}
+    # No QR matrix given (e.g. qrcode failed) -- the right half must stay
+    # untouched rather than half-drawing a background with nothing on it.
+    assert c.bbox(HALF, 0, W - 1, H - 1) is None
+    check_snapshot("ap_setup_open", art, update_snapshots)
+
+
+def test_ap_setup_scene_oversized_qr_degrades_to_text_only(update_snapshots, caplog):
+    """Caught live: the qrcode library's own default quiet zone alone was
+    enough to blow a 29x29-module code out to 37x37, past the panel's 32px
+    height, with nothing raising anywhere -- app.py's border=0 fix is the
+    real fix, but the renderer must also never half-draw a background with
+    no QR on it, and must say why out loud instead of failing silently."""
+    caplog.set_level(logging.WARNING)
+    c = canvas()
+    too_big = tuple(tuple(True for _ in range(37)) for _ in range(37))
+    make_renderer().draw_ap_setup(c, "TestNet", "hunter2", too_big)
+    art = show("ap_setup_oversized_qr", c)
+
+    assert not c.out_of_bounds
+    assert c.bbox(HALF, 0, W - 1, H - 1) is None
+    assert "doesn't fit" in caplog.text
+    check_snapshot("ap_setup_oversized_qr", art, update_snapshots)
+
+
+def test_ap_setup_scene_long_ssid_never_overflows_its_half(update_snapshots):
+    """The default SSID is 20 characters -- 80px at 4px/char on the tiny
+    font, against only ~62px available on one panel half. Pins down that
+    _fit_text actually engages instead of DrawText silently overflowing
+    into the QR's half or off the panel entirely."""
+    c = canvas()
+    make_renderer().draw_ap_setup(c, "NHL-Scoreboard-Setup", "scoreboard", None)
+    art = show("ap_setup_long_ssid", c)
+
+    assert not c.out_of_bounds
+    box = c.bbox(0, 0, HALF - 1, H - 1)
+    assert box is not None
+    assert box.x1 < HALF
+    check_snapshot("ap_setup_long_ssid", art, update_snapshots)
 
 
 # --------------------------------------------------------------------------

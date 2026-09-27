@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
+import re
 import signal
 import time
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import FrameType
+
+import qrcode
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
@@ -46,6 +51,20 @@ STANDINGS_TTL_SECONDS = 60 * 60
 BRIGHTNESS_SMOOTHING = 0.3
 #: How long each scene stays up in ``--demo`` (#47).
 DEMO_SCENE_SECONDS = 4.0
+#: Written by nhl-scoreboard-setup-ap while the board's own first-boot WiFi
+#: AP is up (#131 follow-up); its mere presence means the ap_setup scene
+#: overrides everything else, so a phone that can only reach the board over
+#: that AP always sees how to join it. /run, matching the script's own
+#: choice -- never survives a reboot stale.
+AP_SETUP_STATE_PATH = Path("/run/nhl-scoreboard-setup-ap-state.json")
+#: Characters the de-facto WIFI: QR-code format requires backslash-escaped
+#: inside SSID/password fields -- unescaped, any of these would end the
+#: field early or corrupt the payload for a strict parser.
+_QR_SPECIAL_CHARS = re.compile(r'([\\;,:"])')
+
+
+def _qr_escape(value: str) -> str:
+    return _QR_SPECIAL_CHARS.sub(r"\\\1", value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +73,7 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``countdown``, ``preview``, ``standings``, ``clock``,
-    ``no_games``, ``connecting``, ``no_data``.
+    ``no_games``, ``connecting``, ``no_data``, ``ap_setup``.
     """
 
     kind: str
@@ -63,6 +82,17 @@ class Scene:
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
+    #: Set only for ``ap_setup`` (#131 follow-up) -- the board's own
+    #: first-boot WiFi AP, so a phone can join and finish setup. ``None``
+    #: password means the AP came up open, not WPA2-protected.
+    ap_ssid: str | None = None
+    ap_password: str | None = None
+    #: Precomputed QR module grid (row-major, True = dark module), or
+    #: ``None`` when the payload didn't fit any QR version, or `qrcode`
+    #: itself failed for some other reason -- the scene still shows
+    #: SSID/password as text either way, same graceful-degradation
+    #: precedent as LightSensor/resolve_timezone elsewhere in this app.
+    ap_qr_matrix: tuple[tuple[bool, ...], ...] | None = None
 
 
 class ScoreboardApp:
@@ -77,11 +107,19 @@ class ScoreboardApp:
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
         sleep: Callable[[float], None] | None = None,
+        ap_setup_state_path: Path | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
         self.sleep = sleep or time.sleep
+        self.ap_setup_state_path = ap_setup_state_path or AP_SETUP_STATE_PATH
+        #: (ssid, password) -> precomputed QR matrix, so a QR isn't
+        #: recomputed every FRAME_INTERVAL for the whole time the AP stays
+        #: up -- it only changes if the AP's own SSID/password ever would.
+        self._ap_qr_cache: (
+            tuple[tuple[str, str | None], tuple[tuple[bool, ...], ...] | None] | None
+        ) = None
         self.horn = horn or GoalHornPlayer.default(
             device=settings.audio.device,
             horn_dir=settings.audio.horn_dir,
@@ -721,9 +759,69 @@ class ScoreboardApp:
         from the status thread -- that would race the main loop into
         duplicate fetches, or block a "read-only" page on a slow NHL
         response.
+
+        ap_setup wins over everything else, unconditionally (#131
+        follow-up): if the board's own WiFi AP is up, a phone joining it is
+        the only way to reach the board at all -- there is no point
+        showing a stale game, a goal flash, or "NO DATA" to nobody.
         """
+        ap_scene = self._ap_setup_scene()
+        if ap_scene is not None:
+            return ap_scene
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
+
+    def _ap_setup_scene(self) -> Scene | None:
+        try:
+            raw = self.ap_setup_state_path.read_text()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            log.warning("Could not read AP setup state file: %s", exc)
+            return None
+        try:
+            data = json.loads(raw)
+            ssid = str(data["ssid"])
+            password = data["password"]
+            password = str(password) if password is not None else None
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            log.warning("Malformed AP setup state file: %s", exc)
+            return None
+        return Scene(
+            "ap_setup",
+            ap_ssid=ssid,
+            ap_password=password,
+            ap_qr_matrix=self._ap_setup_qr_matrix(ssid, password),
+        )
+
+    def _ap_setup_qr_matrix(
+        self, ssid: str, password: str | None
+    ) -> tuple[tuple[bool, ...], ...] | None:
+        cache_key = (ssid, password)
+        if self._ap_qr_cache is not None and self._ap_qr_cache[0] == cache_key:
+            return self._ap_qr_cache[1]
+        if password is None:
+            payload = f"WIFI:T:nopass;S:{_qr_escape(ssid)};;"
+        else:
+            payload = f"WIFI:T:WPA;S:{_qr_escape(ssid)};P:{_qr_escape(password)};;"
+        try:
+            # border=0 explicitly: verified live that get_matrix() otherwise
+            # includes the library's own default 4-module quiet zone in its
+            # output (29x29 modules for this payload becomes 37x37 with it)
+            # -- silently exceeding the panel's 32px height and skipping the
+            # QR draw entirely, with nothing wrong to log because nothing
+            # raised. Confirming the fit still happens in the renderer
+            # regardless; this just stops the default border from being the
+            # reason it doesn't.
+            qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, border=0)
+            qr.add_data(payload)
+            qr.make(fit=True)
+            matrix = tuple(tuple(bool(v) for v in row) for row in qr.get_matrix())
+        except Exception as exc:
+            log.warning("Could not build AP setup QR code: %s", exc)
+            matrix = None
+        self._ap_qr_cache = (cache_key, matrix)
+        return matrix
 
     def _select_base_scene(self, *, allow_fetch: bool = True) -> Scene:
         if self.last_success is None:
@@ -936,6 +1034,8 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), self.settings.scoreboard.favourite_team)
+        elif scene.kind == "ap_setup":
+            r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         else:
             r.draw_message(self.canvas, "NO GAMES")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
