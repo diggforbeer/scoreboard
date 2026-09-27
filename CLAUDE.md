@@ -449,8 +449,11 @@ exit; with `show_logos = false` every step is just text.
 ## WiFi AP + captive-portal setup mode (#131)
 
 Infrastructure phase only, sub-issue of #116 -- gets a phone able to reach
-the board at all when it has no working network yet. No setup page (#132)
-and no wiring into the credential-submission/rollback flow (#133) here.
+the board at all when it has no working network yet, plus (#132) the
+nearby-network scan `nhl-scoreboard-setup-ap` caches for the setup page to
+render as a picker. The setup page itself lives in `setup_server.py` (see
+the "WiFi setup page" section below); wiring a submission into the
+credential-submission/rollback flow is #133, not done anywhere yet.
 
 - **Trigger condition** (`image/files/scripts/nhl-scoreboard-setup-ap`,
   `cmd_check`/`is_online`): "has a default route", checked with
@@ -507,6 +510,91 @@ and no wiring into the credential-submission/rollback flow (#133) here.
   this script -- adding it needs a change to a workflow file, which is
   outside this change's own write access; tracked as a follow-up rather
   than silently skipped.
+- **Nearby-network scan** (#132, `scan_networks`/`parse_networks`): runs
+  `iwctl station <dev> scan` + `get-networks` itself, still in station
+  mode, immediately before the `Mode ap` switch above, and caches the
+  result as a JSON array of unique SSIDs to
+  `/run/nhl-scoreboard-setup-ap-networks.json`
+  (`NHL_SCOREBOARD_AP_SCAN_FILE`). Has to happen here and only here: this
+  chip can't scan while its own AP is active (see the next section for
+  why), so once `Mode ap` is set there is no later point at which a scan
+  would even be possible. `parse_networks` is an awk script that anchors
+  on the one thing iwctl's plain-text table reliably ends each data row
+  with -- a security token (`open`/`psk`/`8021x`/`wep`) followed by
+  asterisks -- rather than fixed column positions, which shift with
+  whatever the longest nearby SSID happens to be. Same "not verified
+  against real hardware" caveat as the rest of this script (#4): a format
+  mismatch degrades to an empty cached list, never a script failure --
+  covered by `tests/test_setup_ap.py`'s scan tests with a synthetic table,
+  not a real `iwctl` binary.
+
+## WiFi setup page + captive-portal probe handling (#132)
+
+The other half of #132 -- "what does a phone see once it's on the AP" --
+now that #131 (AP reachability) and #141 (the panel's own join QR code)
+are merged. Scope is strictly the page and captive-portal probe handling;
+actually joining the chosen network is #133, not built yet.
+
+- **No live scan, by design.** Verified live and corroborated against
+  real-hardware reports on this board's exact brcmfmac chip family (see
+  #132's own issue comments): the chip cannot scan for nearby networks
+  while its own AP is active (`iwctl station wlan0 get-networks`/`scan`
+  both fail with "No station on device" once `Mode` is switched to `ap`)
+  -- default brcmfmac is single-interface, and the documented `apsta=1`
+  concurrent AP+STA workaround is reported to crash this exact chip's
+  firmware under concurrent use, so it is not being pursued. The setup
+  page instead renders whatever the previous section's cached scan
+  contains -- a snapshot from moments before the AP came up, not a live
+  list.
+- **Text entry is never hidden behind the picker.** That cached scan can
+  miss a network that's out of range at that exact instant,
+  hidden/non-broadcasting, or one that only appears afterward, with no way
+  to rescan short of restarting the whole setup-ap cycle. `setup_server.
+  py`'s page always renders a plain SSID text field alongside the picker,
+  not as a fallback to remove later; on submit, a non-empty manual entry
+  (`ssid_other`) wins over whatever radio button (`ssid_choice`) happens
+  to still be selected.
+- **A new stdlib module, not a new systemd service.** `setup_server.py`
+  follows `status_server.py`'s own pattern (`http.server`, no
+  dependencies) and is started/stopped by `ScoreboardApp` itself
+  (`_sync_setup_server()`, called once per `run()` loop tick), gated on
+  nothing but whether `nhl-scoreboard-setup-ap`'s own state file exists --
+  the same signal `_ap_setup_scene` already keys off of for the panel's QR
+  scene. `nhl-scoreboard.service` already runs as root and already polls
+  that file every frame, so this needed no new unit, no new packaging, and
+  no new privilege: binding `wifi_setup.port`'s default of 80 needs root,
+  which the service already has.
+- **Port 80, not `status.port`'s 8080.** Captive-portal probes (Apple's
+  `/hotspot-detect.html`, Android's `/generate_204`, Windows NCSI's
+  `/connecttest.txt`/`/ncsi.txt`) ask for plain HTTP on the well-known
+  port by a fixed hostname; dnsmasq's wildcard DNS (`address=/#/<ap-addr>`,
+  #131) only gets those requests as far as this board's IP -- the port
+  still has to be the one the probe actually asks for, or the request
+  never reaches this server at all.
+- **Every non-setup-page GET gets a 302 to `/`, not just the three named
+  probes.** Wildcard DNS means literally any hostname a phone's OS decides
+  to probe resolves here, so enumerating only the three documented probes
+  and 404ing everything else would still fail to pop the prompt for
+  anything not on that list -- the redirect is a deliberate catch-all,
+  with the three named probes only special-cased for a debug log line. A
+  relative `Location: /` is enough: it resolves against whatever host the
+  client thinks it just asked, which is fine, since wildcard DNS already
+  points that host back at this board.
+- **This module never touches iwd/iwctl.** On submit it writes
+  `{"ssid": ..., "password": ...}` to
+  `/run/nhl-scoreboard-setup-submission.json` (`ap_submission_state_path`,
+  atomic tmp+replace, same convention as `Settings.save()`) and nothing
+  else -- that file is the hand-off point for #133's still-unbuilt join
+  flow, not consumed by anything yet. `password` is `None` for an open
+  network, matching the `open`/`password` distinction the AP's own state
+  file (#131) already makes.
+- Per #132's own issue text, captive-portal auto-popup is "the single most
+  fragile part of the whole idea" -- inconsistent across iOS/Android/
+  desktop, and sometimes doesn't fire at all, no matter how this is
+  implemented. #141's panel QR code is the reliable fallback: it gets a
+  phone onto the AP without depending on captive-portal detection firing
+  at all, and this page is reachable by typing its fixed address manually
+  regardless of whether the "Sign in to network" prompt ever appears.
 
 ## Disk-destructive code (grow-rootfs)
 

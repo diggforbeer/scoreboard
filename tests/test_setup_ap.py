@@ -47,6 +47,7 @@ class Rig:
         self.call_log = tmp_path / "calls.log"
         self.dnsmasq_conf = tmp_path / "dnsmasq.conf"
         self.state_file = tmp_path / "state.json"
+        self.scan_file = tmp_path / "networks.json"
 
         write_fake(
             self.bindir,
@@ -63,6 +64,10 @@ class Rig:
             '  start-open) exit "${FAKE_IWCTL_AP_START_OPEN_EXIT:-0}" ;;\n'
             '  start) exit "${FAKE_IWCTL_AP_START_EXIT:-0}" ;;\n'
             '  stop) exit "${FAKE_IWCTL_AP_STOP_EXIT:-0}" ;;\n'
+            '  scan) exit "${FAKE_IWCTL_SCAN_EXIT:-0}" ;;\n'
+            "  get-networks)\n"
+            '    printf "%s\\n" "${FAKE_IWCTL_NETWORKS_TABLE-}"\n'
+            '    exit "${FAKE_IWCTL_GET_NETWORKS_EXIT:-0}" ;;\n'
             "esac\n"
             "exit 0\n",
         )
@@ -76,6 +81,10 @@ class Rig:
             "FAKE_CALL_LOG": str(self.call_log),
             "NHL_SCOREBOARD_AP_DNSMASQ_CONF": str(self.dnsmasq_conf),
             "NHL_SCOREBOARD_AP_STATE_FILE": str(self.state_file),
+            "NHL_SCOREBOARD_AP_SCAN_FILE": str(self.scan_file),
+            # Real scans need to settle asynchronously (see the script's own
+            # comment); tests don't have a real radio to wait on.
+            "NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS": "0",
             **(env_extra or {}),
         }
         result = subprocess.run(
@@ -192,6 +201,69 @@ def test_ap_settings_are_overridable(rig):
 
 
 # --------------------------------------------------------------------------
+# nearby-network scan + cache (#132)
+# --------------------------------------------------------------------------
+
+NETWORK_TABLE = "\n".join(
+    [
+        "                                  Available networks",
+        "--------------------------------------------------------------------------------",
+        "    Network name                       Security            Signal",
+        "--------------------------------------------------------------------------------",
+        "    Home Wifi                          psk                 ****",
+        "    Guest Network                      open                ***",
+        # A currently-connected network is marked with a leading '>' instead
+        # of plain indentation, and (being in range from more than one AP,
+        # or just re-listed) can repeat -- the cache must still dedupe it.
+        ">   Home Wifi                          psk                 ****",
+        "--------------------------------------------------------------------------------",
+    ]
+)
+
+
+def test_scan_happens_before_switching_to_ap_mode(rig):
+    result = rig.run(
+        "start", env_extra={"FAKE_DEFAULT_ROUTE": "", "FAKE_IWCTL_NETWORKS_TABLE": NETWORK_TABLE}
+    )
+    assert result.returncode == 0, result.stderr
+
+    calls = result.calls.splitlines()
+    scan_line = next(i for i, c in enumerate(calls) if "iwctl station wlan0 scan" in c)
+    get_networks_line = next(
+        i for i, c in enumerate(calls) if "iwctl station wlan0 get-networks" in c
+    )
+    mode_ap_line = next(
+        i for i, c in enumerate(calls) if "iwctl device wlan0 set-property Mode ap" in c
+    )
+    assert scan_line < get_networks_line < mode_ap_line, result.calls
+
+
+def test_scan_caches_unique_ssids_as_json(rig):
+    result = rig.run(
+        "start", env_extra={"FAKE_DEFAULT_ROUTE": "", "FAKE_IWCTL_NETWORKS_TABLE": NETWORK_TABLE}
+    )
+    assert result.returncode == 0, result.stderr
+
+    networks = json.loads(rig.scan_file.read_text())
+    assert networks == ["Home Wifi", "Guest Network"]
+
+
+def test_scan_failure_caches_an_empty_list(rig):
+    result = rig.run(
+        "start",
+        env_extra={"FAKE_DEFAULT_ROUTE": "", "FAKE_IWCTL_GET_NETWORKS_EXIT": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(rig.scan_file.read_text()) == []
+
+
+def test_scan_with_no_nearby_networks_caches_an_empty_list(rig):
+    result = rig.run("start", env_extra={"FAKE_DEFAULT_ROUTE": "", "FAKE_IWCTL_NETWORKS_TABLE": ""})
+    assert result.returncode == 0, result.stderr
+    assert json.loads(rig.scan_file.read_text()) == []
+
+
+# --------------------------------------------------------------------------
 # tearing the AP down
 # --------------------------------------------------------------------------
 
@@ -199,6 +271,7 @@ def test_ap_settings_are_overridable(rig):
 def test_stop_tears_down_ap_and_removes_conf(rig):
     rig.dnsmasq_conf.write_text("stale config\n")
     rig.state_file.write_text('{"ssid": "stale", "password": "stale", "open": false}\n')
+    rig.scan_file.write_text('["stale"]\n')
 
     result = rig.run("stop")
     assert result.returncode == 0, result.stderr
@@ -213,6 +286,7 @@ def test_stop_tears_down_ap_and_removes_conf(rig):
     # setup scene -- a stale one left behind after teardown would wrongly
     # keep showing it once the board is back on a real network.
     assert not rig.state_file.exists()
+    assert not rig.scan_file.exists()
 
 
 def test_stop_is_safe_when_never_started(rig):
