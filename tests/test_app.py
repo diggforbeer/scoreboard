@@ -1391,3 +1391,82 @@ def test_draw_scene_dispatches_goal_without_the_horn(fake_backend, games):
     assert drawn == [live]
     assert app.horn.calls == []
     assert app.matrix.swaps == 1
+
+
+# --------------------------------------------------------------------------
+# AP setup scene (#131 follow-up): nhl-scoreboard-setup-ap's state file
+# --------------------------------------------------------------------------
+
+
+def test_no_ap_state_file_leaves_normal_scene_selection_untouched(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=tmp_path / "does-not-exist.json",
+    )
+    app.refresh()
+    assert app.select_scene().kind != "ap_setup"
+
+
+def test_ap_state_file_overrides_even_a_live_game(fake_backend, games, tmp_path):
+    """Not just the idle/connecting cases -- unconditional, per select_scene's
+    own docstring: nobody can see a live game if the only way to reach the
+    board at all is the AP the state file describes."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard"}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app.refresh()
+    assert any(g.is_live for g in app.games), "fixture should have a live game"
+
+    scene = app.select_scene()
+    assert scene.kind == "ap_setup"
+    assert scene.ap_ssid == "NHL-Scoreboard-Setup"
+    assert scene.ap_password == "scoreboard"
+    assert scene.ap_qr_matrix is not None
+
+
+def test_ap_state_file_open_network_has_no_password(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestNet", "password": None, "open": True}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+
+    scene = app.select_scene()
+    assert scene.kind == "ap_setup"
+    assert scene.ap_password is None
+    assert scene.ap_qr_matrix is not None
+
+
+def test_malformed_ap_state_file_degrades_to_normal_scene_selection(fake_backend, games, tmp_path):
+    """A typo/partial write must not crash the board -- same config-typo
+    tolerance CLAUDE.md documents for scoreboard.toml itself."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text("not valid json{{{")
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app.refresh()
+    assert app.select_scene().kind != "ap_setup"
+
+
+def test_ap_qr_matrix_is_cached_across_calls(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestNet", "password": "hunter2"}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+
+    first = app.select_scene().ap_qr_matrix
+    second = app.select_scene().ap_qr_matrix
+    assert first is second
+
+
+def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
+    from nhl_scoreboard.app import _qr_escape
+
+    assert _qr_escape('a;b,c:d"e\\f') == 'a\\;b\\,c\\:d\\"e\\\\f'
+    assert _qr_escape("plain") == "plain"

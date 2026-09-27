@@ -53,6 +53,13 @@ AP_PREFIX="${NHL_SCOREBOARD_AP_PREFIX:-24}"
 DHCP_RANGE="${NHL_SCOREBOARD_AP_DHCP_RANGE:-10.42.0.10,10.42.0.200,12h}"
 DNSMASQ_CONF="${NHL_SCOREBOARD_AP_DNSMASQ_CONF:-/run/nhl-scoreboard-setup-ap-dnsmasq.conf}"
 DNSMASQ_BIN="${NHL_SCOREBOARD_AP_DNSMASQ_BIN:-dnsmasq}"
+# Read by the app (app.py's _ap_setup_scene) to show the SSID/password + a
+# join QR code on the panel instead of the normal scoreboard while setup
+# mode is active -- the only way to reach the board at all is a phone that
+# can already see this, so there's no point drawing a scene nobody asked
+# for and no user turned this on for. /run so it never survives a reboot
+# stale, same reasoning as the dnsmasq conf above.
+STATE_FILE="${NHL_SCOREBOARD_AP_STATE_FILE:-/run/nhl-scoreboard-setup-ap-state.json}"
 
 log() {
     logger -t nhl-scoreboard-setup-ap "$1"
@@ -80,6 +87,26 @@ address=/#/$AP_ADDR
 EOF
 }
 
+# Minimal, dependency-free JSON string escaping (backslash and quote only --
+# SSID/passphrase are shell-safe strings already, this just keeps them from
+# breaking the JSON syntax around them).
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+write_state_file() {
+    # $1: "true"/"false" -- whether the AP actually came up open
+    # (start-open) or WPA2-protected (the fallback). Written distinctly so
+    # the app never shows/encodes a password that isn't actually required.
+    if [ "$1" = "true" ]; then
+        printf '{"ssid":"%s","password":null,"open":true}\n' \
+            "$(json_escape "$SSID")" > "$STATE_FILE"
+    else
+        printf '{"ssid":"%s","password":"%s","open":false}\n' \
+            "$(json_escape "$SSID")" "$(json_escape "$PASSPHRASE")" > "$STATE_FILE"
+    fi
+}
+
 cmd_check() {
     if is_online; then
         log "Board has a default route; AP mode not needed"
@@ -100,10 +127,23 @@ cmd_start() {
     ip addr add "$AP_ADDR/$AP_PREFIX" dev "$IFACE"
     ip link set "$IFACE" up
 
+    # Verified live on real hardware (#131 follow-up): `iwctl ap <dev>
+    # start` fails outright ("No ap on device") on this board's brcmfmac
+    # driver unless the device's Mode is switched to "ap" first -- iwd does
+    # NOT do this automatically as part of `ap start` here, despite "ap"
+    # appearing in the wiphy's own supported iftypes. station disconnect
+    # first is best-effort (harmless if already disconnected): switching
+    # Mode while still attempting to autoconnect in station mode is the
+    # other half of what real hardware showed was needed.
+    iwctl station "$IFACE" disconnect 2>/dev/null || true
+    iwctl device "$IFACE" set-property Mode ap
+
     if iwctl ap "$IFACE" start-open "$SSID"; then
         log "AP mode: open network (no passphrase)"
+        write_state_file true
     elif iwctl ap "$IFACE" start "$SSID" "$PASSPHRASE"; then
         log "AP mode: iwd start-open unavailable; fell back to WPA2-PSK"
+        write_state_file false
     else
         log "Could not start AP mode on $IFACE"
         return 1
@@ -117,8 +157,13 @@ cmd_start() {
 cmd_stop() {
     log "Tearing down AP mode on $IFACE"
     iwctl ap "$IFACE" stop 2>/dev/null || true
+    # Verified live: the device is left in Mode=ap after `ap stop` -- it
+    # does not revert on its own. #133's join flow needs the interface
+    # back in station mode to have any chance of connecting to a real
+    # network afterward.
+    iwctl device "$IFACE" set-property Mode station 2>/dev/null || true
     ip addr flush dev "$IFACE" 2>/dev/null || true
-    rm -f "$DNSMASQ_CONF"
+    rm -f "$DNSMASQ_CONF" "$STATE_FILE"
 }
 
 case "${1:-start}" in

@@ -17,6 +17,9 @@ dependencies = [
     # dropping the file's per-setting comments; stdlib tomllib is read-only,
     # and a plain dict-based writer would throw the comments away (#51).
     "tomlkit>=0.12",
+    # For the AP-mode setup scene's join QR code (#131 follow-up) -- just
+    # the module-matrix computation, no image/PIL rendering path used.
+    "qrcode>=7",
 ]
 
 [project.optional-dependencies]

@@ -37,6 +37,7 @@ DEP_TO_APT_PACKAGE = {
     "requests": "python3-requests",
     "pillow": "python3-pil",
     "tomlkit": "python3-tomlkit",
+    "qrcode": "python3-qrcode",
 }
 
 

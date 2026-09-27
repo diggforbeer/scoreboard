@@ -47,6 +47,10 @@ mmdebstrap:
     # source tree on PYTHONPATH, not pip-installed, so this has to come from
     # apt like python3-requests/python3-pil do, not pyproject.toml's deps.
     - python3-tomlkit
+    # renderer.py's AP-mode setup scene (#131 follow-up) draws a join QR
+    # code -- just the module-matrix computation (pyproject.toml's `qrcode`
+    # dep), same apt-not-pip reasoning as python3-tomlkit above.
+    - python3-qrcode
     - iw
     # WiFi AP + captive-portal DHCP/DNS for first-boot setup mode (#131),
     # when neither ethernet nor a configured Wi-Fi profile leaves the board
@@ -58,6 +62,13 @@ mmdebstrap:
     # below -- only our own instance, scoped to wlan0 and started from
     # nhl-scoreboard-setup-ap.service, ever runs.
     - dnsmasq
+    # nhl-scoreboard-setup-ap's `ip addr`/`ip link` calls need this --
+    # verified missing live on real hardware (#131's follow-up): the
+    # script died immediately with "ip: not found" (exit 127) before ever
+    # reaching the iwctl AP call, so iwctl's own real-hardware behaviour is
+    # still unverified pending this fix. Not pulled in transitively by
+    # anything else already installed here.
+    - iproute2
     - ca-certificates
     - alsa-utils
     # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
