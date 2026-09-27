@@ -47,6 +47,10 @@ mmdebstrap:
     # source tree on PYTHONPATH, not pip-installed, so this has to come from
     # apt like python3-requests/python3-pil do, not pyproject.toml's deps.
     - python3-tomlkit
+    # renderer.py's AP-mode setup scene (#131 follow-up) draws a join QR
+    # code -- just the module-matrix computation (pyproject.toml's `qrcode`
+    # dep), same apt-not-pip reasoning as python3-tomlkit above.
+    - python3-qrcode
     - iw
     # WiFi AP + captive-portal DHCP/DNS for first-boot setup mode (#131),
     # when neither ethernet nor a configured Wi-Fi profile leaves the board

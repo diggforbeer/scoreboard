@@ -21,6 +21,7 @@ return code alone would not catch that regression.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -45,6 +46,7 @@ class Rig:
         self.bindir.mkdir()
         self.call_log = tmp_path / "calls.log"
         self.dnsmasq_conf = tmp_path / "dnsmasq.conf"
+        self.state_file = tmp_path / "state.json"
 
         write_fake(
             self.bindir,
@@ -73,6 +75,7 @@ class Rig:
             "PATH": f"{self.bindir}:{os.environ['PATH']}",
             "FAKE_CALL_LOG": str(self.call_log),
             "NHL_SCOREBOARD_AP_DNSMASQ_CONF": str(self.dnsmasq_conf),
+            "NHL_SCOREBOARD_AP_STATE_FILE": str(self.state_file),
             **(env_extra or {}),
         }
         result = subprocess.run(
@@ -138,6 +141,11 @@ def test_offline_brings_up_open_ap_and_starts_dnsmasq(rig):
     assert "bind-interfaces" in conf
     assert "address=/#/10.42.0.1" in conf
 
+    # Open network succeeded -- the app must never show/encode a password
+    # that isn't actually required to join.
+    state = json.loads(rig.state_file.read_text())
+    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": None, "open": True}
+
 
 def test_start_open_unsupported_falls_back_to_psk(rig):
     result = rig.run(
@@ -148,6 +156,9 @@ def test_start_open_unsupported_falls_back_to_psk(rig):
     assert "iwctl ap wlan0 start-open NHL-Scoreboard-Setup" in result.calls
     assert "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard" in result.calls
     assert "dnsmasq --no-daemon" in result.calls
+
+    state = json.loads(rig.state_file.read_text())
+    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard", "open": False}
 
 
 def test_ap_totally_unavailable_never_starts_dnsmasq(rig):
@@ -161,6 +172,7 @@ def test_ap_totally_unavailable_never_starts_dnsmasq(rig):
     )
     assert result.returncode != 0
     assert "dnsmasq" not in result.calls
+    assert not rig.state_file.exists()
 
 
 def test_ap_settings_are_overridable(rig):
@@ -186,6 +198,7 @@ def test_ap_settings_are_overridable(rig):
 
 def test_stop_tears_down_ap_and_removes_conf(rig):
     rig.dnsmasq_conf.write_text("stale config\n")
+    rig.state_file.write_text('{"ssid": "stale", "password": "stale", "open": false}\n')
 
     result = rig.run("stop")
     assert result.returncode == 0, result.stderr
@@ -196,6 +209,10 @@ def test_stop_tears_down_ap_and_removes_conf(rig):
     assert "iwctl device wlan0 set-property Mode station" in result.calls
     assert "ip addr flush dev wlan0" in result.calls
     assert not rig.dnsmasq_conf.exists()
+    # The app uses this file's presence alone to decide whether to show the
+    # setup scene -- a stale one left behind after teardown would wrongly
+    # keep showing it once the board is back on a real network.
+    assert not rig.state_file.exists()
 
 
 def test_stop_is_safe_when_never_started(rig):
