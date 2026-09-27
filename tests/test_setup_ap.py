@@ -123,6 +123,11 @@ def test_offline_brings_up_open_ap_and_starts_dnsmasq(rig):
 
     assert "ip addr add 10.42.0.1/24 dev wlan0" in result.calls
     assert "ip link set wlan0 up" in result.calls
+    # Verified live on real hardware: `ap start` fails outright unless the
+    # device is explicitly switched into AP mode first -- iwd does not do
+    # this itself as part of `ap start` on this driver.
+    assert "iwctl station wlan0 disconnect" in result.calls
+    assert "iwctl device wlan0 set-property Mode ap" in result.calls
     assert "iwctl ap wlan0 start-open NHL-Scoreboard-Setup" in result.calls
     # start-open succeeded, so the WPA2-PSK fallback must never be tried.
     assert "iwctl ap wlan0 start NHL-Scoreboard-Setup" not in result.calls
@@ -185,6 +190,10 @@ def test_stop_tears_down_ap_and_removes_conf(rig):
     result = rig.run("stop")
     assert result.returncode == 0, result.stderr
     assert "iwctl ap wlan0 stop" in result.calls
+    # Verified live: the device is left in Mode=ap after `ap stop` -- it
+    # does not revert on its own, so #133's later join flow needs this to
+    # have any chance of reaching a real network afterward.
+    assert "iwctl device wlan0 set-property Mode station" in result.calls
     assert "ip addr flush dev wlan0" in result.calls
     assert not rig.dnsmasq_conf.exists()
 

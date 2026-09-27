@@ -58,6 +58,13 @@ mmdebstrap:
     # below -- only our own instance, scoped to wlan0 and started from
     # nhl-scoreboard-setup-ap.service, ever runs.
     - dnsmasq
+    # nhl-scoreboard-setup-ap's `ip addr`/`ip link` calls need this --
+    # verified missing live on real hardware (#131's follow-up): the
+    # script died immediately with "ip: not found" (exit 127) before ever
+    # reaching the iwctl AP call, so iwctl's own real-hardware behaviour is
+    # still unverified pending this fix. Not pulled in transitively by
+    # anything else already installed here.
+    - iproute2
     - ca-certificates
     - alsa-utils
     # For the ambient light sensor (#44): light_sensor.py talks to a BH1750

@@ -100,6 +100,17 @@ cmd_start() {
     ip addr add "$AP_ADDR/$AP_PREFIX" dev "$IFACE"
     ip link set "$IFACE" up
 
+    # Verified live on real hardware (#131 follow-up): `iwctl ap <dev>
+    # start` fails outright ("No ap on device") on this board's brcmfmac
+    # driver unless the device's Mode is switched to "ap" first -- iwd does
+    # NOT do this automatically as part of `ap start` here, despite "ap"
+    # appearing in the wiphy's own supported iftypes. station disconnect
+    # first is best-effort (harmless if already disconnected): switching
+    # Mode while still attempting to autoconnect in station mode is the
+    # other half of what real hardware showed was needed.
+    iwctl station "$IFACE" disconnect 2>/dev/null || true
+    iwctl device "$IFACE" set-property Mode ap
+
     if iwctl ap "$IFACE" start-open "$SSID"; then
         log "AP mode: open network (no passphrase)"
     elif iwctl ap "$IFACE" start "$SSID" "$PASSPHRASE"; then
@@ -117,6 +128,11 @@ cmd_start() {
 cmd_stop() {
     log "Tearing down AP mode on $IFACE"
     iwctl ap "$IFACE" stop 2>/dev/null || true
+    # Verified live: the device is left in Mode=ap after `ap stop` -- it
+    # does not revert on its own. #133's join flow needs the interface
+    # back in station mode to have any chance of connecting to a real
+    # network afterward.
+    iwctl device "$IFACE" set-property Mode station 2>/dev/null || true
     ip addr flush dev "$IFACE" 2>/dev/null || true
     rm -f "$DNSMASQ_CONF"
 }
