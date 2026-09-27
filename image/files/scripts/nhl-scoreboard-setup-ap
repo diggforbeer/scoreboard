@@ -1,8 +1,10 @@
 #!/bin/sh
 # Bring up a WiFi access point + captive-portal DHCP/DNS when the board has
 # no other working network path (#131, infrastructure phase of #116). This
-# is deliberately just the AP/DHCP/DNS plumbing -- no setup page (#132) and
-# no wiring into the wifi-join/rollback flow in scoreboard-provision (#133).
+# is deliberately just the AP/DHCP/DNS plumbing plus the nearby-network scan
+# the setup page renders as a picker (#132, see below) -- the setup page
+# itself lives in setup_server.py, and wiring a submission into the
+# wifi-join/rollback flow in scoreboard-provision is #133, neither done here.
 #
 # Trigger condition: NOT simply "no [wifi] configured" -- scoreboard-
 # provision already treats that as "relying on ethernet" and does nothing
@@ -43,6 +45,21 @@
 # successfully, not by this script guessing -- systemd's ExecStopPost
 # also runs it on any `systemctl stop`, so it fires however the service
 # is asked to end.
+#
+# Nearby-network scan (#132): this chip can't scan while its own AP is
+# active (`iwctl station wlan0 get-networks` fails with "No station on
+# device" once Mode is switched to ap -- confirmed live, corroborated by
+# real-hardware reports on this exact brcmfmac chip family: default
+# single-interface, and the documented apsta=1 concurrent-mode workaround
+# is reported to crash this chip's firmware under concurrent use, so it's
+# not being pursued -- see #132's issue comments). So the scan has to
+# happen here, still in station mode, right before the Mode ap switch
+# below, and its result cached to a file the setup page (#132) reads
+# instead of scanning live. That means the list is a snapshot from just
+# before the AP came up, not live -- it can miss a network that's out of
+# range at that exact moment, hidden, or appears afterward, which is why
+# the setup page also always offers a plain text SSID field alongside the
+# picker, not just the picker alone.
 set -eu
 
 IFACE="${NHL_SCOREBOARD_AP_IFACE:-wlan0}"
@@ -60,6 +77,15 @@ DNSMASQ_BIN="${NHL_SCOREBOARD_AP_DNSMASQ_BIN:-dnsmasq}"
 # for and no user turned this on for. /run so it never survives a reboot
 # stale, same reasoning as the dnsmasq conf above.
 STATE_FILE="${NHL_SCOREBOARD_AP_STATE_FILE:-/run/nhl-scoreboard-setup-ap-state.json}"
+# Read by the setup page (#132) to render the network picker. A JSON array
+# of nearby SSIDs seen in the scan taken just before the AP came up -- see
+# the header comment above for why this can't be a live scan instead.
+SCAN_FILE="${NHL_SCOREBOARD_AP_SCAN_FILE:-/run/nhl-scoreboard-setup-ap-networks.json}"
+# How long to let a scan settle before reading results back. iwctl's scan
+# is asynchronous -- start it, then read get-networks after this pause.
+# Not verified against real hardware timing (#4); overridable so tests
+# don't have to actually wait.
+SCAN_SETTLE_SECONDS="${NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS:-2}"
 
 log() {
     logger -t nhl-scoreboard-setup-ap "$1"
@@ -107,6 +133,63 @@ write_state_file() {
     fi
 }
 
+# Turns `iwctl station <dev> get-networks`'s table on stdin into a JSON
+# array of unique SSIDs on stdout, e.g. ["Home Wifi","Guest"]. iwctl has no
+# JSON output mode, so this anchors on the one thing that table format
+# reliably ends each data row with -- a security token (open/psk/8021x/wep)
+# followed by asterisks -- rather than fixed column positions, which shift
+# with the longest SSID iwctl happens to be padding for. Best-effort and
+# NOT verified against real hardware output (#4): if a real board's iwctl
+# format doesn't match, this degrades to an empty list (still valid JSON),
+# never a script failure -- the text-entry fallback in the setup page
+# covers exactly that case.
+parse_networks() {
+    # $0 below is awk's own record variable, not a shell positional
+    # parameter -- this whole block is a single-quoted awk program on
+    # purpose, so shell must never expand anything inside it.
+    # shellcheck disable=SC2016
+    awk '
+        /^-+$/ { next }
+        /Available networks/ { next }
+        /Network name/ && /Security/ { next }
+        /^ *$/ { next }
+        {
+            line = $0
+            sub(/^> */, "", line)
+            sub(/^ +/, "", line)
+            if (match(line, / +(open|psk|8021x|wep) +\*+ *$/)) {
+                name = substr(line, 1, RSTART - 1)
+                sub(/ +$/, "", name)
+                if (name != "" && !(name in seen)) {
+                    seen[name] = 1
+                    names[n++] = name
+                }
+            }
+        }
+        END {
+            printf "["
+            for (i = 0; i < n; i++) {
+                esc = names[i]
+                gsub(/\\/, "\\\\", esc)
+                gsub(/"/, "\\\"", esc)
+                if (i > 0) printf ","
+                printf "\"%s\"", esc
+            }
+            printf "]\n"
+        }
+    '
+}
+
+scan_networks() {
+    log "Scanning for nearby networks before switching $IFACE to AP mode"
+    iwctl station "$IFACE" scan >/dev/null 2>&1 || true
+    sleep "$SCAN_SETTLE_SECONDS"
+    if ! iwctl station "$IFACE" get-networks 2>/dev/null | parse_networks > "$SCAN_FILE"; then
+        log "Could not read nearby networks; caching an empty list"
+        printf '[]\n' > "$SCAN_FILE"
+    fi
+}
+
 cmd_check() {
     if is_online; then
         log "Board has a default route; AP mode not needed"
@@ -136,6 +219,7 @@ cmd_start() {
     # Mode while still attempting to autoconnect in station mode is the
     # other half of what real hardware showed was needed.
     iwctl station "$IFACE" disconnect 2>/dev/null || true
+    scan_networks
     iwctl device "$IFACE" set-property Mode ap
 
     if iwctl ap "$IFACE" start-open "$SSID"; then
@@ -163,7 +247,7 @@ cmd_stop() {
     # network afterward.
     iwctl device "$IFACE" set-property Mode station 2>/dev/null || true
     ip addr flush dev "$IFACE" 2>/dev/null || true
-    rm -f "$DNSMASQ_CONF" "$STATE_FILE"
+    rm -f "$DNSMASQ_CONF" "$STATE_FILE" "$SCAN_FILE"
 }
 
 case "${1:-start}" in

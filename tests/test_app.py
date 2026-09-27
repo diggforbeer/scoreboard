@@ -1482,6 +1482,154 @@ def test_ap_qr_matrix_is_cached_across_calls(fake_backend, games, tmp_path):
     assert first is second
 
 
+# --------------------------------------------------------------------------
+# WiFi setup page (#132): started/stopped in step with the AP state file
+# --------------------------------------------------------------------------
+
+
+def test_setup_server_not_started_without_ap_state_file(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=tmp_path / "does-not-exist.json",
+    )
+    app._sync_setup_server()
+    assert app.setup_server is None
+
+
+def test_setup_server_starts_when_ap_state_file_present(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=state_path,
+    )
+    app._sync_setup_server()
+    try:
+        assert app.setup_server is not None
+        url = f"http://127.0.0.1:{app.setup_server.port}/"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            assert resp.status == 200
+            assert "WiFi network" in resp.read().decode("utf-8")
+    finally:
+        if app.setup_server is not None:
+            app.setup_server.stop()
+
+
+def test_setup_server_repeated_sync_keeps_the_same_instance(fake_backend, games, tmp_path):
+    """Nothing changed between two ticks -- must not tear down and rebuild
+    (and thus rebind) a perfectly healthy running server every frame."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app._sync_setup_server()
+    first = app.setup_server
+    try:
+        app._sync_setup_server()
+        assert app.setup_server is first
+    finally:
+        if app.setup_server is not None:
+            app.setup_server.stop()
+
+
+def test_setup_server_stops_when_ap_state_file_disappears(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app._sync_setup_server()
+    assert app.setup_server is not None
+
+    state_path.unlink()
+    app._sync_setup_server()
+    assert app.setup_server is None
+
+
+def test_setup_server_disabled_via_config_never_starts(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.enabled = False
+    app = ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app._sync_setup_server()
+    assert app.setup_server is None
+
+
+def test_cached_setup_networks_reads_the_scan_state_file(fake_backend, games, tmp_path):
+    scan_path = tmp_path / "networks.json"
+    scan_path.write_text(json.dumps(["Home Wifi", "Guest"]))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_scan_state_path=scan_path
+    )
+    assert app._cached_setup_networks() == ["Home Wifi", "Guest"]
+
+
+def test_cached_setup_networks_missing_file_is_an_empty_list(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_scan_state_path=tmp_path / "does-not-exist.json",
+    )
+    assert app._cached_setup_networks() == []
+
+
+def test_cached_setup_networks_malformed_file_is_an_empty_list(fake_backend, games, tmp_path):
+    scan_path = tmp_path / "networks.json"
+    scan_path.write_text("not valid json{{{")
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_scan_state_path=scan_path
+    )
+    assert app._cached_setup_networks() == []
+
+
+def test_cached_setup_networks_non_list_json_is_an_empty_list(fake_backend, games, tmp_path):
+    scan_path = tmp_path / "networks.json"
+    scan_path.write_text(json.dumps({"unexpected": "shape"}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_scan_state_path=scan_path
+    )
+    assert app._cached_setup_networks() == []
+
+
+def test_setup_submission_is_written_to_the_state_file(fake_backend, games, tmp_path):
+    submission_path = tmp_path / "submission.json"
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_submission_state_path=submission_path,
+    )
+    app._on_setup_submission("Home Wifi", "hunter2")
+    assert json.loads(submission_path.read_text()) == {"ssid": "Home Wifi", "password": "hunter2"}
+
+
+def test_setup_submission_open_network_records_null_password(fake_backend, games, tmp_path):
+    submission_path = tmp_path / "submission.json"
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_submission_state_path=submission_path,
+    )
+    app._on_setup_submission("Open Net", None)
+    assert json.loads(submission_path.read_text()) == {"ssid": "Open Net", "password": None}
+
+
 def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
     from nhl_scoreboard.app import _qr_escape
 

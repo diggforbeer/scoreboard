@@ -35,6 +35,7 @@ from .nhl.models import (
     conference_standings,
     standings_window,
 )
+from .setup_server import SetupServer
 from .status_server import StatusServer
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,16 @@ DEMO_SCENE_SECONDS = 4.0
 #: that AP always sees how to join it. /run, matching the script's own
 #: choice -- never survives a reboot stale.
 AP_SETUP_STATE_PATH = Path("/run/nhl-scoreboard-setup-ap-state.json")
+#: Written by nhl-scoreboard-setup-ap's pre-AP-mode scan (#132) -- a JSON
+#: array of nearby SSIDs, cached from a snapshot taken moments before the AP
+#: came up (this chip can't scan while its own AP is active). Read by the
+#: setup page to render its network picker; the page always offers a plain
+#: text field alongside it too, since that snapshot can miss a network.
+AP_SCAN_STATE_PATH = Path("/run/nhl-scoreboard-setup-ap-networks.json")
+#: Written by the setup page (#132) when someone submits a network choice --
+#: the hand-off point for #133's still-to-be-built join flow to read from.
+#: This app only ever writes it; it never touches iwd/iwctl itself.
+AP_SUBMISSION_STATE_PATH = Path("/run/nhl-scoreboard-setup-submission.json")
 #: Characters the de-facto WIFI: QR-code format requires backslash-escaped
 #: inside SSID/password fields -- unescaped, any of these would end the
 #: field early or corrupt the payload for a strict parser.
@@ -112,12 +123,25 @@ class ScoreboardApp:
         status_server: StatusServer | None = None,
         sleep: Callable[[float], None] | None = None,
         ap_setup_state_path: Path | None = None,
+        ap_scan_state_path: Path | None = None,
+        ap_submission_state_path: Path | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
         self.sleep = sleep or time.sleep
         self.ap_setup_state_path = ap_setup_state_path or AP_SETUP_STATE_PATH
+        self.ap_scan_state_path = ap_scan_state_path or AP_SCAN_STATE_PATH
+        self.ap_submission_state_path = ap_submission_state_path or AP_SUBMISSION_STATE_PATH
+        #: The WiFi setup page (#132) -- only running while nhl-scoreboard-
+        #: setup-ap's state file says the AP is up, kept in step by
+        #: _sync_setup_server(). None means "not currently running", whether
+        #: because the AP is down or wifi_setup.enabled is false.
+        self.setup_server: SetupServer | None = None
+        #: The (enabled, port) _sync_setup_server last built setup_server
+        #: from, so a config reload's port change is noticed even if the AP
+        #: state file's presence hasn't changed. None means no server wanted.
+        self._setup_server_config: tuple[bool, int] | None = None
         #: (ssid, password) -> precomputed QR matrix, so a QR isn't
         #: recomputed every FRAME_INTERVAL for the whole time the AP stays
         #: up -- it only changes if the AP's own SSID/password ever would.
@@ -253,6 +277,7 @@ class ScoreboardApp:
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
             self.refresh_goal_details()
+            self._sync_setup_server()
             self.draw()
             self.sleep(FRAME_INTERVAL)
         self.shutdown()
@@ -301,6 +326,8 @@ class ScoreboardApp:
         try:
             if self.status_server is not None:
                 self.status_server.stop()
+            if self.setup_server is not None:
+                self.setup_server.stop()
             self.matrix.Clear()
         finally:
             self.client.close()
@@ -871,6 +898,75 @@ class ScoreboardApp:
             matrix = None
         self._ap_qr_cache = (cache_key, matrix)
         return matrix
+
+    # -- WiFi setup page (#132) --------------------------------------------
+
+    def _sync_setup_server(self) -> None:
+        """Start/stop the WiFi setup HTTP server in step with the AP state file.
+
+        Only called from run()'s own loop -- status_snapshot() (the status
+        page's own thread) only ever calls select_scene(allow_fetch=False),
+        never this, so there is no cross-thread race to start or stop the
+        same socket. Only needs "is the AP state file there", the same
+        signal _ap_setup_scene keys off of, not its contents. Also reacts to
+        a live config reload (wifi_setup.enabled/port) even when the AP
+        state file's presence hasn't changed, the same way _apply_reloaded_
+        settings handles the status server's own port change.
+        """
+        cfg = self.settings.wifi_setup
+        wanted = cfg.enabled and self.ap_setup_state_path.exists()
+        desired = (cfg.enabled, cfg.port) if wanted else None
+        if desired == self._setup_server_config:
+            return
+        if self.setup_server is not None:
+            self.setup_server.stop()
+            self.setup_server = None
+        self._setup_server_config = desired
+        if desired is None:
+            return
+        self.setup_server = SetupServer(
+            networks=self._cached_setup_networks,
+            on_submit=self._on_setup_submission,
+            port=cfg.port,
+        )
+        try:
+            self.setup_server.start()
+        except OSError as exc:
+            log.warning("Could not start WiFi setup server: %s", exc)
+            self.setup_server = None
+
+    def _cached_setup_networks(self) -> list[str]:
+        """The nearby-network snapshot nhl-scoreboard-setup-ap cached before AP mode came up."""
+        try:
+            raw = self.ap_scan_state_path.read_text()
+        except OSError:
+            return []
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            log.warning("Malformed AP scan state file: %s", exc)
+            return []
+        if not isinstance(data, list):
+            return []
+        return [str(item) for item in data]
+
+    def _on_setup_submission(self, ssid: str, password: str | None) -> None:
+        """Record a WiFi choice from the setup page for #133's join flow to pick up.
+
+        This app never touches iwd/iwctl itself -- see setup_server.py's own
+        module docstring for why actually joining the network is out of
+        scope here. Written atomically (tmp + replace), same convention as
+        Settings.save(), so a reader never sees a half-written file.
+        """
+        payload = json.dumps({"ssid": ssid, "password": password})
+        tmp_path = self.ap_submission_state_path.with_name(
+            self.ap_submission_state_path.name + ".tmp"
+        )
+        try:
+            tmp_path.write_text(payload)
+            tmp_path.replace(self.ap_submission_state_path)
+        except OSError as exc:
+            log.warning("Could not write WiFi setup submission: %s", exc)
 
     def _select_base_scene(self, *, allow_fetch: bool = True) -> Scene:
         if self.last_success is None:
