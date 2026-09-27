@@ -124,7 +124,7 @@ device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's de
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
 
 [status]
-enabled = false              # a read-only web status page, for headless debugging
+enabled = true                # a read-only web status page, for headless debugging; set false to turn off
 port = 8080
 
 [night_mode]
@@ -212,15 +212,16 @@ whenever a team-specific file isn't found. See `[audio]` in
 
 ## Status page
 
-The board is headless by design, so diagnosing "why is it stuck" normally
-means SSH-ing in and reading `journalctl -u nhl-scoreboard`. Set
-`[status] enabled = true` in the config and the board also serves a tiny
-read-only HTML page at `http://<board's-ip>:8080/` showing the current
-scene, the last successful API poll, the last error (if any), the
-favourite team and the rotation mode -- enough to check on the board from
-a phone on the same network. It's stdlib `http.server`, no framework, and
-has no login: it binds the local network the board is already trusted on,
-not the internet, so don't port-forward it.
+The board is headless by design, so diagnosing "why is it stuck" would
+otherwise mean SSH-ing in and reading `journalctl -u nhl-scoreboard`. On by
+default, the board instead serves a tiny read-only HTML page at
+`http://<board's-ip>:8080/` showing the current scene, the last successful
+API poll, the last error (if any), the favourite team and the rotation mode
+-- enough to check on the board from a phone on the same network. It's
+stdlib `http.server`, no framework, and has no login: it binds the local
+network the board is already trusted on, not the internet, so don't
+port-forward it. Set `[status] enabled = false` in the config to turn it
+off.
 
 ## Layout
 
