@@ -250,6 +250,24 @@ class StatusServerConfig:
 
 
 @dataclass(slots=True)
+class WifiSetupConfig:
+    """The WiFi setup page served while the board's own first-boot AP is up (#132).
+
+    On by default: while ``nhl-scoreboard-setup-ap`` (#131) has the AP up,
+    this is the only way for a phone connected to it to actually choose a
+    network -- reachability alone (#141's QR code) doesn't collect
+    credentials. Port 80, not ``status.port``'s 8080: captive-portal probes
+    (Apple/Android/Windows) hit the well-known plain-HTTP port, and
+    dnsmasq's wildcard DNS only gets them as far as this board's IP -- the
+    port still has to be the one they actually ask for. nhl-scoreboard.service
+    already runs as root, so binding it needs no extra capability.
+    """
+
+    enabled: bool = True
+    port: int = 80
+
+
+@dataclass(slots=True)
 class NightModeConfig:
     """Scheduled dimming that stays out of the way of a live game (#92).
 
@@ -305,6 +323,7 @@ class Settings:
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
+    wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
     source_path: Path | None = None
 
@@ -334,6 +353,7 @@ class Settings:
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
+            wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
         )
 
@@ -377,6 +397,7 @@ class Settings:
         self.scoreboard = reloaded.scoreboard
         self.audio = reloaded.audio
         self.status = reloaded.status
+        self.wifi_setup = reloaded.wifi_setup
         self.night_mode = reloaded.night_mode
 
 

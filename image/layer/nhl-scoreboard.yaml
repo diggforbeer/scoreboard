@@ -315,7 +315,7 @@ mmdebstrap:
     - |-
       set -eu
       chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
-        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server"
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server, nhl_scoreboard.setup_server"
         python3 -m nhl_scoreboard --help >/dev/null
       '
       echo "nhl_scoreboard app modules import correctly"

@@ -75,6 +75,17 @@ def test_status_server_defaults_on(tmp_path):
     assert status.port == 9000
 
 
+def test_wifi_setup_server_defaults_on_port_80(tmp_path):
+    assert Settings().wifi_setup.enabled is True
+    assert Settings().wifi_setup.port == 80
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[wifi_setup]\nenabled = false\nport = 8000\n")
+    wifi_setup = Settings.load(path).wifi_setup
+    assert wifi_setup.enabled is False
+    assert wifi_setup.port == 8000
+
+
 def test_brightness_clamp_is_kept_within_0_100():
     settings = Settings()
     settings.panel.min_brightness = -5

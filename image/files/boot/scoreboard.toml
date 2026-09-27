@@ -102,6 +102,20 @@ horn_dir = ""
 enabled = true
 port = 8080
 
+[wifi_setup]
+# The setup page served while the board's own first-boot WiFi access point
+# (see nhl-scoreboard-setup-ap) is up -- lets a phone connected to that AP
+# pick a network from a scan taken just before the AP came up, or type one
+# in by hand, and submit a password. On by default: while the AP is up,
+# this is the only way to actually choose a network (the AP itself just
+# gets a phone reachable, it doesn't collect credentials). Port 80, not
+# status.port's 8080: Apple/Android/Windows captive-portal probes ask for
+# plain port 80, and the whole point of this page is to answer those
+# probes instead of a "no portal here" response, so it has to be on the
+# port they actually ask for.
+enabled = true
+port = 80
+
 [night_mode]
 # Dim the board overnight, but never in the middle of a game: while a game is
 # live (and for a while after it ends) the board stays at normal brightness
