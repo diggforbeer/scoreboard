@@ -17,7 +17,7 @@ from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, Scor
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, PlayerSeasonDetail, StandingsRow
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -89,6 +89,7 @@ class FlowClient:
         self.standings_calls = 0
         self.fail_standings = False
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
 
     def scores(self, date="now"):
         return list(self.today)
@@ -98,6 +99,9 @@ class FlowClient:
 
     def goal_scoring(self, game_id):
         return self.goal_events.get(game_id, ())
+
+    def team_roster(self, team):
+        return self.team_rosters.get(team, {})
 
     def schedule(self, team):
         self.schedule_calls += 1
@@ -485,11 +489,14 @@ def test_draw_dispatches_goal_scene(day):
 # --------------------------------------------------------------------------
 
 
-def goal_event(team=FAV, scorer="F. FORSBERG", goals=1, strength="ev") -> GoalEvent:
+def goal_event(
+    team=FAV, scorer="F. FORSBERG", goals=1, strength="ev", player_id=8480000
+) -> GoalEvent:
     return GoalEvent(
         team_abbrev=team,
         scorer_name=scorer,
         scorer_goals_to_date=goals,
+        scorer_player_id=player_id,
         assists=(),
         strength=strength,
     )

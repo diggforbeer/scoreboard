@@ -897,12 +897,17 @@ def test_goal_scene_ignores_situation(games, synthetic_logos):
 # --------------------------------------------------------------------------
 
 
-def goal_event(team: str, scorer="F. FORSBERG", goals=12, assists=(), strength="ev") -> GoalEvent:
+def goal_event(
+    team: str, scorer="F. FORSBERG", goals=12, assists=(), strength="ev", player_id=8480000
+) -> GoalEvent:
     return GoalEvent(
         team_abbrev=team,
         scorer_name=scorer,
         scorer_goals_to_date=goals,
-        assists=tuple(AssistDetail(name=n, assists_to_date=a) for n, a in assists),
+        scorer_player_id=player_id,
+        assists=tuple(
+            AssistDetail(name=n, assists_to_date=a, sweater_number=0) for n, a in assists
+        ),
         strength=strength,
     )
 

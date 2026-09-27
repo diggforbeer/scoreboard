@@ -107,12 +107,18 @@ class AssistDetail:
 
     name: str
     assists_to_date: int
+    #: Free in the same landing payload as everything else here (#124) --
+    #: unlike the scorer's own entry, an assist's raw object carries this
+    #: directly, confirmed live. Unlike scorer_sweater_number/scorer_points
+    #: below, no second call needed for this one.
+    sweater_number: int
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> AssistDetail:
         return cls(
             name=_default_str(raw.get("name")),
             assists_to_date=int(raw.get("assistsToDate") or 0),
+            sweater_number=int(raw.get("sweaterNumber") or 0),
         )
 
 
@@ -123,19 +129,30 @@ class GoalEvent:
     Confirmed free in that payload against two real live games: scorer name
     (already compact "F. Lastname"), the scorer's season goal total
     (``goalsToDate``, confirmed genuinely cumulative-season, not per-game),
-    each assister's name/season assist total, and ``strength``
-    ("ev"/"pp"/"sh"). NOT confirmed free, and deliberately not modelled here:
-    jersey number (the scorer's own entry has none, unlike an assist's
-    ``sweaterNumber``), total points for either player, and explicit
-    primary/secondary assist labelling -- see #124, split out because
-    closing those gaps needs a second API call this issue doesn't.
+    each assister's name/season assist total/``sweaterNumber``, and
+    ``strength`` ("ev"/"pp"/"sh"). NOT free from this endpoint: the
+    scorer's own jersey number, and total points (goals + assists) for
+    either player -- this endpoint gives only one half of that sum per
+    person. ``scorer_sweater_number``/``scorer_points`` close that gap
+    (#124) but need a second call this dataclass alone can't make; both
+    stay ``None`` until ``ScoreboardApp`` fills them in via
+    ``dataclasses.replace`` once the scoring team's roster+stats are
+    fetched, and permanently ``None`` if that fetch ever fails -- the
+    screen still shows without them, same graceful-degradation precedent
+    as the rest of this app.
     """
 
     team_abbrev: str
     scorer_name: str
     scorer_goals_to_date: int
+    #: Free in this payload (unlike an assist's own id, not needed since
+    #: sweater_number is already free there) -- the key for looking up
+    #: scorer_sweater_number/scorer_points in the team roster (#124).
+    scorer_player_id: int
     assists: tuple[AssistDetail, ...]
     strength: str
+    scorer_sweater_number: int | None = None
+    scorer_points: int | None = None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> GoalEvent:
@@ -143,6 +160,7 @@ class GoalEvent:
             team_abbrev=_default_str(raw.get("teamAbbrev")).upper(),
             scorer_name=_default_str(raw.get("name")),
             scorer_goals_to_date=int(raw.get("goalsToDate") or 0),
+            scorer_player_id=int(raw.get("playerId") or 0),
             assists=tuple(AssistDetail.from_api(a) for a in (raw.get("assists") or [])),
             strength=str(raw.get("strength") or "ev").lower(),
         )
@@ -165,6 +183,56 @@ def goal_events_from_landing(raw: dict[str, Any] | None) -> tuple[GoalEvent, ...
             except (AttributeError, KeyError, TypeError, ValueError):
                 continue
     return tuple(events)
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerSeasonDetail:
+    """Jersey number + season points for one player (#124).
+
+    Exists only because closing GoalEvent's gap needs combining two
+    endpoints, confirmed live, neither of which has both alone:
+    ``roster/{team}/current`` has ``sweaterNumber`` (keyed by ``id``) but
+    not points; ``club-stats/{team}/now`` has ``points`` (keyed by
+    ``playerId``) but not sweaterNumber.
+    """
+
+    sweater_number: int
+    points: int
+
+
+def player_details_from_api(
+    roster: dict[str, Any], club_stats: dict[str, Any]
+) -> dict[int, PlayerSeasonDetail]:
+    """Combine a team's roster and club-stats payloads into one id -> detail map.
+
+    Only players present in both are included -- a player needs a roster
+    entry (for the jersey number) and a stats entry (for points) to be any
+    use to the goal-detail screen; one without the other can't be shown
+    anyway. Goalies included on both sides even though the goal-detail
+    screen only ever looks up scorers/assisters, who are practically never
+    goalies -- but rare on-ice-credit oddities exist, and this is a
+    zero-cost `dict` builder, not a live call, so there's no reason to
+    special-case them out.
+    """
+    numbers: dict[int, int] = {}
+    for group in ("forwards", "defensemen", "goalies"):
+        for player in roster.get(group) or []:
+            try:
+                numbers[int(player["id"])] = int(player["sweaterNumber"])
+            except (KeyError, TypeError, ValueError):
+                continue
+    points: dict[int, int] = {}
+    for group in ("skaters", "goalies"):
+        for player in club_stats.get(group) or []:
+            try:
+                points[int(player["playerId"])] = int(player.get("points") or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+    return {
+        player_id: PlayerSeasonDetail(sweater_number=number, points=points[player_id])
+        for player_id, number in numbers.items()
+        if player_id in points
+    }
 
 
 @dataclass(frozen=True, slots=True)

@@ -26,7 +26,13 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import (
+    Game,
+    GoalEvent,
+    PlayerSeasonDetail,
+    Situation,
+    StandingsRow,
+)
 
 
 class FakeCanvas:
@@ -95,6 +101,8 @@ class FakeClient:
         self.situations: dict[int, Situation | None] = {}
         self.goal_scoring_calls: list[int] = []
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        self.team_roster_calls: list[str] = []
+        self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
         self.schedule_calls = 0
@@ -116,6 +124,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return self.goal_events.get(game_id, ())
+
+    def team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        self.team_roster_calls.append(team)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.team_rosters.get(team, {})
 
     def schedule(self, team: str) -> list[Game]:
         self.schedule_calls += 1
@@ -380,11 +394,14 @@ def test_situation_fetch_failure_keeps_last_value(fake_backend, games):
 # -- goal detail polling: favourite's live game only (#122) ------------------
 
 
-def goal_event(team="CGY", scorer="F. FORSBERG", goals=1, strength="ev") -> GoalEvent:
+def goal_event(
+    team="CGY", scorer="F. FORSBERG", goals=1, strength="ev", player_id=8480000
+) -> GoalEvent:
     return GoalEvent(
         team_abbrev=team,
         scorer_name=scorer,
         scorer_goals_to_date=goals,
+        scorer_player_id=player_id,
         assists=(),
         strength=strength,
     )

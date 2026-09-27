@@ -29,6 +29,7 @@ from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
     Game,
     GoalEvent,
+    PlayerSeasonDetail,
     Situation,
     StandingsRow,
     conference_standings,
@@ -45,6 +46,9 @@ FRAME_INTERVAL = 0.5
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
 STANDINGS_TTL_SECONDS = 60 * 60
+#: A team's jersey numbers never change intra-season; points change only
+#: when that team plays, at most a few times a week (#124).
+ROSTER_TTL_SECONDS = 60 * 60
 #: How much a new lux reading moves the smoothed value, 0-1. Low on purpose:
 #: this is what keeps a cloud passing over a window, or a hand briefly
 #: covering the sensor, from visibly flickering the panel.
@@ -204,6 +208,12 @@ class ScoreboardApp:
         #: (game id, monotonic time, event) of the most recent goal_detail
         #: screen, for how long it stays up.
         self._goal_detail: tuple[int, float, GoalEvent] | None = None
+        #: team abbrev -> (fetched at, jersey number/points by player id),
+        #: for GoalEvent's scorer_sweater_number/scorer_points (#124). Only
+        #: ever fetched for a team that has actually just scored the
+        #: favourite a goal-detail screen -- not proactively for every team
+        #: in the schedule.
+        self._team_rosters: dict[str, tuple[float, dict[int, PlayerSeasonDetail]]] = {}
         #: The configured logo library, held by run_demo() while it toggles
         #: renderer.logos between it and None for the text layout.
         self._demo_real_logos: LogoLibrary | None = logos
@@ -641,7 +651,46 @@ class ScoreboardApp:
             return
         if len(events) > previous:
             self._shown_goal_events[game_id] = previous + 1
-            self._goal_detail = (game_id, self.monotonic(), events[previous])
+            self._goal_detail = (
+                game_id,
+                self.monotonic(),
+                self._enrich_goal_detail(events[previous]),
+            )
+
+    def _team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        """Jersey number + season points for ``team``, cached (#124).
+
+        Fetched lazily -- only once a goal-detail screen for that team is
+        actually about to show, not proactively for every team on the
+        schedule. A failed fetch keeps whatever was cached before (possibly
+        still nothing) rather than clearing it, same precedent as
+        ``next_favourite_game``/``conference_standings``.
+        """
+        now = self.monotonic()
+        fetched_at, roster = self._team_rosters.get(team, (None, {}))
+        if fetched_at is not None and now - fetched_at < ROSTER_TTL_SECONDS:
+            return roster
+        try:
+            roster = self.client.team_roster(team)
+        except NHLApiError as exc:
+            log.debug("Roster fetch for %s failed: %s", team, exc)
+            return roster
+        self._team_rosters[team] = (now, roster)
+        return roster
+
+    def _enrich_goal_detail(self, event: GoalEvent) -> GoalEvent:
+        """Fill in scorer_sweater_number/scorer_points, if the roster fetch works out.
+
+        Left as-is (both stay None) on a failed fetch or a scorer missing
+        from the roster response -- the screen still shows fine without
+        them, same graceful-degradation precedent as everything else here.
+        """
+        detail = self._team_roster(event.team_abbrev).get(event.scorer_player_id)
+        if detail is None:
+            return event
+        return dataclasses.replace(
+            event, scorer_sweater_number=detail.sweater_number, scorer_points=detail.points
+        )
 
     # -- favourite mode --------------------------------------------------
 

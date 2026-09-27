@@ -251,6 +251,61 @@ def test_goal_scoring_returns_empty_when_scoring_is_absent():
 
 
 @responses.activate
+def test_team_roster_combines_roster_and_club_stats():
+    """Two calls, one lookup (#124) -- neither endpoint alone has both
+    sweaterNumber and points, confirmed live against the real API."""
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/roster/NSH/current",
+        json={
+            "forwards": [{"id": 1, "sweaterNumber": 9}],
+            "defensemen": [{"id": 2, "sweaterNumber": 55}],
+            "goalies": [{"id": 3, "sweaterNumber": 74}],
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/club-stats/NSH/now",
+        json={
+            "skaters": [{"playerId": 1, "points": 40}, {"playerId": 2, "points": 20}],
+            "goalies": [{"playerId": 3, "points": 0}],
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        roster = client.team_roster("nsh")
+    urls = [c.request.url for c in responses.calls]
+    assert f"{BASE_URL}/roster/NSH/current" in urls
+    assert f"{BASE_URL}/club-stats/NSH/now" in urls
+    assert roster[1].sweater_number == 9
+    assert roster[1].points == 40
+    assert roster[2].sweater_number == 55
+    assert roster[2].points == 20
+    assert roster[3].sweater_number == 74
+    assert roster[3].points == 0
+
+
+@responses.activate
+def test_team_roster_omits_a_player_missing_from_either_side():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/roster/NSH/current",
+        json={"forwards": [{"id": 1, "sweaterNumber": 9}, {"id": 2, "sweaterNumber": 55}]},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/club-stats/NSH/now",
+        json={"skaters": [{"playerId": 1, "points": 40}]},
+        status=200,
+    )
+    with NHLClient() as client:
+        roster = client.team_roster("NSH")
+    assert set(roster) == {1}
+
+
+@responses.activate
 def test_standings_hits_standings_date():
     responses.add(responses.GET, f"{BASE_URL}/standings/now", json={"standings": []}, status=200)
     with NHLClient() as client:

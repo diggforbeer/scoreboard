@@ -16,7 +16,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import Game, GoalEvent, Situation, StandingsRow, goal_events_from_landing
+from .models import (
+    Game,
+    GoalEvent,
+    PlayerSeasonDetail,
+    Situation,
+    StandingsRow,
+    goal_events_from_landing,
+    player_details_from_api,
+)
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +94,20 @@ class NHLClient:
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             log.warning("Skipping malformed scoring for game %s: %s", game_id, exc)
             return ()
+
+    def team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        """Jersey number + season points for every player on ``team`` (#124).
+
+        Two calls, combined: neither ``roster/{team}/current`` nor
+        ``club-stats/{team}/now`` alone has both jersey number and points
+        (confirmed live) -- see ``player_details_from_api``. Malformed
+        entries are skipped per-player, same precedent as ``_parse_items``,
+        rather than losing the whole roster over one bad entry.
+        """
+        team = team.strip().upper()
+        roster = self._get(f"/roster/{team}/current")
+        club_stats = self._get(f"/club-stats/{team}/now")
+        return player_details_from_api(roster, club_stats)
 
     def standings(self, date: str = "now") -> list[StandingsRow]:
         """Every team's current standings line, unsorted across conferences.

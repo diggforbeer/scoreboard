@@ -317,7 +317,9 @@ class Renderer:
     ) -> None:
         cx = (left + right) // 2
         name_baseline = 9
-        self.text_center(canvas, self.fonts.small, cx, name_baseline, ACCENT, event.scorer_name)
+        self.text_center(
+            canvas, self.fonts.small, cx, name_baseline, ACCENT, self._scorer_line(event)
+        )
         if event.strength != "ev":
             self.text_right(
                 canvas, self.fonts.tiny, right, name_baseline, ACCENT, event.strength.upper()
@@ -328,7 +330,7 @@ class Renderer:
             cx,
             17,
             WHITE,
-            f"GOAL #{event.scorer_goals_to_date}",
+            self._goal_line(event),
         )
         lines = self._assist_lines(event)
         baselines = (25,) if len(lines) == 1 else (23, 30)
@@ -336,10 +338,28 @@ class Renderer:
             self.text_center(canvas, self.fonts.tiny, cx, baseline, SUBDUED, line)
 
     @staticmethod
+    def _scorer_line(event: GoalEvent) -> str:
+        """Jersey number prefixed when known (#124) -- None until
+        ScoreboardApp's roster fetch fills it in, or permanently if that
+        fetch ever fails; the name alone is still a complete line either
+        way, same graceful-degradation precedent as the rest of this app.
+        """
+        if event.scorer_sweater_number is None:
+            return event.scorer_name
+        return f"#{event.scorer_sweater_number} {event.scorer_name}"
+
+    @staticmethod
+    def _goal_line(event: GoalEvent) -> str:
+        """Season points appended when known (#124) -- see _scorer_line."""
+        if event.scorer_points is None:
+            return f"GOAL #{event.scorer_goals_to_date}"
+        return f"GOAL #{event.scorer_goals_to_date} - {event.scorer_points} PTS"
+
+    @staticmethod
     def _assist_lines(event: GoalEvent) -> tuple[str, ...]:
         if not event.assists:
             return ("UNASSISTED",)
-        return tuple(f"{a.name} {a.assists_to_date}" for a in event.assists)
+        return tuple(f"#{a.sweater_number} {a.name} {a.assists_to_date}" for a in event.assists)
 
     def draw_preview(self, canvas: Any, game: Game, now: datetime) -> None:
         """The favourite's next game: who, which day, what time."""
