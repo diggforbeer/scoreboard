@@ -513,18 +513,17 @@ def test_goal_detail_state_pruned_with_the_rest(fake_backend, games):
     assert app._shown_goal_events == {}
 
 
-def test_status_server_off_by_default(fake_backend, games):
+def test_status_server_built_by_default(fake_backend, games):
     app = build_app(fake_backend, games)
-    assert app.status_server is None
-
-
-def test_status_server_built_when_enabled(fake_backend, games):
-    settings = Settings()
-    settings.status.enabled = True
-    settings.status.port = 9191
-    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
     assert app.status_server is not None
-    assert app.status_server.port == 9191
+    assert app.status_server.port == 8080
+
+
+def test_status_server_not_built_when_disabled(fake_backend, games):
+    settings = Settings()
+    settings.status.enabled = False
+    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is None
 
 
 def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
