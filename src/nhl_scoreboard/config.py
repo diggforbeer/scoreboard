@@ -238,12 +238,14 @@ class AudioConfig:
 class StatusServerConfig:
     """Read-only web status page for headless debugging (#48).
 
-    Off by default so it isn't one more thing that has to be reasoned about
-    for every board. No auth: it binds the local network only, for a device
-    already trusted there -- do not port-forward it to the internet.
+    On by default: the board is headless by design, so this is the main way
+    to check on it without SSH-ing in, and it's the only way at all until a
+    phone has a captive-portal setup flow to reach it (#116). No auth: it
+    binds the local network only, for a device already trusted there -- do
+    not port-forward it to the internet.
     """
 
-    enabled: bool = False
+    enabled: bool = True
     port: int = 8080
 
 
