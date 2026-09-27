@@ -27,6 +27,7 @@ from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
 from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow
+from nhl_scoreboard.wifi_join import WifiJoinAttempt
 
 
 class FakeCanvas:
@@ -1618,3 +1619,84 @@ def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
 
     assert _qr_escape('a;b,c:d"e\\f') == 'a\\;b\\,c\\:d\\"e\\\\f'
     assert _qr_escape("plain") == "plain"
+
+
+# --------------------------------------------------------------------------
+# WiFi join outcome scene (#133)
+# --------------------------------------------------------------------------
+
+
+def _wifi_join(tmp_path, **kwargs) -> WifiJoinAttempt:
+    return WifiJoinAttempt(
+        config_path=tmp_path / "scoreboard.toml",
+        connect_timeout=1.0,
+        submission_path=tmp_path / "submission.json",
+        outcome_path=tmp_path / "outcome.json",
+        **kwargs,
+    )
+
+
+def test_no_outcome_file_leaves_normal_scene_selection_untouched(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=_wifi_join(tmp_path)
+    )
+    app.refresh()
+    assert app.select_scene().kind != "wifi_join"
+
+
+def test_wifi_join_outcome_overrides_even_a_live_game(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text(json.dumps({"status": "attempting", "ssid": "HomeNet"}))
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    app.refresh()
+    assert any(g.is_live for g in app.games), "fixture should have a live game"
+
+    scene = app.select_scene()
+    assert scene.kind == "wifi_join"
+    assert scene.wifi_join_status == "attempting"
+    assert scene.wifi_join_ssid == "HomeNet"
+
+
+def test_wifi_join_outcome_wins_over_ap_setup_scene(fake_backend, games, tmp_path):
+    """A failed attempt restarts the AP, recreating the ap_setup state file
+    underneath the still-showing "Failed..." message -- wifi_join must win
+    for as long as its own outcome file exists."""
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text(json.dumps({"status": "failed", "ssid": "HomeNet"}))
+    ap_setup_path = tmp_path / "ap-setup.json"
+    ap_setup_path.write_text(json.dumps({"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard"}))
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        wifi_join=join,
+        ap_setup_state_path=ap_setup_path,
+    )
+    assert app.select_scene().kind == "wifi_join"
+
+
+def test_malformed_outcome_file_degrades_to_normal_scene_selection(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text("not valid json{{{")
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    app.refresh()
+    assert app.select_scene().kind != "wifi_join"
+
+
+def test_wifi_join_built_from_settings_picks_up_connect_timeout(fake_backend, games, tmp_path):
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("[wifi]\nconnect_timeout_seconds = 45\n")
+    app = ScoreboardApp(Settings.load(config_path), client=FakeClient(games), backend=fake_backend)
+    assert app.wifi_join.connect_timeout == 45.0
+
+
+def test_config_reload_updates_wifi_join_connect_timeout_in_place(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    assert app.wifi_join.connect_timeout == 1.0
+
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("[wifi]\nconnect_timeout_seconds = 20\n")
+    app._apply_reloaded_settings(Settings.load(config_path))
+    assert app.wifi_join is join, "reload updates the existing object, not a new one"
+    assert app.wifi_join.connect_timeout == 20.0

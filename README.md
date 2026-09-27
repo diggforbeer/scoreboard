@@ -123,6 +123,12 @@ enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
 
+[wifi]
+ssid = ""                    # leave empty if you're using wired ethernet instead
+password = ""
+country = "CA"               # two-letter regulatory domain code, e.g. CA, US, GB
+connect_timeout_seconds = 90 # how long a new SSID/password gets to connect before rolling back
+
 [status]
 enabled = true                # a read-only web status page, for headless debugging; set false to turn off
 port = 8080

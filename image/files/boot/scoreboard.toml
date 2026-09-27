@@ -15,6 +15,11 @@ ssid = ""
 password = ""
 # Two-letter country code for the wireless regulatory domain, e.g. CA, US, GB.
 country = "CA"
+# How long to wait for a new SSID/password (from this file, or submitted via
+# the first-time AP setup page) to actually connect before giving up and
+# rolling back. Also used by the AP setup flow to decide when to stop
+# waiting and let you retry.
+connect_timeout_seconds = 90
 
 [scoreboard]
 # Three-letter team abbreviation, shown first in the rotation. Set to "" for

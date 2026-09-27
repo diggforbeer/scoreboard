@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from nhl_scoreboard.config import ConfigWriteError, Settings, resolve_timezone
@@ -84,6 +86,27 @@ def test_wifi_setup_server_defaults_on_port_80(tmp_path):
     wifi_setup = Settings.load(path).wifi_setup
     assert wifi_setup.enabled is False
     assert wifi_setup.port == 8000
+
+
+def test_wifi_connect_timeout_defaults_to_90_and_is_overridable(tmp_path):
+    assert Settings().wifi.connect_timeout_seconds == 90.0
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[wifi]\nssid = "MyNetwork"\nconnect_timeout_seconds = 30\n')
+    settings = Settings.load(path)
+    assert settings.wifi.connect_timeout_seconds == 30.0
+
+
+def test_wifi_ssid_password_country_are_not_modelled_and_do_not_warn(tmp_path, caplog):
+    """ssid/password/country live in the same [wifi] section but are read
+    directly out of raw TOML by scoreboard-provision, not through WifiConfig
+    -- this pins down that loading a normal [wifi] section never trips
+    _build()'s "unknown key" warning for any of them."""
+    caplog.set_level(logging.WARNING)
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[wifi]\nssid = "MyNetwork"\npassword = "hunter2"\ncountry = "US"\n')
+    Settings.load(path)
+    assert "unknown config key" not in caplog.text.lower()
 
 
 def test_brightness_clamp_is_kept_within_0_100():
