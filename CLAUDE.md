@@ -446,6 +446,224 @@ exit; with `show_logos = false` every step is just text.
   branch trigger) -- a human pushing a real release tag by hand should
   get a build regardless of what changed.
 
+## WiFi AP + captive-portal setup mode (#131)
+
+Infrastructure phase only, sub-issue of #116 -- gets a phone able to reach
+the board at all when it has no working network yet, plus (#132) the
+nearby-network scan `nhl-scoreboard-setup-ap` caches for the setup page to
+render as a picker. The setup page itself lives in `setup_server.py` (see
+the "WiFi setup page" section below); wiring a submission into the
+credential-submission/rollback flow is #133, not done anywhere yet.
+
+- **Trigger condition** (`image/files/scripts/nhl-scoreboard-setup-ap`,
+  `cmd_check`/`is_online`): "has a default route", checked with
+  `ip route show default`, not "no `[wifi]` configured" -- scoreboard-
+  provision's `apply_wifi()` already treats a bare config as "relying on
+  ethernet" and does nothing, so re-checking that here would needlessly
+  pop an AP on every ethernet-only boot. A default route is used instead
+  of matching specific interface names (eth0 vs enp0s0 vs a USB dongle
+  vary by hardware) -- it is also exactly what the app itself needs to
+  reach `api-web.nhle.com`, so "no default route" and "board can't do its
+  job" are the same condition. `nhl-scoreboard-setup-ap.service` orders
+  itself `After=scoreboard-provision.service`, which already blocks up to
+  its own `WIFI_CONNECT_TIMEOUT` resolving any configured Wi-Fi (connect,
+  or roll back) before returning -- so by the time this script runs, that
+  outcome is already settled and it needs no wait/retry loop of its own.
+- **AP mode is iwd's own** (`net.connman.iwd.AccessPoint`, via `iwctl ap`),
+  not hostapd -- this image already depends on iwd (`CLAUDE.md`: "Wi-Fi is
+  iwd, not NetworkManager"), so this adds no second WiFi daemon. iwd's AP
+  support only handles the 802.11 side; it does not assign the interface
+  an IP or hand out leases, so the script still sets a static IP itself
+  (`10.42.0.1/24` by default) before calling `iwctl ap`.
+- **`iwctl ap <dev> start-open`** (an open, unencrypted network) is tried
+  first, falling back to a fixed-passphrase WPA2-PSK network if that
+  fails. **Not verified against real hardware or a known iwd version**
+  (#4) -- start-open needs a newer iwd than could be confirmed against
+  whatever this image's Debian release actually ships without a real
+  board to check. Treat the open-network path as the intended default,
+  not a confirmed one, until it's checked on hardware.
+- **dnsmasq is a genuinely new dependency** (`image/layer/nhl-scoreboard.
+  yaml`), added for DHCP leases + wildcard DNS (`address=/#/<ap-addr>`, so
+  every hostname a phone's OS probes resolves to the board -- that's what
+  actually triggers the OS's captive-portal prompt). Flagged here as a
+  real tradeoff per #131, not snuck in quietly -- the project has
+  otherwise stuck to stdlib/essential packages. Its own `dnsmasq.service`
+  is masked at image-build time (a plain `ln -sf /dev/null` symlink, the
+  same thing `systemctl mask` itself creates -- not `systemctl mask`
+  directly, since there's no running init inside the mmdebstrap chroot for
+  it to talk to): only the scoped instance `nhl-scoreboard-setup-ap`
+  starts directly, `--conf-file`'d and `bind-interfaces`'d to the AP
+  interface only, ever runs.
+- **No self-monitoring teardown loop.** A WiFi radio cannot be an AP and a
+  station at the same time, so there is nothing meaningful for this
+  script to poll for on its own interface once the AP is up. `stop` (also
+  run from `ExecStopPost`, so it fires however the service is asked to
+  end) is meant to be driven by #133's submission flow once *it* confirms
+  a real network joined -- not by this script guessing.
+- Tested the same way as `nhl-scoreboard-grow-rootfs`/`scoreboard-
+  provision`: the real script, run as a subprocess, with `ip`/`iwctl`/
+  `dnsmasq`/`logger` faked on the PATH (`tests/test_setup_ap.py`). What
+  that does *not* prove: that `start-open` exists, that a real phone shows
+  a captive-portal prompt for the result, or that iwd AP mode and dnsmasq
+  actually cooperate on a real radio -- all #4.
+- CI's `shell` job (`.github/workflows/ci.yml`) does not yet shellcheck
+  this script -- adding it needs a change to a workflow file, which is
+  outside this change's own write access; tracked as a follow-up rather
+  than silently skipped.
+- **Nearby-network scan** (#132, `scan_networks`/`parse_networks`): runs
+  `iwctl station <dev> scan` + `get-networks` itself, still in station
+  mode, immediately before the `Mode ap` switch above, and caches the
+  result as a JSON array of unique SSIDs to
+  `/run/nhl-scoreboard-setup-ap-networks.json`
+  (`NHL_SCOREBOARD_AP_SCAN_FILE`). Has to happen here and only here: this
+  chip can't scan while its own AP is active (see the next section for
+  why), so once `Mode ap` is set there is no later point at which a scan
+  would even be possible. `parse_networks` is an awk script that anchors
+  on the one thing iwctl's plain-text table reliably ends each data row
+  with -- a security token (`open`/`psk`/`8021x`/`wep`) followed by
+  asterisks -- rather than fixed column positions, which shift with
+  whatever the longest nearby SSID happens to be. Same "not verified
+  against real hardware" caveat as the rest of this script (#4): a format
+  mismatch degrades to an empty cached list, never a script failure --
+  covered by `tests/test_setup_ap.py`'s scan tests with a synthetic table,
+  not a real `iwctl` binary.
+
+## WiFi setup page + captive-portal probe handling (#132)
+
+The other half of #132 -- "what does a phone see once it's on the AP" --
+now that #131 (AP reachability) and #141 (the panel's own join QR code)
+are merged. Scope is strictly the page and captive-portal probe handling;
+actually joining the chosen network is #133, not built yet.
+
+- **No live scan, by design.** Verified live and corroborated against
+  real-hardware reports on this board's exact brcmfmac chip family (see
+  #132's own issue comments): the chip cannot scan for nearby networks
+  while its own AP is active (`iwctl station wlan0 get-networks`/`scan`
+  both fail with "No station on device" once `Mode` is switched to `ap`)
+  -- default brcmfmac is single-interface, and the documented `apsta=1`
+  concurrent AP+STA workaround is reported to crash this exact chip's
+  firmware under concurrent use, so it is not being pursued. The setup
+  page instead renders whatever the previous section's cached scan
+  contains -- a snapshot from moments before the AP came up, not a live
+  list.
+- **Text entry is never hidden behind the picker.** That cached scan can
+  miss a network that's out of range at that exact instant,
+  hidden/non-broadcasting, or one that only appears afterward, with no way
+  to rescan short of restarting the whole setup-ap cycle. `setup_server.
+  py`'s page always renders a plain SSID text field alongside the picker,
+  not as a fallback to remove later; on submit, a non-empty manual entry
+  (`ssid_other`) wins over whatever radio button (`ssid_choice`) happens
+  to still be selected.
+- **A new stdlib module, not a new systemd service.** `setup_server.py`
+  follows `status_server.py`'s own pattern (`http.server`, no
+  dependencies) and is started/stopped by `ScoreboardApp` itself
+  (`_sync_setup_server()`, called once per `run()` loop tick), gated on
+  nothing but whether `nhl-scoreboard-setup-ap`'s own state file exists --
+  the same signal `_ap_setup_scene` already keys off of for the panel's QR
+  scene. `nhl-scoreboard.service` already runs as root and already polls
+  that file every frame, so this needed no new unit, no new packaging, and
+  no new privilege: binding `wifi_setup.port`'s default of 80 needs root,
+  which the service already has.
+- **Port 80, not `status.port`'s 8080.** Captive-portal probes (Apple's
+  `/hotspot-detect.html`, Android's `/generate_204`, Windows NCSI's
+  `/connecttest.txt`/`/ncsi.txt`) ask for plain HTTP on the well-known
+  port by a fixed hostname; dnsmasq's wildcard DNS (`address=/#/<ap-addr>`,
+  #131) only gets those requests as far as this board's IP -- the port
+  still has to be the one the probe actually asks for, or the request
+  never reaches this server at all.
+- **Every non-setup-page GET gets a 302 to `/`, not just the three named
+  probes.** Wildcard DNS means literally any hostname a phone's OS decides
+  to probe resolves here, so enumerating only the three documented probes
+  and 404ing everything else would still fail to pop the prompt for
+  anything not on that list -- the redirect is a deliberate catch-all,
+  with the three named probes only special-cased for a debug log line. A
+  relative `Location: /` is enough: it resolves against whatever host the
+  client thinks it just asked, which is fine, since wildcard DNS already
+  points that host back at this board.
+- **This module never touches iwd/iwctl.** On submit it writes
+  `{"ssid": ..., "password": ...}` to
+  `/run/nhl-scoreboard-setup-submission.json` (`ap_submission_state_path`,
+  atomic tmp+replace, same convention as `Settings.save()`) and nothing
+  else -- that file is the hand-off point for #133's still-unbuilt join
+  flow, not consumed by anything yet. `password` is `None` for an open
+  network, matching the `open`/`password` distinction the AP's own state
+  file (#131) already makes.
+- Per #132's own issue text, captive-portal auto-popup is "the single most
+  fragile part of the whole idea" -- inconsistent across iOS/Android/
+  desktop, and sometimes doesn't fire at all, no matter how this is
+  implemented. #141's panel QR code is the reliable fallback: it gets a
+  phone onto the AP without depending on captive-portal detection firing
+  at all, and this page is reachable by typing its fixed address manually
+  regardless of whether the "Sign in to network" prompt ever appears.
+
+## Wiring the setup page's submission into a real join (#133)
+
+Closes the loop #131/#132 leave open: turning a submitted SSID/password
+into an actual network join, safely, with the AP setup flow's own
+first-time-user constraints -- not #51's original boot-time-only
+assumptions.
+
+- **`apply_wifi()` moved from `scoreboard-provision` into
+  `nhl_scoreboard/wifi.py`**, an importable module, so both the boot-time
+  caller and this live join flow call the exact same tested join/rollback
+  path instead of two implementations of "try new credentials, roll back
+  on failure." `scoreboard-provision` itself now just parses `[wifi]` out
+  of the TOML and hands it off -- the 26 existing subprocess-level tests in
+  `tests/test_scoreboard_provision.py` needed zero changes after this
+  move, since they exercise behaviour through the script's own CLI
+  boundary, not where the code physically lives.
+- **`apply_wifi()` now returns `bool`** (`True` for an already-current
+  profile or a genuine new success, `False` only when a real attempt was
+  made and the network never came up) -- the boot-time caller still
+  ignores it, but the live join flow needs to know which panel message and
+  which of "drop the AP" / "bring it back" to do next.
+- **The panel is the feedback channel, not the HTTP response** (decided
+  directly in #133's own issue discussion, not assumed): attempting the
+  join means switching the radio out of `Mode ap`, which tears down the AP
+  the phone's setup-page request arrived over -- killing that connection
+  before any response describing success/failure could reach it.
+  `wifi_join.py`'s `WifiJoinAttempt` writes a state file
+  (`/run/nhl-scoreboard-wifi-join-state.json`) with `attempting`/
+  `connected`/`failed`, read by `_wifi_join_scene()` the same way #141's
+  `_ap_setup_scene()` already reads its own -- and given **top** priority
+  in `select_scene()`, even over `ap_setup`: a failed attempt restarts
+  `nhl-scoreboard-setup-ap`, which recreates its own state file underneath
+  the still-counting-down "Failed..." message, and that message has to win
+  until its own display window (`OUTCOME_DISPLAY_SECONDS`, 15s) elapses.
+- **The join runs on a background thread**, off `ScoreboardApp.run()`'s own
+  loop -- `WifiJoinAttempt.poll()` is called every frame and must never
+  block; a real attempt can take up to `connect_timeout_seconds` (90s by
+  default), and freezing score polling/rendering for that long would
+  defeat the point of a scoreboard that's still trying to show something
+  during setup.
+- **A failed join restarts AP mode** (also decided directly, not a
+  judgment call left to whoever built this) so the person can reconnect
+  and retry from the same phone -- treated as the *expected* retry path,
+  not a rare edge case, which matters given the real-hardware finding
+  below.
+- **`[wifi] connect_timeout_seconds`** (default 90, matching
+  `nhl_scoreboard.wifi`'s own `WIFI_CONNECT_TIMEOUT` default) is a real
+  `WifiConfig` dataclass field now, exposed properly instead of left as the
+  `NHL_SCOREBOARD_WIFI_TIMEOUT` env var (still there, still the underlying
+  default, but that one's for tests/low-level overrides, not something a
+  real user would find). `ssid`/`password`/`country` stay deliberately
+  unmodelled in `WifiConfig` -- `scoreboard-provision` reads those straight
+  out of raw TOML (predates this dataclass) and nothing else needs typed
+  access to them; `Settings.from_dict` filters the raw `[wifi]` dict down
+  to just `connect_timeout_seconds` before handing it to `_build()`, so
+  those three don't trip its "unknown key" warning on every single load.
+- **Real-hardware risk, not yet re-verified after this landed**: repeated
+  rapid AP start/stop/mode-switch cycling (manual testing during #132's own
+  investigation) put this board's radio into a bad state once --
+  `iwctl ap <dev> start` failing with `START_AP failed: -22` and
+  `Could not register frame watch type ...: -114` in `iwd`'s own log,
+  recovered only by backing off / a clean boot. Given the decision above
+  that failure-then-retry is the expected path, not an edge case, this
+  needs real-hardware testing of *that specific path* (submit bad
+  credentials, confirm the AP comes back, retry, repeat a few times) before
+  trusting it, not just the happy path -- #4, same as everything else here
+  that needs a Pi.
+
 ## Disk-destructive code (grow-rootfs)
 
 `image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
