@@ -57,6 +57,24 @@ WIFI_POLL_INTERVAL = float(os.environ.get("NHL_SCOREBOARD_WIFI_POLL_INTERVAL", "
 log = logging.getLogger(__name__)
 
 
+def _write_secret_file(path: Path, contents: str) -> None:
+    """Write ``contents`` (a WiFi passphrase, always) with mode 0600 from
+    the moment the file exists -- not write-then-chmod, which leaves a
+    window where the file sits at whatever the process umask gives a plain
+    ``Path.write_text()`` (typically 644, world-readable) before the
+    follow-up chmod narrows it. Flagged by CodeQL once this module moved
+    the code that already did this out of the previously-unscanned
+    ``scoreboard-provision`` script (#133) -- storing the passphrase in
+    the file at all is inherent to how iwd's own profile format and this
+    project's rollback state work, not fixable without breaking WiFi
+    joining entirely, but this specific race was a real, narrow gap worth
+    actually closing rather than just accepting alongside it.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(contents)
+
+
 def apply_wifi(wifi: dict, config_path: Path, *, connect_timeout: float | None = None) -> bool:
     """Join the network described by ``wifi`` (a parsed ``[wifi]`` section).
 
@@ -97,8 +115,7 @@ def apply_wifi(wifi: dict, config_path: Path, *, connect_timeout: float | None =
     previous_profile = read_state_file()
     try:
         IWD_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-        profile.write_text(contents)
-        profile.chmod(0o600)
+        _write_secret_file(profile, contents)
     except OSError as exc:
         log.error("Could not write Wi-Fi profile: %s", exc)
         return False
@@ -243,8 +260,7 @@ def station_field(output: str, field: str) -> str:
 def write_last_good(ssid: str, password: str, country: str) -> None:
     payload = {"ssid": ssid, "password": password, "country": country}
     try:
-        LAST_GOOD_FILE.write_text(json.dumps(payload))
-        LAST_GOOD_FILE.chmod(0o600)
+        _write_secret_file(LAST_GOOD_FILE, json.dumps(payload))
     except OSError as exc:
         log.warning("Could not record last-good Wi-Fi config: %s", exc)
 
