@@ -188,9 +188,6 @@ class ScoreboardConfig:
     #: meaningfully more to read (name, season totals, assist(s)) than the
     #: "GOAL" + score flash.
     goal_detail_seconds: float = 8.0
-    #: "favourite": follow the favourite's game -- countdown, live, final,
-    #: then a preview of the next one. "all": rotate every game today.
-    rotation: str = "favourite"
     #: Inside this many hours of puck drop the preview becomes a countdown.
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.
@@ -213,13 +210,63 @@ class ScoreboardConfig:
             "scoreboard", "live_poll_seconds", self.live_poll_seconds
         )
         self.rotate_seconds = _clamp_interval("scoreboard", "rotate_seconds", self.rotate_seconds)
-        self.rotation = self.rotation.strip().lower() or "favourite"
-        if self.rotation not in ("favourite", "all"):
-            log.warning("Unknown rotation %r; using 'all'", self.rotation)
-            self.rotation = "all"
-        if self.rotation == "favourite" and not self.favourite_team:
-            log.warning("rotation = 'favourite' needs a favourite_team; using 'all'")
-            self.rotation = "all"
+
+
+#: The only screens ``_rotate_idle_scenes`` (app.py) knows how to show.
+#: "countdown_preview" auto-switches between countdown/preview based on
+#: countdown_hours, same as always -- which one shows isn't a user choice,
+#: so it isn't split into two separately configurable screens (#150).
+VALID_ROTATION_SCREENS = ("countdown_preview", "standings", "clock")
+
+
+@dataclass(slots=True)
+class RotationEntry:
+    """One slot in the configurable idle rotation (#150), parsed from a ``[[rotation]]`` table.
+
+    Only ever constructed by ``_parse_rotation`` with an already-validated
+    ``screen``/``seconds`` pair -- invalid entries (unknown screen,
+    non-positive seconds) are dropped there and never reach this type.
+    """
+
+    screen: str
+    seconds: float
+
+
+def _parse_rotation(raw: list[Any]) -> list[RotationEntry]:
+    """Parse ``[[rotation]]`` (an array of tables), dropping invalid entries.
+
+    Per #150's decision 3, an invalid entry is never displayed on the panel
+    but is not fatal either -- logged as a warning and skipped, same
+    typo-tolerant convention as every other config value in this module.
+    """
+    entries: list[RotationEntry] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            log.warning("Ignoring [[rotation]] entry that isn't a table: %r", item)
+            continue
+        screen = str(item.get("screen", "")).strip().lower()
+        if screen not in VALID_ROTATION_SCREENS:
+            log.warning(
+                "Ignoring [[rotation]] entry with unknown screen %r (must be one of %s)",
+                item.get("screen"),
+                ", ".join(VALID_ROTATION_SCREENS),
+            )
+            continue
+        seconds = item.get("seconds")
+        try:
+            seconds_value = float(seconds)
+        except (TypeError, ValueError):
+            log.warning(
+                "Ignoring [[rotation]] entry %r with non-numeric seconds %r", screen, seconds
+            )
+            continue
+        if seconds_value <= 0:
+            log.warning(
+                "Ignoring [[rotation]] entry %r with non-positive seconds %r", screen, seconds_value
+            )
+            continue
+        entries.append(RotationEntry(screen=screen, seconds=seconds_value))
+    return entries
 
 
 @dataclass(slots=True)
@@ -347,6 +394,13 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
+    #: The idle rotation (#150), explicit ``[[rotation]]`` entries in file
+    #: order. Empty when absent from the file -- app.py derives the old
+    #: implicit default list (countdown/preview, standings, clock) from
+    #: ScoreboardConfig's own rotate_seconds/show_standings/
+    #: show_clock_between_games in that case, so an upgraded board changes
+    #: nothing until the owner opts in.
+    rotation: list[RotationEntry] = field(default_factory=list)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
     wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
@@ -378,6 +432,7 @@ class Settings:
         return cls(
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
+            rotation=_parse_rotation(raw.get("rotation", [])),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
             wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
@@ -385,14 +440,24 @@ class Settings:
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
         )
 
-    def save(self, updates: Mapping[str, Mapping[str, Any]]) -> None:
+    def save(self, updates: Mapping[str, Any]) -> None:
         """Write ``updates`` into the source file, in place, keeping everything else.
 
-        ``updates`` is ``{section: {key: value}}``, e.g.
-        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``.
-        Only those keys are touched -- parsed and re-emitted with ``tomlkit``
-        rather than ``tomllib`` + a plain writer, so every comment in the
-        heavily-annotated boot-partition template survives untouched (#51).
+        ``updates`` is normally ``{section: {key: value}}``, e.g.
+        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``
+        -- only those keys are touched, parsed and re-emitted with
+        ``tomlkit`` rather than ``tomllib`` + a plain writer, so every
+        comment in the heavily-annotated boot-partition template survives
+        untouched (#51).
+
+        The one exception is the ``"rotation"`` key (#150): ``[[rotation]]``
+        is an array of tables, not a flat section of scalars, so its value
+        is the *whole new list* of ``{"screen": ..., "seconds": ...}``
+        dicts to write, not a ``{key: value}`` patch -- there is no
+        per-field update for an ordered, variable-length list, only
+        "replace it". Built with ``tomlkit.aot()`` rather than assigning a
+        plain list, which would round-trip as an inline array rather than
+        a sequence of ``[[rotation]]`` tables.
 
         Updates this object's in-memory settings from the same file afterwards,
         via the normal load path, so the caller sees the merged result without
@@ -406,6 +471,15 @@ class Settings:
             raise ConfigWriteError(f"could not read {self.source_path}: {exc}") from exc
 
         for section, values in updates.items():
+            if section == "rotation":
+                aot = tomlkit.aot()
+                for entry in values:
+                    table = tomlkit.table()
+                    table["screen"] = entry["screen"]
+                    table["seconds"] = entry["seconds"]
+                    aot.append(table)
+                doc["rotation"] = aot
+                continue
             table = doc.get(section)
             if table is None:
                 table = tomlkit.table()
@@ -423,6 +497,7 @@ class Settings:
         reloaded = Settings.from_toml(self.source_path)
         self.panel = reloaded.panel
         self.scoreboard = reloaded.scoreboard
+        self.rotation = reloaded.rotation
         self.audio = reloaded.audio
         self.status = reloaded.status
         self.wifi_setup = reloaded.wifi_setup

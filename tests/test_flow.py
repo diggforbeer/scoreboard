@@ -123,7 +123,6 @@ def fake_backend() -> Backend:
 def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -> ScoreboardApp:
     settings = Settings()
     settings.scoreboard.favourite_team = FAV
-    settings.scoreboard.rotation = "favourite"
     for k, v in cfg.items():
         setattr(settings.scoreboard, k, v)
     return ScoreboardApp(
@@ -316,22 +315,6 @@ def test_schedule_failure_backs_off_instead_of_polling_every_frame(day):
     assert client.schedule_calls == 2, "a retry is still expected once the backoff elapses"
 
 
-def test_all_rotation_ignores_favourite_flow(day):
-    app, _, _ = day
-    app.settings.scoreboard.rotation = "all"
-    assert scene(app)[0] == "game"
-
-
-def test_favourite_rotation_without_favourite_degrades_to_all():
-    settings = Settings.from_dict({"scoreboard": {"favourite_team": "", "rotation": "favourite"}})
-    assert settings.scoreboard.rotation == "all"
-
-
-def test_unknown_rotation_degrades_to_all():
-    settings = Settings.from_dict({"scoreboard": {"rotation": "sideways"}})
-    assert settings.scoreboard.rotation == "all"
-
-
 def test_draw_renders_every_scene_kind(day):
     """Each scene kind reaches the renderer without error."""
     app, clock, client = day
@@ -456,7 +439,7 @@ def test_no_favourite_team_never_detects_goals(fake_backend):
     client = FlowClient()
     client.today = [game(1, "TBL", "NSH", PUCK_DROP, "LIVE")]
     settings_app = ScoreboardApp(
-        Settings.from_dict({"scoreboard": {"favourite_team": "", "rotation": "all"}}),
+        Settings.from_dict({"scoreboard": {"favourite_team": ""}}),
         client=client,
         backend=fake_backend,
         clock=lambda: PUCK_DROP,
@@ -730,6 +713,38 @@ def test_clock_between_games_never_interrupts_a_live_or_final_held_game(day):
     client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
     tick(app, clock, hours=6, minutes=5)
     assert scene(app) == ("game", 1)
+
+
+def test_explicit_rotation_overrides_derived_default_with_per_entry_seconds(day):
+    """An explicit [[rotation]] (#150) replaces the show_*/rotate_seconds-derived list entirely."""
+    from nhl_scoreboard.config import RotationEntry
+
+    app, clock, _client = day
+    app.settings.rotation = [RotationEntry("clock", 3), RotationEntry("countdown_preview", 7)]
+
+    assert scene(app)[0] == "clock"
+    tick(app, clock, seconds=3)
+    assert scene(app)[0] == "preview"
+    tick(app, clock, seconds=7)
+    assert scene(app)[0] == "clock"
+
+
+def test_explicit_rotation_skips_unavailable_entries_and_falls_back(day):
+    """An entry with nothing to show right now is skipped, not shown blank (#150 decision 2).
+
+    Only "standings" is configured here -- not "countdown_preview" -- so even
+    though there is an upcoming favourite game, it never appears; with
+    standings itself ineligible (no rows), nothing in the rotation can be
+    shown at all and the board falls back to cycling today's games by index.
+    """
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    client.standings_rows = []
+    app.settings.rotation = [RotationEntry("standings", 5)]
+
+    kind, gid = scene(app)
+    assert kind == "game" and gid in {9, 1}
 
 
 def test_standings_shown_when_no_more_games_are_scheduled(fake_backend):
