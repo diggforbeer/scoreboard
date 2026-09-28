@@ -246,49 +246,154 @@ def _render_html(snapshot: dict[str, str]) -> bytes:
     page; also what the existing snapshot-rendering tests exercise directly.
     """
     rows = _snapshot_rows(snapshot)
-    return _PAGE_TEMPLATE.format(banner="", rows=rows, sections="").encode("utf-8")
+    return _PAGE_TEMPLATE.format(nav="", banner="", rows=rows, sections="").encode("utf-8")
 
 
 def _snapshot_rows(snapshot: dict[str, str]) -> str:
     return "".join(
-        f"<tr><th>{html.escape(key)}</th><td>{html.escape(value)}</td></tr>"
+        f'<div class="stat"><span class="k">{html.escape(key)}</span>'
+        f'<span class="v">{html.escape(value)}</span></div>'
         for key, value in snapshot.items()
     )
 
 
+#: Modern, single-file dark theme -- no external fonts/CDN/JS: this page is
+#: served on a LAN, sometimes to a phone with no other network at all (the
+#: AP setup flow's own captive-portal page, setup_server.py, is separate but
+#: shares that constraint), so nothing here may depend on internet access.
+#: CSS variables + a system font stack keep it a plain stdlib string template
+#: like before, just a nicer-looking one.
 _PAGE_TEMPLATE = """<!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>NHL Scoreboard status</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hockey Scoreboard</title>
 <style>
-body {{ font-family: sans-serif; background: #111; color: #eee; padding: 2rem; max-width: 40rem; }}
-h1 {{ font-size: 1.2rem; }}
-h2 {{ font-size: 1.1rem; margin-top: 2rem; }}
-h3 {{ font-size: 1rem; margin-bottom: 0.25rem; }}
-table {{ border-collapse: collapse; margin-bottom: 1rem; }}
-th, td {{ text-align: left; padding: 0.25rem 1.5rem 0.25rem 0; }}
-th {{ color: #888; font-weight: normal; white-space: nowrap; }}
-form.section {{
-  border: 1px solid #333; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 1rem;
+:root {{
+  --bg: #0b0d12;
+  --surface: #151822;
+  --surface-2: #1b1f2b;
+  --border: #262b3a;
+  --text: #e8eaf0;
+  --muted: #8b93a7;
+  --accent: #5b8cff;
+  --accent-2: #7aa2ff;
+  --success: #3ecf8e;
+  --warning: #e0a638;
+  --danger: #ef5a5a;
+  --radius: 10px;
 }}
-.field {{ margin: 0.5rem 0; }}
+* {{ box-sizing: border-box; }}
+body {{
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: radial-gradient(circle at top, #12141c 0%, var(--bg) 60%);
+  color: var(--text);
+  padding: 2.5rem 1.25rem 4rem;
+}}
+.page {{ max-width: 78rem; margin: 0 auto; }}
+header.top {{ margin-bottom: 2rem; }}
+header.top h1 {{ font-size: 1.5rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }}
+header.top p {{ margin: 0; color: var(--muted); font-size: 0.95rem; }}
+nav.jump {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.25rem 0 0; }}
+nav.jump a {{
+  color: var(--muted); text-decoration: none; font-size: 0.8rem;
+  padding: 0.3rem 0.7rem; border: 1px solid var(--border); border-radius: 999px;
+  transition: color .15s, border-color .15s;
+}}
+nav.jump a:hover {{ color: var(--text); border-color: var(--accent); }}
+.banner {{
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.75rem 1rem;
+  border-radius: var(--radius); margin-bottom: 1.5rem; font-size: 0.9rem;
+  border: 1px solid transparent;
+}}
+.banner-ok {{
+  background: rgba(62, 207, 142, 0.12); color: var(--success);
+  border-color: rgba(62, 207, 142, 0.35);
+}}
+.banner-error {{
+  background: rgba(239, 90, 90, 0.12); color: var(--danger);
+  border-color: rgba(239, 90, 90, 0.35);
+}}
+.stat-grid {{
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.6rem; margin-bottom: 1.75rem;
+}}
+.stat {{
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 0.6rem 0.8rem;
+}}
+.stat .k {{
+  display: block; color: var(--muted); font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.2rem;
+}}
+.stat .v {{ display: block; font-size: 0.92rem; word-break: break-word; }}
+h2.settings-title {{ font-size: 1.05rem; color: var(--muted); font-weight: 600; margin: 0 0 1rem; }}
+.settings-grid {{ columns: 2 26rem; column-gap: 1.5rem; }}
+.card {{
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+  break-inside: avoid;
+}}
+.card h3 {{ font-size: 1rem; margin: 0 0 0.35rem; }}
+.field {{ margin: 0.9rem 0; }}
+.field > label:not(.field-toggle) {{
+  display: block; font-size: 0.85rem; color: var(--text); margin-bottom: 0.35rem;
+}}
 .field input[type=text], .field input[type=password], .field input[type=number], .field select {{
-  width: 100%; max-width: 20rem; box-sizing: border-box;
+  width: 100%; max-width: 22rem; background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 0.5rem 0.65rem; font-size: 0.9rem;
+  font-family: inherit; transition: border-color .15s;
 }}
-.hint {{ color: #aaa; font-size: 0.85rem; }}
-.restart-note {{ color: #d9a441; font-size: 0.8rem; }}
-.field-error {{ color: #e06c6c; font-size: 0.85rem; }}
-.banner-ok {{ color: #6cbf6c; }}
-.banner-error {{ color: #e06c6c; }}
-button {{ margin-top: 0.5rem; }}
+.field input:focus, .field select:focus {{ outline: none; border-color: var(--accent); }}
+.field-toggle {{ display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }}
+.field-toggle .field-text {{ font-size: 0.85rem; }}
+.switch-input {{ position: absolute; opacity: 0; width: 0; height: 0; }}
+.switch {{
+  width: 2.5rem; height: 1.4rem; flex-shrink: 0; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); position: relative;
+  transition: background .15s, border-color .15s;
+}}
+.switch::before {{
+  content: ""; position: absolute; width: 1rem; height: 1rem; border-radius: 50%;
+  background: var(--muted); top: 0.14rem; left: 0.14rem;
+  transition: transform .15s, background .15s;
+}}
+.switch-input:checked + .switch {{
+  background: rgba(91, 140, 255, 0.25); border-color: var(--accent);
+}}
+.switch-input:checked + .switch::before {{
+  transform: translateX(1.1rem); background: var(--accent-2);
+}}
+.switch-input:focus-visible + .switch {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
+.badge {{
+  display: inline-block; font-size: 0.7rem; padding: 0.1rem 0.5rem;
+  border-radius: 999px; margin-left: 0.4rem; vertical-align: middle;
+}}
+.badge-restart {{ background: rgba(224, 166, 56, 0.15); color: var(--warning); }}
+.hint {{ color: var(--muted); font-size: 0.82rem; margin: 0.25rem 0 0.75rem; }}
+.field-error {{ color: var(--danger); font-size: 0.8rem; margin-top: 0.3rem; }}
+button {{
+  margin-top: 0.75rem; background: var(--accent); color: #0b0d12; border: none;
+  border-radius: 8px; padding: 0.55rem 1.15rem; font-size: 0.85rem; font-weight: 600;
+  font-family: inherit; cursor: pointer; transition: background .15s, transform .1s;
+}}
+button:hover {{ background: var(--accent-2); }}
+button:active {{ transform: scale(0.98); }}
 </style>
 </head>
 <body>
-<h1>NHL Scoreboard status</h1>
+<div class="page">
+<header class="top">
+  <h1>Hockey Scoreboard</h1>
+  <p>Status &amp; configuration</p>
+  {nav}
+</header>
 {banner}
-<table>{rows}</table>
+<div class="stat-grid">{rows}</div>
 {sections}
+</div>
 </body>
 </html>
 """
@@ -303,7 +408,7 @@ def _render_field(
 ) -> str:
     current = _current_value(settings, wifi_raw, field)
     restart_note = (
-        ' <span class="restart-note">(applies after restart)</span>'
+        ' <span class="badge badge-restart">applies after restart</span>'
         if field.restart_required
         else ""
     )
@@ -312,12 +417,13 @@ def _render_field(
     if field.kind == "bool":
         checked = submitted_raw == "true" if submitted_raw is not None else bool(current)
         input_html = (
-            f'<input type="checkbox" name="{field.key}" value="true"'
-            f"{' checked' if checked else ''}>"
+            f'<input type="checkbox" class="switch-input" name="{field.key}" value="true"'
+            f'{" checked" if checked else ""}><span class="switch"></span>'
         )
         return (
-            f'<div class="field"><label>{input_html} {html.escape(field.label)}'
-            f"{restart_note}</label>{error_html}</div>"
+            f'<div class="field"><label class="field-toggle">{input_html}'
+            f'<span class="field-text">{html.escape(field.label)}{restart_note}</span>'
+            f"</label>{error_html}</div>"
         )
 
     value = submitted_raw if submitted_raw is not None else str(current)
@@ -366,13 +472,15 @@ def _render_section(
             "If the new network doesn't come up, the previous settings are "
             "restored automatically.</p>"
         )
-    error_html = f'<p class="banner-error">{html.escape(form_error)}</p>' if form_error else ""
+    error_html = (
+        f'<div class="banner banner-error">{html.escape(form_error)}</div>' if form_error else ""
+    )
     fields_html = "".join(
         _render_field(field, settings, wifi_raw, errors.get(field.key), submitted.get(field.key))
         for field in _FIELDS_BY_SECTION[section]
     )
     return (
-        f'<form method="post" action="/save" class="section">'
+        f'<form method="post" action="/save" class="card" id="{section}">'
         f'<input type="hidden" name="section" value="{section}">'
         f"<h3>{html.escape(title)}</h3>{note}{error_html}{fields_html}"
         f'<button type="submit">Save {html.escape(title)}</button>'
@@ -403,8 +511,13 @@ def _render_page(
                 " Applying the new Wi-Fi settings now -- the board's network "
                 "connection may drop briefly."
             )
-        banner = f'<p class="banner-ok">{message}</p>'
+        banner = f'<div class="banner banner-ok">{message}</div>'
 
+    nav = (
+        '<nav class="jump">'
+        + "".join(f'<a href="#{section}">{html.escape(title)}</a>' for section, title in _SECTIONS)
+        + "</nav>"
+    )
     sections = "".join(
         _render_section(
             section,
@@ -418,9 +531,12 @@ def _render_page(
         for section, title in _SECTIONS
     )
     rows = _snapshot_rows(snapshot)
-    return _PAGE_TEMPLATE.format(
-        banner=banner, rows=rows, sections=f"<h2>Settings</h2>{sections}"
-    ).encode("utf-8")
+    sections = (
+        f'<h2 class="settings-title">Settings</h2><div class="settings-grid">{sections}</div>'
+    )
+    return _PAGE_TEMPLATE.format(nav=nav, banner=banner, rows=rows, sections=sections).encode(
+        "utf-8"
+    )
 
 
 # -- Wi-Fi live trigger (#51, #110) ------------------------------------------
