@@ -53,7 +53,8 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
 ## Commands
 
 ```bash
-source .venv/bin/activate            # python3 -m venv .venv && pip install -e '.[dev]' first time
+./scripts/setup-dev.sh               # first time: .venv, dev extras, scoreboard.local.toml, logos
+source .venv/bin/activate
 pytest                               # 199 tests, ~1s, fully offline
 pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
