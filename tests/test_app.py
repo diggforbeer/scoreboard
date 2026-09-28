@@ -1193,7 +1193,7 @@ def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, t
         url = f"http://127.0.0.1:{app.status_server.port}/"
         with urllib.request.urlopen(url, timeout=5) as resp:
             assert resp.status == 200
-            assert "NHL Scoreboard status" in resp.read().decode("utf-8")
+            assert "Hockey Scoreboard" in resp.read().decode("utf-8")
     finally:
         app.status_server.stop()
 
