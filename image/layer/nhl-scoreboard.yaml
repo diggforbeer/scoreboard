@@ -76,8 +76,13 @@ mmdebstrap:
     # .open() degrades to None the same as a missing /dev/i2c-* would.
     - python3-smbus
     # For nhl-scoreboard-grow-rootfs: partition inspection (parted) and
-    # filesystem growth (resize2fs). util-linux (findmnt, lsblk, sfdisk)
-    # is essential and always present, so not listed explicitly.
+    # filesystem growth (resize2fs). util-linux (findmnt, lsblk) is
+    # essential and always present, but sfdisk is NOT -- confirmed live on
+    # real hardware (#129): Debian split fdisk/sfdisk/cfdisk out of
+    # util-linux into their own `fdisk` package a while back, and nothing
+    # else here pulls it in transitively. Without it, grow-rootfs's stage 1
+    # fails outright (sfdisk: command not found) on every boot, forever.
+    - fdisk
     - parted
     - e2fsprogs
     # Build-time, for the HUB75 bindings. Upstream builds through
