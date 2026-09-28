@@ -4,12 +4,39 @@ An NHL scoreboard for a HUB75 LED matrix, delivered as a ready-to-flash
 Raspberry Pi image.
 
 Flash the image with the official [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
-("Use custom"), drop your Wi-Fi details and favourite team into a text file on
-the boot partition, and the board comes up showing live scores.
+("Use custom") and power it on — if it has no ethernet and no WiFi details
+yet, it walks you through joining a network from your phone (see
+[First-time WiFi setup](#first-time-wifi-setup) below). Set a favourite
+team by editing a text file on the boot partition, and the board comes up
+showing live scores.
 
 On first boot the board grows its root filesystem to fill the rest of the SD
 card and reboots itself once to finish — this is expected, not a fault; give
 it a couple of minutes on the very first power-up.
+
+## First-time WiFi setup
+
+If the board has no ethernet connection and no `[wifi]` details in
+`scoreboard.toml` yet, it broadcasts its own WiFi network
+(`NHL-Scoreboard-Setup` by default) and shows the network name, password,
+and a join QR code right on the panel — scan it, or join that network
+manually from your phone's WiFi settings.
+
+- Your phone should pop up a "Sign in to network" page on its own — pick
+  your real WiFi network from the list (or type its name if it's not
+  there) and its password, and submit.
+- If that page doesn't appear automatically — common; captive-portal
+  detection isn't fully reliable across every phone and OS — open a
+  browser and go to `http://10.42.0.1` directly.
+
+The panel shows "Connected!" once the board joins your network, or
+restarts its own setup network so you can try again if something (usually
+the password) didn't work.
+
+**No phone handy, or would rather not use it?** You can skip all of this
+by editing `[wifi]` in `scoreboard.toml` directly on the boot partition
+before ever powering the board on — the same way every other setting here
+works, and still fully supported, not replaced by the flow above.
 
 ## Hardware
 
