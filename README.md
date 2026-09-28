@@ -69,17 +69,17 @@ No LED panel required — the app falls back to
 renders to a browser window.
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
-
-# Team logos are not committed; fetch and rasterise them once (needs libcairo2)
-python scripts/fetch-logos.py
+# One-shot setup: creates .venv, installs the dev extras, copies
+# scoreboard.local.toml from the boot-partition template if it doesn't
+# already exist, and fetches logos. Safe to re-run any time.
+./scripts/setup-dev.sh
+source .venv/bin/activate
 
 # Print today's scores; needs no display at all
 nhl-scoreboard --dump
 
 # Run the board in the emulator, then open http://localhost:8888
-cp image/files/boot/scoreboard.toml scoreboard.local.toml   # edit favourite_team etc.
+# (edit scoreboard.local.toml first for favourite_team etc.)
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
