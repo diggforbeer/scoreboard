@@ -238,13 +238,59 @@ class AudioConfig:
 class StatusServerConfig:
     """Read-only web status page for headless debugging (#48).
 
-    Off by default so it isn't one more thing that has to be reasoned about
-    for every board. No auth: it binds the local network only, for a device
-    already trusted there -- do not port-forward it to the internet.
+    On by default: the board is headless by design, so this is the main way
+    to check on it without SSH-ing in, and it's the only way at all until a
+    phone has a captive-portal setup flow to reach it (#116). No auth: it
+    binds the local network only, for a device already trusted there -- do
+    not port-forward it to the internet.
     """
 
-    enabled: bool = False
+    enabled: bool = True
     port: int = 8080
+
+
+@dataclass(slots=True)
+class WifiSetupConfig:
+    """The WiFi setup page served while the board's own first-boot AP is up (#132).
+
+    On by default: while ``nhl-scoreboard-setup-ap`` (#131) has the AP up,
+    this is the only way for a phone connected to it to actually choose a
+    network -- reachability alone (#141's QR code) doesn't collect
+    credentials. Port 80, not ``status.port``'s 8080: captive-portal probes
+    (Apple/Android/Windows) hit the well-known plain-HTTP port, and
+    dnsmasq's wildcard DNS only gets them as far as this board's IP -- the
+    port still has to be the one they actually ask for. nhl-scoreboard.service
+    already runs as root, so binding it needs no extra capability.
+    """
+
+    enabled: bool = True
+    port: int = 80
+
+
+@dataclass(slots=True)
+class WifiConfig:
+    """How long a WiFi join attempt waits before deciding it failed (#133).
+
+    Shared by boot-time provisioning (scoreboard-provision) and the AP setup
+    page's live join flow -- nhl_scoreboard.wifi's own module-level default
+    (WIFI_CONNECT_TIMEOUT, 90s) is the fallback when this isn't set. 90s is
+    the number that default already used; exposed here as a real setting
+    rather than left as the env var (NHL_SCOREBOARD_WIFI_TIMEOUT) that
+    default is overridden by today, which is meant for tests/low-level
+    overrides, not something a real user would find.
+
+    ``ssid``/``password``/``country`` are deliberately NOT modelled here --
+    scoreboard-provision reads those directly out of the raw TOML dict
+    itself (predates this Settings dataclass) and nothing else needs typed
+    access to them.
+    """
+
+    connect_timeout_seconds: float = 90.0
+
+    def __post_init__(self) -> None:
+        self.connect_timeout_seconds = _clamp_interval(
+            "wifi", "connect_timeout_seconds", self.connect_timeout_seconds
+        )
 
 
 @dataclass(slots=True)
@@ -303,6 +349,8 @@ class Settings:
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
+    wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
+    wifi: WifiConfig = field(default_factory=WifiConfig)
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
     source_path: Path | None = None
 
@@ -332,6 +380,8 @@ class Settings:
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
+            wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
+            wifi=_wifi_config(raw.get("wifi", {})),
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
         )
 
@@ -375,6 +425,8 @@ class Settings:
         self.scoreboard = reloaded.scoreboard
         self.audio = reloaded.audio
         self.status = reloaded.status
+        self.wifi_setup = reloaded.wifi_setup
+        self.wifi = reloaded.wifi
         self.night_mode = reloaded.night_mode
 
 
@@ -394,3 +446,16 @@ def _build(cls: type, raw: dict[str, Any]) -> Any:
         else:
             log.warning("Ignoring unknown config key %r in [%s]", key, cls.__name__)
     return cls(**kwargs)
+
+
+def _wifi_config(raw: dict[str, Any]) -> WifiConfig:
+    """WifiConfig only models ``connect_timeout_seconds``.
+
+    ``ssid``/``password``/``country`` live in the same ``[wifi]`` TOML
+    section but are read directly out of the raw dict by
+    scoreboard-provision (predates this dataclass), not through here.
+    Filtered before ``_build()`` sees them so those three don't trip its
+    "unknown key" warning on every single load.
+    """
+    filtered = {k: v for k, v in raw.items() if k == "connect_timeout_seconds"}
+    return _build(WifiConfig, filtered)

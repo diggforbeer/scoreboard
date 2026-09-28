@@ -15,6 +15,11 @@ ssid = ""
 password = ""
 # Two-letter country code for the wireless regulatory domain, e.g. CA, US, GB.
 country = "CA"
+# How long to wait for a new SSID/password (from this file, or submitted via
+# the first-time AP setup page) to actually connect before giving up and
+# rolling back. Also used by the AP setup flow to decide when to stop
+# waiting and let you retry.
+connect_timeout_seconds = 90
 
 [scoreboard]
 # Three-letter team abbreviation, shown first in the rotation. Set to "" for
@@ -96,11 +101,26 @@ horn_dir = ""
 # A small web page showing what the board currently thinks is going on
 # (current scene, last successful poll, last error, favourite team,
 # rotation) plus a form to edit this file from a phone on the same
-# network -- handy for a headless board without SSH-ing in. Off by
+# network -- handy for a headless board without SSH-ing in. On by
 # default. No login: this binds the local network the board is on, not
-# the internet -- do not port-forward it.
-enabled = false
+# the internet -- do not port-forward it. Set enabled = false to turn it
+# off.
+enabled = true
 port = 8080
+
+[wifi_setup]
+# The setup page served while the board's own first-boot WiFi access point
+# (see nhl-scoreboard-setup-ap) is up -- lets a phone connected to that AP
+# pick a network from a scan taken just before the AP came up, or type one
+# in by hand, and submit a password. On by default: while the AP is up,
+# this is the only way to actually choose a network (the AP itself just
+# gets a phone reachable, it doesn't collect credentials). Port 80, not
+# status.port's 8080: Apple/Android/Windows captive-portal probes ask for
+# plain port 80, and the whole point of this page is to answer those
+# probes instead of a "no portal here" response, so it has to be on the
+# port they actually ask for.
+enabled = true
+port = 80
 
 [night_mode]
 # Dim the board overnight, but never in the middle of a game: while a game is

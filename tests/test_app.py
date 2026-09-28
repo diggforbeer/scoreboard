@@ -31,6 +31,7 @@ from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
 from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow
 from nhl_scoreboard.status_server import _FIELDS_BY_SECTION
+from nhl_scoreboard.wifi_join import WifiJoinAttempt
 
 
 class FakeCanvas:
@@ -517,18 +518,17 @@ def test_goal_detail_state_pruned_with_the_rest(fake_backend, games):
     assert app._shown_goal_events == {}
 
 
-def test_status_server_off_by_default(fake_backend, games):
+def test_status_server_built_by_default(fake_backend, games):
     app = build_app(fake_backend, games)
-    assert app.status_server is None
-
-
-def test_status_server_built_when_enabled(fake_backend, games):
-    settings = Settings()
-    settings.status.enabled = True
-    settings.status.port = 9191
-    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
     assert app.status_server is not None
-    assert app.status_server.port == 9191
+    assert app.status_server.port == 8080
+
+
+def test_status_server_not_built_when_disabled(fake_backend, games):
+    settings = Settings()
+    settings.status.enabled = False
+    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+    assert app.status_server is None
 
 
 def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
@@ -1511,3 +1511,311 @@ def test_draw_scene_dispatches_goal_without_the_horn(fake_backend, games):
     assert drawn == [live]
     assert app.horn.calls == []
     assert app.matrix.swaps == 1
+
+
+# --------------------------------------------------------------------------
+# AP setup scene (#131 follow-up): nhl-scoreboard-setup-ap's state file
+# --------------------------------------------------------------------------
+
+
+def test_no_ap_state_file_leaves_normal_scene_selection_untouched(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=tmp_path / "does-not-exist.json",
+    )
+    app.refresh()
+    assert app.select_scene().kind != "ap_setup"
+
+
+def test_ap_state_file_overrides_even_a_live_game(fake_backend, games, tmp_path):
+    """Not just the idle/connecting cases -- unconditional, per select_scene's
+    own docstring: nobody can see a live game if the only way to reach the
+    board at all is the AP the state file describes."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard"}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app.refresh()
+    assert any(g.is_live for g in app.games), "fixture should have a live game"
+
+    scene = app.select_scene()
+    assert scene.kind == "ap_setup"
+    assert scene.ap_ssid == "NHL-Scoreboard-Setup"
+    assert scene.ap_password == "scoreboard"
+    assert scene.ap_qr_matrix is not None
+
+
+def test_ap_state_file_open_network_has_no_password(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestNet", "password": None, "open": True}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+
+    scene = app.select_scene()
+    assert scene.kind == "ap_setup"
+    assert scene.ap_password is None
+    assert scene.ap_qr_matrix is not None
+
+
+def test_malformed_ap_state_file_degrades_to_normal_scene_selection(fake_backend, games, tmp_path):
+    """A typo/partial write must not crash the board -- same config-typo
+    tolerance CLAUDE.md documents for scoreboard.toml itself."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text("not valid json{{{")
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app.refresh()
+    assert app.select_scene().kind != "ap_setup"
+
+
+def test_ap_qr_matrix_is_cached_across_calls(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestNet", "password": "hunter2"}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+
+    first = app.select_scene().ap_qr_matrix
+    second = app.select_scene().ap_qr_matrix
+    assert first is second
+
+
+# --------------------------------------------------------------------------
+# WiFi setup page (#132): started/stopped in step with the AP state file
+# --------------------------------------------------------------------------
+
+
+def test_setup_server_not_started_without_ap_state_file(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=tmp_path / "does-not-exist.json",
+    )
+    app._sync_setup_server()
+    assert app.setup_server is None
+
+
+def test_setup_server_starts_when_ap_state_file_present(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=state_path,
+    )
+    app._sync_setup_server()
+    try:
+        assert app.setup_server is not None
+        url = f"http://127.0.0.1:{app.setup_server.port}/"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            assert resp.status == 200
+            assert "WiFi network" in resp.read().decode("utf-8")
+    finally:
+        if app.setup_server is not None:
+            app.setup_server.stop()
+
+
+def test_setup_server_repeated_sync_keeps_the_same_instance(fake_backend, games, tmp_path):
+    """Nothing changed between two ticks -- must not tear down and rebuild
+    (and thus rebind) a perfectly healthy running server every frame."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app._sync_setup_server()
+    first = app.setup_server
+    try:
+        app._sync_setup_server()
+        assert app.setup_server is first
+    finally:
+        if app.setup_server is not None:
+            app.setup_server.stop()
+
+
+def test_setup_server_stops_when_ap_state_file_disappears(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app._sync_setup_server()
+    assert app.setup_server is not None
+
+    state_path.unlink()
+    app._sync_setup_server()
+    assert app.setup_server is None
+
+
+def test_setup_server_disabled_via_config_never_starts(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    settings = Settings()
+    settings.wifi_setup.enabled = False
+    app = ScoreboardApp(
+        settings, client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
+    )
+    app._sync_setup_server()
+    assert app.setup_server is None
+
+
+def test_cached_setup_networks_reads_the_scan_state_file(fake_backend, games, tmp_path):
+    scan_path = tmp_path / "networks.json"
+    scan_path.write_text(json.dumps(["Home Wifi", "Guest"]))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_scan_state_path=scan_path
+    )
+    assert app._cached_setup_networks() == ["Home Wifi", "Guest"]
+
+
+def test_cached_setup_networks_missing_file_is_an_empty_list(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_scan_state_path=tmp_path / "does-not-exist.json",
+    )
+    assert app._cached_setup_networks() == []
+
+
+def test_cached_setup_networks_malformed_file_is_an_empty_list(fake_backend, games, tmp_path):
+    scan_path = tmp_path / "networks.json"
+    scan_path.write_text("not valid json{{{")
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_scan_state_path=scan_path
+    )
+    assert app._cached_setup_networks() == []
+
+
+def test_cached_setup_networks_non_list_json_is_an_empty_list(fake_backend, games, tmp_path):
+    scan_path = tmp_path / "networks.json"
+    scan_path.write_text(json.dumps({"unexpected": "shape"}))
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, ap_scan_state_path=scan_path
+    )
+    assert app._cached_setup_networks() == []
+
+
+def test_setup_submission_is_written_to_the_state_file(fake_backend, games, tmp_path):
+    submission_path = tmp_path / "submission.json"
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_submission_state_path=submission_path,
+    )
+    app._on_setup_submission("Home Wifi", "hunter2")
+    assert json.loads(submission_path.read_text()) == {"ssid": "Home Wifi", "password": "hunter2"}
+
+
+def test_setup_submission_open_network_records_null_password(fake_backend, games, tmp_path):
+    submission_path = tmp_path / "submission.json"
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_submission_state_path=submission_path,
+    )
+    app._on_setup_submission("Open Net", None)
+    assert json.loads(submission_path.read_text()) == {"ssid": "Open Net", "password": None}
+
+
+def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
+    from nhl_scoreboard.app import _qr_escape
+
+    assert _qr_escape('a;b,c:d"e\\f') == 'a\\;b\\,c\\:d\\"e\\\\f'
+    assert _qr_escape("plain") == "plain"
+
+
+# --------------------------------------------------------------------------
+# WiFi join outcome scene (#133)
+# --------------------------------------------------------------------------
+
+
+def _wifi_join(tmp_path, **kwargs) -> WifiJoinAttempt:
+    return WifiJoinAttempt(
+        config_path=tmp_path / "scoreboard.toml",
+        connect_timeout=1.0,
+        submission_path=tmp_path / "submission.json",
+        outcome_path=tmp_path / "outcome.json",
+        **kwargs,
+    )
+
+
+def test_no_outcome_file_leaves_normal_scene_selection_untouched(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=_wifi_join(tmp_path)
+    )
+    app.refresh()
+    assert app.select_scene().kind != "wifi_join"
+
+
+def test_wifi_join_outcome_overrides_even_a_live_game(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text(json.dumps({"status": "attempting", "ssid": "HomeNet"}))
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    app.refresh()
+    assert any(g.is_live for g in app.games), "fixture should have a live game"
+
+    scene = app.select_scene()
+    assert scene.kind == "wifi_join"
+    assert scene.wifi_join_status == "attempting"
+    assert scene.wifi_join_ssid == "HomeNet"
+
+
+def test_wifi_join_outcome_wins_over_ap_setup_scene(fake_backend, games, tmp_path):
+    """A failed attempt restarts the AP, recreating the ap_setup state file
+    underneath the still-showing "Failed..." message -- wifi_join must win
+    for as long as its own outcome file exists."""
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text(json.dumps({"status": "failed", "ssid": "HomeNet"}))
+    ap_setup_path = tmp_path / "ap-setup.json"
+    ap_setup_path.write_text(json.dumps({"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard"}))
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        wifi_join=join,
+        ap_setup_state_path=ap_setup_path,
+    )
+    assert app.select_scene().kind == "wifi_join"
+
+
+def test_malformed_outcome_file_degrades_to_normal_scene_selection(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text("not valid json{{{")
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    app.refresh()
+    assert app.select_scene().kind != "wifi_join"
+
+
+def test_wifi_join_built_from_settings_picks_up_connect_timeout(fake_backend, games, tmp_path):
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("[wifi]\nconnect_timeout_seconds = 45\n")
+    app = ScoreboardApp(Settings.load(config_path), client=FakeClient(games), backend=fake_backend)
+    assert app.wifi_join.connect_timeout == 45.0
+
+
+def test_config_reload_updates_wifi_join_connect_timeout_in_place(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    assert app.wifi_join.connect_timeout == 1.0
+
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("[wifi]\nconnect_timeout_seconds = 20\n")
+    app._apply_reloaded_settings(Settings.load(config_path))
+    assert app.wifi_join is join, "reload updates the existing object, not a new one"
+    assert app.wifi_join.connect_timeout == 20.0

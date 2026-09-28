@@ -273,9 +273,18 @@ jobs:
           files: |
             deploy/*.xz
             deploy/*.sha256
+          # append_body, not body-replaces-body: release.yml's `gh release
+          # create --generate-notes` already wrote a "What's Changed" PR
+          # list into the release body. Without append_body: true, this
+          # step's `body:` replaces that outright -- verified against a
+          # real release (v2026.09.26.9) that shipped with only the flash
+          # instructions below and no PR list at all, because of exactly
+          # that. Appending keeps both.
+          append_body: true
           body: |
-            Raspberry Pi image for the NHL scoreboard.
 
-            Flash `${{ steps.artifact.outputs.name }}` with Raspberry Pi Imager
-            using **Use custom**, then edit `scoreboard.toml` on the boot
-            partition to set your Wi-Fi network and favourite team.
+            ## Flashing this image
+
+            Flash `${{ steps.artifact.outputs.name }}` with Raspberry Pi
+            Imager using **Use custom**, then edit `scoreboard.toml` on the
+            boot partition to set your Wi-Fi network and favourite team.

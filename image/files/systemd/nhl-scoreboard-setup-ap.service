@@ -1,0 +1,21 @@
+[Unit]
+Description=WiFi access point + captive-portal DHCP/DNS for first-time setup
+Documentation=https://github.com/diggforbeer/scoreboard
+# scoreboard-provision.service already blocks (up to its own
+# WIFI_CONNECT_TIMEOUT) resolving any configured Wi-Fi -- connect or roll
+# back -- before returning, so by the time this starts, whether the board
+# is online is already settled; no wait/retry loop needed here. Also waits
+# on network-online.target, same as nhl-scoreboard.service, so a
+# slow-DHCP ethernet link gets a fair chance first.
+After=network-online.target scoreboard-provision.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Exits 0 immediately, starting nothing, when the board already has a
+# working default route -- that is a successful no-op, not a crash.
+ExecStart=/usr/local/sbin/nhl-scoreboard-setup-ap start
+ExecStopPost=/usr/local/sbin/nhl-scoreboard-setup-ap stop
+
+[Install]
+WantedBy=multi-user.target

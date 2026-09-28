@@ -7,6 +7,7 @@ sensibly -- just with less or more breathing room.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -16,6 +17,8 @@ from ..nhl.models import Game, GoalEvent, StandingsRow
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_secondary_color
+
+log = logging.getLogger(__name__)
 
 WHITE = (255, 255, 255)
 DIM = (48, 48, 48)
@@ -496,7 +499,153 @@ class Renderer:
                 canvas, self.fonts.medium, self.width // 2, self.height // 2 + 4, WHITE, title
             )
 
+    def draw_ap_setup(
+        self,
+        canvas: Any,
+        ssid: str,
+        password: str | None,
+        qr_matrix: Sequence[Sequence[bool]] | None,
+    ) -> None:
+        """First-boot WiFi setup (#131 follow-up): SSID/password as text on
+        the left half, a join QR code on the right half.
+
+        The QR is confined to one physical panel half, never centred across
+        the full width -- centring it would straddle the seam between the
+        two chained 64x32 panels at x=64, breaking a pattern a scanner
+        needs contiguous. Verified live on real hardware: dark modules on a
+        light background is required (a strict validator rejected the
+        inverse), and 1px-per-module is the only size that fits this
+        panel's 32px height at all -- which is also why there is no quiet
+        zone drawn beyond what already surrounds it; there is no height to
+        spare for one.
+
+        ``password is None`` means the AP came up open (no passphrase
+        needed), not WPA2-protected -- shown and encoded differently, never
+        as an empty-string password.
+        """
+        canvas.Clear()
+        half = self.width // 2
+
+        if qr_matrix:
+            h = len(qr_matrix)
+            w = len(qr_matrix[0]) if h else 0
+            if w <= self.width - half and h <= self.height:
+                for y in range(self.height):
+                    for x in range(half, self.width):
+                        canvas.SetPixel(x, y, *WHITE)
+                ox = half + (self.width - half - w) // 2
+                oy = (self.height - h) // 2
+                for y, row in enumerate(qr_matrix):
+                    for x, val in enumerate(row):
+                        if val:
+                            canvas.SetPixel(ox + x, oy + y, 0, 0, 0)
+            else:
+                # Not just theoretical: caught live when app.py's QR builder
+                # didn't pass border=0 -- the library's own default quiet
+                # zone alone was enough to blow past 32px with no exception
+                # raised anywhere, so nothing else would have explained a
+                # panel with text but no QR without this.
+                log.warning(
+                    "AP setup QR (%dx%d modules) doesn't fit one panel half "
+                    "(%dx%d available); showing SSID/password text only",
+                    w,
+                    h,
+                    self.width - half,
+                    self.height,
+                )
+
+        # Left half only, same seam-avoidance reasoning as the QR above --
+        # the default SSID does not fit even alone at this width (20 chars
+        # vs. ~15 that fit in 62px on the tiny font), so this leans on
+        # _fit_text rather than promising every SSID renders in full.
+        max_w = half - 2
+        self.text(
+            canvas,
+            self.fonts.tiny,
+            1,
+            7,
+            WHITE,
+            self._fit_text(self.fonts.tiny, "WIFI SETUP", max_w),
+        )
+        self.text(canvas, self.fonts.tiny, 1, 14, SUBDUED, "SSID:")
+        self.text(
+            canvas, self.fonts.tiny, 1, 21, WHITE, self._fit_text(self.fonts.tiny, ssid, max_w)
+        )
+        if password is None:
+            self.text(
+                canvas,
+                self.fonts.tiny,
+                1,
+                28,
+                SUBDUED,
+                self._fit_text(self.fonts.tiny, "OPEN NETWORK", max_w),
+            )
+        else:
+            self.text(canvas, self.fonts.tiny, 1, 28, SUBDUED, "PW:")
+            self.text(
+                canvas,
+                self.fonts.tiny,
+                16,
+                28,
+                WHITE,
+                self._fit_text(self.fonts.tiny, password, max_w - 15),
+            )
+
+    def draw_wifi_join(self, canvas: Any, status: str | None, ssid: str | None) -> None:
+        """WiFi join outcome (#133): shown while nhl_scoreboard.wifi_join is
+        attempting a network submitted via the setup page, or briefly after,
+        before falling through to whatever's next (normal game data if
+        actually online, or the ap_setup SSID/QR scene again if a failed
+        attempt brought the AP back).
+
+        No SSID named in the "failed" case deliberately: the AP's real name
+        might not be the default, and ap_setup's own scene (about to show
+        next, once this one's display window ends) already names it
+        correctly from its own state file -- duplicating that name here
+        would just be a second place it could go stale.
+        """
+        canvas.Clear()
+        cx = self.width // 2
+        max_w = self.width - 4
+        if status == "connected":
+            title, color, subtitle = "CONNECTED!", LIVE, ssid or ""
+        elif status == "failed":
+            title, color, subtitle = "COULD NOT CONNECT", ACCENT, "REJOINING SETUP MODE..."
+        else:
+            title, color, subtitle = "JOINING...", WHITE, ssid or ""
+        self.text_center(
+            canvas,
+            self.fonts.medium,
+            cx,
+            13,
+            color,
+            self._fit_text(self.fonts.medium, title, max_w),
+        )
+        self.text_center(
+            canvas,
+            self.fonts.small,
+            cx,
+            self.height - 3,
+            SUBDUED,
+            self._fit_text(self.fonts.small, subtitle, max_w),
+        )
+
     # -- helpers ---------------------------------------------------------
+
+    @staticmethod
+    def _fit_text(font: Any, text: str, max_width: int) -> str:
+        """Truncate ``text`` with a trailing "..." so it never exceeds
+        ``max_width`` -- the off-panel-text guarantee everywhere else in
+        this renderer holds for arbitrary, user-configured AP SSIDs/
+        passwords too, not just the fixed strings the rest of the app
+        draws.
+        """
+        if text_width(font, text) <= max_width:
+            return text
+        truncated = text
+        while truncated and text_width(font, truncated + "...") > max_width:
+            truncated = truncated[:-1]
+        return f"{truncated}..." if truncated else text[:1]
 
     @staticmethod
     def _dim(color: tuple[int, int, int], factor: float = 0.5) -> tuple[int, int, int]:

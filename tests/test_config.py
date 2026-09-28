@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from nhl_scoreboard.config import ConfigWriteError, Settings, resolve_timezone
@@ -64,15 +66,47 @@ def test_auto_brightness_defaults_off():
     assert (panel.min_brightness, panel.max_brightness) == (10, 100)
 
 
-def test_status_server_defaults_off(tmp_path):
-    assert Settings().status.enabled is False
+def test_status_server_defaults_on(tmp_path):
+    assert Settings().status.enabled is True
     assert Settings().status.port == 8080
 
     path = tmp_path / "scoreboard.toml"
-    path.write_text("[status]\nenabled = true\nport = 9000\n")
+    path.write_text("[status]\nenabled = false\nport = 9000\n")
     status = Settings.load(path).status
-    assert status.enabled is True
+    assert status.enabled is False
     assert status.port == 9000
+
+
+def test_wifi_setup_server_defaults_on_port_80(tmp_path):
+    assert Settings().wifi_setup.enabled is True
+    assert Settings().wifi_setup.port == 80
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[wifi_setup]\nenabled = false\nport = 8000\n")
+    wifi_setup = Settings.load(path).wifi_setup
+    assert wifi_setup.enabled is False
+    assert wifi_setup.port == 8000
+
+
+def test_wifi_connect_timeout_defaults_to_90_and_is_overridable(tmp_path):
+    assert Settings().wifi.connect_timeout_seconds == 90.0
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[wifi]\nssid = "MyNetwork"\nconnect_timeout_seconds = 30\n')
+    settings = Settings.load(path)
+    assert settings.wifi.connect_timeout_seconds == 30.0
+
+
+def test_wifi_ssid_password_country_are_not_modelled_and_do_not_warn(tmp_path, caplog):
+    """ssid/password/country live in the same [wifi] section but are read
+    directly out of raw TOML by scoreboard-provision, not through WifiConfig
+    -- this pins down that loading a normal [wifi] section never trips
+    _build()'s "unknown key" warning for any of them."""
+    caplog.set_level(logging.WARNING)
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[wifi]\nssid = "MyNetwork"\npassword = "hunter2"\ncountry = "US"\n')
+    Settings.load(path)
+    assert "unknown config key" not in caplog.text.lower()
 
 
 def test_brightness_clamp_is_kept_within_0_100():

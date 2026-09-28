@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
+import re
 import signal
 import time
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import FrameType
+
+import qrcode
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
-from .config import Settings, resolve_timezone
+from .config import DEFAULT_CONFIG_PATHS, Settings, resolve_timezone
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
@@ -29,7 +34,9 @@ from .nhl.models import (
     conference_standings,
     standings_window,
 )
+from .setup_server import SetupServer
 from .status_server import StatusServer
+from .wifi_join import WifiJoinAttempt
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +53,37 @@ STANDINGS_TTL_SECONDS = 60 * 60
 BRIGHTNESS_SMOOTHING = 0.3
 #: How long each scene stays up in ``--demo`` (#47).
 DEMO_SCENE_SECONDS = 4.0
+#: Written by nhl-scoreboard-setup-ap while the board's own first-boot WiFi
+#: AP is up (#131 follow-up); its mere presence means the ap_setup scene
+#: overrides everything else, so a phone that can only reach the board over
+#: that AP always sees how to join it. /run, matching the script's own
+#: choice -- never survives a reboot stale.
+AP_SETUP_STATE_PATH = Path("/run/nhl-scoreboard-setup-ap-state.json")
+#: Written by nhl-scoreboard-setup-ap's pre-AP-mode scan (#132) -- a JSON
+#: array of nearby SSIDs, cached from a snapshot taken moments before the AP
+#: came up (this chip can't scan while its own AP is active). Read by the
+#: setup page to render its network picker; the page always offers a plain
+#: text field alongside it too, since that snapshot can miss a network.
+AP_SCAN_STATE_PATH = Path("/run/nhl-scoreboard-setup-ap-networks.json")
+#: Written by the setup page (#132) when someone submits a network choice --
+#: the hand-off point for #133's still-to-be-built join flow to read from.
+#: This app only ever writes it; it never touches iwd/iwctl itself.
+AP_SUBMISSION_STATE_PATH = Path("/run/nhl-scoreboard-setup-submission.json")
+#: Written by WifiJoinAttempt (#133) while/after acting on a submission --
+#: "attempting"/"connected"/"failed" -- and read by _wifi_join_scene() to
+#: show it on the panel, the feedback channel #133 decided on since the AP
+#: teardown needed to attempt the join kills the phone's own connection to
+#: whatever HTTP request submitted it. /run, same non-surviving-a-reboot
+#: convention as every other AP-setup-mode state file.
+WIFI_JOIN_OUTCOME_PATH = Path("/run/nhl-scoreboard-wifi-join-state.json")
+#: Characters the de-facto WIFI: QR-code format requires backslash-escaped
+#: inside SSID/password fields -- unescaped, any of these would end the
+#: field early or corrupt the payload for a strict parser.
+_QR_SPECIAL_CHARS = re.compile(r'([\\;,:"])')
+
+
+def _qr_escape(value: str) -> str:
+    return _QR_SPECIAL_CHARS.sub(r"\\\1", value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +92,7 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``countdown``, ``preview``, ``standings``, ``clock``,
-    ``no_games``, ``connecting``, ``no_data``.
+    ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
     kind: str
@@ -63,6 +101,21 @@ class Scene:
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
+    #: Set only for ``ap_setup`` (#131 follow-up) -- the board's own
+    #: first-boot WiFi AP, so a phone can join and finish setup. ``None``
+    #: password means the AP came up open, not WPA2-protected.
+    ap_ssid: str | None = None
+    ap_password: str | None = None
+    #: Precomputed QR module grid (row-major, True = dark module), or
+    #: ``None`` when the payload didn't fit any QR version, or `qrcode`
+    #: itself failed for some other reason -- the scene still shows
+    #: SSID/password as text either way, same graceful-degradation
+    #: precedent as LightSensor/resolve_timezone elsewhere in this app.
+    ap_qr_matrix: tuple[tuple[bool, ...], ...] | None = None
+    #: Set only for ``wifi_join`` (#133) -- "attempting"/"connected"/"failed",
+    #: and the SSID that outcome is about.
+    wifi_join_status: str | None = None
+    wifi_join_ssid: str | None = None
 
 
 class ScoreboardApp:
@@ -77,11 +130,44 @@ class ScoreboardApp:
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
         sleep: Callable[[float], None] | None = None,
+        ap_setup_state_path: Path | None = None,
+        ap_scan_state_path: Path | None = None,
+        ap_submission_state_path: Path | None = None,
+        wifi_join: WifiJoinAttempt | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
         self.sleep = sleep or time.sleep
+        self.ap_setup_state_path = ap_setup_state_path or AP_SETUP_STATE_PATH
+        self.ap_scan_state_path = ap_scan_state_path or AP_SCAN_STATE_PATH
+        self.ap_submission_state_path = ap_submission_state_path or AP_SUBMISSION_STATE_PATH
+        #: Acts on a submission (#133): tears down the AP, calls
+        #: nhl_scoreboard.wifi's shared join/rollback path, reports the
+        #: outcome to the panel. A full object, not just a path, since
+        #: tests need to substitute the whole thing (real subprocess/thread
+        #: use), not just where its state files live.
+        self.wifi_join = wifi_join or WifiJoinAttempt(
+            config_path=settings.source_path or DEFAULT_CONFIG_PATHS[0],
+            connect_timeout=settings.wifi.connect_timeout_seconds,
+            submission_path=self.ap_submission_state_path,
+            outcome_path=WIFI_JOIN_OUTCOME_PATH,
+        )
+        #: The WiFi setup page (#132) -- only running while nhl-scoreboard-
+        #: setup-ap's state file says the AP is up, kept in step by
+        #: _sync_setup_server(). None means "not currently running", whether
+        #: because the AP is down or wifi_setup.enabled is false.
+        self.setup_server: SetupServer | None = None
+        #: The (enabled, port) _sync_setup_server last built setup_server
+        #: from, so a config reload's port change is noticed even if the AP
+        #: state file's presence hasn't changed. None means no server wanted.
+        self._setup_server_config: tuple[bool, int] | None = None
+        #: (ssid, password) -> precomputed QR matrix, so a QR isn't
+        #: recomputed every FRAME_INTERVAL for the whole time the AP stays
+        #: up -- it only changes if the AP's own SSID/password ever would.
+        self._ap_qr_cache: (
+            tuple[tuple[str, str | None], tuple[tuple[bool, ...], ...] | None] | None
+        ) = None
         self.horn = horn or GoalHornPlayer.default(
             device=settings.audio.device,
             horn_dir=settings.audio.horn_dir,
@@ -207,6 +293,9 @@ class ScoreboardApp:
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
             self.refresh_goal_details()
+            self._sync_setup_server()
+            self.wifi_join.poll()
+            self.wifi_join.expire_outcome_if_stale()
             self.draw()
             self.sleep(FRAME_INTERVAL)
         self.shutdown()
@@ -255,6 +344,8 @@ class ScoreboardApp:
         try:
             if self.status_server is not None:
                 self.status_server.stop()
+            if self.setup_server is not None:
+                self.setup_server.stop()
             self.matrix.Clear()
         finally:
             self.client.close()
@@ -429,6 +520,12 @@ class ScoreboardApp:
                     self.status_server.start()
             else:
                 self.status_server = None
+
+        # wifi.connect_timeout_seconds: plain attribute update, no
+        # stop/rebuild needed the way StatusServer's fixed-at-construction
+        # port does -- WifiJoinAttempt reads it fresh on its next attempt,
+        # and there's nothing live to restart if one isn't in progress.
+        self.wifi_join.connect_timeout = new_settings.wifi.connect_timeout_seconds
 
     # -- auto brightness ---------------------------------------------------
 
@@ -725,9 +822,165 @@ class ScoreboardApp:
         from the status thread -- that would race the main loop into
         duplicate fetches, or block a "read-only" page on a slow NHL
         response.
+
+        wifi_join wins over even ap_setup (#133): while a join attempt's
+        outcome is still showing, that's more current than "here's how to
+        join" -- notably during a failed attempt's retry window, when
+        nhl-scoreboard-setup-ap has already brought the AP (and its own
+        ap_setup state file) back up underneath the "Failed..." message
+        that's still counting down.
+
+        ap_setup otherwise wins over everything else, unconditionally
+        (#131 follow-up): if the board's own WiFi AP is up, a phone joining
+        it is the only way to reach the board at all -- there is no point
+        showing a stale game, a goal flash, or "NO DATA" to nobody.
         """
+        join_scene = self._wifi_join_scene()
+        if join_scene is not None:
+            return join_scene
+        ap_scene = self._ap_setup_scene()
+        if ap_scene is not None:
+            return ap_scene
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
+
+    def _wifi_join_scene(self) -> Scene | None:
+        try:
+            raw = self.wifi_join.outcome_path.read_text()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            log.warning("Could not read WiFi join outcome file: %s", exc)
+            return None
+        try:
+            data = json.loads(raw)
+            status = str(data["status"])
+            ssid = str(data["ssid"])
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            log.warning("Malformed WiFi join outcome file: %s", exc)
+            return None
+        return Scene("wifi_join", wifi_join_status=status, wifi_join_ssid=ssid)
+
+    def _ap_setup_scene(self) -> Scene | None:
+        try:
+            raw = self.ap_setup_state_path.read_text()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            log.warning("Could not read AP setup state file: %s", exc)
+            return None
+        try:
+            data = json.loads(raw)
+            ssid = str(data["ssid"])
+            password = data["password"]
+            password = str(password) if password is not None else None
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            log.warning("Malformed AP setup state file: %s", exc)
+            return None
+        return Scene(
+            "ap_setup",
+            ap_ssid=ssid,
+            ap_password=password,
+            ap_qr_matrix=self._ap_setup_qr_matrix(ssid, password),
+        )
+
+    def _ap_setup_qr_matrix(
+        self, ssid: str, password: str | None
+    ) -> tuple[tuple[bool, ...], ...] | None:
+        cache_key = (ssid, password)
+        if self._ap_qr_cache is not None and self._ap_qr_cache[0] == cache_key:
+            return self._ap_qr_cache[1]
+        if password is None:
+            payload = f"WIFI:T:nopass;S:{_qr_escape(ssid)};;"
+        else:
+            payload = f"WIFI:T:WPA;S:{_qr_escape(ssid)};P:{_qr_escape(password)};;"
+        try:
+            # border=0 explicitly: verified live that get_matrix() otherwise
+            # includes the library's own default 4-module quiet zone in its
+            # output (29x29 modules for this payload becomes 37x37 with it)
+            # -- silently exceeding the panel's 32px height and skipping the
+            # QR draw entirely, with nothing wrong to log because nothing
+            # raised. Confirming the fit still happens in the renderer
+            # regardless; this just stops the default border from being the
+            # reason it doesn't.
+            qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, border=0)
+            qr.add_data(payload)
+            qr.make(fit=True)
+            matrix = tuple(tuple(bool(v) for v in row) for row in qr.get_matrix())
+        except Exception as exc:
+            log.warning("Could not build AP setup QR code: %s", exc)
+            matrix = None
+        self._ap_qr_cache = (cache_key, matrix)
+        return matrix
+
+    # -- WiFi setup page (#132) --------------------------------------------
+
+    def _sync_setup_server(self) -> None:
+        """Start/stop the WiFi setup HTTP server in step with the AP state file.
+
+        Only called from run()'s own loop -- status_snapshot() (the status
+        page's own thread) only ever calls select_scene(allow_fetch=False),
+        never this, so there is no cross-thread race to start or stop the
+        same socket. Only needs "is the AP state file there", the same
+        signal _ap_setup_scene keys off of, not its contents. Also reacts to
+        a live config reload (wifi_setup.enabled/port) even when the AP
+        state file's presence hasn't changed, the same way _apply_reloaded_
+        settings handles the status server's own port change.
+        """
+        cfg = self.settings.wifi_setup
+        wanted = cfg.enabled and self.ap_setup_state_path.exists()
+        desired = (cfg.enabled, cfg.port) if wanted else None
+        if desired == self._setup_server_config:
+            return
+        if self.setup_server is not None:
+            self.setup_server.stop()
+            self.setup_server = None
+        self._setup_server_config = desired
+        if desired is None:
+            return
+        self.setup_server = SetupServer(
+            networks=self._cached_setup_networks,
+            on_submit=self._on_setup_submission,
+            port=cfg.port,
+        )
+        try:
+            self.setup_server.start()
+        except OSError as exc:
+            log.warning("Could not start WiFi setup server: %s", exc)
+            self.setup_server = None
+
+    def _cached_setup_networks(self) -> list[str]:
+        """The nearby-network snapshot nhl-scoreboard-setup-ap cached before AP mode came up."""
+        try:
+            raw = self.ap_scan_state_path.read_text()
+        except OSError:
+            return []
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            log.warning("Malformed AP scan state file: %s", exc)
+            return []
+        if not isinstance(data, list):
+            return []
+        return [str(item) for item in data]
+
+    def _on_setup_submission(self, ssid: str, password: str | None) -> None:
+        """Record a WiFi choice from the setup page for #133's join flow to pick up.
+
+        This app never touches iwd/iwctl itself -- see setup_server.py's own
+        module docstring for why actually joining the network is out of
+        scope here. Written atomically (tmp + replace), same convention as
+        Settings.save(), so a reader never sees a half-written file.
+        """
+        payload = json.dumps({"ssid": ssid, "password": password})
+        tmp_path = self.ap_submission_state_path.with_name(
+            self.ap_submission_state_path.name + ".tmp"
+        )
+        try:
+            tmp_path.write_text(payload)
+            tmp_path.replace(self.ap_submission_state_path)
+        except OSError as exc:
+            log.warning("Could not write WiFi setup submission: %s", exc)
 
     def _select_base_scene(self, *, allow_fetch: bool = True) -> Scene:
         if self.last_success is None:
@@ -940,6 +1193,10 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), self.settings.scoreboard.favourite_team)
+        elif scene.kind == "ap_setup":
+            r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
+        elif scene.kind == "wifi_join":
+            r.draw_wifi_join(self.canvas, scene.wifi_join_status, scene.wifi_join_ssid)
         else:
             r.draw_message(self.canvas, "NO GAMES")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
