@@ -596,6 +596,74 @@ actually joining the chosen network is #133, not built yet.
   at all, and this page is reachable by typing its fixed address manually
   regardless of whether the "Sign in to network" prompt ever appears.
 
+## Wiring the setup page's submission into a real join (#133)
+
+Closes the loop #131/#132 leave open: turning a submitted SSID/password
+into an actual network join, safely, with the AP setup flow's own
+first-time-user constraints -- not #51's original boot-time-only
+assumptions.
+
+- **`apply_wifi()` moved from `scoreboard-provision` into
+  `nhl_scoreboard/wifi.py`**, an importable module, so both the boot-time
+  caller and this live join flow call the exact same tested join/rollback
+  path instead of two implementations of "try new credentials, roll back
+  on failure." `scoreboard-provision` itself now just parses `[wifi]` out
+  of the TOML and hands it off -- the 26 existing subprocess-level tests in
+  `tests/test_scoreboard_provision.py` needed zero changes after this
+  move, since they exercise behaviour through the script's own CLI
+  boundary, not where the code physically lives.
+- **`apply_wifi()` now returns `bool`** (`True` for an already-current
+  profile or a genuine new success, `False` only when a real attempt was
+  made and the network never came up) -- the boot-time caller still
+  ignores it, but the live join flow needs to know which panel message and
+  which of "drop the AP" / "bring it back" to do next.
+- **The panel is the feedback channel, not the HTTP response** (decided
+  directly in #133's own issue discussion, not assumed): attempting the
+  join means switching the radio out of `Mode ap`, which tears down the AP
+  the phone's setup-page request arrived over -- killing that connection
+  before any response describing success/failure could reach it.
+  `wifi_join.py`'s `WifiJoinAttempt` writes a state file
+  (`/run/nhl-scoreboard-wifi-join-state.json`) with `attempting`/
+  `connected`/`failed`, read by `_wifi_join_scene()` the same way #141's
+  `_ap_setup_scene()` already reads its own -- and given **top** priority
+  in `select_scene()`, even over `ap_setup`: a failed attempt restarts
+  `nhl-scoreboard-setup-ap`, which recreates its own state file underneath
+  the still-counting-down "Failed..." message, and that message has to win
+  until its own display window (`OUTCOME_DISPLAY_SECONDS`, 15s) elapses.
+- **The join runs on a background thread**, off `ScoreboardApp.run()`'s own
+  loop -- `WifiJoinAttempt.poll()` is called every frame and must never
+  block; a real attempt can take up to `connect_timeout_seconds` (90s by
+  default), and freezing score polling/rendering for that long would
+  defeat the point of a scoreboard that's still trying to show something
+  during setup.
+- **A failed join restarts AP mode** (also decided directly, not a
+  judgment call left to whoever built this) so the person can reconnect
+  and retry from the same phone -- treated as the *expected* retry path,
+  not a rare edge case, which matters given the real-hardware finding
+  below.
+- **`[wifi] connect_timeout_seconds`** (default 90, matching
+  `nhl_scoreboard.wifi`'s own `WIFI_CONNECT_TIMEOUT` default) is a real
+  `WifiConfig` dataclass field now, exposed properly instead of left as the
+  `NHL_SCOREBOARD_WIFI_TIMEOUT` env var (still there, still the underlying
+  default, but that one's for tests/low-level overrides, not something a
+  real user would find). `ssid`/`password`/`country` stay deliberately
+  unmodelled in `WifiConfig` -- `scoreboard-provision` reads those straight
+  out of raw TOML (predates this dataclass) and nothing else needs typed
+  access to them; `Settings.from_dict` filters the raw `[wifi]` dict down
+  to just `connect_timeout_seconds` before handing it to `_build()`, so
+  those three don't trip its "unknown key" warning on every single load.
+- **Real-hardware risk, not yet re-verified after this landed**: repeated
+  rapid AP start/stop/mode-switch cycling (manual testing during #132's own
+  investigation) put this board's radio into a bad state once --
+  `iwctl ap <dev> start` failing with `START_AP failed: -22` and
+  `Could not register frame watch type ...: -114` in `iwd`'s own log,
+  recovered only by backing off / a clean boot. Given the decision above
+  that failure-then-retry is the expected path, not an edge case, this
+  needs real-hardware testing of *that specific path* (submit bad
+  credentials, confirm the AP comes back, retry, repeat a few times) before
+  trusting it, not just the happy path -- #4, same as everything else here
+  that needs a Pi.
+
 ## Disk-destructive code (grow-rootfs)
 
 `image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
