@@ -19,7 +19,7 @@ import qrcode
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
-from .config import DEFAULT_CONFIG_PATHS, Settings, resolve_timezone
+from .config import DEFAULT_CONFIG_PATHS, RotationEntry, Settings, resolve_timezone
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
@@ -584,8 +584,9 @@ class ScoreboardApp:
         """A relevant game is live, or finished less than cooldown_minutes ago.
 
         "tracked" with no favourite_team has nothing to track, so it
-        behaves as "all" -- a normal combination (rotation = "all" with
-        night mode on), not a misconfiguration worth a warning.
+        behaves as "all" -- a normal combination (no favourite_team
+        configured, with night mode on), not a misconfiguration worth a
+        warning.
         """
         cfg = self.settings.night_mode
         favourite = self.settings.scoreboard.favourite_team
@@ -795,24 +796,61 @@ class ScoreboardApp:
             return Scene("countdown", upcoming)
         return Scene("preview", upcoming)
 
-    def _rotate_idle_scenes(self, upcoming: Game, standings: Scene | None) -> Scene:
-        """Cycle countdown/preview, standings and the idle clock on rotate_seconds' cadence.
+    def _default_rotation(self) -> list[RotationEntry]:
+        """The implicit rotation list, derived from the older discrete settings (#150).
 
-        Widened from the old 2-way standings-vs-countdown/preview split to
-        add the idle clock as a slot (opt-in, ``show_clock_between_games``)
-        -- with the flag off, this is exactly the old 2-way (or 1-way, with
-        standings suppressed) math, just generalised over a list instead of
-        a single ``% 2``.
+        Used whenever ``[[rotation]]`` isn't present in the config file, so
+        an upgraded board's idle rotation is unchanged until the owner
+        opts into an explicit list.
         """
-        slots: list[Scene] = [self._countdown_or_preview(upcoming)]
-        if standings is not None:
-            slots.append(standings)
-        if self.settings.scoreboard.show_clock_between_games:
-            slots.append(Scene("clock"))
+        cfg = self.settings.scoreboard
+        entries = [RotationEntry("countdown_preview", cfg.rotate_seconds)]
+        if cfg.show_standings:
+            entries.append(RotationEntry("standings", cfg.rotate_seconds))
+        if cfg.show_clock_between_games:
+            entries.append(RotationEntry("clock", cfg.rotate_seconds))
+        return entries
+
+    def _effective_rotation(self) -> list[RotationEntry]:
+        return self.settings.rotation or self._default_rotation()
+
+    def _rotation_screen_scene(
+        self, screen: str, upcoming: Game | None, standings: Scene | None
+    ) -> Scene | None:
+        if screen == "countdown_preview":
+            return self._countdown_or_preview(upcoming) if upcoming is not None else None
+        if screen == "standings":
+            return standings
+        if screen == "clock":
+            return Scene("clock")
+        return None
+
+    def _rotate_idle_scenes(self, upcoming: Game | None, standings: Scene | None) -> Scene | None:
+        """Cycle the configured (or derived-default) rotation list, each entry its own dwell time.
+
+        A configured entry with nothing to show right now -- ``standings``
+        before the favourite's season has started, or ``countdown_preview``
+        with no upcoming game at all -- is skipped for this pass rather than
+        shown blank (#150 decision 2); the remaining entries keep cycling
+        normally. ``None`` only when every entry is currently unavailable.
+        """
+        slots = [
+            (scene, entry.seconds)
+            for entry in self._effective_rotation()
+            if (scene := self._rotation_screen_scene(entry.screen, upcoming, standings)) is not None
+        ]
+        if not slots:
+            return None
         if len(slots) == 1:
-            return slots[0]
-        period = max(self.settings.scoreboard.rotate_seconds, 1.0)
-        return slots[int(self.monotonic() // period) % len(slots)]
+            return slots[0][0]
+        total = sum(seconds for _, seconds in slots)
+        position = self.monotonic() % total
+        elapsed = 0.0
+        for scene, seconds in slots:
+            elapsed += seconds
+            if position < elapsed:
+                return scene
+        return slots[-1][0]
 
     def select_scene(self, *, allow_fetch: bool = True) -> Scene:
         """Decide what to show; the draw step only renders the answer.
@@ -987,10 +1025,9 @@ class ScoreboardApp:
             return Scene("connecting")
         if self.is_stale():
             return Scene("no_data")
-        if self.settings.scoreboard.rotation == "favourite":
-            scene = self._favourite_scene(allow_fetch=allow_fetch)
-            if scene is not None:
-                return scene
+        scene = self._favourite_scene(allow_fetch=allow_fetch)
+        if scene is not None:
+            return scene
         if self.games:
             return Scene("game", self.games[self.index])
         return Scene("clock" if self.settings.scoreboard.show_clock_when_idle else "no_games")
@@ -1035,6 +1072,8 @@ class ScoreboardApp:
 
     def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         cfg = self.settings.scoreboard
+        if not cfg.favourite_team:
+            return None
         today = self.favourite_game_today()
         if today is not None:
             if today.is_live:
@@ -1050,8 +1089,6 @@ class ScoreboardApp:
             else self.next_favourite_game(allow_fetch=allow_fetch)
         )
         standings = self._standings_scene(allow_fetch=allow_fetch)
-        if upcoming is None:
-            return standings
         return self._rotate_idle_scenes(upcoming, standings)
 
     def situation_targets(self) -> list[Game]:
@@ -1064,7 +1101,7 @@ class ScoreboardApp:
         favourite = self.settings.scoreboard.favourite_team
         if favourite:
             targets += [g for g in self.games if g.is_live and g.involves(favourite)]
-        if self.settings.scoreboard.rotation == "all" and self.games:
+        if self.games:
             current = self.games[self.index]
             if current.is_live and current not in targets:
                 targets.append(current)
@@ -1146,7 +1183,6 @@ class ScoreboardApp:
             "scene": scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",
-            "rotation": cfg.rotation,
             "last successful poll": self._format_time(self.last_success_at),
             "last error": self.last_error or "(none)",
             "last error at": self._format_time(self.last_error_at) if self.last_error_at else "",
