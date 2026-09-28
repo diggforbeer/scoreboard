@@ -715,16 +715,13 @@ same bar as everything else in this repo.
 - MBR only. GPT has a backup header at the end of the disk that would
   also need relocating; this script does not attempt that, and this
   image's layout (`image/mbr/simple_dual`) is MBR, so it doesn't need to.
-- **Cannot be verified without real hardware** (tracked in #4, same as
-  everything else that needs a Pi). What *is* tested,
-  `tests/test_grow_rootfs.py`: the actual script, run for real against a
+- `tests/test_grow_rootfs.py`: the actual script, run for real against a
   faked toolchain (every external command it touches is a recording
-  fake) -- this catches shell logic bugs and confirms the safety checks
-  actually refuse when they should, but cannot confirm `sfdisk`/
-  `resize2fs` behave as expected against a real disk. When touching this
-  script, mutation-test the change the way the start-sector assertion
-  was verified: deliberately break the thing the test is supposed to
-  catch and confirm it fails before trusting it passes.
+  fake) -- catches shell logic bugs and confirms the safety checks
+  actually refuse when they should. When touching this script,
+  mutation-test the change the way the start-sector assertion was
+  verified: deliberately break the thing the test is supposed to catch
+  and confirm it fails before trusting it passes.
 - **Was disabled #121-#129, re-enabled by #129.** A real Pi 4 first boot
   once never came up at all (no DHCP lease on wifi *or* ethernet, LED
   matrix never showed anything, `sudo fdisk`/Disk Management from another
@@ -740,14 +737,35 @@ same bar as everything else in this repo.
   EEPROM issue; #4's hardware-verification checklist having this box
   checked with zero corroborating detail (no `journalctl` excerpt,
   nothing) was never real evidence either way. #129 re-enabled the
-  `enable-units` line on that basis, once a board existed that booted
-  reliably (post EEPROM reflash, post #126's audio/panel fix) -- but that
-  re-enable has **not itself** been confirmed against a real
-  resize-and-reboot cycle on hardware yet (root partition actually grows,
-  board comes back up). Don't treat the line being present as equivalent
-  to that having happened; if a real board ever hangs on first boot again
-  with this enabled, that's the first real evidence of an actual
-  grow-rootfs bug (as opposed to the EEPROM red herring) -- capture it
+  `enable-units` line on that basis.
+- **Confirmed against a real resize-and-reboot cycle on hardware,
+  2026-09-28 (#129)** -- and it did NOT work out of the box, catching two
+  real bugs neither `tests/test_grow_rootfs.py`'s faked toolchain nor CI
+  could have caught:
+  1. `findmnt / -o source -n` reported `/dev/disk/by-slot/system` on this
+     board's OS, not a `/dev/mmcblk0pN`-style path. The script's
+     `PART_NUM=$(echo "$ROOT_PART" | grep -o '[0-9]*$')` silently produced
+     an empty string against that alias, which never matched
+     `LAST_PART_NUM`, tripping the "not the last partition" safety refusal
+     -- even though the partition genuinely was last -- and permanently
+     marking the done-marker on exit 0 with the table never touched.
+     Fixed by canonicalising with `readlink -f` before extracting the
+     partition number, whatever alias `findmnt` hands back.
+  2. **`sfdisk` genuinely was not installed on the image at all.** Debian
+     split `fdisk`/`sfdisk`/`cfdisk` out of `util-linux` into their own
+     `fdisk` package a while back (confirmed live: `dpkg -S sfdisk` found
+     nothing, `apt-cache policy fdisk` showed `Installed: (none)`); the
+     apt package list's own comment wrongly assumed util-linux always
+     carries it. Fixed by adding `fdisk` to `image/layer/nhl-scoreboard.
+     yaml`'s packages. Without it, stage 1 would fail every single boot
+     forever (`sfdisk: command not found`, exit 127, the *retryable*
+     failure path -- never a hang, just a partition that never grows).
+  With both fixed, verified live: `nhl-scoreboard-grow-rootfs.service`
+  ran stage 1 (`sfdisk`, reboot), then stage 2 automatically on the next
+  boot (`resize2fs`), root partition went from 2.5G to 29.5G on a 29.7G
+  card, and `nhl-scoreboard.service` came back up fine afterward. If a
+  real board ever hangs or fails to grow again with this enabled, that's
+  new evidence of a *different* bug, not this one -- capture it
   (HDMI console, `journalctl`) before changing anything, per #129.
 
 ## Config conventions
