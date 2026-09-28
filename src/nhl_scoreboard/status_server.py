@@ -336,7 +336,9 @@ h2.settings-title {{ font-size: 1.05rem; color: var(--muted); font-weight: 600; 
 }}
 .card h3 {{ font-size: 1rem; margin: 0 0 0.35rem; }}
 .field {{ margin: 0.9rem 0; }}
-.field > label {{ display: block; font-size: 0.85rem; color: var(--text); margin-bottom: 0.35rem; }}
+.field > label:not(.field-toggle) {{
+  display: block; font-size: 0.85rem; color: var(--text); margin-bottom: 0.35rem;
+}}
 .field input[type=text], .field input[type=password], .field input[type=number], .field select {{
   width: 100%; max-width: 22rem; background: var(--surface-2); border: 1px solid var(--border);
   color: var(--text); border-radius: 8px; padding: 0.5rem 0.65rem; font-size: 0.9rem;
