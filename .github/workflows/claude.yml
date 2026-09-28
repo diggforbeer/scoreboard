@@ -91,6 +91,18 @@ jobs:
           # `git rm`, never fetch or merge, so a run's checkout (fetch-
           # depth: 1, one commit) had no way to even pull in main's side of
           # a conflict, let alone resolve one.
+          #
+          # `Bash(python3:*)`/`Bash(nhl-scoreboard:*)`/`Bash(playwright
+          # install:*)` added after a real run (PR #153) was asked to
+          # screenshot the admin page and the LED demo scenes and had no
+          # way to: it could `pip install playwright` (already covered by
+          # the existing `Bash(pip install:*)` entry) but couldn't fetch
+          # the actual browser binary, run a screenshot script, or start
+          # `nhl-scoreboard --demo --backend RGBMatrixEmulator` to render
+          # the panel scenes at all. Getting the resulting PNG into the PR
+          # needs no new entry -- `git add`/`commit`/`push` already work,
+          # so a run commits the image into its own branch and links it by
+          # raw.githubusercontent.com URL rather than trying to attach it.
           claude_args: |
-            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*)"
+            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*)"
             --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Every other default instruction still applies."
