@@ -58,7 +58,7 @@ Early development. Working today:
 - [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
-- [x] Optional read-only web status page for headless debugging
+- [x] Optional web status page for headless debugging, with a config editor
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
 - [ ] Verified on real hardware
 
@@ -130,7 +130,7 @@ country = "CA"               # two-letter regulatory domain code, e.g. CA, US, G
 connect_timeout_seconds = 90 # how long a new SSID/password gets to connect before rolling back
 
 [status]
-enabled = true                # a read-only web status page, for headless debugging; set false to turn off
+enabled = true                # a web status page + config editor, for headless debugging; set false to turn off
 port = 8080
 
 [night_mode]
@@ -220,7 +220,7 @@ whenever a team-specific file isn't found. See `[audio]` in
 
 The board is headless by design, so diagnosing "why is it stuck" would
 otherwise mean SSH-ing in and reading `journalctl -u nhl-scoreboard`. On by
-default, the board instead serves a tiny read-only HTML page at
+default, the board instead serves a small HTML page at
 `http://<board's-ip>:8080/` showing the current scene, the last successful
 API poll, the last error (if any), the favourite team and the rotation mode
 -- enough to check on the board from a phone on the same network. It's
@@ -228,6 +228,20 @@ stdlib `http.server`, no framework, and has no login: it binds the local
 network the board is already trusted on, not the internet, so don't
 port-forward it. Set `[status] enabled = false` in the config to turn it
 off.
+
+Below that is a form per config section (scoreboard, audio, status,
+night mode, panel, Wi-Fi) that edits `scoreboard.toml` directly -- no
+SSH or SD card needed. Saving writes the file with `tomlkit` (comments in
+the file survive) and the running board picks the change up within a
+second, the same way it already does for a hand-edited file over SSH.
+`[panel]` fields that need a process restart to take effect (geometry,
+GPIO mapping, ...) are still editable here, just labelled as such. Saving
+Wi-Fi settings restarts the board's network connection live -- briefly
+interrupting it -- and rolls back automatically if the new network
+doesn't come up, the same rollback `scoreboard-provision` already does at
+boot. A submitted form is checked against the request's own `Host`
+header to reject cross-site submissions, but there's still no login: as
+with the rest of the page, this assumes the LAN itself is trusted.
 
 ## Layout
 
