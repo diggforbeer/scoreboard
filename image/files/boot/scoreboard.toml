@@ -22,14 +22,20 @@ country = "CA"
 connect_timeout_seconds = 90
 
 [scoreboard]
-# Three-letter team abbreviation, shown first in the rotation. Set to "" for
-# no preference. Examples: NSH, TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
+# Three-letter team abbreviation, followed as your team's day: a preview of
+# the next game, a countdown as puck drop approaches, the live score, the
+# final for a while, then the preview of the game after that. Set to "" for
+# no preference, which instead rotates through every game in the league
+# today. Examples: NSH, TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
 favourite_team = "NSH"
 
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 timezone = "America/Chicago"
 
-# Seconds each game stays on screen before rotating to the next.
+# Seconds each game stays on screen when rotating through every game in the
+# league (no favourite_team, or nothing to show for your favourite right
+# now); also the default dwell time for each idle screen below, unless an
+# explicit [[rotation]] list overrides it (see the bottom of this section).
 rotate_seconds = 8
 
 # How often to ask the NHL for updated scores, in seconds.
@@ -37,12 +43,6 @@ poll_seconds = 60
 # Faster polling while a game is actually in progress.
 live_poll_seconds = 15
 
-# What the board follows.
-#   "favourite"  Your team's day: a preview of the next game, a countdown as
-#                puck drop approaches, the live score, the final for a while,
-#                then the preview of the game after that.
-#   "all"        Rotate through every game in the league today.
-rotation = "favourite"
 # Within this many hours of puck drop the preview becomes a countdown.
 countdown_hours = 2
 # How long a finished game stays on the board before the next preview.
@@ -72,11 +72,34 @@ goal_detail_seconds = 8
 # Only appears once favourite_team has actually played a game this season.
 show_standings = true
 
-# In "favourite" rotation, also cycle the clock into the countdown/preview
-# (and standings, if shown) alternation whenever the favourite isn't live --
-# separate from show_clock_when_idle above, which only covers "no games
-# left to preview at all".
+# Also cycle the clock into the countdown/preview (and standings, if shown)
+# alternation whenever the favourite isn't live -- separate from
+# show_clock_when_idle above, which only covers "no games left to preview
+# at all".
 show_clock_between_games = false
+
+# What shows while there's no live or recently-finished favourite game, by
+# default: derived from rotate_seconds/show_standings/show_clock_between_games
+# above -- countdown/preview, then standings (if shown), then the clock (if
+# enabled), each for rotate_seconds. To control the order or give each
+# screen its own duration instead, uncomment and edit an explicit list
+# below; once any [[rotation]] table is present, rotate_seconds/
+# show_standings/show_clock_between_games above are no longer read for this
+# purpose. screen is one of "countdown_preview", "standings", "clock". A
+# screen with nothing to show right now (e.g. standings before your team's
+# season has started) is skipped for that pass, not shown blank.
+#
+# [[rotation]]
+# screen = "countdown_preview"
+# seconds = 10
+#
+# [[rotation]]
+# screen = "standings"
+# seconds = 15
+#
+# [[rotation]]
+# screen = "clock"
+# seconds = 8
 
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
@@ -99,8 +122,8 @@ horn_dir = ""
 
 [status]
 # A small web page showing what the board currently thinks is going on
-# (current scene, last successful poll, last error, favourite team,
-# rotation) plus a form to edit this file from a phone on the same
+# (current scene, last successful poll, last error, favourite team) plus
+# a form to edit this file from a phone on the same
 # network -- handy for a headless board without SSH-ing in. On by
 # default. No login: this binds the local network the board is on, not
 # the internet -- do not port-forward it. Set enabled = false to turn it

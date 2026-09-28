@@ -315,3 +315,98 @@ def test_night_mode_derived_times_are_not_settable_from_toml(tmp_path, caplog):
     night = Settings.load(path).night_mode  # must not raise
     assert night.start_time == "22:30"
     assert "start" in caplog.text
+
+
+# -- configurable idle rotation (#150) ---------------------------------------
+
+
+def test_rotation_absent_from_file_defaults_to_an_empty_list():
+    """app.py derives the old implicit default list itself when this is empty."""
+    assert Settings().rotation == []
+
+
+def test_rotation_parses_screen_and_seconds_in_file_order(tmp_path):
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        """
+        [[rotation]]
+        screen = "countdown_preview"
+        seconds = 10
+
+        [[rotation]]
+        screen = "standings"
+        seconds = 15
+
+        [[rotation]]
+        screen = "clock"
+        seconds = 8
+        """
+    )
+    assert Settings.load(path).rotation == [
+        RotationEntry("countdown_preview", 10.0),
+        RotationEntry("standings", 15.0),
+        RotationEntry("clock", 8.0),
+    ]
+
+
+def test_rotation_entry_with_unknown_screen_is_dropped_with_a_warning(tmp_path, caplog):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[[rotation]]\nscreen = "weather"\nseconds = 10\n')
+    assert Settings.load(path).rotation == []
+    assert "weather" in caplog.text
+
+
+@pytest.mark.parametrize("bad_seconds", [0, -5, "soon"])
+def test_rotation_entry_with_non_positive_or_non_numeric_seconds_is_dropped(bad_seconds, caplog):
+    from nhl_scoreboard.config import _parse_rotation
+
+    entries = _parse_rotation([{"screen": "clock", "seconds": bad_seconds}])
+    assert entries == []
+    assert "clock" in caplog.text
+
+
+def test_rotation_valid_entries_kept_alongside_dropped_invalid_ones(tmp_path):
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        """
+        [[rotation]]
+        screen = "clock"
+        seconds = 5
+
+        [[rotation]]
+        screen = "bogus"
+        seconds = 5
+        """
+    )
+    assert Settings.load(path).rotation == [RotationEntry("clock", 5.0)]
+
+
+def test_save_writes_rotation_as_an_array_of_tables(tmp_path):
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    settings = Settings.load(path)
+    settings.save(
+        {
+            "rotation": [
+                {"screen": "countdown_preview", "seconds": 10},
+                {"screen": "clock", "seconds": 8},
+            ]
+        }
+    )
+
+    assert settings.rotation == [
+        RotationEntry("countdown_preview", 10.0),
+        RotationEntry("clock", 8.0),
+    ]
+    reloaded = Settings.load(path)
+    assert reloaded.rotation == settings.rotation
+    text = path.read_text()
+    assert "[[rotation]]" in text
+    # The untouched [scoreboard] section survives the write.
+    assert 'favourite_team = "NSH"' in text

@@ -70,7 +70,6 @@ _FIELDS: tuple[_Field, ...] = (
         "scoreboard", "favourite_team", "str", "Favourite team (3-letter abbrev, blank for none)"
     ),
     _Field("scoreboard", "timezone", "str", "Timezone (IANA name, e.g. America/Chicago)"),
-    _Field("scoreboard", "rotation", "select", "Rotation", choices=("favourite", "all")),
     _Field("scoreboard", "rotate_seconds", "float", "Seconds per game in rotation"),
     _Field("scoreboard", "poll_seconds", "float", "Score poll interval (seconds)"),
     _Field("scoreboard", "live_poll_seconds", "float", "Live score poll interval (seconds)"),

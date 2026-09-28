@@ -167,14 +167,14 @@ def test_post_unchecked_checkbox_saves_false_not_missing(tmp_path):
     assert Settings.load(path).audio.enabled is False
 
 
-def test_post_rejects_unknown_rotation_and_non_numeric_seconds(tmp_path):
+def test_post_rejects_unknown_select_and_non_numeric_seconds(tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\nrotation = "favourite"\n')
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\nlogo_variant = "dark"\n')
     settings = Settings.load(path)
     server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
     server.start()
     try:
-        data = _form_for(settings, "scoreboard", rotation="bogus", rotate_seconds="soon")
+        data = _form_for(settings, "scoreboard", logo_variant="bogus", rotate_seconds="soon")
         status, _, body = _post(server.port, data)
         assert status == 400
         assert "must be one of" in body
@@ -182,7 +182,7 @@ def test_post_rejects_unknown_rotation_and_non_numeric_seconds(tmp_path):
     finally:
         server.stop()
     # Nothing was written -- the file is untouched.
-    assert 'rotation = "favourite"' in path.read_text()
+    assert 'logo_variant = "dark"' in path.read_text()
 
 
 def test_post_rejects_non_numeric_int_field(tmp_path):

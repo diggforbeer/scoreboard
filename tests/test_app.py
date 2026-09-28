@@ -310,9 +310,9 @@ def in_play(games: list[Game]) -> list[Game]:
 
 
 def test_situations_fetched_only_for_favourite_and_on_screen(fake_backend, games):
-    """In 'all' rotation the on-screen game is a second target; nothing else is."""
+    """The on-screen game is always a second situation target; nothing else is."""
     games = in_play(games)  # three live games: SEA@CGY, CAR@FLA, UTA@COL
-    app = build_app(fake_backend, games, favourite_team="CGY", rotation="all")
+    app = build_app(fake_backend, games, favourite_team="CGY")
     app.refresh()
     favourite_game = next(g for g in app.games if g.involves("CGY"))
     assert app.games[app.index] == favourite_game, "favourite is pinned first: targets coincide"
@@ -539,7 +539,6 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     app.refresh()
     snapshot = app.status_snapshot()
     assert snapshot["favourite team"] == "TOR"
-    assert snapshot["rotation"] == "favourite"
     assert snapshot["last successful poll"] != "never"
     assert snapshot["scene"]
 
@@ -873,7 +872,7 @@ def test_draw_dispatches_no_data_when_stale(fake_backend, games):
 
 
 def test_draw_dispatches_clock_when_idle(fake_backend, games):
-    app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=True)
+    app = build_app(fake_backend, games, show_clock_when_idle=True)
     app.last_success = app.monotonic()
     calls = []
     app.renderer.draw_clock = lambda canvas, now, favourite=None: calls.append(now)
@@ -882,7 +881,7 @@ def test_draw_dispatches_clock_when_idle(fake_backend, games):
 
 
 def test_draw_dispatches_no_games_when_idle_clock_disabled(fake_backend, games):
-    app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=False)
+    app = build_app(fake_backend, games, show_clock_when_idle=False)
     app.last_success = app.monotonic()
     calls = []
     app.renderer.draw_message = lambda canvas, *args: calls.append(args)

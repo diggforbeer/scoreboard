@@ -129,13 +129,12 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 
 ```toml
 [scoreboard]
-favourite_team = "NSH"      # "" for none
-rotation = "favourite"      # follow the favourite's day; "all" rotates every game
-prefer_favourite = true     # in "all" rotation, still show the favourite's game first
+favourite_team = "NSH"      # "" rotates every game in the league instead
+prefer_favourite = true     # with no live/held favourite game, still show it first when rotating
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
 timezone = "America/Chicago"
-rotate_seconds = 8          # dwell per game in "all" rotation, and per idle scene below
+rotate_seconds = 8          # dwell per game with no favourite, and per idle scene below
 poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
@@ -144,6 +143,13 @@ goal_flash_seconds = 6      # how long the GOAL screen stays up after your team 
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
+
+# Optional: override the idle rotation's order and per-screen timing (see
+# "What it shows" below). With no [[rotation]] tables, the list above
+# (rotate_seconds/show_standings/show_clock_between_games) still applies.
+# [[rotation]]
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock
+# seconds = 10
 
 [audio]
 enabled = true
@@ -204,7 +210,7 @@ same way a router's printed default password is. The account can `sudo`
 
 ## What it shows
 
-In the default `rotation = "favourite"`, the board follows your team's day:
+With a `favourite_team` set (the default, `NSH`), the board follows your team's day:
 
 | When | Board shows |
 |---|---|
@@ -216,14 +222,18 @@ In the default `rotation = "favourite"`, the board follows your team's day:
 | After that | Preview of the next game on the schedule |
 
 The next game comes from the team's season schedule, fetched once an hour.
-While there's no favourite game to show live, the board alternates the
-preview/countdown with two more scenes on `rotate_seconds`' cadence: your
+While there's no favourite game to show live, the board cycles an **idle
+rotation** of up to three screens: the preview/countdown above, your
 **conference standings** (`show_standings`, once your team's season has
-actually started) and, if `show_clock_between_games` is on, the **idle
-clock**. With `rotation = "all"` the board instead rotates through every
-game in the league today, `rotate_seconds` each, favourite first
-(`prefer_favourite`). The GOAL screen and the horn both still only ever fire
-for your favourite team's own goal, regardless of rotation mode.
+actually started), and, if `show_clock_between_games` is on, the **idle
+clock**. By default each stays up for `rotate_seconds`; add `[[rotation]]`
+entries to `scoreboard.toml` to reorder them, drop one, or give each its
+own duration instead (see [Configuration](#configuration)) -- a screen with
+nothing to show right now is skipped, not shown blank. With no
+`favourite_team` set (or nothing left for it to show), the board instead
+rotates through every game in the league today, `rotate_seconds` each,
+favourite first (`prefer_favourite`). The GOAL screen and the horn both
+still only ever fire for your favourite team's own goal.
 
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
 a tracked game is live or was held recently, so a late finish stays
@@ -249,8 +259,8 @@ The board is headless by design, so diagnosing "why is it stuck" would
 otherwise mean SSH-ing in and reading `journalctl -u nhl-scoreboard`. On by
 default, the board instead serves a small HTML page at
 `http://<board's-ip>:8080/` showing the current scene, the last successful
-API poll, the last error (if any), the favourite team and the rotation mode
--- enough to check on the board from a phone on the same network. It's
+API poll, the last error (if any) and the favourite team -- enough to check
+on the board from a phone on the same network. It's
 stdlib `http.server`, no framework, and has no login: it binds the local
 network the board is already trusted on, not the internet, so don't
 port-forward it. Set `[status] enabled = false` in the config to turn it

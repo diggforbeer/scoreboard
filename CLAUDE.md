@@ -147,14 +147,20 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
 
 ## App flow
 
-`rotation = "favourite"` (default, `NSH`): `select_scene()` picks live →
-final (held `final_hold_minutes` from when the game *ended*, not from when
-we first saw it final -- exact if we watched it finish, estimated from the
-start time otherwise; see `Game.estimated_end`) → today's game if pregame
-else next from the season schedule → countdown inside `countdown_hours`,
-preview beyond. Falls back to `all` rotation if there is no favourite game
-or the schedule fetch fails. `rotation = "all"` cycles every game today,
-`rotate_seconds` each.
+`_select_base_scene` always tries the favourite first (`_favourite_scene`,
+default favourite `NSH`): `select_scene()` picks live → final (held
+`final_hold_minutes` from when the game *ended*, not from when we first
+saw it final -- exact if we watched it finish, estimated from the start
+time otherwise; see `Game.estimated_end`) → today's game if pregame else
+next from the season schedule → countdown inside `countdown_hours`,
+preview beyond. `_favourite_scene` returns `None` immediately with no
+`favourite_team` configured, or falls through to the idle rotation (below)
+having nothing to show -- either way the board then cycles every game
+today by index, `rotate_seconds` each (#150 removed the old two-value
+`rotation` ("favourite"/"all") setting that used to gate this: a future
+multi-favourite "red-zone" feature needs "which game(s) currently preempt
+the rotation" to be a richer question than that toggle could express, so
+it was deleted rather than built on top of).
 
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
 **only** for the favourite's game and the on-screen game, at
@@ -184,11 +190,10 @@ chosen. Suppressed entirely until the favourite's own `games_played > 0`:
 `standings/now` keeps serving the just-finished season's *final* table
 all through the off-season rather than an empty result (verified with a
 live call while filing #40), and `games_played` is the only signal on
-hand for "is this actually the current season." Only scoped to
-`rotation = "favourite"`, same precedent as the power-play indicator and
-goal detection above -- shown interleaved with the preview/countdown
-scene, alternating on `rotate_seconds`' own cadence, never in place of a
-live game or a held final. Standings are polled on an hourly TTL
+hand for "is this actually the current season." Only ever shown as part
+of the favourite's idle rotation (below), same precedent as the
+power-play indicator and goal detection above -- never in place of a live
+game or a held final. Standings are polled on an hourly TTL
 (`STANDINGS_TTL_SECONDS`), the same idea as `SCHEDULE_TTL_SECONDS` for the
 season schedule. `clinchIndicator` values are parsed onto `StandingsRow`
 but not rendered or colour-coded -- they're confirmed from only one real,
@@ -202,14 +207,33 @@ in_playoff_position` already computes the real rule from `division_sequence`/
 correction wouldn't need a new API call, just wiring it in; flagged, not
 yet decided on.
 
-`_favourite_scene`'s non-live branch (`_rotate_idle_scenes`) cycles
-countdown/preview, standings (when shown) and, opt-in via
-`show_clock_between_games` (default `false`), the idle clock -- same
-`rotate_seconds` cadence as the standings alternation, now generalised
-over a list instead of a single `% 2`. Off by default so existing
-installs see no change; distinct from `show_clock_when_idle`, which only
-covers the unrelated "no games left to preview at all" case (`_select_
-base_scene`'s fallback when `_favourite_scene` returns `None` entirely).
+`_favourite_scene`'s non-live branch (`_rotate_idle_scenes`, #150) cycles
+a config-driven list of screens -- `countdown_preview` (auto-switches
+between countdown/preview based on `countdown_hours`, same as before;
+which one shows isn't a user choice, so it isn't split into two entries),
+`standings`, `clock` -- each with its own dwell time, read from an
+explicit `[[rotation]]` array of tables in `scoreboard.toml`
+(`config.py`'s `RotationEntry`/`_parse_rotation`). No `[[rotation]]` in
+the file (`Settings.rotation == []`) falls back to `_default_rotation`,
+which derives the pre-#150 list from `rotate_seconds` +
+`show_standings` + `show_clock_between_games` (`show_clock_between_games`
+still defaults `false`, so an upgraded board's rotation is unchanged
+until the owner opts in) -- those three settings are only read for that
+derivation and are ignored the moment an explicit `[[rotation]]` exists.
+An entry with nothing to show for the current pass (`standings` before
+`games_played > 0`, or `countdown_preview` with no upcoming game at all)
+is skipped rather than shown blank; the remaining entries keep cycling.
+`_rotate_idle_scenes` returns `None` only when every configured entry is
+currently unavailable, at which point `_favourite_scene` returns `None`
+too and `_select_base_scene` falls through to cycling today's games by
+index. Unknown `screen` values and non-positive `seconds` are dropped by
+`_parse_rotation` at load time (logged, never fatal, never rendered --
+this repo's usual config-typo convention) so `_rotate_idle_scenes` never
+has to handle an invalid entry itself. Distinct from `show_clock_when_idle`,
+which only covers the unrelated "no games left to preview at all" case
+(`_select_base_scene`'s fallback when `_favourite_scene` returns `None`
+entirely). Admin-UI support for editing `[[rotation]]` itself is #151, not
+built yet -- today it's boot-partition-TOML-only.
 
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
@@ -221,7 +245,8 @@ building anything -- an earlier draft of this fetched it from
 check turned up that the score feed already had it for free), so SOG
 has none of situation's scoping/caching (`situation_targets`,
 `live_poll_seconds`) -- it's available for every game the app already
-knows about, live or final, in either rotation mode. `TeamSide.sog`
+knows about, live or final, whether or not it's the favourite's.
+`TeamSide.sog`
 defaults to `0`, never `None`, so the indicator band's old "nothing to
 show, draw a plain rule" case no longer exists -- `_draw_situation`
 always draws something now, and the plain-rule fallback was removed
@@ -241,8 +266,8 @@ panel once the window ends. `suppress_scope` is `tracked` (favourite's
 game only) or `all` (any live game) -- same favourite-vs-all scoping
 precedent as the power-play indicator, goal detection and standings.
 `tracked` with no `favourite_team` silently behaves as `all`; that's a
-valid combination (`rotation = "all"` with night mode on), not a
-misconfiguration, so no warning. `dim_brightness = 0` is zero-power
+valid combination (no `favourite_team` configured, with night mode on),
+not a misconfiguration, so no warning. `dim_brightness = 0` is zero-power
 blanking: `draw()` clears and swaps the canvas and skips scene selection
 and rendering entirely, rather than trusting brightness 0 alone to be dark
 on every backend. Transitions are instant; eased steps were considered and
@@ -728,10 +753,14 @@ same bar as everything else in this repo.
 ## Config conventions
 
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
-  a typo must not stop the board booting.
-- Defaults are the Predators, favourite rotation, `regular` mapping,
-  128×32, Central time (America/Chicago). Anything can be overridden in the toml.
-- `rotation = "favourite"` with no `favourite_team` degrades to `all`.
+  a typo must not stop the board booting. Invalid `[[rotation]]` entries
+  (#150) follow the same convention: dropped with a warning, never fatal,
+  never rendered on the panel.
+- Defaults are the Predators, `regular` mapping, 128×32, Central time
+  (America/Chicago). Anything can be overridden in the toml.
+- With no `favourite_team` configured, the board falls through to cycling
+  every game today by index -- there is no longer a separate `rotation`
+  setting to degrade (removed by #150).
 
 ## Style
 
