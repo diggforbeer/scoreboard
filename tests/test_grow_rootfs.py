@@ -65,6 +65,11 @@ class Rig:
         self.set_boot_id("boot-a")
 
         write_fake(self.bindir, "findmnt", 'echo "${FAKE_ROOT_PART:-/dev/mmcblk0p2}"')
+        # Identity by default (a plain /dev/mmcblkXpY path resolves to
+        # itself); FAKE_RESOLVED_ROOT_PART overrides this to simulate
+        # findmnt reporting an alias (by-slot, by-partuuid, ...) that
+        # readlink -f canonicalises to a real device node (#129).
+        write_fake(self.bindir, "readlink", 'echo "${FAKE_RESOLVED_ROOT_PART:-$2}"')
         write_fake(self.bindir, "lsblk", 'echo "${FAKE_ROOT_DISK:-mmcblk0}"')
         write_fake(self.bindir, "parted", 'printf "%s" "$FAKE_PARTED_OUT"')
         write_fake(
@@ -151,6 +156,25 @@ def test_stage1_refuses_when_root_is_not_the_last_partition(rig):
     # Refusal is permanent, not retried forever: stops the unit from
     # trying (and logging about it) on every future boot.
     assert done_marker(rig.state_dir).is_file()
+
+
+def test_stage1_resolves_a_by_slot_mount_source_before_checking_last_partition(rig):
+    """Real-hardware finding (#129): findmnt reported /dev/disk/by-slot/
+    system instead of /dev/mmcblk0p2 on this board, which has no trailing
+    digit -- PART_NUM came out empty, never matched LAST_PART_NUM ("2"),
+    and the script wrongly refused to grow a partition that genuinely was
+    last. Confirmed live via journalctl before this fix existed."""
+    result = rig.run(
+        env_extra={
+            "FAKE_ROOT_PART": "/dev/disk/by-slot/system",
+            "FAKE_RESOLVED_ROOT_PART": "/dev/mmcblk0p2",
+        }
+    )
+    assert result.returncode == 0, result.stderr
+    assert "sfdisk" in result.calls, "must actually attempt the grow, not refuse"
+    assert "-N 2" in result.calls or "-N" in result.calls
+    assert grown_marker(rig.state_dir).is_file()
+    assert not done_marker(rig.state_dir).is_file()
 
 
 def test_stage1_sfdisk_failure_is_retryable_not_permanent(rig):

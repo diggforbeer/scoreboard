@@ -59,7 +59,16 @@ if [ -f "$DONE_MARKER" ]; then
 fi
 mkdir -p "$STATE_DIR"
 
-ROOT_PART=$(findmnt / -o source -n)
+# findmnt's reported source isn't always a /dev/mmcblkXpY-style path --
+# confirmed live on real hardware (#129), it reported /dev/disk/by-slot/
+# system, an alias with no trailing partition number. The digit-extraction
+# below silently produced an empty PART_NUM, which never matched
+# LAST_PART_NUM, tripping the "not the last partition" safety refusal (and
+# permanently marking DONE_MARKER) even though the partition genuinely was
+# last -- resize2fs was never even attempted. readlink -f canonicalises
+# whatever alias findmnt hands back (by-slot, by-partuuid, by-label, ...)
+# to the real /dev/mmcblkXpY node every other line here already assumes.
+ROOT_PART=$(readlink -f "$(findmnt / -o source -n)")
 ROOT_DEV="/dev/$(lsblk -no pkname "$ROOT_PART")"
 PART_NUM=$(echo "$ROOT_PART" | grep -o '[0-9]*$')
 
