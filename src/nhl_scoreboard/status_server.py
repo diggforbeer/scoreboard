@@ -268,7 +268,7 @@ _PAGE_TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NHL Scoreboard</title>
+<title>Hockey Scoreboard</title>
 <style>
 :root {{
   --bg: #0b0d12;
@@ -386,7 +386,7 @@ button:active {{ transform: scale(0.98); }}
 <body>
 <div class="page">
 <header class="top">
-  <h1>NHL Scoreboard</h1>
+  <h1>Hockey Scoreboard</h1>
   <p>Status &amp; configuration</p>
   {nav}
 </header>
