@@ -434,6 +434,140 @@ def test_get_wifi_saved_banner_warns_about_network_interruption():
         server.stop()
 
 
+def _rotation_form(action: str, rows: list[dict[str, str]]) -> dict[str, str]:
+    data = {"section": "rotation", "rotation_action": action}
+    for i, row in enumerate(rows):
+        data[f"rotation_screen_{i}"] = row["screen"]
+        data[f"rotation_seconds_{i}"] = row["seconds"]
+        data[f"rotation_order_{i}"] = row["order"]
+    return data
+
+
+def test_get_renders_rotation_rows_from_settings(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        '[[rotation]]\nscreen = "standings"\nseconds = 20\n'
+        '[[rotation]]\nscreen = "clock"\nseconds = 10\n'
+    )
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+        assert 'name="rotation_screen_0"' in body
+        assert 'value="standings" selected' in body
+        assert 'name="rotation_seconds_0" value="20.0"' in body
+        assert 'name="rotation_screen_1"' in body
+        assert 'value="clock" selected' in body
+    finally:
+        server.stop()
+
+
+def test_post_rotation_add_row_does_not_save(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    try:
+        status, _, body = _post(server.port, _rotation_form("add_row", []))
+        assert status == 200
+        assert 'name="rotation_screen_0"' in body
+    finally:
+        server.stop()
+    assert Settings.load(path).rotation == []
+
+
+def test_post_rotation_add_row_respects_max_rows(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    rows = [{"screen": "clock", "seconds": "5", "order": str(i + 1)} for i in range(8)]
+    try:
+        status, _, body = _post(server.port, _rotation_form("add_row", rows))
+        assert status == 200
+        assert "Maximum 8 rows" in body
+    finally:
+        server.stop()
+
+
+def test_post_rotation_remove_row(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    rows = [
+        {"screen": "standings", "seconds": "20", "order": "1"},
+        {"screen": "clock", "seconds": "10", "order": "2"},
+    ]
+    try:
+        status, _, body = _post(server.port, _rotation_form("remove_row_0", rows))
+        assert status == 200
+        assert body.count('name="rotation_screen_') == 1
+        assert 'name="rotation_screen_0"' in body
+        assert 'value="clock" selected' in body
+        assert 'name="rotation_seconds_0" value="10"' in body
+    finally:
+        server.stop()
+    assert Settings.load(path).rotation == []
+
+
+def test_post_rotation_save_writes_sorted_by_order(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    rows = [
+        {"screen": "clock", "seconds": "10", "order": "2"},
+        {"screen": "standings", "seconds": "20", "order": "1"},
+    ]
+    try:
+        status, headers, _ = _post(server.port, _rotation_form("save", rows))
+        assert status == 303
+        assert headers["Location"] == "/?saved=rotation"
+    finally:
+        server.stop()
+    reloaded = Settings.load(path)
+    assert [e.screen for e in reloaded.rotation] == ["standings", "clock"]
+    assert [e.seconds for e in reloaded.rotation] == [20.0, 10.0]
+
+
+def test_post_rotation_save_rejects_bad_screen_and_seconds(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    rows = [
+        {"screen": "bogus", "seconds": "notanumber", "order": "1"},
+    ]
+    try:
+        status, _, body = _post(server.port, _rotation_form("save", rows))
+        assert status == 400
+        assert "unknown screen" in body
+    finally:
+        server.stop()
+    assert Settings.load(path).rotation == []
+
+
+def test_get_shows_rotation_saved_banner():
+    settings = Settings()
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    try:
+        url = f"http://127.0.0.1:{server.port}/?saved=rotation"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+        assert "Idle rotation settings saved" in body
+    finally:
+        server.stop()
+
+
 def test_default_wifi_restart_invokes_systemctl(monkeypatch):
     calls = []
     monkeypatch.setattr(

@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .config import ConfigWriteError, Settings
+from .config import VALID_ROTATION_SCREENS, ConfigWriteError, RotationEntry, Settings
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +159,7 @@ _FIELDS: tuple[_Field, ...] = (
 
 _SECTIONS: tuple[tuple[str, str], ...] = (
     ("scoreboard", "Scoreboard"),
+    ("rotation", "Idle rotation"),
     ("audio", "Audio"),
     ("status", "Status page"),
     ("night_mode", "Night mode"),
@@ -232,6 +233,136 @@ def _coerce_section(
         else:  # str, password
             values[field.key] = text
     return values, errors
+
+
+# -- [[rotation]] editor (#151) ----------------------------------------------
+#
+# The generic _Field/_coerce_section machinery above assumes one scalar per
+# key inside a fixed-shape section; [[rotation]] is an ordered, variable-
+# length list of {screen, seconds} tables, so it gets its own row-based
+# renderer/parser rather than being forced into that shape. Per #151's
+# recommendation: no client-side JS (same stdlib-only constraint as the rest
+# of this page and setup_server.py) -- add/remove is a full page round trip
+# per click, and reordering is a plain numeric "order" field read back and
+# sorted on save, rather than swap-with-neighbour buttons, so one submit
+# still commits the whole list at once like every other section's save.
+
+#: Generous but finite: unlike every other section, rows have no dynamic
+#: add without a page round trip, so an unbounded list would need its own
+#: pagination story. #151 flags this as a recommendation, not a final call
+#: -- raise it if a real rotation needs more than this.
+_ROTATION_MAX_ROWS = 8
+
+
+@dataclass(frozen=True, slots=True)
+class _RotationRow:
+    """One row's raw, unvalidated form values -- kept as strings so a bad
+    submission (or a fresh "Add row") redisplays exactly what's there rather
+    than a coerced/defaulted value."""
+
+    screen: str
+    seconds: str
+    order: str
+
+
+def _rotation_rows_from_settings(entries: list[RotationEntry]) -> list[_RotationRow]:
+    return [
+        _RotationRow(screen=entry.screen, seconds=str(entry.seconds), order=str(index + 1))
+        for index, entry in enumerate(entries)
+    ]
+
+
+def _parse_rotation_form_rows(form: dict[str, list[str]]) -> list[_RotationRow]:
+    """Rebuild the posted rows from ``rotation_{screen,seconds,order}_{i}`` fields.
+
+    Rows are always rendered as a contiguous 0..N-1 index (see
+    ``_render_rotation_section``), so a missing ``rotation_screen_{i}`` marks
+    the end of the list rather than a gap to skip over.
+    """
+    rows = []
+    index = 0
+    while f"rotation_screen_{index}" in form:
+        rows.append(
+            _RotationRow(
+                screen=(form.get(f"rotation_screen_{index}") or [""])[0],
+                seconds=(form.get(f"rotation_seconds_{index}") or [""])[0],
+                order=(form.get(f"rotation_order_{index}") or [""])[0],
+            )
+        )
+        index += 1
+    return rows
+
+
+def _validate_rotation_rows(rows: list[_RotationRow]) -> tuple[list[RotationEntry], list[str]]:
+    """Coerce+validate every row, or bail out with messages and no entries.
+
+    Sorting happens here, by the submitted "order" field, ascending -- ties
+    keep the rows' original (pre-sort) relative order, same as any stable
+    sort.
+    """
+    errors: list[str] = []
+    parsed: list[tuple[float, int, RotationEntry]] = []
+    for position, row in enumerate(rows):
+        screen = row.screen.strip().lower()
+        if screen not in VALID_ROTATION_SCREENS:
+            errors.append(f"Row {position + 1}: unknown screen {row.screen!r}")
+            continue
+        try:
+            seconds = float(row.seconds)
+        except ValueError:
+            errors.append(f"Row {position + 1}: seconds must be a number")
+            continue
+        if seconds <= 0:
+            errors.append(f"Row {position + 1}: seconds must be positive")
+            continue
+        try:
+            order = float(row.order)
+        except ValueError:
+            errors.append(f"Row {position + 1}: order must be a number")
+            continue
+        parsed.append((order, position, RotationEntry(screen=screen, seconds=seconds)))
+    if errors:
+        return [], errors
+    parsed.sort(key=lambda item: (item[0], item[1]))
+    return [entry for _, _, entry in parsed], []
+
+
+def _render_rotation_section(rows: list[_RotationRow], form_error: str | None) -> str:
+    row_html = "".join(
+        '<div class="rotation-row">'
+        f'<select name="rotation_screen_{i}">'
+        + "".join(
+            f'<option value="{html.escape(choice)}"'
+            f"{' selected' if choice == row.screen else ''}>{html.escape(choice)}</option>"
+            for choice in VALID_ROTATION_SCREENS
+        )
+        + "</select>"
+        f'<input type="number" step="any" min="0" name="rotation_seconds_{i}" '
+        f'value="{html.escape(row.seconds)}" placeholder="seconds" title="seconds">'
+        f'<input type="number" step="1" name="rotation_order_{i}" '
+        f'value="{html.escape(row.order)}" placeholder="order" title="order">'
+        f'<button type="submit" name="rotation_action" value="remove_row_{i}">Remove</button>'
+        "</div>"
+        for i, row in enumerate(rows)
+    )
+    error_html = (
+        f'<div class="banner banner-error">{html.escape(form_error)}</div>' if form_error else ""
+    )
+    add_disabled = " disabled" if len(rows) >= _ROTATION_MAX_ROWS else ""
+    return (
+        '<form method="post" action="/save" class="card" id="rotation">'
+        '<input type="hidden" name="section" value="rotation">'
+        "<h3>Idle rotation</h3>"
+        '<p class="hint">Screens shown when the favourite is not live, in "order" order '
+        "(lowest first, ties keep row order). "
+        f"Up to {_ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default "
+        "(countdown/preview, standings, clock).</p>"
+        f"{error_html}{row_html}"
+        f'<button type="submit" name="rotation_action" value="add_row"{add_disabled}>'
+        "Add row</button> "
+        '<button type="submit" name="rotation_action" value="save">Save idle rotation</button>'
+        "</form>"
+    )
 
 
 # -- rendering ---------------------------------------------------------------
@@ -373,6 +504,15 @@ h2.settings-title {{ font-size: 1.05rem; color: var(--muted); font-weight: 600; 
 .badge-restart {{ background: rgba(224, 166, 56, 0.15); color: var(--warning); }}
 .hint {{ color: var(--muted); font-size: 0.82rem; margin: 0.25rem 0 0.75rem; }}
 .field-error {{ color: var(--danger); font-size: 0.8rem; margin-top: 0.3rem; }}
+.rotation-row {{
+  display: flex; align-items: center; gap: 0.5rem; margin: 0.6rem 0; flex-wrap: wrap;
+}}
+.rotation-row select, .rotation-row input[type=number] {{
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 0.45rem 0.6rem; font-size: 0.85rem; font-family: inherit;
+}}
+.rotation-row input[type=number] {{ width: 6rem; }}
+.rotation-row button {{ margin-top: 0; padding: 0.45rem 0.8rem; }}
 button {{
   margin-top: 0.75rem; background: var(--accent); color: #0b0d12; border: none;
   border-radius: 8px; padding: 0.55rem 1.15rem; font-size: 0.85rem; font-weight: 600;
@@ -497,9 +637,13 @@ def _render_page(
     form_error: str | None = None,
     errors: dict[str, str] | None = None,
     submitted: dict[str, str] | None = None,
+    rotation_rows: list[_RotationRow] | None = None,
+    rotation_error: str | None = None,
 ) -> bytes:
     errors = errors or {}
     submitted = submitted or {}
+    if rotation_rows is None:
+        rotation_rows = _rotation_rows_from_settings(settings.rotation)
 
     banner = ""
     if banner_section:
@@ -518,7 +662,9 @@ def _render_page(
         + "</nav>"
     )
     sections = "".join(
-        _render_section(
+        _render_rotation_section(rotation_rows, rotation_error)
+        if section == "rotation"
+        else _render_section(
             section,
             title,
             settings,
@@ -606,6 +752,9 @@ def _make_handler(
             raw_body = self.rfile.read(length).decode("utf-8", errors="replace")
             form = urllib.parse.parse_qs(raw_body, keep_blank_values=True)
             section = (form.get("section") or [""])[0]
+            if section == "rotation":
+                self._handle_rotation_post(form)
+                return
             fields = _FIELDS_BY_SECTION.get(section)
             if not fields:
                 self.send_error(HTTPStatus.BAD_REQUEST, "Unknown config section")
@@ -657,6 +806,94 @@ def _make_handler(
             redirect_section = section if section in _FIELDS_BY_SECTION else ""
             safe_section = urllib.parse.quote(redirect_section, safe="")
             self.send_header("Location", f"/?saved={safe_section}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _handle_rotation_post(self, form: dict[str, list[str]]) -> None:
+            """Add/remove/save for the [[rotation]] editor (#151).
+
+            Unlike every other section, one submit can mean three different
+            things (the row-level Add/Remove buttons vs. the section's own
+            Save), distinguished by the ``rotation_action`` value the clicked
+            button sent -- see ``_render_rotation_section``. Add/remove never
+            touch the file; only "save" does.
+            """
+            current = settings()
+            rows = _parse_rotation_form_rows(form)
+            action = (form.get("rotation_action") or [""])[0]
+
+            if action == "add_row":
+                form_error = None
+                if len(rows) < _ROTATION_MAX_ROWS:
+                    rows.append(
+                        _RotationRow(
+                            screen=VALID_ROTATION_SCREENS[0],
+                            seconds="60",
+                            order=str(len(rows) + 1),
+                        )
+                    )
+                else:
+                    form_error = f"Maximum {_ROTATION_MAX_ROWS} rows."
+                body = _render_page(
+                    snapshot(),
+                    current,
+                    _read_wifi_raw(current.source_path),
+                    rotation_rows=rows,
+                    rotation_error=form_error,
+                )
+                self._write_html(HTTPStatus.OK, body)
+                return
+
+            if action.startswith("remove_row_"):
+                try:
+                    remove_index = int(action.removeprefix("remove_row_"))
+                except ValueError:
+                    remove_index = -1
+                if 0 <= remove_index < len(rows):
+                    del rows[remove_index]
+                body = _render_page(
+                    snapshot(), current, _read_wifi_raw(current.source_path), rotation_rows=rows
+                )
+                self._write_html(HTTPStatus.OK, body)
+                return
+
+            # action == "save" -- the only branch that writes to disk.
+            entries, validation_errors = _validate_rotation_rows(rows)
+            save_error: str | None = None
+            if not validation_errors:
+                if current.source_path is None:
+                    save_error = "No config file is loaded; nothing to save."
+                else:
+                    try:
+                        # A throwaway Settings instance, same reasoning as
+                        # every other section's save below.
+                        Settings.from_toml(current.source_path).save(
+                            {
+                                "rotation": [
+                                    {"screen": entry.screen, "seconds": entry.seconds}
+                                    for entry in entries
+                                ]
+                            }
+                        )
+                    except (OSError, tomllib.TOMLDecodeError) as exc:
+                        save_error = f"Could not read {current.source_path}: {exc}"
+                    except ConfigWriteError as exc:
+                        save_error = str(exc)
+
+            if validation_errors or save_error:
+                body = _render_page(
+                    snapshot(),
+                    current,
+                    _read_wifi_raw(current.source_path),
+                    rotation_rows=rows,
+                    rotation_error=save_error or "; ".join(validation_errors),
+                )
+                status = HTTPStatus.INTERNAL_SERVER_ERROR if save_error else HTTPStatus.BAD_REQUEST
+                self._write_html(status, body)
+                return
+
+            self.send_response(HTTPStatus.SEE_OTHER)
+            self.send_header("Location", "/?saved=rotation")
             self.send_header("Content-Length", "0")
             self.end_headers()
 
