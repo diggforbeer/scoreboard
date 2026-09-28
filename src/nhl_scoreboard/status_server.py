@@ -4,8 +4,9 @@ Stdlib-only (`http.server`), matching the project's "no heavy dependencies on
 the device" stance. Serves a status snapshot it has no knowledge of (handed
 to it as a callable -- see ``ScoreboardApp.status_snapshot``) alongside a
 form-per-section editor for ``scoreboard.toml``, built from the ``Settings``
-dataclasses and the raw ``[wifi]`` table (which isn't part of ``Settings``
-at all -- see ``config.py``).
+dataclasses plus ``[wifi]``'s ``ssid``/``password``/``country``, which
+``WifiConfig`` deliberately doesn't model (see ``config.py``) -- those three
+are read from the raw TOML table instead.
 
 No auth, bound to 0.0.0.0 by default: this is a status/config page for a
 device already trusted on the local network, not something to port-forward.
@@ -132,13 +133,29 @@ _FIELDS: tuple[_Field, ...] = (
         "Refresh rate limit (Hz, 0 = unlimited)",
         restart_required=True,
     ),
-    # [wifi] isn't part of Settings at all (see config.py) -- scoreboard-
-    # provision reads it straight out of the raw TOML. Saving still goes
-    # through Settings.save(), which writes any {section: {key: value}}
-    # regardless of whether that section is one of its own dataclass fields.
+    # ssid/password/country aren't part of WifiConfig (see config.py) --
+    # scoreboard-provision reads them straight out of the raw TOML. Saving
+    # still goes through Settings.save(), which writes any
+    # {section: {key: value}} regardless of whether a key is one of its
+    # section's own dataclass fields, so connect_timeout_seconds below
+    # (which *is* modelled, on WifiConfig) round-trips through the exact
+    # same raw-table path as the other three with no special-casing needed.
     _Field("wifi", "ssid", "str", "Wi-Fi SSID (blank to use ethernet)"),
     _Field("wifi", "password", "password", "Wi-Fi password"),
     _Field("wifi", "country", "country", "Regulatory country code (2 letters, e.g. US)"),
+    _Field(
+        "wifi",
+        "connect_timeout_seconds",
+        "float",
+        "Seconds a new SSID/password gets to connect before rolling back",
+    ),
+    # [wifi_setup] (#132) is the captive-portal setup page served while the
+    # board's own first-boot AP is up -- unrelated to [wifi] above, which is
+    # the network the board joins. Live-editable, not restart_required:
+    # ScoreboardApp._sync_setup_server() already reacts to a reload the same
+    # way it does for [status]'s own port.
+    _Field("wifi_setup", "enabled", "bool", "WiFi setup page enabled (served while the AP is up)"),
+    _Field("wifi_setup", "port", "int", "WiFi setup page port"),
 )
 
 _SECTIONS: tuple[tuple[str, str], ...] = (
@@ -148,6 +165,7 @@ _SECTIONS: tuple[tuple[str, str], ...] = (
     ("night_mode", "Night mode"),
     ("panel", "Panel"),
     ("wifi", "Wi-Fi"),
+    ("wifi_setup", "WiFi setup page"),
 )
 _SECTION_TITLES: dict[str, str] = dict(_SECTIONS)
 

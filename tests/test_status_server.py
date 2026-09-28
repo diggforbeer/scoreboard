@@ -41,8 +41,16 @@ def _form_for(settings: Settings, section: str, **overrides: object) -> dict[str
 
 
 def _wifi_form(**overrides: str) -> dict[str, str]:
-    """[wifi] isn't part of Settings, so it has no ``settings``-derived defaults."""
-    data = {"section": "wifi", "ssid": "", "password": "", "country": ""}
+    """ssid/password/country aren't part of Settings, so they have no
+    ``settings``-derived defaults; connect_timeout_seconds is a real
+    WifiConfig field but round-trips through this same raw section."""
+    data = {
+        "section": "wifi",
+        "ssid": "",
+        "password": "",
+        "country": "",
+        "connect_timeout_seconds": "90",
+    }
     data.update(overrides)
     return data
 
@@ -290,7 +298,41 @@ def test_post_wifi_section_triggers_restart_but_others_do_not(tmp_path):
     finally:
         server.stop()
     raw = tomllib.loads(path.read_text())
-    assert raw["wifi"] == {"ssid": "HomeNet", "password": "hunter2", "country": "US"}
+    assert raw["wifi"] == {
+        "ssid": "HomeNet",
+        "password": "hunter2",
+        "country": "US",
+        "connect_timeout_seconds": 90.0,
+    }
+
+
+def test_post_wifi_setup_section_round_trips_and_does_not_restart_wifi(tmp_path):
+    """[wifi_setup] (#132) is a real Settings section, unlike [wifi]'s raw
+    ssid/password/country -- round-trips through _form_for like any other
+    section, and isn't the network-join section wifi_restart is scoped to."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[wifi_setup]\nenabled = true\nport = 80\n")
+    settings = Settings.load(path)
+    calls: list[int] = []
+    server = StatusServer(
+        snapshot=dict,
+        port=0,
+        settings=lambda: settings,
+        host="127.0.0.1",
+        wifi_restart=lambda: calls.append(1),
+    )
+    server.start()
+    try:
+        status, _, _ = _post(
+            server.port, _form_for(settings, "wifi_setup", enabled=False, port="8090")
+        )
+        assert status == 303
+        assert calls == []
+    finally:
+        server.stop()
+    reloaded = Settings.load(path)
+    assert reloaded.wifi_setup.enabled is False
+    assert reloaded.wifi_setup.port == 8090
 
 
 def test_post_wifi_rejects_bad_country_code(tmp_path):
