@@ -448,6 +448,56 @@ def test_ap_setup_scene_long_ssid_never_overflows_its_half(update_snapshots):
 
 
 # --------------------------------------------------------------------------
+# WiFi join outcome (#133)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "status", "ssid", "expect_color"),
+    [
+        ("wifi_join_attempting", "attempting", "HomeNetwork", WHITE),
+        ("wifi_join_connected", "connected", "HomeNetwork", LIVE),
+        ("wifi_join_failed", "failed", "HomeNetwork", ACCENT),
+    ],
+)
+def test_wifi_join_scene(name, status, ssid, expect_color, update_snapshots):
+    c = canvas()
+    make_renderer().draw_wifi_join(c, status, ssid)
+    art = show(name, c)
+
+    assert not c.out_of_bounds
+    # tolerance=2: text_center's integer division of an odd pixel width can
+    # land a wider string like "CONNECTED!" up to ~1.5px off perfect centre
+    # -- same font-glyph-width allowance CLAUDE.md documents elsewhere, not
+    # a real layout bug.
+    assert_centered(c, 0, 16, "title", tolerance=2.0)
+    assert_centered(c, 20, H - 1, "subtitle", tolerance=2.0)
+    assert expect_color in c.colors(0, 0, W - 1, 16)
+    check_snapshot(name, art, update_snapshots)
+
+
+def test_wifi_join_failed_rendering_does_not_depend_on_ssid():
+    """The AP's real name might not be the default -- ap_setup's own scene
+    (about to show next once this one's display window ends) is the one
+    place that names it, from its own state file. Naming it here too would
+    just be a second place it could go stale, so the "failed" message is
+    fixed text regardless of which ssid is passed -- proven here by two
+    wildly different ssids rendering identically."""
+    renderer = make_renderer()
+    first = canvas()
+    renderer.draw_wifi_join(first, "failed", "SomeSpecificNetworkName")
+    second = canvas()
+    renderer.draw_wifi_join(second, "failed", "AnEntirelyDifferentNetwork")
+    assert first.pixels == second.pixels
+
+
+def test_wifi_join_long_ssid_never_overflows_the_panel():
+    c = canvas()
+    make_renderer().draw_wifi_join(c, "attempting", "A" * 60)
+    assert not c.out_of_bounds
+
+
+# --------------------------------------------------------------------------
 # special teams
 # --------------------------------------------------------------------------
 

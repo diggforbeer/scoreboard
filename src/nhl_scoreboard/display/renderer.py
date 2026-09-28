@@ -591,6 +591,45 @@ class Renderer:
                 self._fit_text(self.fonts.tiny, password, max_w - 15),
             )
 
+    def draw_wifi_join(self, canvas: Any, status: str | None, ssid: str | None) -> None:
+        """WiFi join outcome (#133): shown while nhl_scoreboard.wifi_join is
+        attempting a network submitted via the setup page, or briefly after,
+        before falling through to whatever's next (normal game data if
+        actually online, or the ap_setup SSID/QR scene again if a failed
+        attempt brought the AP back).
+
+        No SSID named in the "failed" case deliberately: the AP's real name
+        might not be the default, and ap_setup's own scene (about to show
+        next, once this one's display window ends) already names it
+        correctly from its own state file -- duplicating that name here
+        would just be a second place it could go stale.
+        """
+        canvas.Clear()
+        cx = self.width // 2
+        max_w = self.width - 4
+        if status == "connected":
+            title, color, subtitle = "CONNECTED!", LIVE, ssid or ""
+        elif status == "failed":
+            title, color, subtitle = "COULD NOT CONNECT", ACCENT, "REJOINING SETUP MODE..."
+        else:
+            title, color, subtitle = "JOINING...", WHITE, ssid or ""
+        self.text_center(
+            canvas,
+            self.fonts.medium,
+            cx,
+            13,
+            color,
+            self._fit_text(self.fonts.medium, title, max_w),
+        )
+        self.text_center(
+            canvas,
+            self.fonts.small,
+            cx,
+            self.height - 3,
+            SUBDUED,
+            self._fit_text(self.fonts.small, subtitle, max_w),
+        )
+
     # -- helpers ---------------------------------------------------------
 
     @staticmethod

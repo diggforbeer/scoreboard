@@ -268,6 +268,32 @@ class WifiSetupConfig:
 
 
 @dataclass(slots=True)
+class WifiConfig:
+    """How long a WiFi join attempt waits before deciding it failed (#133).
+
+    Shared by boot-time provisioning (scoreboard-provision) and the AP setup
+    page's live join flow -- nhl_scoreboard.wifi's own module-level default
+    (WIFI_CONNECT_TIMEOUT, 90s) is the fallback when this isn't set. 90s is
+    the number that default already used; exposed here as a real setting
+    rather than left as the env var (NHL_SCOREBOARD_WIFI_TIMEOUT) that
+    default is overridden by today, which is meant for tests/low-level
+    overrides, not something a real user would find.
+
+    ``ssid``/``password``/``country`` are deliberately NOT modelled here --
+    scoreboard-provision reads those directly out of the raw TOML dict
+    itself (predates this Settings dataclass) and nothing else needs typed
+    access to them.
+    """
+
+    connect_timeout_seconds: float = 90.0
+
+    def __post_init__(self) -> None:
+        self.connect_timeout_seconds = _clamp_interval(
+            "wifi", "connect_timeout_seconds", self.connect_timeout_seconds
+        )
+
+
+@dataclass(slots=True)
 class NightModeConfig:
     """Scheduled dimming that stays out of the way of a live game (#92).
 
@@ -324,6 +350,7 @@ class Settings:
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
     wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
+    wifi: WifiConfig = field(default_factory=WifiConfig)
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
     source_path: Path | None = None
 
@@ -354,6 +381,7 @@ class Settings:
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
             wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
+            wifi=_wifi_config(raw.get("wifi", {})),
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
         )
 
@@ -398,6 +426,7 @@ class Settings:
         self.audio = reloaded.audio
         self.status = reloaded.status
         self.wifi_setup = reloaded.wifi_setup
+        self.wifi = reloaded.wifi
         self.night_mode = reloaded.night_mode
 
 
@@ -417,3 +446,16 @@ def _build(cls: type, raw: dict[str, Any]) -> Any:
         else:
             log.warning("Ignoring unknown config key %r in [%s]", key, cls.__name__)
     return cls(**kwargs)
+
+
+def _wifi_config(raw: dict[str, Any]) -> WifiConfig:
+    """WifiConfig only models ``connect_timeout_seconds``.
+
+    ``ssid``/``password``/``country`` live in the same ``[wifi]`` TOML
+    section but are read directly out of the raw dict by
+    scoreboard-provision (predates this dataclass), not through here.
+    Filtered before ``_build()`` sees them so those three don't trip its
+    "unknown key" warning on every single load.
+    """
+    filtered = {k: v for k, v in raw.items() if k == "connect_timeout_seconds"}
+    return _build(WifiConfig, filtered)
