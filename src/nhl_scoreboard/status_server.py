@@ -292,7 +292,7 @@ body {{
   color: var(--text);
   padding: 2.5rem 1.25rem 4rem;
 }}
-.page {{ max-width: 52rem; margin: 0 auto; }}
+.page {{ max-width: 78rem; margin: 0 auto; }}
 header.top {{ margin-bottom: 2rem; }}
 header.top h1 {{ font-size: 1.5rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }}
 header.top p {{ margin: 0; color: var(--muted); font-size: 0.95rem; }}
@@ -330,9 +330,11 @@ nav.jump a:hover {{ color: var(--text); border-color: var(--accent); }}
 }}
 .stat .v {{ display: block; font-size: 0.92rem; word-break: break-word; }}
 h2.settings-title {{ font-size: 1.05rem; color: var(--muted); font-weight: 600; margin: 0 0 1rem; }}
+.settings-grid {{ columns: 2 26rem; column-gap: 1.5rem; }}
 .card {{
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+  break-inside: avoid;
 }}
 .card h3 {{ font-size: 1rem; margin: 0 0 0.35rem; }}
 .field {{ margin: 0.9rem 0; }}
@@ -529,7 +531,9 @@ def _render_page(
         for section, title in _SECTIONS
     )
     rows = _snapshot_rows(snapshot)
-    sections = f'<h2 class="settings-title">Settings</h2>{sections}'
+    sections = (
+        f'<h2 class="settings-title">Settings</h2><div class="settings-grid">{sections}</div>'
+    )
     return _PAGE_TEMPLATE.format(nav=nav, banner=banner, rows=rows, sections=sections).encode(
         "utf-8"
     )
