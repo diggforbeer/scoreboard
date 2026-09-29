@@ -1,11 +1,14 @@
 # Admin page frontend (React + Vite)
 
-Story 1 of #178: a React SPA connected to a Python WebSocket server, proving
-the pipeline end to end before building anything real on top of it. See
-`src/nhl_scoreboard/ws_server.py`'s own docstring for exactly what this
-story does and doesn't cover -- local-dev only, one piece of data
-(the installed version), no reconnect logic, not wired into the actual
-admin page or the device image yet.
+A React SPA connected to a Python WebSocket server, built as vertical
+slices (#178). See `src/nhl_scoreboard/ws_server.py`'s own docstring for
+exactly what's been ported over so far and what hasn't -- local-dev only,
+not wired into the actual admin page or the device image yet.
+
+So far: the installed version (read-only), and the Audio section
+(`enabled`/`device`/`horn_dir`) -- read, edit, and save, with no page
+reload, which was the actual point of moving off `status_server.py`'s
+HTML-form-POST model.
 
 ## Running it locally
 
@@ -22,10 +25,15 @@ npm install                               # first time only
 npm run dev                               # http://localhost:5173/
 ```
 
-Open `http://localhost:5173/` -- it should show `WebSocket: open` and the
+By default the WebSocket server reads/writes `scoreboard.local.toml` in the
+repo root (same git-ignored dev config every other local-dev command uses)
+-- override with `NHL_SCOREBOARD_CONFIG` to point at a different file.
+
+Open `http://localhost:5173/` -- it should show `WebSocket: open`, the
 installed version (`unknown (factory image)` unless something has written
 `/opt/nhl-scoreboard/VERSION`, e.g. via `NHL_SCOREBOARD_APP_DIR` pointed at
-a directory that has one).
+a directory that has one), and the Audio section pre-filled from the config
+file -- editable, with a "Saved." confirmation on submit and no navigation.
 
 ## Commands
 

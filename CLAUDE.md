@@ -886,10 +886,30 @@ slices, one story at a time.
   That correction is what cleared the way for this -- `setup_server.py`
   itself is explicitly out of scope for any of this and stays exactly as
   it is.
-- Not yet decided or built: the JSON API replacing the HTML-form actions,
-  deploying the WebSocket server to the real device, or anything about the
-  production React build reaching the image (`frontend/`'s `dist/` is
-  git-ignored, nothing here ships yet) -- all later stories.
+- **Story 2 (done): the first real section, Audio.** Chosen deliberately
+  as the smallest section (`enabled`/`device`/`horn_dir`, 3 fields) to
+  prove the read/edit/save round trip before a bigger one. `ws_server.py`
+  now sends the current `[audio]` values on connect (via `Settings.load`,
+  same as `status_server.py`) and handles a `save` message the same way
+  `status_server.py`'s `/save` POST does -- write into a throwaway
+  `Settings` instance, reload fresh from disk afterward, never mutate
+  anything in memory (this process has no live `ScoreboardApp` to mutate
+  anyway). Validation is hardcoded to Audio's own 3 fields, not
+  generalised over `status_server.py`'s `_Field`/`_coerce_section` shape
+  -- one section isn't enough evidence yet for what the right shared
+  abstraction is; that's a later story's job once a second section shows
+  the actual pattern, not before. Verified with a real headless-browser
+  interaction (not just unit tests): unchecked the box, typed a device
+  string, clicked Save, watched "Saved." appear with zero page reload --
+  the actual thing this whole rebuild is for.
+- Not yet decided or built: every other section, the JSON-API-vs-
+  WebSocket-for-everything question (Audio's save went straight over the
+  existing WebSocket connection rather than a separate HTTP endpoint --
+  worth confirming that's still the right call once a section needs
+  something WebSocket-shaped push doesn't fit as naturally), deploying
+  this to the real device, or anything about the production React build
+  reaching the image (`frontend/`'s `dist/` is git-ignored, nothing here
+  ships yet).
 
 ## Disk-destructive code (grow-rootfs)
 
