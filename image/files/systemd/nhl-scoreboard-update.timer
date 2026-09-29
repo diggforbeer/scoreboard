@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily check for a newer scoreboard release
+
+[Timer]
+OnBootSec=10min
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

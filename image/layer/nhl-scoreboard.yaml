@@ -206,6 +206,23 @@ mmdebstrap:
         "$1/etc/systemd/system/"
       ln -sf /dev/null "$1/etc/systemd/system/dnsmasq.service"
 
+    # ---- app self-update (#32) -----------------------------------------
+    # The timer only *checks*; installing is the admin page's button, via
+    # nhl-scoreboard-update-apply.service. The driver commit is recorded so
+    # the updater can refuse a release that needs a rebuilt rgbmatrix. The
+    # timer is enabled by the symlink `systemctl enable` itself makes.
+    - |-
+      set -eu
+      for unit in nhl-scoreboard-update.service nhl-scoreboard-update-now.service \
+          nhl-scoreboard-update-apply.service nhl-scoreboard-update.timer; do
+        install -m 0644 "$IGconf_sb_assetdir/systemd/$unit" "$1/etc/systemd/system/"
+      done
+      install -d -m 0755 "$1/etc/systemd/system/timers.target.wants" "$1/var/lib/nhl-scoreboard"
+      ln -sf /etc/systemd/system/nhl-scoreboard-update.timer \
+        "$1/etc/systemd/system/timers.target.wants/nhl-scoreboard-update.timer"
+      git -C "$IGconf_sb_vendordir/rpi-rgb-led-matrix" rev-parse HEAD \
+        > "$1/usr/share/nhl-scoreboard/driver-commit"
+
     # ---- boot partition settings file --------------------------------
     - |-
       set -eu
@@ -320,7 +337,7 @@ mmdebstrap:
     - |-
       set -eu
       chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
-        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server, nhl_scoreboard.setup_server"
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server, nhl_scoreboard.setup_server, nhl_scoreboard.updater"
         python3 -m nhl_scoreboard --help >/dev/null
       '
       echo "nhl_scoreboard app modules import correctly"

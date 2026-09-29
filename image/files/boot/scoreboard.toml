@@ -131,6 +131,13 @@ horn_dir = ""
 enabled = true
 port = 8080
 
+[update]
+# Once a day the board asks GitHub Releases whether a newer version exists
+# and says so on the status page. It never installs anything by itself --
+# that is the "Install" button there. The status page also has a button to
+# check on demand. Set enabled = false to stop the daily check.
+enabled = true
+
 [wifi_setup]
 # The setup page served while the board's own first-boot WiFi access point
 # (see nhl-scoreboard-setup-ap) is up -- lets a phone connected to that AP
