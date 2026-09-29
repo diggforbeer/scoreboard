@@ -35,6 +35,12 @@ dev = [
     # button.py's tests drive the real gpiozero.Button through its MockFactory;
     # on the board it comes from apt (python3-gpiozero), same as smbus above.
     "gpiozero>=1.6",
+    # Admin page WebSocket live-updates (#178), story 1: local-dev-only for
+    # now, not yet wired into the shipped image -- kept in dev, not
+    # [project] dependencies, until a later story actually deploys it.
+    # python3-websockets is a real apt package on this image's Debian
+    # release (confirmed live, trixie ships 15.0.1-1) when that day comes.
+    "websockets>=13",
 ]
 
 [project.scripts]

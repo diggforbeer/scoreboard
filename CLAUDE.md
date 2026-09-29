@@ -854,6 +854,43 @@ assumptions.
   trusting it, not just the happy path -- #4, same as everything else here
   that needs a Pi.
 
+## Admin page frontend (React, in progress -- #178)
+
+The status/config page (`status_server.py`) is being rebuilt around a real
+JSON API + WebSocket live updates + a React frontend, replacing the current
+server-rendered-HTML-forms-with-full-page-POST model. Tracked issue #178
+has the full design, phasing, and open decisions (Vite, TypeScript,
+incremental rollout, WebSocket kept scoped to update-check/apply progress
+and save-without-reload -- not live game/score data). Built as vertical
+slices, one story at a time.
+
+- **Story 1 (done): prove the pipeline end to end.** `frontend/` (a Vite +
+  React + TypeScript SPA, `frontend/README.md` has the exact run commands)
+  connects over a real WebSocket to `src/nhl_scoreboard/ws_server.py` (a
+  new, minimal `websockets`-based server) and displays one real piece of
+  app state -- the installed version, the same value
+  `updater.installed_version()` already provides the admin page's status
+  grid. Deliberately narrow: local-dev only, not started by
+  `ScoreboardApp`, not wired into the image build or any systemd unit, one
+  message on connect and nothing further. `websockets` lives in
+  `pyproject.toml`'s `dev` extras, not `[project]` dependencies, until a
+  later story actually deploys this -- confirmed live that
+  `python3-websockets` (15.0.1-1) is a real apt package on this image's
+  Debian release for when that day comes, so it'll follow the same
+  apt-not-pip pattern as everything else on the device.
+- **status_server.py's own "no client-side JS" framing was corrected
+  first (#177)**: it was never actually required to work offline the way
+  `setup_server.py`'s captive-portal page genuinely is (that page *is* the
+  mechanism for getting the board online at all; the admin page's whole
+  purpose only makes sense once the board already has real connectivity).
+  That correction is what cleared the way for this -- `setup_server.py`
+  itself is explicitly out of scope for any of this and stays exactly as
+  it is.
+- Not yet decided or built: the JSON API replacing the HTML-form actions,
+  deploying the WebSocket server to the real device, or anything about the
+  production React build reaching the image (`frontend/`'s `dist/` is
+  git-ignored, nothing here ships yet) -- all later stories.
+
 ## Disk-destructive code (grow-rootfs)
 
 `image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
