@@ -41,7 +41,13 @@ from pathlib import Path
 from typing import Any
 
 from . import updater
-from .config import VALID_ROTATION_SCREENS, ConfigWriteError, RotationEntry, Settings
+from .config import (
+    PANEL_HARDWARE_MAPPING_CHOICES,
+    VALID_ROTATION_SCREENS,
+    ConfigWriteError,
+    RotationEntry,
+    Settings,
+)
 
 log = logging.getLogger(__name__)
 
@@ -112,7 +118,7 @@ _FIELDS: tuple[_Field, ...] = (
         "hardware_mapping",
         "select",
         "Hardware mapping",
-        choices=("regular", "adafruit-hat", "adafruit-hat-pwm"),
+        choices=PANEL_HARDWARE_MAPPING_CHOICES,
         restart_required=True,
     ),
     _Field(

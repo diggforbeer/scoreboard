@@ -1994,6 +1994,130 @@ def test_setup_submission_open_network_records_null_password(fake_backend, games
     assert json.loads(submission_path.read_text()) == {"ssid": "Open Net", "password": None}
 
 
+# --------------------------------------------------------------------------
+# display check (#172): the setup page's "is the panel showing anything"
+# confirmation loop.
+# --------------------------------------------------------------------------
+
+
+def _write_config(tmp_path: Path, **panel_overrides: object) -> Path:
+    config_path = tmp_path / "scoreboard.toml"
+    lines = ["[panel]"] + [f'{k} = "{v}"' for k, v in panel_overrides.items()]
+    config_path.write_text("\n".join(lines) + "\n")
+    return config_path
+
+
+def test_panel_check_state_reports_current_mapping_and_no_trial_by_default(
+    fake_backend, games, tmp_path
+):
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        hw_mapping_trial_path=tmp_path / "trial.json",
+    )
+    assert app._panel_check_state() == ("regular", False)
+
+
+def test_panel_check_state_reports_trial_in_progress(fake_backend, games, tmp_path):
+    trial_path = tmp_path / "trial.json"
+    trial_path.write_text("")
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, hw_mapping_trial_path=trial_path
+    )
+    assert app._panel_check_state() == ("regular", True)
+
+
+def test_on_panel_next_saves_the_next_candidate_and_restarts(fake_backend, games, tmp_path):
+    config_path = _write_config(tmp_path, hardware_mapping="regular")
+    trial_path = tmp_path / "trial.json"
+    restarted = []
+    settings = Settings.from_toml(config_path)
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        hw_mapping_trial_path=trial_path,
+        restart_service=lambda: restarted.append(1),
+    )
+
+    result = app._on_panel_next()
+
+    assert result == "adafruit-hat"
+    assert Settings.from_toml(config_path).panel.hardware_mapping == "adafruit-hat"
+    assert trial_path.exists()
+    assert restarted == [1]
+
+
+def test_on_panel_next_cycles_from_whatever_is_currently_configured(fake_backend, games, tmp_path):
+    config_path = _write_config(tmp_path, hardware_mapping="adafruit-hat-pwm")
+    settings = Settings.from_toml(config_path)
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        hw_mapping_trial_path=tmp_path / "trial.json",
+        restart_service=lambda: None,
+    )
+
+    assert app._on_panel_next() == "regular"
+
+
+def test_on_panel_next_without_a_loaded_config_file_fails_without_restarting(
+    fake_backend, games, tmp_path
+):
+    restarted = []
+    app = ScoreboardApp(
+        Settings(),  # source_path is None
+        client=FakeClient(games),
+        backend=fake_backend,
+        hw_mapping_trial_path=tmp_path / "trial.json",
+        restart_service=lambda: restarted.append(1),
+    )
+
+    assert app._on_panel_next() is None
+    assert restarted == []
+
+
+def test_on_panel_confirm_clears_the_trial_marker(fake_backend, games, tmp_path):
+    trial_path = tmp_path / "trial.json"
+    trial_path.write_text("")
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, hw_mapping_trial_path=trial_path
+    )
+
+    app._on_panel_confirm()
+
+    assert not trial_path.exists()
+
+
+def test_sync_setup_server_clears_a_stale_trial_marker_once_the_ap_goes_away(
+    fake_backend, games, tmp_path
+):
+    ap_state_path = tmp_path / "ap-state.json"
+    ap_state_path.write_text(json.dumps({"ssid": "TestSetupNet", "password": None}))
+    trial_path = tmp_path / "trial.json"
+    trial_path.write_text("")
+    settings = Settings()
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=ap_state_path,
+        hw_mapping_trial_path=trial_path,
+    )
+    app._sync_setup_server()
+    assert app.setup_server is not None
+    assert trial_path.exists()
+
+    ap_state_path.unlink()
+    app._sync_setup_server()
+
+    assert app.setup_server is None
+    assert not trial_path.exists()
+
+
 def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
     from nhl_scoreboard.app import _qr_escape
 
