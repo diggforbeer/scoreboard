@@ -812,11 +812,13 @@ def _make_handler(
             self._write_html(HTTPStatus.OK, body)
 
         def do_POST(self) -> None:
-            if self.path in ("/update/check", "/update/apply"):
+            # Map the path to a fixed literal so no request-derived text reaches the
+            # Location header (CodeQL: HTTP response splitting).
+            action = {"/update/check": "check", "/update/apply": "apply"}.get(self.path)
+            if action is not None:
                 if not self._is_same_origin():
                     self.send_error(HTTPStatus.FORBIDDEN, "Cross-site POST rejected")
                     return
-                action = self.path.rsplit("/", 1)[1]
                 update_trigger(action)
                 self.send_response(HTTPStatus.SEE_OTHER)
                 self.send_header("Location", f"/?update={action}")
