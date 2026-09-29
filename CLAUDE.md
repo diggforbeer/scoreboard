@@ -298,6 +298,22 @@ which only covers the unrelated "no games left to preview at all" case
 entirely). Admin-UI support for editing `[[rotation]]` itself is #151, not
 built yet -- today it's boot-partition-TOML-only.
 
+`matchup` (#157) is a fourth `[[rotation]]` screen and the only
+**opt-in** one: deliberately absent from `_default_rotation`, so a board
+never shows it (or calls `right-rail` at all) unless the owner lists
+`{screen = "matchup", seconds = N}` explicitly. It shows the favourite's
+head-to-head wins this season against the upcoming game's opponent
+(`SeasonSeriesRecord`, drawn away-home like the game scene), fetched per
+upcoming game id on an hourly TTL (`SEASON_SERIES_TTL_SECONDS`) with the
+same backoff-on-failure as standings -- never live-polled. Skipped for
+the pass (not shown blank) with no upcoming game, before the first fetch
+lands, or when the API had no usable tally; `0-0` is a real answer and
+does render. This is the first scene showing opponent-specific data;
+that precedent covers exactly this win tally and nothing broader
+(opponent leaders, injuries, etc. each need their own decision). Only the
+tally ships -- individual past-meeting scores (#168) and team/player
+stat leaders (#169) are separate follow-ups.
+
 The physical button (#50, `button.py`, `[button]`, off by default) is one
 momentary switch between a GPIO pin and GND -- GPIO 26 by default, 16 the
 documented alternative, both from the verified free-pin table in Hardware
@@ -387,6 +403,20 @@ exit; with `show_logos = false` every step is just text.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
+- `gamecenter/{id}/right-rail` (#157, a different endpoint from
+  `landing`) has `seasonSeriesWins: {awayTeamWins, homeTeamWins}` --
+  oriented to *that game's own* away/home (verified: the same NSH-CGY
+  series reads `0-3` from a game NSH hosted, `3-0` from one it played
+  away), season-to-date across completed regular-season meetings only
+  (every meeting's right-rail shows the same total, not a running count),
+  OT/SO wins counted as wins, `0-0` all through the preseason. No team
+  abbreviations on that object; pair it with the `Game` it was fetched
+  for. `seasonSeries[]` lists every meeting: completed ones carry
+  `awayTeam.score`/`homeTeam.score` and `gameOutcome.lastPeriodType`
+  (`REG`/`OT`, plus `otPeriods`), future ones have no scores -- verified
+  against real 2025-26 responses but not parsed or shown yet (#168). No stat
+  leaders here: `teamGameStats` is per-game aggregates (shots, PP,
+  penalties), not leaders.
 - `clock.inIntermission` lags the period actually ending -- confirmed
   against a real live game (NSH @ CAR, 2026-09-24) sitting at
   `timeRemaining: "00:00"`, `running: false`, `inIntermission: false` for

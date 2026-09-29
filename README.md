@@ -82,6 +82,7 @@ Early development. Working today:
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [x] Shots on goal, live, for every game; favourite's power play/empty net indicator
 - [x] Favourite's conference standings, interleaved with the idle rotation
+- [x] Opt-in season-series screen: the favourite's head-to-head record against their next opponent
 - [x] Goal horn and GOAL celebration screen
 - [x] Three stars of the game, once the favourite's game goes final
 - [x] Auto-dim from an optional BH1750 ambient light sensor
@@ -152,8 +153,9 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup
 # seconds = 10
+# "matchup" (season series vs. the next opponent) only shows if listed here.
 
 [audio]
 enabled = true

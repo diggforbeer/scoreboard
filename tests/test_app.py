@@ -32,7 +32,14 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow, Star
+from nhl_scoreboard.nhl.models import (
+    Game,
+    GoalEvent,
+    SeasonSeriesRecord,
+    Situation,
+    StandingsRow,
+    Star,
+)
 from nhl_scoreboard.status_server import _FIELDS_BY_SECTION
 from nhl_scoreboard.wifi_join import WifiJoinAttempt
 
@@ -108,6 +115,8 @@ class FakeClient:
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
         self.schedule_calls = 0
+        self.series: dict[int, SeasonSeriesRecord | None] = {}
+        self.season_series_calls: list[int] = []
 
     def scores(self, date: str = "now") -> list[Game]:
         self.calls += 1
@@ -144,6 +153,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return list(self.standings_rows)
+
+    def season_series(self, game_id: int) -> SeasonSeriesRecord | None:
+        self.season_series_calls.append(game_id)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.series.get(game_id)
 
     def close(self) -> None:
         self.closed = True
@@ -1611,6 +1626,7 @@ def stub_renderer(app: ScoreboardApp) -> None:
         "draw_countdown",
         "draw_preview",
         "draw_standings",
+        "draw_matchup",
         "draw_message",
         "draw_clock",
     ):

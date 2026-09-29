@@ -30,6 +30,7 @@ from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
     Game,
     GoalEvent,
+    SeasonSeriesRecord,
     Situation,
     StandingsRow,
     Star,
@@ -50,6 +51,9 @@ FRAME_INTERVAL = 0.5
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
 STANDINGS_TTL_SECONDS = 60 * 60
+#: The upcoming game's head-to-head tally (#157) only moves when another
+#: meeting between the same two teams finishes -- days or weeks apart.
+SEASON_SERIES_TTL_SECONDS = 60 * 60
 #: How much a new lux reading moves the smoothed value, 0-1. Low on purpose:
 #: this is what keeps a cloud passing over a window, or a hand briefly
 #: covering the sensor, from visibly flickering the panel.
@@ -94,13 +98,16 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``, ``clock``,
-    ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
+    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``, ``matchup``,
+    ``clock``, ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
     kind: str
     game: Game | None = None
     standings: tuple[StandingsRow, ...] | None = None
+    #: Set only for ``matchup`` (#157) -- oriented to ``game``'s own
+    #: away/home sides, as the API returns it.
+    season_series: SeasonSeriesRecord | None = None
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
@@ -255,6 +262,14 @@ class ScoreboardApp:
         self._standings: tuple[float, list[StandingsRow]] | None = None
         #: same backoff as _schedule_retry_after, for standings failures.
         self._standings_retry_after: float = 0.0
+        #: upcoming game id -> (fetched at, its head-to-head tally), for the
+        #: opt-in matchup screen (#157). Only the current upcoming game's
+        #: entry is ever kept; it's dropped once a different game is next.
+        self._season_series: dict[int, tuple[float, SeasonSeriesRecord | None]] = {}
+        #: upcoming game id -> retry-not-before, same backoff as
+        #: _standings_retry_after but per game, so a new upcoming game isn't
+        #: stuck behind the previous one's failure.
+        self._season_series_retry_after: dict[int, float] = {}
         #: game id -> the favourite's own score last seen in that game, so a
         #: goal can be detected as an increase. Set on first sighting without
         #: firing, so a game already 3-1 at startup does not fire a goal.
@@ -943,6 +958,47 @@ class ScoreboardApp:
             return None
         return Scene("standings", standings=tuple(window))
 
+    def _refresh_season_series(
+        self, game_id: int, *, allow_fetch: bool = True
+    ) -> SeasonSeriesRecord | None:
+        """The upcoming game's head-to-head tally, cached ``SEASON_SERIES_TTL_SECONDS``.
+
+        Same TTL + backoff-on-failure shape as ``_refresh_standings``, keyed
+        by game id since the answer is specific to one matchup. A failed
+        refresh keeps serving whatever was cached before it.
+        """
+        now_mono = self.monotonic()
+        entry = self._season_series.get(game_id)
+        stale = entry is None or now_mono - entry[0] > SEASON_SERIES_TTL_SECONDS
+        retry_after = self._season_series_retry_after.get(game_id, 0.0)
+        if allow_fetch and stale and now_mono >= retry_after:
+            # Only ever the one upcoming matchup worth remembering.
+            self._season_series = {k: v for k, v in self._season_series.items() if k == game_id}
+            self._season_series_retry_after = {}
+            try:
+                entry = (now_mono, self.client.season_series(game_id))
+                self._season_series[game_id] = entry
+            except NHLApiError as exc:
+                log.warning("Season series fetch for %s failed: %s", game_id, exc)
+                self._record_error(f"season series fetch: {exc}")
+                self._season_series_retry_after[game_id] = now_mono + SEASON_SERIES_TTL_SECONDS
+        return entry[1] if entry is not None else None
+
+    def _matchup_scene(self, upcoming: Game | None, *, allow_fetch: bool = True) -> Scene | None:
+        """The favourite's head-to-head record against their next opponent (#157).
+
+        None -- skipped for this rotation pass, never drawn blank -- with no
+        upcoming game, before the fetch has succeeded, or when the API had
+        no usable tally. A ``0-0`` tally (preseason, or no meeting finished
+        yet) is a real answer and does render.
+        """
+        if upcoming is None:
+            return None
+        record = self._refresh_season_series(upcoming.id, allow_fetch=allow_fetch)
+        if record is None:
+            return None
+        return Scene("matchup", upcoming, season_series=record)
+
     def _countdown_or_preview(self, upcoming: Game) -> Scene:
         cfg = self.settings.scoreboard
         if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
@@ -954,7 +1010,8 @@ class ScoreboardApp:
 
         Used whenever ``[[rotation]]`` isn't present in the config file, so
         an upgraded board's idle rotation is unchanged until the owner
-        opts into an explicit list.
+        opts into an explicit list. ``matchup`` (#157) is deliberately never
+        here: it only appears when someone lists it in ``[[rotation]]``.
         """
         cfg = self.settings.scoreboard
         entries = [RotationEntry("countdown_preview", cfg.rotate_seconds)]
@@ -968,7 +1025,12 @@ class ScoreboardApp:
         return self.settings.rotation or self._default_rotation()
 
     def _rotation_screen_scene(
-        self, screen: str, upcoming: Game | None, standings: Scene | None
+        self,
+        screen: str,
+        upcoming: Game | None,
+        standings: Scene | None,
+        *,
+        allow_fetch: bool = True,
     ) -> Scene | None:
         if screen == "countdown_preview":
             return self._countdown_or_preview(upcoming) if upcoming is not None else None
@@ -976,9 +1038,15 @@ class ScoreboardApp:
             return standings
         if screen == "clock":
             return Scene("clock")
+        if screen == "matchup":
+            # Resolved here, not up front like standings, so a board without
+            # "matchup" in its rotation never calls right-rail at all.
+            return self._matchup_scene(upcoming, allow_fetch=allow_fetch)
         return None
 
-    def _rotate_idle_scenes(self, upcoming: Game | None, standings: Scene | None) -> Scene | None:
+    def _rotate_idle_scenes(
+        self, upcoming: Game | None, standings: Scene | None, *, allow_fetch: bool = True
+    ) -> Scene | None:
         """Cycle the configured (or derived-default) rotation list, each entry its own dwell time.
 
         A configured entry with nothing to show right now -- ``standings``
@@ -990,7 +1058,12 @@ class ScoreboardApp:
         slots = [
             (scene, entry.seconds)
             for entry in self._effective_rotation()
-            if (scene := self._rotation_screen_scene(entry.screen, upcoming, standings)) is not None
+            if (
+                scene := self._rotation_screen_scene(
+                    entry.screen, upcoming, standings, allow_fetch=allow_fetch
+                )
+            )
+            is not None
         ]
         if not slots:
             return None
@@ -1248,7 +1321,7 @@ class ScoreboardApp:
             else self.next_favourite_game(allow_fetch=allow_fetch)
         )
         standings = self._standings_scene(allow_fetch=allow_fetch)
-        return self._rotate_idle_scenes(upcoming, standings)
+        return self._rotate_idle_scenes(upcoming, standings, allow_fetch=allow_fetch)
 
     def situation_targets(self) -> list[Game]:
         """Live games worth a second request: the favourite's and the on-screen one.
@@ -1385,6 +1458,8 @@ class ScoreboardApp:
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
+        elif scene.kind == "matchup":
+            r.draw_matchup(self.canvas, scene.game, scene.season_series)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":
