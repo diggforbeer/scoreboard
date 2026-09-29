@@ -86,6 +86,12 @@ SCAN_FILE="${NHL_SCOREBOARD_AP_SCAN_FILE:-/run/nhl-scoreboard-setup-ap-networks.
 # Not verified against real hardware timing (#4); overridable so tests
 # don't have to actually wait.
 SCAN_SETTLE_SECONDS="${NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS:-2}"
+# `iwctl ap ... start*` is retried once before giving up on that mode
+# (#173): this chip already has documented mode-switching flakiness (see
+# above), and one transient failure shouldn't leave the board with no AP
+# at all. Only the pause is overridable, so tests don't have to wait.
+AP_START_ATTEMPTS=2
+AP_START_RETRY_SECONDS="${NHL_SCOREBOARD_AP_START_RETRY_SECONDS:-2}"
 
 log() {
     logger -t nhl-scoreboard-setup-ap "$1"
@@ -190,6 +196,20 @@ scan_networks() {
     fi
 }
 
+# $@: everything after `iwctl ap <dev>`, e.g. `start-open <ssid>`.
+# Succeeds as soon as one attempt does; fails once all are exhausted.
+ap_start_with_retry() {
+    attempt=1
+    while ! iwctl ap "$IFACE" "$@"; do
+        if [ "$attempt" -ge "$AP_START_ATTEMPTS" ]; then
+            return 1
+        fi
+        log "iwctl ap $IFACE $1 failed (attempt $attempt of $AP_START_ATTEMPTS); retrying in ${AP_START_RETRY_SECONDS}s"
+        sleep "$AP_START_RETRY_SECONDS"
+        attempt=$((attempt + 1))
+    done
+}
+
 cmd_check() {
     if is_online; then
         log "Board has a default route; AP mode not needed"
@@ -222,10 +242,10 @@ cmd_start() {
     scan_networks
     iwctl device "$IFACE" set-property Mode ap
 
-    if iwctl ap "$IFACE" start-open "$SSID"; then
+    if ap_start_with_retry start-open "$SSID"; then
         log "AP mode: open network (no passphrase)"
         write_state_file true
-    elif iwctl ap "$IFACE" start "$SSID" "$PASSPHRASE"; then
+    elif ap_start_with_retry start "$SSID" "$PASSPHRASE"; then
         log "AP mode: iwd start-open unavailable; fell back to WPA2-PSK"
         write_state_file false
     else
