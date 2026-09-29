@@ -1,4 +1,4 @@
-"""nhl_scoreboard.ws_server (#178): real app state flows across a real
+"""nhl_scoreboard.admin_server (#178): real app state flows across a real
 WebSocket connection, in both directions.
 
 Plain `asyncio.run()` inside ordinary test functions rather than adding
@@ -11,13 +11,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import http.client
 import json
 
 import pytest
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
+from websockets.sync.client import connect as sync_connect
 
-from nhl_scoreboard import updater, ws_server
+from nhl_scoreboard import admin_server, updater
 
 
 @pytest.fixture
@@ -30,7 +32,7 @@ def app_dir(tmp_path, monkeypatch):
 def config_path(tmp_path, monkeypatch):
     path = tmp_path / "scoreboard.toml"
     path.write_text("")
-    monkeypatch.setattr(ws_server, "CONFIG_PATH", str(path))
+    monkeypatch.setattr(admin_server, "CONFIG_PATH", str(path))
     return path
 
 
@@ -44,20 +46,56 @@ def state_file(tmp_path, monkeypatch):
 @pytest.fixture
 def fake_systemctl(monkeypatch):
     calls = []
-    monkeypatch.setattr(ws_server.subprocess, "run", lambda *args, **kwargs: calls.append(args[0]))
+    monkeypatch.setattr(
+        admin_server.subprocess, "run", lambda *args, **kwargs: calls.append(args[0])
+    )
     return calls
 
 
+@pytest.fixture
+def admin_dir(tmp_path, monkeypatch):
+    """A real ADMIN_DIR with a built-looking index.html + one asset, for
+    the static-file-serving tests (#178 story 10) -- never the real
+    frontend/dist, just enough to exercise _static_response's own logic."""
+    directory = tmp_path / "admin"
+    directory.mkdir()
+    (directory / "index.html").write_text("<!doctype html><title>admin</title>")
+    (directory / "app.js").write_text("console.log('hi')")
+    monkeypatch.setattr(admin_server, "ADMIN_DIR", directory)
+    return directory
+
+
 async def _serve_and_run(scenario):
-    async with serve(ws_server._handle, "localhost", 0) as server:
+    async with serve(admin_server._handle, "localhost", 0) as server:
         port = server.sockets[0].getsockname()[1]
         async with connect(f"ws://localhost:{port}/") as client:
             return await scenario(client)
 
 
-async def _skip_initial(client, n=9):
+async def _serve_and_get(path):
+    """Same shape as _serve_and_run, but a plain HTTP GET through
+    _process_request -- the static-file half of story 10, not the
+    WebSocket half."""
+    async with serve(
+        admin_server._handle, "localhost", 0, process_request=admin_server._process_request
+    ) as server:
+        port = server.sockets[0].getsockname()[1]
+
+        def _get():
+            conn = http.client.HTTPConnection("localhost", port, timeout=5)
+            try:
+                conn.request("GET", path)
+                resp = conn.getresponse()
+                return resp.status, dict(resp.getheaders()), resp.read()
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(_get)
+
+
+async def _skip_initial(client, n=10):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update messages every connection opens with."""
+    rotation/update/snapshot messages every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -277,7 +315,7 @@ def test_rotation_save_rejects_non_positive_or_non_numeric_seconds(app_dir, conf
 
 
 def test_rotation_save_rejects_more_than_the_row_cap(app_dir, config_path):
-    rows = [{"screen": "clock", "seconds": 5}] * (ws_server.ROTATION_MAX_ROWS + 1)
+    rows = [{"screen": "clock", "seconds": 5}] * (admin_server.ROTATION_MAX_ROWS + 1)
 
     async def scenario(client):
         await _skip_initial(client)
@@ -287,7 +325,7 @@ def test_rotation_save_rejects_more_than_the_row_cap(app_dir, config_path):
     received = asyncio.run(_serve_and_run(scenario))
     message = json.loads(received)
     assert message["type"] == "error"
-    assert str(ws_server.ROTATION_MAX_ROWS) in message["message"]
+    assert str(admin_server.ROTATION_MAX_ROWS) in message["message"]
     assert config_path.read_text() == ""
 
 
@@ -406,12 +444,12 @@ def test_watcher_broadcasts_when_the_update_state_file_changes(
     """The actual point of story 4: a check/apply happening out of process
     (a real board would run it via systemd, not this call) still reaches
     every connected client without anyone asking again."""
-    monkeypatch.setattr(ws_server, "UPDATE_POLL_SECONDS", 0.02)
+    monkeypatch.setattr(admin_server, "UPDATE_POLL_SECONDS", 0.02)
 
     async def scenario():
-        watcher = asyncio.create_task(ws_server._watch_update_state())
+        watcher = asyncio.create_task(admin_server._watch_update_state())
         try:
-            async with serve(ws_server._handle, "localhost", 0) as server:
+            async with serve(admin_server._handle, "localhost", 0) as server:
                 port = server.sockets[0].getsockname()[1]
                 async with connect(f"ws://localhost:{port}/") as client:
                     await _skip_initial(client)
@@ -436,12 +474,12 @@ def test_watcher_broadcasts_when_the_update_state_file_changes(
 def test_watcher_broadcasts_to_every_connected_client(
     app_dir, config_path, state_file, monkeypatch
 ):
-    monkeypatch.setattr(ws_server, "UPDATE_POLL_SECONDS", 0.02)
+    monkeypatch.setattr(admin_server, "UPDATE_POLL_SECONDS", 0.02)
 
     async def scenario():
-        watcher = asyncio.create_task(ws_server._watch_update_state())
+        watcher = asyncio.create_task(admin_server._watch_update_state())
         try:
-            async with serve(ws_server._handle, "localhost", 0) as server:
+            async with serve(admin_server._handle, "localhost", 0) as server:
                 port = server.sockets[0].getsockname()[1]
                 async with (
                     connect(f"ws://localhost:{port}/") as client_a,
@@ -956,3 +994,164 @@ def test_wifi_save_rejects_a_non_object_payload(app_dir, config_path):
 
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received)["type"] == "error"
+
+
+# -- story 10: static file serving, the snapshot message, AdminServer -------
+
+
+def test_static_get_serves_index_html(admin_dir):
+    status, headers, body = asyncio.run(_serve_and_get("/"))
+    assert status == 200
+    assert headers["Content-Type"] == "text/html; charset=utf-8"
+    assert body == b"<!doctype html><title>admin</title>"
+
+
+def test_static_get_serves_a_real_asset_with_its_content_type(admin_dir):
+    status, headers, body = asyncio.run(_serve_and_get("/app.js"))
+    assert status == 200
+    assert headers["Content-Type"] == "text/javascript; charset=utf-8"
+    assert body == b"console.log('hi')"
+
+
+def test_static_get_falls_back_to_index_html_for_an_unknown_path(admin_dir):
+    """A single-page app with one real route -- any other path (a client-
+    side route, or just a typo) gets index.html, same as any other SPA's
+    server-side fallback."""
+    status, _, body = asyncio.run(_serve_and_get("/some/unknown/path"))
+    assert status == 200
+    assert body == b"<!doctype html><title>admin</title>"
+
+
+def test_static_get_rejects_path_traversal(admin_dir):
+    """A request for something outside ADMIN_DIR falls back to index.html
+    (not a 500, not a real file from elsewhere on disk)."""
+    status, _, body = asyncio.run(_serve_and_get("/../../../../etc/passwd"))
+    assert status == 200
+    assert body == b"<!doctype html><title>admin</title>"
+
+
+def test_websocket_upgrade_still_works_with_process_request_installed(admin_dir):
+    """The same disambiguation _process_request relies on (the Upgrade
+    header, not the path) -- a real WS handshake at "/" must still work
+    once static-file serving is wired onto the same port."""
+
+    async def scenario(client):
+        return await client.recv()
+
+    async def run():
+        async with serve(
+            admin_server._handle,
+            "localhost",
+            0,
+            process_request=admin_server._process_request,
+        ) as server:
+            port = server.sockets[0].getsockname()[1]
+            async with connect(f"ws://localhost:{port}/") as client:
+                return await scenario(client)
+
+    received = asyncio.run(run())
+    assert json.loads(received)["type"] == "version"
+
+
+def test_sends_an_empty_snapshot_with_no_provider_configured(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client, n=9)  # everything up to but not including snapshot
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "snapshot", "data": {}}
+
+
+def test_sends_the_configured_snapshot_on_connect(app_dir, config_path, monkeypatch):
+    monkeypatch.setattr(admin_server, "SNAPSHOT_PROVIDER", lambda: {"scene": "game", "error": ""})
+
+    async def scenario(client):
+        await _skip_initial(client, n=9)
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "snapshot",
+        "data": {"scene": "game", "error": ""},
+    }
+
+
+def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch):
+    """Same proven shape as _watch_update_state's own broadcast test --
+    the actual point of story 10's snapshot section: a scene change reaches
+    every connected client without anyone asking again."""
+    monkeypatch.setattr(admin_server, "SNAPSHOT_POLL_SECONDS", 0.02)
+    # A mutable dict the test flips directly, not a stateful iterator --
+    # SNAPSHOT_PROVIDER is called from two independent places (the
+    # connect-time send and the watcher's own poll loop), so an iterator
+    # shared between them would race on which call consumes which value.
+    state = {"scene": "preview"}
+    monkeypatch.setattr(admin_server, "SNAPSHOT_PROVIDER", lambda: dict(state))
+
+    async def scenario():
+        watcher = asyncio.create_task(admin_server._watch_snapshot())
+        try:
+            async with serve(admin_server._handle, "localhost", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                async with connect(f"ws://localhost:{port}/") as client:
+                    await _skip_initial(client, n=9)  # up to but not including the first snapshot
+                    first = json.loads(await client.recv())
+                    state["scene"] = "game"
+                    second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
+                    return first, second
+        finally:
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+
+    first, second = asyncio.run(scenario())
+    assert first["data"]["scene"] == "preview"
+    assert second["data"]["scene"] == "game"
+
+
+def test_admin_server_class_starts_and_stops(app_dir, config_path):
+    server = admin_server.AdminServer(config_path=str(config_path), port=0, host="localhost")
+    server.start()
+    try:
+        assert server.port != 0
+        with sync_connect(f"ws://localhost:{server.port}/", open_timeout=5) as ws:
+            message = json.loads(ws.recv(timeout=5))
+            assert message["type"] == "version"
+    finally:
+        server.stop()
+
+
+def test_admin_server_class_sets_config_path_and_snapshot_provider(app_dir, config_path, tmp_path):
+    """start() repoints the module-global CONFIG_PATH/SNAPSHOT_PROVIDER at
+    this instance's own values -- the same "just assign the module global"
+    convention the rest of this test file already relies on, now exercised
+    through the real class instead of a fixture."""
+    other_config = tmp_path / "other.toml"
+    other_config.write_text('[audio]\nenabled = false\ndevice = "hw:9,0"\nhorn_dir = ""\n')
+    server = admin_server.AdminServer(
+        config_path=str(other_config),
+        port=0,
+        host="localhost",
+        snapshot=lambda: {"scene": "final"},
+    )
+    server.start()
+    try:
+        with sync_connect(f"ws://localhost:{server.port}/", open_timeout=5) as ws:
+            messages = [json.loads(ws.recv(timeout=5)) for _ in range(10)]
+        audio = next(m for m in messages if m.get("section") == "audio")
+        assert audio["data"]["device"] == "hw:9,0"
+        snapshot = next(m for m in messages if m["type"] == "snapshot")
+        assert snapshot["data"] == {"scene": "final"}
+    finally:
+        server.stop()
+
+
+def test_admin_server_class_port_resolves_a_requested_port_of_zero(app_dir, config_path):
+    server = admin_server.AdminServer(config_path=str(config_path), port=0, host="localhost")
+    assert server.port == 0  # not started yet -- still the requested value
+    server.start()
+    try:
+        assert server.port != 0
+    finally:
+        server.stop()
+    assert server.port == 0  # stop() clears the resolved port

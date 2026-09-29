@@ -328,7 +328,7 @@ out of scope. Thread safety is the non-obvious part: gpiozero fires
 `when_held` from a separate hold-timer thread, so those callbacks only set
 plain bools, and `run()`'s own thread consumes them once per iteration
 (`handle_button()`) and does every actual mutation -- the same rule
-`status_server.py` follows for its request thread. A long press is told
+`admin_server.py` follows for its own thread. A long press is told
 apart from a short one by a per-press "hold already fired" bool that
 `when_pressed` resets and `when_released` checks, so a hold never also
 counts as a tap on release. Dependency follows the light sensor's pattern:
@@ -733,8 +733,11 @@ actually joining the chosen network is #133, not built yet.
   (`ssid_other`) wins over whatever radio button (`ssid_choice`) happens
   to still be selected.
 - **A new stdlib module, not a new systemd service.** `setup_server.py`
-  follows `status_server.py`'s own pattern (`http.server`, no
-  dependencies) and is started/stopped by `ScoreboardApp` itself
+  is `http.server`-based, no dependencies -- the pattern the original
+  `status_server.py` used too, before it was replaced by `admin_server.py`
+  (#178 story 10; unlike that page, `setup_server.py` genuinely must work
+  offline, so it stays stdlib-only on principle, not just by inheritance)
+  -- and is started/stopped by `ScoreboardApp` itself
   (`_sync_setup_server()`, called once per `run()` loop tick), gated on
   nothing but whether `nhl-scoreboard-setup-ap`'s own state file exists --
   the same signal `_ap_setup_scene` already keys off of for the panel's QR
@@ -854,15 +857,21 @@ assumptions.
   trusting it, not just the happy path -- #4, same as everything else here
   that needs a Pi.
 
-## Admin page frontend (React, in progress -- #178)
+## Admin page frontend (React, deployed to the device -- #178)
 
-The status/config page (`status_server.py`) is being rebuilt around a real
-JSON API + WebSocket live updates + a React frontend, replacing the current
-server-rendered-HTML-forms-with-full-page-POST model. Tracked issue #178
-has the full design, phasing, and open decisions (Vite, TypeScript,
-incremental rollout, WebSocket kept scoped to update-check/apply progress
-and save-without-reload -- not live game/score data). Built as vertical
-slices, one story at a time.
+The old status/config page (`status_server.py`, HTML-forms-with-full-page-
+POST) has been replaced with a real React frontend + WebSocket live
+updates, and as of Story 10 it's the page that actually ships and starts
+on boot -- `status_server.py` is deleted. Tracked issue #178 has the full
+design, phasing, and decisions (Vite, TypeScript, incremental rollout,
+WebSocket kept scoped to update-check/apply progress and save-without-
+reload, plus a read-only status snapshot -- not live game/score data,
+and not a channel for pushing scene changes to the panel itself). Built
+as vertical slices, one story at a time. **The server module was renamed
+`ws_server.py` -> `admin_server.py` in Story 10**, once it started serving
+the built static page too, not just a WebSocket -- every story below
+before Story 10 refers to it by its old name, describing what was true
+when it was written; that history is left as-is rather than rewritten.
 
 - **Story 1 (done): prove the pipeline end to end.** `frontend/` (a Vite +
   React + TypeScript SPA, `frontend/README.md` has the exact run commands)
@@ -1033,14 +1042,84 @@ slices, one story at a time.
   already present in the file (a real-world case, since scoreboard-
   provision writes those from a completed setup flow) that a save
   doesn't disturb them.
-- Not yet decided or built: every other section, the JSON-API-vs-
-  WebSocket-for-everything question (every save/action so far has gone
-  straight over the existing WebSocket connection rather than a separate
-  HTTP endpoint -- worth confirming that's still the right call once
-  something needs a shape this doesn't fit as naturally), deploying this
-  to the real device, or anything about the production React build
-  reaching the image (`frontend/`'s `dist/` is git-ignored, nothing here
-  ships yet).
+- **Story 10 (done): deploy to the real device, retire `status_server.py`.**
+  The owner's own call, made live in conversation after trying Story 9's
+  build locally ("we can delete the old site, and make this the one that
+  starts on boot now"), with two follow-up decisions surfaced and
+  confirmed before touching anything: port the status snapshot into the
+  new page first (below), and continue on the same PR rather than filing
+  a new issue. Three things landed together:
+  1. **One port serves the built React page and the WebSocket.**
+     `websockets`' own `process_request` hook (confirmed present in the
+     pinned `websockets>=13`, tested directly against 17.1 before relying
+     on it) intercepts every request; a genuine WebSocket upgrade
+     (`Upgrade: websocket` -- what a real browser's `new WebSocket(...)`
+     always sends, checked directly rather than assumed) is let through
+     to the existing handler, anything else is served as a static file
+     out of `ADMIN_DIR` (`/usr/share/nhl-scoreboard/admin` on the device,
+     same directory-env-var pattern as fonts' `NHL_SCOREBOARD_FONT_DIR`),
+     falling back to `index.html` for this single-page app's one route.
+     No reverse proxy, no second port. `frontend/dist` is a CI build
+     product now (`build-image.yml`'s new "Build admin frontend" step,
+     `actions/setup-node` + `npm ci` + `npm run build`, right before the
+     image build itself) that the image layer's own `customize-hooks`
+     copies in exactly the way team logos already are -- Node never
+     touches the device.
+  2. **`AdminServer` wraps the server on a background thread**, exposing
+     the same `start()`/`stop()`/`port` shape `StatusServer` had, so
+     `app.py`'s integration is a small diff at the same three call sites
+     `StatusServer` was built/started/stopped/rebuilt from (`__init__`,
+     `run()`, `reload_config_if_changed()`), not a rewrite of
+     `ScoreboardApp` itself. `StatusServer` ran a blocking `http.server`
+     loop in a plain thread; `AdminServer` runs its own `asyncio` loop in
+     the thread instead, signalling `stop()` via
+     `asyncio.run_coroutine_threadsafe` rather than an OS-level shutdown
+     call. `[status]`'s `enabled`/`port` fields are reused as-is -- same
+     TOML section, same meaning, just a different implementation
+     underneath; an existing board's boot-partition config needed no
+     migration.
+  3. **The status snapshot moved over too, not just the config editor.**
+     `status_server.py` served two genuinely different things:
+     `ScoreboardApp.status_snapshot()` (scene, current game, last poll,
+     last error -- read-only "headless debugging" state, found during
+     this story's own investigation, not something #178's earlier stories
+     had touched) alongside the HTML-forms editor. Dropping the snapshot
+     too would have been a real regression for anyone debugging a board
+     with no HDMI output, so a new "Board status" section (rendered
+     generically, key by key, same as `status_server.py`'s old
+     `.stat-grid`) ships in the same story. `SNAPSHOT_PROVIDER` is the
+     same "handed to it as a callable" relationship `StatusServer`'s own
+     `snapshot` parameter had; broadcast on change (`_watch_snapshot`),
+     same proven shape as `_watch_update_state`.
+
+  **Wi-Fi `ssid`/`password`/`country` editing did *not* carry over** --
+  explicitly dropped, a real decision surfaced and confirmed before
+  deleting `status_server.py`, not an oversight: that page's Wi-Fi
+  section had raw-TOML fields (unrelated to `WifiConfig`) that restarted
+  `scoreboard-provision.service` on save, letting an already-online board
+  switch networks directly from the admin page. The AP/captive-portal
+  flow (#131-#133) is now the one way to (re)join a network -- it covers
+  the far more common "board has no network yet" case with a real retry/
+  rollback state machine that the old direct-edit path never had.
+  Changing an already-online board's Wi-Fi now means walking it through
+  that flow (e.g. by disconnecting it) rather than editing a field here.
+
+  Verified two ways, since this story has no #4-style real-hardware
+  check available: a full local production-mode run (`npm run build`,
+  then `admin_server.py` pointed at the built `dist/` with
+  `NHL_SCOREBOARD_ADMIN_DIR`, no Vite involved at all) -- confirmed the
+  built page loads, a save round-trips, and the WebSocket still works on
+  the same port a static GET does; and the normal Vite-dev-server pass
+  used for every earlier story. **Not verified on real hardware** (no Pi
+  in this session) -- flagged the same way every other real-hardware-only
+  gap in this project is (see `image/layer/nhl-scoreboard.yaml`'s own
+  `python3-websockets` addition and CLAUDE.md's Image build facts).
+- Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
+  question (every save/action so far has gone straight over the existing
+  WebSocket connection rather than a separate HTTP endpoint -- worth
+  confirming that's still the right call once something needs a shape
+  this doesn't fit as naturally), and real-hardware verification of
+  Story 10 itself (#4).
 
 ## Disk-destructive code (grow-rootfs)
 

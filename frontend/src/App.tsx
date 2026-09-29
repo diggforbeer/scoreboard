@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
-// Python WebSocket server (nhl_scoreboard.ws_server, run separately for now:
-// `python -m nhl_scoreboard.ws_server`). See its own docstring for the
-// message protocol and what's been ported over so far (#178).
+// Python admin server (nhl_scoreboard.admin_server) -- one port serves both
+// this page's own production build and its WebSocket (#178 story 10); in
+// local dev, run it separately alongside the Vite dev server:
+// `python -m nhl_scoreboard.admin_server`. See its own docstring for the
+// message protocol and what's been ported over so far.
 const WS_URL = 'ws://localhost:8765/'
 
 // Mirrors config.py's VALID_ROTATION_SCREENS -- hardcoded here rather than
@@ -10,6 +12,59 @@ const WS_URL = 'ws://localhost:8765/'
 // to generalise yet" call the backend docstring makes.
 const ROTATION_SCREENS = ['countdown_preview', 'standings', 'clock', 'matchup'] as const
 const ROTATION_MAX_ROWS = 8
+
+// Abbreviations match display/teams.py's TEAM_COLORS keys exactly -- the
+// only place this project otherwise enumerates every team. Full names are
+// for this dropdown's own readability; the value saved is still just the
+// 3-letter abbreviation config.py has always expected. Sorted by name.
+const NHL_TEAMS = [
+  ['ANA', 'Anaheim Ducks'],
+  ['BOS', 'Boston Bruins'],
+  ['BUF', 'Buffalo Sabres'],
+  ['CGY', 'Calgary Flames'],
+  ['CAR', 'Carolina Hurricanes'],
+  ['CHI', 'Chicago Blackhawks'],
+  ['COL', 'Colorado Avalanche'],
+  ['CBJ', 'Columbus Blue Jackets'],
+  ['DAL', 'Dallas Stars'],
+  ['DET', 'Detroit Red Wings'],
+  ['EDM', 'Edmonton Oilers'],
+  ['FLA', 'Florida Panthers'],
+  ['LAK', 'Los Angeles Kings'],
+  ['MIN', 'Minnesota Wild'],
+  ['MTL', 'Montreal Canadiens'],
+  ['NSH', 'Nashville Predators'],
+  ['NJD', 'New Jersey Devils'],
+  ['NYI', 'New York Islanders'],
+  ['NYR', 'New York Rangers'],
+  ['OTT', 'Ottawa Senators'],
+  ['PHI', 'Philadelphia Flyers'],
+  ['PIT', 'Pittsburgh Penguins'],
+  ['SJS', 'San Jose Sharks'],
+  ['SEA', 'Seattle Kraken'],
+  ['STL', 'St. Louis Blues'],
+  ['TBL', 'Tampa Bay Lightning'],
+  ['TOR', 'Toronto Maple Leafs'],
+  ['UTA', 'Utah Mammoth'],
+  ['VAN', 'Vancouver Canucks'],
+  ['VGK', 'Vegas Golden Knights'],
+  ['WSH', 'Washington Capitals'],
+  ['WPG', 'Winnipeg Jets'],
+] as const
+
+// Common US timezones only, per the owner's request -- not every IANA zone.
+// scoreboard.timezone accepts any IANA name, so a config already set to
+// something outside this list is added as an extra option rather than
+// silently dropped (see the Scoreboard form below).
+const US_TIMEZONES = [
+  ['America/New_York', 'Eastern (America/New_York)'],
+  ['America/Chicago', 'Central (America/Chicago)'],
+  ['America/Denver', 'Mountain (America/Denver)'],
+  ['America/Phoenix', 'Mountain, no DST (America/Phoenix)'],
+  ['America/Los_Angeles', 'Pacific (America/Los_Angeles)'],
+  ['America/Anchorage', 'Alaska (America/Anchorage)'],
+  ['Pacific/Honolulu', 'Hawaii (Pacific/Honolulu)'],
+] as const
 
 type ConnectionState = 'connecting' | 'open' | 'closed'
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -72,7 +127,7 @@ interface PanelConfig {
 
 // Mirrors NightModeConfig's own *editable* fields (config.py) -- not
 // start/end, which are derived datetime.time values the server never
-// sends (see ws_server.py's _night_mode_payload).
+// sends (see admin_server.py's _night_mode_payload).
 interface NightModeConfig {
   enabled: boolean
   start_time: string
@@ -106,6 +161,12 @@ interface UpdateConfig {
   last_apply: string
 }
 
+// ScoreboardApp.status_snapshot()'s dict, handed straight through by
+// admin_server.py's own "snapshot" message (#178 story 10) -- this page
+// has no more idea what a scene or a game is than the server does, so
+// keys are rendered generically rather than modelled one field at a time.
+type SnapshotData = Record<string, string>
+
 type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
@@ -116,6 +177,7 @@ type ServerMessage =
   | { type: 'config'; section: 'wifi'; data: WifiConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
+  | { type: 'snapshot'; data: SnapshotData }
   | { type: 'saved'; section: string }
   | { type: 'error'; section?: string; message: string }
   | { type: 'checking' }
@@ -131,6 +193,23 @@ function saveFeedback(status: SaveStatus, error: string | null) {
   if (status === 'saved') return <span className="text-success">Saved.</span>
   if (status === 'error') return <span className="text-danger">{error}</span>
   return null
+}
+
+function teamName(abbrev: string) {
+  const team = NHL_TEAMS.find(([code]) => code === abbrev)
+  return team ? team[1] : '(none)'
+}
+
+// One line, colour-coded, for the "Software update" status box -- the same
+// four states the Software update card itself distinguishes, just
+// summarised at a glance rather than with its own Check/Install buttons.
+function updateStatusLine(update: UpdateConfig | null) {
+  if (!update) return <span className="text-body-secondary">waiting...</span>
+  if (update.error) return <span className="text-danger">Check failed</span>
+  if (update.available && update.applicable) {
+    return <span className="text-warning">Update available: {update.latest}</span>
+  }
+  return <span className="text-success">Up to date</span>
 }
 
 function App() {
@@ -172,6 +251,8 @@ function App() {
   const [updatePhase, setUpdatePhase] = useState<'idle' | 'checking' | 'applying'>('idle')
   const [rebooting, setRebooting] = useState(false)
 
+  const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
+
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
@@ -198,6 +279,9 @@ function App() {
             setUpdate(message.data)
             setUpdatePhase('idle') // real data just arrived -- whatever was in flight is done
           }
+          break
+        case 'snapshot':
+          setSnapshot(message.data)
           break
         case 'saved':
           if (message.section === 'audio') setAudioSaveStatus('saved')
@@ -352,15 +436,74 @@ function App() {
   }
 
   return (
-    <div className="container py-4" style={{ maxWidth: '40rem' }}>
-      <header className="d-flex justify-content-between align-items-center mb-4">
+    <div className="container py-4" style={{ maxWidth: '75rem' }}>
+      <header className="mb-4">
         <h1 className="h3 mb-0">Hockey Scoreboard</h1>
-        {connectionBadge(connection)}
       </header>
 
-      <p className="text-body-secondary">
-        Installed version: {version ?? 'waiting for server...'}
-      </p>
+      <div className="row g-3 mb-4">
+        <div className="col-6 col-md-3">
+          <div className="card h-100">
+            <div className="card-body text-center py-2">
+              <div className="text-body-secondary small">Connection</div>
+              <div className="fs-5">{connectionBadge(connection)}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div className="card h-100">
+            <div className="card-body text-center py-2">
+              <div className="text-body-secondary small">Version</div>
+              <div className="fs-5">{version ?? 'waiting...'}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div className="card h-100">
+            <div className="card-body text-center py-2">
+              <div className="text-body-secondary small">Software update</div>
+              <div className="fs-5">{updateStatusLine(update)}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-6 col-md-3">
+          <div className="card h-100">
+            <div className="card-body text-center py-2">
+              <div className="text-body-secondary small">Favourite team</div>
+              <div className="fs-5">
+                {scoreboard ? teamName(scoreboard.favourite_team) : 'waiting...'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Board status</h2>
+          {snapshot ? (
+            Object.keys(snapshot).length === 0 ? (
+              <p className="text-body-secondary mb-0">
+                No live app to report on (local dev, or a board with no ScoreboardApp attached).
+              </p>
+            ) : (
+              <div className="row row-cols-2 row-cols-md-4 g-2">
+                {Object.entries(snapshot).map(([key, value]) => (
+                  <div className="col" key={key}>
+                    <div className="text-body-secondary small text-capitalize">{key}</div>
+                    <div>{value || '(none)'}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="row g-4">
+      <div className="col-lg-6">
 
       <div className="card mb-4">
         <div className="card-body">
@@ -369,28 +512,43 @@ function App() {
             <form onSubmit={saveScoreboard}>
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-favourite-team">
-                  Favourite team (3-letter abbrev, blank for none)
+                  Favourite team
                 </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
                   id="sb-favourite-team"
-                  type="text"
                   value={scoreboard.favourite_team}
                   onChange={(e) => setScoreboard({ ...scoreboard, favourite_team: e.target.value })}
-                />
+                >
+                  <option value="">(none)</option>
+                  {NHL_TEAMS.map(([abbrev, name]) => (
+                    <option key={abbrev} value={abbrev}>
+                      {name} ({abbrev})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-timezone">
-                  Timezone (IANA name, e.g. America/Chicago)
+                  Timezone
                 </label>
-                <input
-                  className="form-control"
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
                   id="sb-timezone"
-                  type="text"
                   value={scoreboard.timezone}
                   onChange={(e) => setScoreboard({ ...scoreboard, timezone: e.target.value })}
-                />
+                >
+                  {!US_TIMEZONES.some(([zone]) => zone === scoreboard.timezone) && (
+                    <option value={scoreboard.timezone}>{scoreboard.timezone}</option>
+                  )}
+                  {US_TIMEZONES.map(([zone, label]) => (
+                    <option key={zone} value={zone}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <h3 className="h6 text-body-secondary mt-4">Timing</h3>
@@ -472,112 +630,6 @@ function App() {
                   Save Scoreboard
                 </button>
                 {saveFeedback(scoreboardSaveStatus, scoreboardSaveError)}
-              </div>
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Audio</h2>
-          {audio ? (
-            <form onSubmit={saveAudio}>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="audio-enabled"
-                  checked={audio.enabled}
-                  onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="audio-enabled">
-                  Goal horn enabled
-                </label>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="audio-device">
-                  ALSA device (blank for default)
-                </label>
-                <input
-                  className="form-control"
-                  id="audio-device"
-                  type="text"
-                  value={audio.device}
-                  onChange={(e) => setAudio({ ...audio, device: e.target.value })}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="audio-horn-dir">
-                  Horn directory override (blank for default)
-                </label>
-                <input
-                  className="form-control"
-                  id="audio-horn-dir"
-                  type="text"
-                  value={audio.horn_dir}
-                  onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
-                />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={audioSaveStatus === 'saving'}
-                >
-                  Save Audio
-                </button>
-                {saveFeedback(audioSaveStatus, audioSaveError)}
-              </div>
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Status page</h2>
-          {status ? (
-            <form onSubmit={saveStatus}>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="status-enabled"
-                  checked={status.enabled}
-                  onChange={(e) => setStatus({ ...status, enabled: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="status-enabled">
-                  Status page enabled
-                </label>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="status-port">
-                  Status page port
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="status-port"
-                  type="number"
-                  step="1"
-                  value={status.port}
-                  onChange={(e) => setStatus({ ...status, port: Number(e.target.value) })}
-                />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={statusSaveStatus === 'saving'}
-                >
-                  Save Status page
-                </button>
-                {saveFeedback(statusSaveStatus, statusSaveError)}
               </div>
             </form>
           ) : (
@@ -791,6 +843,201 @@ function App() {
         </div>
       </div>
 
+      </div>
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Idle rotation</h2>
+          {rotation ? (
+            <form onSubmit={saveRotation}>
+              <p className="text-body-secondary small">
+                Screens shown when the favourite is not live, in this order. Up to{' '}
+                {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
+                (countdown/preview, standings, clock).
+              </p>
+              {rotation.map((row, i) => (
+                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
+                  <select
+                    className="form-select"
+                    style={{ width: 'auto' }}
+                    value={row.screen}
+                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
+                  >
+                    {ROTATION_SCREENS.map((screen) => (
+                      <option key={screen} value={screen}>
+                        {screen}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="form-control"
+                    style={{ width: '6rem' }}
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={row.seconds}
+                    onChange={(e) => updateRow(i, { ...row, seconds: Number(e.target.value) })}
+                  />
+                  <span className="text-body-secondary small">seconds</span>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, -1)}
+                    disabled={i === 0}
+                    aria-label="Move up"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, 1)}
+                    disabled={i === rotation.length - 1}
+                    aria-label="Move down"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm"
+                    onClick={() => removeRow(i)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={addRow}
+                  disabled={rotation.length >= ROTATION_MAX_ROWS}
+                >
+                  Add row
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={rotationSaveStatus === 'saving'}
+                >
+                  Save idle rotation
+                </button>
+                {saveFeedback(rotationSaveStatus, rotationSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Audio</h2>
+          {audio ? (
+            <form onSubmit={saveAudio}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-enabled"
+                  checked={audio.enabled}
+                  onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-enabled">
+                  Goal horn enabled
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-device">
+                  ALSA device (blank for default)
+                </label>
+                <input
+                  className="form-control"
+                  id="audio-device"
+                  type="text"
+                  value={audio.device}
+                  onChange={(e) => setAudio({ ...audio, device: e.target.value })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-horn-dir">
+                  Horn directory override (blank for default)
+                </label>
+                <input
+                  className="form-control"
+                  id="audio-horn-dir"
+                  type="text"
+                  value={audio.horn_dir}
+                  onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={audioSaveStatus === 'saving'}
+                >
+                  Save Audio
+                </button>
+                {saveFeedback(audioSaveStatus, audioSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Status page</h2>
+          {status ? (
+            <form onSubmit={saveStatus}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="status-enabled"
+                  checked={status.enabled}
+                  onChange={(e) => setStatus({ ...status, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="status-enabled">
+                  Status page enabled
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="status-port">
+                  Status page port
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="status-port"
+                  type="number"
+                  step="1"
+                  value={status.port}
+                  onChange={(e) => setStatus({ ...status, port: Number(e.target.value) })}
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={statusSaveStatus === 'saving'}
+                >
+                  Save Status page
+                </button>
+                {saveFeedback(statusSaveStatus, statusSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
       <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Night mode</h2>
@@ -946,93 +1193,7 @@ function App() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-body">
-          <h2 className="card-title h5">Idle rotation</h2>
-          {rotation ? (
-            <form onSubmit={saveRotation}>
-              <p className="text-body-secondary small">
-                Screens shown when the favourite is not live, in this order. Up to{' '}
-                {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
-                (countdown/preview, standings, clock).
-              </p>
-              {rotation.map((row, i) => (
-                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
-                  <select
-                    className="form-select"
-                    style={{ width: 'auto' }}
-                    value={row.screen}
-                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
-                  >
-                    {ROTATION_SCREENS.map((screen) => (
-                      <option key={screen} value={screen}>
-                        {screen}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="form-control"
-                    style={{ width: '6rem' }}
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={row.seconds}
-                    onChange={(e) => updateRow(i, { ...row, seconds: Number(e.target.value) })}
-                  />
-                  <span className="text-body-secondary small">seconds</span>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, -1)}
-                    disabled={i === 0}
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, 1)}
-                    disabled={i === rotation.length - 1}
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => removeRow(i)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={addRow}
-                  disabled={rotation.length >= ROTATION_MAX_ROWS}
-                >
-                  Add row
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={rotationSaveStatus === 'saving'}
-                >
-                  Save idle rotation
-                </button>
-                {saveFeedback(rotationSaveStatus, rotationSaveError)}
-              </div>
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mt-4">
+      <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Software update</h2>
           {update ? (
@@ -1084,7 +1245,7 @@ function App() {
         </div>
       </div>
 
-      <div className="card mt-4 mb-4">
+      <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Reboot</h2>
           <p className="text-body-secondary small">
@@ -1099,6 +1260,9 @@ function App() {
             </button>
           )}
         </div>
+      </div>
+
+      </div>
       </div>
     </div>
   )

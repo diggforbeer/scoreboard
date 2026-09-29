@@ -1,13 +1,17 @@
-"""Admin page WebSocket server (#178).
+"""Admin page server: static React build + WebSocket, one port (#178).
+
+Named ``admin_server`` (not ``ws_server``, its name through story 9) since
+story 10 made it serve the built frontend too, not just a WebSocket --
+started by ``ScoreboardApp`` on the real device now, same as
+``StatusServer`` (the page this replaces) was.
 
 Scope, deliberately narrow -- built as vertical slices, not the finished
 thing:
 
-* Local-dev only. Not started by ``ScoreboardApp``, not wired into
-  ``image/layer/nhl-scoreboard.yaml`` or any systemd unit -- run it by hand
-  (``python -m nhl_scoreboard.ws_server``) alongside the React dev server.
-  Deploying this to the real board is a later story (#178 was explicit that
-  story 1 shouldn't decide that yet).
+* Local-dev only *through story 9*. Not started by ``ScoreboardApp``, not
+  wired into ``image/layer/nhl-scoreboard.yaml`` or any systemd unit -- run
+  it by hand (``python -m nhl_scoreboard.admin_server``) alongside the
+  React dev server. Story 10 changed this -- see below.
 * Story 1: prove the pipeline. On connect, sends the installed version once
   (the same value the admin page's status grid already shows, via
   ``updater.installed_version()``).
@@ -107,8 +111,60 @@ thing:
   out of scope for this whole rebuild (see the note right after story
   1). This section only tunes how long a join attempt waits before
   deciding it failed.
+* Story 10: deploy to the real device, retire ``status_server.py``. Three
+  things landed together, all driven by the same decision (the owner: "we
+  can delete the old site, and make this the one that starts on boot"):
 
-No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
+  1. **One port serves the built React page and the WebSocket.**
+     ``websockets``' own ``process_request`` hook (confirmed present in the
+     pinned ``websockets>=13``, tested directly against 17.1 before relying
+     on it) intercepts every incoming request; a genuine WebSocket upgrade
+     (``Upgrade: websocket`` header -- what a real browser's
+     ``new WebSocket(...)`` always sends, checked directly rather than
+     assumed) is let through to ``_handle`` as before, anything else is
+     served as a static file out of ``ADMIN_DIR`` (``_static_response``),
+     falling back to ``index.html`` for this single-page app's one route.
+     No reverse proxy, no second port.
+  2. **``AdminServer`` wraps ``run()`` on a background thread**, exposing
+     the same ``start()``/``stop()``/``port`` shape ``StatusServer`` (the
+     class this replaces) had, so ``app.py``'s integration is a small diff
+     at the same three call sites ``StatusServer`` was built/started/
+     stopped/rebuilt from, not a rewrite of ``ScoreboardApp`` itself.
+     ``StatusServer`` ran a blocking ``http.server`` loop in a plain
+     thread; this runs its own ``asyncio`` loop in the thread instead,
+     since ``run()`` is a coroutine -- ``stop()`` signals it via
+     ``asyncio.run_coroutine_threadsafe`` rather than an OS-level shutdown
+     call, since there's no ``httpd.shutdown()`` equivalent for a bare
+     ``serve()`` context manager.
+  3. **The status snapshot moved over too**, not just the config editor:
+     ``status_server.py`` served two genuinely different things --
+     ``ScoreboardApp.status_snapshot()`` (scene, current game, last poll,
+     last error -- read-only "headless debugging" state) alongside the
+     HTML-forms editor. Only the editor had a home in the new page through
+     story 9; dropping the snapshot too would have been a real regression
+     for anyone debugging a board with no HDMI output, so it's ported
+     here first. ``SNAPSHOT_PROVIDER`` is the same "handed to it as a
+     callable" relationship ``StatusServer``'s own ``snapshot`` parameter
+     had -- this module still has no model of what a scene or a game is,
+     it just forwards whatever dict it's given. Broadcast on change
+     (``_watch_snapshot``), same proven shape as ``_watch_update_state``.
+
+  ``[status]``'s ``enabled``/``port`` fields are reused as-is for this
+  server -- same TOML section, same meaning ("is the web admin page on,
+  and where"), just a different implementation underneath; an existing
+  board's boot-partition config needed no migration. Wi-Fi ``ssid``/
+  ``password``/``country`` editing, which ``status_server.py``'s own Wi-Fi
+  section had (raw TOML fields, unrelated to ``WifiConfig``, restarting
+  ``scoreboard-provision.service`` on save) did **not** carry over --
+  explicitly dropped, not an oversight: the AP/captive-portal flow (#131-
+  #133) is now the one way to (re)join a network, covering the far more
+  common "board has no network yet" case with a real retry/rollback state
+  machine; changing an already-online board's Wi-Fi now means walking it
+  through that flow (e.g. by disconnecting it) rather than editing a
+  field here.
+
+No auth, same trust model ``status_server.py`` (the page this replaces)
+had: a LAN-only admin tool, not something to port-forward.
 """
 
 from __future__ import annotations
@@ -120,9 +176,15 @@ import json
 import logging
 import os
 import subprocess
+import threading
+from collections.abc import Callable
+from http import HTTPStatus
+from pathlib import Path
 
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.datastructures import Headers
+from websockets.http11 import Request, Response
 
 from . import updater
 from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
@@ -132,13 +194,23 @@ log = logging.getLogger(__name__)
 
 #: Overridable so a second instance (or a test) doesn't collide with one
 #: already running locally -- same convention as StatusServer's port.
-HOST = os.environ.get("NHL_SCOREBOARD_WS_HOST", "localhost")
-PORT = int(os.environ.get("NHL_SCOREBOARD_WS_PORT", "8765"))
+HOST = os.environ.get("NHL_SCOREBOARD_ADMIN_HOST", "localhost")
+PORT = int(os.environ.get("NHL_SCOREBOARD_ADMIN_PORT", "8765"))
 #: scoreboard.toml to read/write. Defaults to the same git-ignored dev
 #: config every other local-dev command uses (`nhl-scoreboard -c
 #: scoreboard.local.toml`); DEFAULT_CONFIG_PATHS (config.py) are real
-#: device-only paths that don't exist on a dev machine.
+#: device-only paths that don't exist on a dev machine. Rebound at runtime
+#: by AdminServer.start() to the real board's resolved config path (#178
+#: story 10) -- same "just assign the module global" convention the test
+#: suite already uses (monkeypatch.setattr(admin_server, "CONFIG_PATH", ...)).
 CONFIG_PATH = os.environ.get("NHL_SCOREBOARD_CONFIG", "scoreboard.local.toml")
+#: The built frontend (`frontend/dist`, a CI build product -- see
+#: build-image.yml) -- served for any plain HTTP GET, same directory
+#: pattern as NHL_SCOREBOARD_FONT_DIR for fonts.py. Local dev doesn't use
+#: this at all (frontend/README.md's `npm run dev` / Vite is the real dev
+#: workflow); it matters for `npm run build` + a manual verification pass,
+#: and for the real device.
+ADMIN_DIR = Path(os.environ.get("NHL_SCOREBOARD_ADMIN_DIR", "/usr/share/nhl-scoreboard/admin"))
 #: Same recommendation as status_server.py's rotation editor (#151) --
 #: generous but finite, so an unbounded list doesn't need its own
 #: pagination story. Enforced server-side here too, not just by the
@@ -146,12 +218,26 @@ CONFIG_PATH = os.environ.get("NHL_SCOREBOARD_CONFIG", "scoreboard.local.toml")
 ROTATION_MAX_ROWS = 8
 #: How often to check updater.STATE_FILE for a change while a check/apply
 #: might be running. Overridable so tests don't wait a real second.
-UPDATE_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_WS_UPDATE_POLL", "1"))
+UPDATE_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_UPDATE_POLL", "1"))
+#: How often to check the live snapshot for a change (#178 story 10) --
+#: much chattier than UPDATE_POLL_SECONDS since scene/game state changes
+#: far more often than an update check does, but still just a poll, not
+#: pushed straight off the main loop -- this process has no other way to
+#: know ScoreboardApp's state changed except asking again.
+SNAPSHOT_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_SNAPSHOT_POLL", "2"))
 
-#: Every currently-open connection -- the update-state watcher broadcasts
-#: to all of them, unlike everything else here, which only ever replies to
-#: whoever sent the request.
+#: Every currently-open connection -- the update-state/snapshot watchers
+#: broadcast to all of them, unlike everything else here, which only ever
+#: replies to whoever sent the request.
 _clients: set[ServerConnection] = set()
+
+#: ScoreboardApp.status_snapshot, injected by AdminServer.start() (#178
+#: story 10) -- None in every other context (local dev, tests, the plain
+#: CLI entry point via main()), which have no live app to ask. Same
+#: "handed to it as a callable" relationship status_server.py's own
+#: snapshot parameter had -- this module still has no idea what a scene or
+#: a game is.
+SNAPSHOT_PROVIDER: Callable[[], dict[str, str]] | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -330,6 +416,20 @@ def _update_payload() -> dict[str, object]:
     }
 
 
+def _snapshot_payload() -> dict[str, object]:
+    """ScoreboardApp.status_snapshot()'s dict, handed straight through --
+    same "this module has no idea what a scene or a game is" relationship
+    status_server.py's own snapshot parameter had. An empty dict (no
+    provider configured -- local dev, tests, or the plain `main()` CLI
+    entry point) is a valid, harmless payload; the frontend just shows
+    nothing rather than "waiting..." forever.
+    """
+    return {
+        "type": "snapshot",
+        "data": SNAPSHOT_PROVIDER() if SNAPSHOT_PROVIDER is not None else {},
+    }
+
+
 async def _broadcast(payload: dict[str, object]) -> None:
     raw = json.dumps(payload)
     # A snapshot, not a live iteration over _clients -- a connection can
@@ -378,6 +478,10 @@ async def _send_night_mode_config(connection: ServerConnection) -> None:
 async def _send_wifi_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_wifi_payload(settings)))
+
+
+async def _send_snapshot(connection: ServerConnection) -> None:
+    await connection.send(json.dumps(_snapshot_payload()))
 
 
 async def _send_update_config(connection: ServerConnection) -> None:
@@ -430,6 +534,24 @@ async def _watch_update_state() -> None:
             if _clients:
                 await _broadcast(_update_payload())
         await asyncio.sleep(UPDATE_POLL_SECONDS)
+
+
+async def _watch_snapshot() -> None:
+    """Broadcast a fresh snapshot to every client whenever it changes (#178
+    story 10) -- same shape as _watch_update_state, the proven pattern for
+    "this process has no other way to know something changed except
+    polling for it". A no-op loop (SNAPSHOT_PROVIDER stays None) in every
+    context but a real device: local dev, tests, and the plain `main()`
+    CLI entry point have no live ScoreboardApp to ask.
+    """
+    last: dict[str, str] | None = None
+    while True:
+        current = SNAPSHOT_PROVIDER() if SNAPSHOT_PROVIDER is not None else None
+        if current != last:
+            last = current
+            if _clients and current is not None:
+                await _broadcast(_snapshot_payload())
+        await asyncio.sleep(SNAPSHOT_POLL_SECONDS)
 
 
 def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[str, object]:
@@ -553,6 +675,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_wifi_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
+        await _send_snapshot(connection)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:
@@ -579,16 +702,74 @@ async def _handle(connection: ServerConnection) -> None:
         _clients.discard(connection)
 
 
+# -- static file serving (#178 story 10) -------------------------------------
+#
+# One port serves both the page and the WebSocket -- websockets' own
+# process_request hook (confirmed present in the pinned websockets>=13,
+# tested against 17.1) fires for every incoming request, upgrade or not.
+# The frontend connects its WebSocket at the same path ("/") the page is
+# served from, so requests are told apart by the Upgrade header, not the
+# path -- a real browser's `new WebSocket(...)` always sends a genuine
+# `Upgrade: websocket` header; a plain page-load GET never does. Verified
+# directly against a running server before relying on it, not assumed from
+# the library's docs alone.
+
+_CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".json": "application/json",
+    ".ico": "image/x-icon",
+    ".png": "image/png",
+    ".woff2": "font/woff2",
+}
+
+
+def _static_response(request_path: str) -> Response:
+    """Serve a file out of ADMIN_DIR, falling back to index.html.
+
+    This is a single-page app with exactly one client-side route ("/"),
+    so any path that isn't a real file under ADMIN_DIR -- including "/"
+    itself -- gets index.html, same as any other SPA's server-side
+    fallback. ``.resolve()`` + a containment check guards against a
+    path-traversal request (``/../../etc/passwd``) escaping ADMIN_DIR.
+    """
+    admin_dir = ADMIN_DIR.resolve()
+    rel = request_path.split("?", 1)[0].lstrip("/") or "index.html"
+    candidate = (admin_dir / rel).resolve()
+    outside_admin_dir = candidate != admin_dir and admin_dir not in candidate.parents
+    if outside_admin_dir or not candidate.is_file():
+        candidate = admin_dir / "index.html"
+    try:
+        body = candidate.read_bytes()
+    except OSError:
+        return Response(HTTPStatus.NOT_FOUND, "Not Found", Headers(), b"")
+    content_type = _CONTENT_TYPES.get(candidate.suffix, "application/octet-stream")
+    headers = Headers([("Content-Type", content_type), ("Content-Length", str(len(body)))])
+    return Response(HTTPStatus.OK, "OK", headers, body)
+
+
+async def _process_request(connection: ServerConnection, request: Request) -> Response | None:
+    if request.headers.get("Upgrade", "").lower() == "websocket":
+        return None  # let the WebSocket handshake proceed as normal
+    return _static_response(request.path)
+
+
 async def run(host: str = HOST, port: int = PORT) -> None:
     watcher = asyncio.create_task(_watch_update_state())
+    snapshot_watcher = asyncio.create_task(_watch_snapshot())
     try:
-        async with serve(_handle, host, port) as server:
-            log.info("Admin WebSocket server listening on ws://%s:%d/", host, port)
+        async with serve(_handle, host, port, process_request=_process_request) as server:
+            log.info("Admin server listening on http://%s:%d/ (page + WebSocket)", host, port)
             await server.serve_forever()
     finally:
         watcher.cancel()
+        snapshot_watcher.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await watcher
+        with contextlib.suppress(asyncio.CancelledError):
+            await snapshot_watcher
 
 
 def main() -> None:
@@ -596,6 +777,95 @@ def main() -> None:
     log.info("websockets %s", websockets.__version__)
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(run())
+
+
+# -- thread lifecycle (#178 story 10) -----------------------------------------
+
+
+class AdminServer:
+    """Runs `run()` on a background thread with its own asyncio loop, until
+    `stop()` -- the same start/stop/port shape `StatusServer` (the page
+    this replaces) had, so `app.py`'s integration is a small diff, not a
+    rewrite. `StatusServer` ran a blocking `http.server` loop in a plain
+    `threading.Thread`; this does the asyncio equivalent, since `run()`
+    itself is a coroutine.
+    """
+
+    def __init__(
+        self,
+        config_path: str,
+        port: int,
+        snapshot: Callable[[], dict[str, str]] | None = None,
+        host: str = "0.0.0.0",  # intentional: a LAN admin page, see module docstring
+    ) -> None:
+        self._config_path = config_path
+        self._port = port
+        self._snapshot = snapshot
+        self._host = host
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._thread: threading.Thread | None = None
+        self._stop_event: asyncio.Event | None = None
+        self._bound_port: int | None = None
+
+    @property
+    def port(self) -> int:
+        """The bound port -- resolves a requested port of 0 to the one actually picked."""
+        return self._bound_port if self._bound_port is not None else self._port
+
+    def start(self) -> None:
+        global CONFIG_PATH, SNAPSHOT_PROVIDER
+        CONFIG_PATH = self._config_path
+        SNAPSHOT_PROVIDER = self._snapshot
+        ready = threading.Event()
+        self._thread = threading.Thread(
+            target=lambda: asyncio.run(self._serve(ready)), name="admin-server", daemon=True
+        )
+        self._thread.start()
+        if not ready.wait(timeout=5):
+            log.warning("Admin server did not confirm startup within 5s")
+
+    async def _serve(self, ready: threading.Event) -> None:
+        self._loop = asyncio.get_running_loop()
+        self._stop_event = asyncio.Event()
+        watcher = asyncio.create_task(_watch_update_state())
+        snapshot_watcher = asyncio.create_task(_watch_snapshot())
+        try:
+            async with serve(
+                _handle, self._host, self._port, process_request=_process_request
+            ) as server:
+                self._bound_port = server.sockets[0].getsockname()[1]
+                log.info(
+                    "Admin server listening on http://%s:%d/ (page + WebSocket)",
+                    self._host,
+                    self.port,
+                )
+                ready.set()
+                await self._stop_event.wait()
+        finally:
+            watcher.cancel()
+            snapshot_watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+            with contextlib.suppress(asyncio.CancelledError):
+                await snapshot_watcher
+
+    def stop(self) -> None:
+        if self._loop is not None and self._stop_event is not None:
+            stop_event = self._stop_event
+            with contextlib.suppress(RuntimeError):
+                asyncio.run_coroutine_threadsafe(
+                    self._set_stop_event(stop_event), self._loop
+                ).result(timeout=5)
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        self._loop = None
+        self._thread = None
+        self._stop_event = None
+        self._bound_port = None
+
+    @staticmethod
+    async def _set_stop_event(stop_event: asyncio.Event) -> None:
+        stop_event.set()
 
 
 if __name__ == "__main__":

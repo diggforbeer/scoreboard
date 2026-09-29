@@ -51,6 +51,12 @@ mmdebstrap:
     # code -- just the module-matrix computation (pyproject.toml's `qrcode`
     # dep), same apt-not-pip reasoning as python3-tomlkit above.
     - python3-qrcode
+    # admin_server.py (#178 story 10) serves the admin page's WebSocket --
+    # pyproject.toml's `websockets` dep, same apt-not-pip reasoning as
+    # python3-tomlkit/python3-qrcode above. Confirmed a real apt package on
+    # this image's Debian release (15.0.1-1) before relying on it (#178
+    # story 1's own investigation).
+    - python3-websockets
     - iw
     # WiFi AP + captive-portal DHCP/DNS for first-boot setup mode (#131),
     # when neither ethernet nor a configured Wi-Fi profile leaves the board
@@ -145,6 +151,23 @@ mmdebstrap:
       cp -a "$LOGOS"/. "$1/usr/share/nhl-scoreboard/logos/"
       find "$1/usr/share/nhl-scoreboard/logos" -type f -exec chmod 0644 {} +
       echo "Installed $(find "$1/usr/share/nhl-scoreboard/logos" -name '*.png' | wc -l) logo files"
+
+    # ---- admin page (React build) ---------------------------------------
+    # frontend/dist is a CI build product (build-image.yml's own "Build
+    # admin frontend" step, `npm run build`), not a repo file -- Node never
+    # touches the image itself, same "build tools are CI-only" stance as
+    # the rgbmatrix compiler toolchain purged below. admin_server.py
+    # (#178 story 10) serves this directory for any plain HTTP GET.
+    - |-
+      set -eu
+      DIST="$IGconf_sb_srcdir/frontend/dist"
+      if [ ! -f "$DIST/index.html" ]; then
+        echo "ERROR: $DIST/index.html missing. Run 'npm run build' in frontend/ first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/share/nhl-scoreboard/admin"
+      cp -a "$DIST"/. "$1/usr/share/nhl-scoreboard/admin/"
+      find "$1/usr/share/nhl-scoreboard/admin" -type f -exec chmod 0644 {} +
 
     # ---- goal horns ----------------------------------------------------
     # The default siren is synthesized and committed to the repo (not
@@ -349,7 +372,7 @@ mmdebstrap:
     - |-
       set -eu
       chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
-        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.button, nhl_scoreboard.status_server, nhl_scoreboard.setup_server, nhl_scoreboard.updater"
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.button, nhl_scoreboard.admin_server, nhl_scoreboard.setup_server, nhl_scoreboard.updater"
         python3 -m nhl_scoreboard --help >/dev/null
         # button.py imports gpiozero lazily, so the line above cannot
         # catch a missing python3-gpiozero; import it directly instead.
