@@ -902,14 +902,36 @@ slices, one story at a time.
   interaction (not just unit tests): unchecked the box, typed a device
   string, clicked Save, watched "Saved." appear with zero page reload --
   the actual thing this whole rebuild is for.
+- **Story 3 (done): the idle rotation list (`[[rotation]]`, #150/#151).**
+  Unlike Audio (fixed scalar fields), this is an ordered, variable-length
+  list -- `config.py`'s own `Settings.save()` already special-cases
+  `"rotation"` to replace the whole list rather than patch keys (see its
+  docstring), so `ws_server.py` just validates the incoming list the same
+  way `config.py`'s `_parse_rotation` does (unknown screen, non-positive
+  seconds) and passes it through -- except a live save rejects the whole
+  list on the first bad row instead of silently dropping it, since a
+  person editing this page should see exactly what's wrong, unlike a
+  hand-edited boot TOML where a typo must not stop the board booting.
+  Also enforces the same row cap `status_server.py`'s HTML version
+  recommended (`ROTATION_MAX_ROWS = 8`), server-side, not just via the
+  frontend disabling its own button. **The numeric "order" field and the
+  full-page-round-trip add/remove buttons in the HTML version existed
+  specifically to work around having no client-side JS (#151) -- gone
+  here.** Row order is just the list's own order now; the frontend does
+  real add/remove/reorder (↑/↓ swap-with-neighbour) in local state, one
+  Save sends the whole list. Verified with a real headless-browser
+  interaction: added three rows, edited two, removed one, reordered the
+  remaining two, saved, and confirmed the file on disk matched exactly
+  (right screens, right seconds, right order) -- not just that the UI
+  looked right.
 - Not yet decided or built: every other section, the JSON-API-vs-
-  WebSocket-for-everything question (Audio's save went straight over the
-  existing WebSocket connection rather than a separate HTTP endpoint --
-  worth confirming that's still the right call once a section needs
-  something WebSocket-shaped push doesn't fit as naturally), deploying
-  this to the real device, or anything about the production React build
-  reaching the image (`frontend/`'s `dist/` is git-ignored, nothing here
-  ships yet).
+  WebSocket-for-everything question (both Audio's and rotation's saves
+  went straight over the existing WebSocket connection rather than a
+  separate HTTP endpoint -- worth confirming that's still the right call
+  once a section needs something WebSocket-shaped push doesn't fit as
+  naturally), deploying this to the real device, or anything about the
+  production React build reaching the image (`frontend/`'s `dist/` is
+  git-ignored, nothing here ships yet).
 
 ## Disk-destructive code (grow-rootfs)
 

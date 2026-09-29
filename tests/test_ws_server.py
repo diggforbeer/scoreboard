@@ -40,6 +40,12 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
+async def _skip_initial(client, n=3):
+    """Drain the version/audio/rotation messages every connection opens with."""
+    for _ in range(n):
+        await client.recv()
+
+
 # -- story 1: version on connect --------------------------------------------
 
 
@@ -66,8 +72,7 @@ def test_connection_stays_open_after_the_initial_messages(app_dir, config_path):
     still open afterward, ready to keep exchanging messages on."""
 
     async def scenario(client):
-        await client.recv()  # version
-        await client.recv()  # audio config
+        await _skip_initial(client)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(client.recv(), timeout=0.2)
         return client.state.name == "OPEN"
@@ -95,8 +100,7 @@ def test_sends_the_current_audio_config_on_connect(app_dir, config_path):
 
 def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
     async def scenario(client):
-        await client.recv()  # version
-        await client.recv()  # initial audio config
+        await _skip_initial(client)
         await client.send(
             json.dumps(
                 {
@@ -120,8 +124,7 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
 
 def test_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
     async def scenario(client):
-        await client.recv()
-        await client.recv()
+        await _skip_initial(client)
         await client.send(json.dumps({"type": "save", "section": "audio", "data": {"bogus": "x"}}))
         return await client.recv()
 
@@ -134,8 +137,7 @@ def test_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_
 
 def test_save_rejects_the_wrong_type_without_writing_the_file(app_dir, config_path):
     async def scenario(client):
-        await client.recv()
-        await client.recv()
+        await _skip_initial(client)
         await client.send(
             json.dumps({"type": "save", "section": "audio", "data": {"enabled": "not a bool"}})
         )
@@ -150,8 +152,7 @@ def test_save_rejects_the_wrong_type_without_writing_the_file(app_dir, config_pa
 
 def test_save_rejects_an_unknown_section(app_dir, config_path):
     async def scenario(client):
-        await client.recv()
-        await client.recv()
+        await _skip_initial(client)
         await client.send(json.dumps({"type": "save", "section": "wifi", "data": {}}))
         return await client.recv()
 
@@ -163,8 +164,7 @@ def test_save_rejects_an_unknown_section(app_dir, config_path):
 
 def test_unknown_message_type_gets_an_error_not_a_crash(app_dir, config_path):
     async def scenario(client):
-        await client.recv()
-        await client.recv()
+        await _skip_initial(client)
         await client.send(json.dumps({"type": "not-a-real-type"}))
         return await client.recv()
 
@@ -174,10 +174,121 @@ def test_unknown_message_type_gets_an_error_not_a_crash(app_dir, config_path):
 
 def test_invalid_json_gets_an_error_not_a_crash(app_dir, config_path):
     async def scenario(client):
-        await client.recv()
-        await client.recv()
+        await _skip_initial(client)
         await client.send("not json at all")
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received)["type"] == "error"
+
+
+# -- story 3: the idle rotation list ------------------------------------------
+
+
+def test_sends_the_current_rotation_on_connect(app_dir, config_path):
+    config_path.write_text(
+        '[[rotation]]\nscreen = "standings"\nseconds = 12\n\n'
+        '[[rotation]]\nscreen = "clock"\nseconds = 8\n'
+    )
+
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "rotation",
+        "data": [
+            {"screen": "standings", "seconds": 12.0},
+            {"screen": "clock", "seconds": 8.0},
+        ],
+    }
+
+
+def test_rotation_save_writes_the_list_in_the_given_order(app_dir, config_path):
+    rows = [{"screen": "clock", "seconds": 5}, {"screen": "standings", "seconds": 15}]
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "rotation"}
+    assert json.loads(fresh)["data"] == [
+        {"screen": "clock", "seconds": 5.0},
+        {"screen": "standings", "seconds": 15.0},
+    ]
+    # Order in the file matches the order sent -- no separate "order" field
+    # to sort by (#151's HTML version needed one; this doesn't).
+    text = config_path.read_text()
+    assert text.index('screen = "clock"') < text.index('screen = "standings"')
+
+
+def test_rotation_save_rejects_an_unknown_screen(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = [{"screen": "bogus-screen", "seconds": 5}]
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "row 1" in message["message"]
+    assert config_path.read_text() == ""
+
+
+@pytest.mark.parametrize("seconds", [0, -5, "five", True])
+def test_rotation_save_rejects_non_positive_or_non_numeric_seconds(app_dir, config_path, seconds):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = [{"screen": "clock", "seconds": seconds}]
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert config_path.read_text() == ""
+
+
+def test_rotation_save_rejects_more_than_the_row_cap(app_dir, config_path):
+    rows = [{"screen": "clock", "seconds": 5}] * (ws_server.ROTATION_MAX_ROWS + 1)
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert str(ws_server.ROTATION_MAX_ROWS) in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_rotation_save_rejects_a_non_list_payload(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"screen": "clock", "seconds": 5}  # a single row, not wrapped in a list
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received)["type"] == "error"
+
+
+def test_rotation_save_accepts_an_empty_list(app_dir, config_path):
+    """Empty is valid -- falls back to the built-in default rotation, same
+    as config.py's own _parse_rotation treats an absent/empty [[rotation]]."""
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": []}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "saved", "section": "rotation"}
