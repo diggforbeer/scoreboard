@@ -48,6 +48,8 @@ class Rig:
         self.dnsmasq_conf = tmp_path / "dnsmasq.conf"
         self.state_file = tmp_path / "state.json"
         self.scan_file = tmp_path / "networks.json"
+        self.counter_dir = tmp_path / "counters"
+        self.counter_dir.mkdir()
 
         write_fake(
             self.bindir,
@@ -60,9 +62,24 @@ class Rig:
         write_fake(
             self.bindir,
             "iwctl",
+            # FAKE_IWCTL_AP_START*_FAIL_TIMES=N fails the first N calls and
+            # succeeds after -- a transient failure, counted in a per-
+            # subcommand file since each call is a fresh process.
+            "fail_first() {\n"
+            '  n=$(cat "$FAKE_COUNTER_DIR/$1" 2>/dev/null || echo 0)\n'
+            "  n=$((n + 1))\n"
+            '  echo "$n" > "$FAKE_COUNTER_DIR/$1"\n'
+            '  [ "$n" -gt "$2" ]\n'
+            "}\n"
             'case "$3" in\n'
-            '  start-open) exit "${FAKE_IWCTL_AP_START_OPEN_EXIT:-0}" ;;\n'
-            '  start) exit "${FAKE_IWCTL_AP_START_EXIT:-0}" ;;\n'
+            "  start-open)\n"
+            '    [ -z "${FAKE_IWCTL_AP_START_OPEN_FAIL_TIMES-}" ] || '
+            'fail_first start-open "$FAKE_IWCTL_AP_START_OPEN_FAIL_TIMES" || exit 1\n'
+            '    exit "${FAKE_IWCTL_AP_START_OPEN_EXIT:-0}" ;;\n'
+            "  start)\n"
+            '    [ -z "${FAKE_IWCTL_AP_START_FAIL_TIMES-}" ] || '
+            'fail_first start "$FAKE_IWCTL_AP_START_FAIL_TIMES" || exit 1\n'
+            '    exit "${FAKE_IWCTL_AP_START_EXIT:-0}" ;;\n'
             '  stop) exit "${FAKE_IWCTL_AP_STOP_EXIT:-0}" ;;\n'
             '  scan) exit "${FAKE_IWCTL_SCAN_EXIT:-0}" ;;\n'
             "  get-networks)\n"
@@ -85,6 +102,8 @@ class Rig:
             # Real scans need to settle asynchronously (see the script's own
             # comment); tests don't have a real radio to wait on.
             "NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS": "0",
+            "NHL_SCOREBOARD_AP_START_RETRY_SECONDS": "0",
+            "FAKE_COUNTER_DIR": str(self.counter_dir),
             **(env_extra or {}),
         }
         result = subprocess.run(
@@ -92,6 +111,11 @@ class Rig:
         )
         result.calls = self.call_log.read_text()
         return result
+
+
+def count_calls(calls: list[str], suffix: str) -> int:
+    """Fakes log their own full path as $0, so match on the command's tail."""
+    return sum(1 for c in calls if c.endswith(suffix))
 
 
 @pytest.fixture
@@ -182,6 +206,47 @@ def test_ap_totally_unavailable_never_starts_dnsmasq(rig):
     assert result.returncode != 0
     assert "dnsmasq" not in result.calls
     assert not rig.state_file.exists()
+    # Every mode gets its full retry budget (#173) before giving up, not
+    # just a single attempt.
+    calls = result.calls.splitlines()
+    assert count_calls(calls, "iwctl ap wlan0 start-open NHL-Scoreboard-Setup") == 2
+    assert count_calls(calls, "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard") == 2
+
+
+def test_transient_start_open_failure_is_retried(rig):
+    """#173: one transient `ap start-open` failure (this chip's known
+    mode-switching flakiness) must not give up on the open network, let
+    alone on AP mode entirely."""
+    result = rig.run(
+        "start",
+        env_extra={"FAKE_DEFAULT_ROUTE": "", "FAKE_IWCTL_AP_START_OPEN_FAIL_TIMES": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+    calls = result.calls.splitlines()
+    assert count_calls(calls, "iwctl ap wlan0 start-open NHL-Scoreboard-Setup") == 2
+    # The retry succeeded, so the PSK fallback is never reached.
+    assert count_calls(calls, "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard") == 0
+    assert "retrying" in result.stdout
+    assert "dnsmasq --no-daemon" in result.calls
+    state = json.loads(rig.state_file.read_text())
+    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": None, "open": True}
+
+
+def test_transient_psk_start_failure_is_retried(rig):
+    result = rig.run(
+        "start",
+        env_extra={
+            "FAKE_DEFAULT_ROUTE": "",
+            "FAKE_IWCTL_AP_START_OPEN_EXIT": "1",
+            "FAKE_IWCTL_AP_START_FAIL_TIMES": "1",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    calls = result.calls.splitlines()
+    assert count_calls(calls, "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard") == 2
+    assert "dnsmasq --no-daemon" in result.calls
+    state = json.loads(rig.state_file.read_text())
+    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard", "open": False}
 
 
 def test_ap_settings_are_overridable(rig):
