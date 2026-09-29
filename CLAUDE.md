@@ -422,7 +422,29 @@ exit; with `show_logos = false` every step is just text.
   dark panel with an otherwise-healthy service.
 - `dtparam=audio=off` and `isolcpus=3` are required; the HUB75 driver and
   onboard audio share the PWM peripheral. Audio → USB. Not the 3.5mm jack,
-  not I2S (GPIO 21 is LAT).
+  not I2S -- **the actual conflict is GPIO 18** (OE, hardware PWM per the
+  bullet above), which is also the Pi's native I2S PCM clock pin. A
+  previous version of this note said "GPIO 21 is LAT" -- that was wrong
+  (see the pin table below) and has been corrected; the practical advice
+  (don't enable I2S) was right regardless.
+- **Full `regular`-mapping GPIO pin table, confirmed against the exact
+  vendored commit** (`scripts/fetch-vendor.sh`'s pinned `MATRIX_REF`),
+  not the library's docs/wiki, which can drift from what's actually
+  pinned -- read the pinned commit's `lib/hardware-mapping.c` struct
+  literally rather than trust prose:
+  OE=18, CLK=17, Strobe/LAT=4, address A-E=22/23/24/25/15,
+  chain-0 RGB (both sub-panel rows)=R1:11 G1:27 B1:7 R2:8 G2:9 B2:10.
+  That's every pin this driver claims at `parallel=1` (this project's
+  config) -- also confirmed by reading `lib/framebuffer.cc`'s
+  `InitGPIO`, which only ORs chain-1/chain-2 pins into the claimed-pins
+  bitmask when `parallel >= 2`/`>= 3` respectively, so those pins are
+  never touched at `parallel=1` regardless of what the mapping struct
+  lists for them. Genuinely free GPIOs on the 40-pin header at this
+  project's config: 5, 6, 12, 13, 14, 16, 19, 20, 21, 26 (2/3 are taken
+  by the BH1750 sensor's I2C bus, #44) -- 14/15 are the UART pair (15
+  already claimed above), so prefer 26 or 16 for anything new (e.g.
+  #50's button) over 14, same "pick an unremarkable pin" reasoning that
+  put the sensor on 2/3.
 - Pixel pitch (`pitch_mm`) is informational; the driver never sees it.
 - Panel spec sheet (the actual purchased hardware): 64×32 / 2048 dots,
   160×80mm at P2.5, 1R1G1B, ≥140° viewing angle, 1/16 scan, HUB75 header,
