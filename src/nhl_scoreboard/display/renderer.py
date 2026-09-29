@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game, GoalEvent, StandingsRow, Star
+from ..nhl.models import Game, GoalEvent, SeasonSeriesRecord, StandingsRow, Star
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_secondary_color
@@ -488,6 +488,61 @@ class Renderer:
         x = self.width // 2 - sum(text_width(font, t) for t, _ in parts) // 2
         for text, color in parts:
             x += self.text(canvas, font, x, y, color, text)
+
+    def draw_matchup(self, canvas: Any, game: Game, record: SeasonSeriesRecord) -> None:
+        """Head-to-head wins this season for the upcoming game (#157).
+
+        Same frame as ``_draw_upcoming`` -- the big line above the rule, a
+        caption below it -- so it reads as a sibling of the preview it
+        rotates with. The tally is away-home, matching the game scene's own
+        left/right order. Only the win tally: individual past meetings'
+        scores are a deferred follow-up, not drawn here.
+        """
+        canvas.Clear()
+        rule_y = 19
+        tally = f"{record.away_wins}-{record.home_wins}"
+        bottom_baseline = self.height - 2
+
+        away = home = None
+        if self.logos is not None:
+            away, home = self.logos.get(game.away.abbrev), self.logos.get(game.home.abbrev)
+
+        if away is not None and home is not None:
+            left, right = self._draw_logos(canvas, away, home)
+            centre = (left + right) // 2
+            self.text_center(canvas, self.fonts.large, centre, 13, WHITE, tally)
+            self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+            font, caption = self._series_caption(right - left - 2)
+            self.text_center(canvas, font, centre, bottom_baseline, SUBDUED, caption)
+            return
+
+        # No artwork: the abbreviations flank the tally instead, in the large
+        # face when it fits (always at 128px) and the small one otherwise.
+        parts = (
+            (f"{game.away.abbrev} ", team_color(game.away.abbrev)),
+            (tally, WHITE),
+            (f" {game.home.abbrev}", team_color(game.home.abbrev)),
+        )
+        max_w = self.width - 4
+        font = self.fonts.large
+        if sum(text_width(font, t) for t, _ in parts) > max_w:
+            font = self.fonts.small
+        x = self.width // 2 - sum(text_width(font, t) for t, _ in parts) // 2
+        for text, color in parts:
+            x += self.text(canvas, font, x, 13, color, text)
+        self.hline(canvas, 0, self.width - 1, rule_y, DIM)
+        font, caption = self._series_caption(max_w)
+        self.text_center(canvas, font, self.width // 2, bottom_baseline, SUBDUED, caption)
+
+    def _series_caption(self, max_width: int) -> tuple[Any, str]:
+        """The widest "season series" label that fits: small face, then tiny, then short."""
+        for font, caption in (
+            (self.fonts.small, "SEASON SERIES"),
+            (self.fonts.tiny, "SEASON SERIES"),
+        ):
+            if text_width(font, caption) <= max_width:
+                return font, caption
+        return self.fonts.small, "SERIES"
 
     #: Column offsets relative to the content area's left edge (past the
     #: favourite's logo, when there is one), so values of different widths

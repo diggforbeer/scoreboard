@@ -398,6 +398,15 @@ def test_rotation_parses_screen_and_seconds_in_file_order(tmp_path):
     ]
 
 
+def test_rotation_accepts_the_opt_in_matchup_screen(tmp_path):
+    """#157: only reachable by listing it explicitly -- see test_flow's default-rotation test."""
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[[rotation]]\nscreen = "matchup"\nseconds = 6\n')
+    assert Settings.load(path).rotation == [RotationEntry("matchup", 6.0)]
+
+
 def test_rotation_entry_with_unknown_screen_is_dropped_with_a_warning(tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[[rotation]]\nscreen = "weather"\nseconds = 10\n')
