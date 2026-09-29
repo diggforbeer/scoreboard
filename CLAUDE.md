@@ -282,8 +282,8 @@ lands, or when the API had no usable tally; `0-0` is a real answer and
 does render. This is the first scene showing opponent-specific data;
 that precedent covers exactly this win tally and nothing broader
 (opponent leaders, injuries, etc. each need their own decision). Only the
-tally ships -- individual past-meeting scores and team/player stat
-leaders are separate follow-ups.
+tally ships -- individual past-meeting scores (#168) and team/player
+stat leaders (#169) are separate follow-ups.
 
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
@@ -360,7 +360,7 @@ exit; with `show_logos = false` every step is just text.
   for. `seasonSeries[]` lists every meeting: completed ones carry
   `awayTeam.score`/`homeTeam.score` and `gameOutcome.lastPeriodType`
   (`REG`/`OT`, plus `otPeriods`), future ones have no scores -- verified
-  against real 2025-26 responses but not parsed or shown yet. No stat
+  against real 2025-26 responses but not parsed or shown yet (#168). No stat
   leaders here: `teamGameStats` is per-game aggregates (shots, PP,
   penalties), not leaders.
 - `clock.inIntermission` lags the period actually ending -- confirmed
