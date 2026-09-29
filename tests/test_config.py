@@ -4,7 +4,13 @@ import logging
 
 import pytest
 
-from nhl_scoreboard.config import ConfigWriteError, Settings, resolve_timezone
+from nhl_scoreboard.config import (
+    PANEL_HARDWARE_MAPPING_CHOICES,
+    ConfigWriteError,
+    Settings,
+    next_hardware_mapping,
+    resolve_timezone,
+)
 
 
 def test_defaults_describe_two_chained_64x32_panels():
@@ -466,3 +472,13 @@ def test_save_writes_rotation_as_an_array_of_tables(tmp_path):
     assert "[[rotation]]" in text
     # The untouched [scoreboard] section survives the write.
     assert 'favourite_team = "NSH"' in text
+
+
+def test_next_hardware_mapping_cycles_through_all_documented_choices():
+    assert next_hardware_mapping("regular") == "adafruit-hat"
+    assert next_hardware_mapping("adafruit-hat") == "adafruit-hat-pwm"
+    assert next_hardware_mapping("adafruit-hat-pwm") == "regular"
+
+
+def test_next_hardware_mapping_unknown_value_starts_over_at_the_first_choice():
+    assert next_hardware_mapping("some-hand-edited-value") == PANEL_HARDWARE_MAPPING_CHOICES[0]

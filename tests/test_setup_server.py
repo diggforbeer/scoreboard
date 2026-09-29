@@ -208,3 +208,125 @@ def test_unknown_path_is_also_redirected_since_dns_is_wildcarded():
         assert resp.getheader("Location") == "/"
     finally:
         server.stop()
+
+
+# --------------------------------------------------------------------------
+# display check (#172): confirm the panel is actually showing something
+# before assuming a wrong hardware_mapping isn't the problem.
+# --------------------------------------------------------------------------
+
+
+def test_page_shows_current_mapping_when_not_in_a_trial():
+    server = SetupServer(
+        networks=lambda: [],
+        on_submit=lambda ssid, password: None,
+        port=0,
+        host="127.0.0.1",
+        panel_state=lambda: ("regular", False),
+    )
+    server.start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+        assert "regular" in body
+        assert "try a different display type" in body
+        # Not gated: the WiFi form is present and usable.
+        assert 'name="ssid_other"' in body
+        assert "Yes, it&#x27;s working" not in body and "Yes, it's working" not in body
+    finally:
+        server.stop()
+
+
+def test_page_gates_the_wifi_form_while_a_trial_is_in_progress():
+    server = SetupServer(
+        networks=lambda: ["Home Wifi"],
+        on_submit=lambda ssid, password: None,
+        port=0,
+        host="127.0.0.1",
+        panel_state=lambda: ("adafruit-hat", True),
+    )
+    server.start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=5) as resp:
+            body = resp.read().decode("utf-8")
+        assert "adafruit-hat" in body
+        assert "Yes, it&#39;s working" in body or "Yes, it's working" in body
+        assert 'name="ssid_other"' not in body
+        assert "Confirm the display" in body
+    finally:
+        server.stop()
+
+
+def test_posting_wifi_form_while_gated_is_rejected_and_does_not_call_on_submit():
+    submitted = []
+    server = SetupServer(
+        networks=lambda: [],
+        on_submit=lambda ssid, password: submitted.append((ssid, password)),
+        port=0,
+        host="127.0.0.1",
+        panel_state=lambda: ("adafruit-hat", True),
+    )
+    server.start()
+    try:
+        status, _ = _post(f"http://127.0.0.1:{server.port}/", "ssid_other=Home&password=")
+        assert status == 409
+        assert submitted == []
+    finally:
+        server.stop()
+
+
+def test_panel_next_calls_the_callback_and_shows_the_restarting_page():
+    calls = []
+    server = SetupServer(
+        networks=lambda: [],
+        on_submit=lambda ssid, password: None,
+        port=0,
+        host="127.0.0.1",
+        on_panel_next=lambda: calls.append(1) or "adafruit-hat",
+    )
+    server.start()
+    try:
+        status, body = _post(f"http://127.0.0.1:{server.port}/panel/next", "")
+        assert status == 200
+        assert calls == [1]
+        assert "adafruit-hat" in body
+        assert "Restarting" in body
+    finally:
+        server.stop()
+
+
+def test_panel_next_failure_is_reported_without_a_restarting_page():
+    server = SetupServer(
+        networks=lambda: [],
+        on_submit=lambda ssid, password: None,
+        port=0,
+        host="127.0.0.1",
+        on_panel_next=lambda: None,
+    )
+    server.start()
+    try:
+        status, body = _post(f"http://127.0.0.1:{server.port}/panel/next", "")
+        assert status == 500
+        assert "Could not save" in body
+    finally:
+        server.stop()
+
+
+def test_panel_confirm_calls_the_callback_and_redirects_home():
+    calls = []
+    server = SetupServer(
+        networks=lambda: [],
+        on_submit=lambda ssid, password: None,
+        port=0,
+        host="127.0.0.1",
+        on_panel_confirm=lambda: calls.append(1),
+    )
+    server.start()
+    try:
+        resp = _get_without_following_redirects(server.port, "/")  # sanity: page loads
+        assert resp.status == 200
+        status, _ = _post(f"http://127.0.0.1:{server.port}/panel/confirm", "")
+        assert status == 200  # urlopen follows the redirect to "/"
+        assert calls == [1]
+    finally:
+        server.stop()

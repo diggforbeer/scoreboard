@@ -854,6 +854,70 @@ assumptions.
   trusting it, not just the happy path -- #4, same as everything else here
   that needs a Pi.
 
+## AP-setup display check (#172)
+
+Closes the gap the Hardware facts entry above flags: a wrong
+`hardware_mapping` is a silent, error-free failure, and until this landed
+the only way to discover one was SSH + reading logs -- not a reasonable ask
+of the setup flow's actual target user. Builds directly on #131/#132's AP
+setup page, before #172's own originally-scoped "picker" phase 1 was
+built -- a picker alone doesn't help someone who doesn't know which name
+matches their hardware, and the picker's config-editor twin
+(`status_server.py`) already existed but needed a full board reboot and,
+worse, is only reachable once WiFi has already joined and torn the AP down.
+
+- **A "display check" card, not a picker.** `setup_server.py`'s page (the
+  same one #132 built for WiFi) now opens with: the currently configured
+  `hardware_mapping`, and a prompt to confirm the panel is actually showing
+  this page's own SSID/password/QR scene right now. "It's not lighting up"
+  cycles to the next of the 3 documented candidates
+  (`config.PANEL_HARDWARE_MAPPING_CHOICES`/`next_hardware_mapping`) and
+  restarts `nhl-scoreboard.service` -- no naming/identification knowledge
+  required, just "does the panel show something now, yes or no."
+- **The WiFi form is gated while a trial is unconfirmed.** A successful
+  WiFi join tears this very AP down (#133) -- letting someone submit
+  credentials mid-trial would strand an unconfirmed, possibly-still-dark
+  display with no way back in once that happens. Enforced twice: hidden
+  from the rendered page, and rejected (409) server-side in `do_POST` if
+  posted anyway. "Yes, it's working" (`/panel/confirm`) ungates it.
+  Everyone else -- the common case, where the default `hardware_mapping`
+  already matches their adapter -- sees the card but is never blocked by
+  it.
+- **`[panel]` never hot-reloads** (see this file's Hardware facts and
+  `config.py`'s `Settings.save()`/`reload_config_if_changed()` docstrings),
+  so "try the next option" writes the new value then fires
+  `systemctl restart nhl-scoreboard.service` on a background thread (same
+  fire-and-forget pattern as `status_server.py`'s `_reboot_board()`) --
+  restarting only the app, not the whole board, so the phone's own
+  connection to the AP is never interrupted, only the setup page's process
+  for a couple of seconds. The HTTP response (a meta-refresh page, no JS,
+  same stdlib-only stance as the rest of this flow) is written before the
+  restart can land, same ordering `_reboot_board()` already relies on.
+- **A trial survives the restart it causes, on purpose.** Cycling
+  mappings kills and restarts the very process serving the setup page, so
+  in-memory state can't track "which candidate, still unconfirmed" across
+  that gap -- `/run/nhl-scoreboard-hw-mapping-trial.json` (existence only,
+  no content needed: the mapping itself is read fresh from
+  `settings.panel.hardware_mapping`, which the restart already reloads from
+  disk) is what survives it. Cleared on "yes, it's working", and defensively
+  by `_sync_setup_server()` whenever the AP setup flow itself ends (WiFi
+  joined, or setup disabled) -- so a later AP session on the same boot
+  (WiFi drops hours later) never inherits a stale gate from one that
+  already finished. `/run`, same never-survives-a-reboot convention as
+  every other AP-setup-mode state file.
+- **`PANEL_HARDWARE_MAPPING_CHOICES` is shared**, not duplicated --
+  `status_server.py`'s own config-editor picker (`_Field` for
+  `panel.hardware_mapping`) now reads the same tuple from `config.py`
+  instead of its own hardcoded literal, so the two pages can't drift.
+- **Not yet built**: the original issue's phase 2 (fully automatic
+  cycling with no explicit "no, try the next option" click) -- deliberately
+  not pursued; this lighter design (explicit action, but gated/restart-
+  aware) was judged to close the actual gap (a correct-looking default that
+  was easy to skip past) with meaningfully less machinery. Also not
+  verified on real hardware (#4): the restart-and-recheck loop's timing
+  (whether 8s is enough for the service to actually be back up) is a
+  guess, not measured.
+
 ## Disk-destructive code (grow-rootfs)
 
 `image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
