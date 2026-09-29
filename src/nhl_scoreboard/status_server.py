@@ -252,8 +252,9 @@ def _coerce_section(
 # key inside a fixed-shape section; [[rotation]] is an ordered, variable-
 # length list of {screen, seconds} tables, so it gets its own row-based
 # renderer/parser rather than being forced into that shape. Per #151's
-# recommendation: no client-side JS (same stdlib-only constraint as the rest
-# of this page and setup_server.py) -- add/remove is a full page round trip
+# recommendation: no client-side JS -- built that way because the page had
+# none at the time, not because this page is required to stay JS-free (see
+# _PAGE_TEMPLATE's own docstring) -- add/remove is a full page round trip
 # per click, and reordering is a plain numeric "order" field read back and
 # sorted on save, rather than swap-with-neighbour buttons, so one submit
 # still commits the whole list at once like every other section's save.
@@ -398,10 +399,18 @@ def _snapshot_rows(snapshot: dict[str, str]) -> str:
     )
 
 
-#: Modern, single-file dark theme -- no external fonts/CDN/JS: this page is
-#: served on a LAN, sometimes to a phone with no other network at all (the
-#: AP setup flow's own captive-portal page, setup_server.py, is separate but
-#: shares that constraint), so nothing here may depend on internet access.
+#: Modern, single-file dark theme -- no external fonts/CDN, no client-side
+#: JS. Unlike setup_server.py's captive-portal page (which genuinely must
+#: work with zero internet access, since it's the mechanism for getting the
+#: board online at all), this page has no such requirement: by the time
+#: anyone's looking at it, the board already has real network connectivity
+#: -- that's the whole point of it. It's technically still reachable during
+#: AP-setup mode too (StatusServer starts unconditionally, gated only on
+#: [status] enabled/port, never on AP state), but that's incidental, not a
+#: design target -- nothing on the panel/QR/setup flow ever points anyone
+#: here then. No JS today is a "hasn't needed one yet" default, not a hard
+#: constraint the way it is for setup_server.py -- don't cite this page as
+#: the reason a future change here can't add one.
 #: CSS variables + a system font stack keep it a plain stdlib string template
 #: like before, just a nicer-looking one.
 _PAGE_TEMPLATE = """<!doctype html>
