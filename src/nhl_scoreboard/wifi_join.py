@@ -39,7 +39,16 @@ from . import wifi
 
 log = logging.getLogger(__name__)
 
-DEFAULT_SETUP_AP_SCRIPT = Path("/usr/local/sbin/nhl-scoreboard-setup-ap")
+#: The AP is driven through its systemd unit, never by running the
+#: nhl-scoreboard-setup-ap script directly (#173). `start` ends in
+#: `exec dnsmasq`, so dnsmasq *is* the unit's Main PID -- running the
+#: script's stop/start as an untracked subprocess tore the radio down under
+#: that still-running dnsmasq without systemd ever stopping it, orphaning
+#: it behind a unit that reported "active" forever while wlan0 sat down.
+#: `systemctl stop` kills the tracked dnsmasq and runs the unit's own
+#: ExecStopPost teardown; both stop and start block until done, so the
+#: join attempt that follows is properly serialized behind them.
+SETUP_AP_UNIT = "nhl-scoreboard-setup-ap.service"
 #: How long "Connected!"/"Failed..." stays up once the attempt is over,
 #: before scene selection falls through to whatever's next (normal game
 #: data if actually online, or the ap_setup SSID/QR scene if the AP came
@@ -64,14 +73,16 @@ class WifiJoinAttempt:
         connect_timeout: float,
         submission_path: Path,
         outcome_path: Path,
-        setup_ap_script: Path | None = None,
+        systemctl_bin: str | Path = "systemctl",
         wall_clock: Callable[[], float] | None = None,
     ) -> None:
         self.config_path = config_path
         self.connect_timeout = connect_timeout
         self.submission_path = submission_path
         self.outcome_path = outcome_path
-        self.setup_ap_script = setup_ap_script or DEFAULT_SETUP_AP_SCRIPT
+        #: A bare command name by default so PATH finds the real one;
+        #: injectable so tests can point it at a recording fake.
+        self.systemctl_bin = systemctl_bin
         #: Wall clock, not monotonic: compared against the outcome file's
         #: own mtime (st_mtime is wall-clock), which a monotonic clock isn't
         #: meaningfully comparable to. Injectable for tests only.
@@ -160,10 +171,24 @@ class WifiJoinAttempt:
             self._write_outcome("failed", ssid)
 
     def _run_setup_ap(self, subcommand: str) -> None:
+        """`systemctl {stop,start}` the AP unit. Never raises: this runs on
+        the failure/crash paths too, where the outcome file still has to be
+        written afterwards. A non-zero exit is logged, not ignored -- it's
+        the only trace a failed AP restart leaves on this side."""
         try:
-            subprocess.run([str(self.setup_ap_script), subcommand], check=False, timeout=30)
+            result = subprocess.run(
+                [str(self.systemctl_bin), subcommand, SETUP_AP_UNIT], check=False, timeout=30
+            )
         except (subprocess.SubprocessError, OSError) as exc:
-            log.warning("nhl-scoreboard-setup-ap %s failed: %s", subcommand, exc)
+            log.warning("Could not run systemctl %s %s: %s", subcommand, SETUP_AP_UNIT, exc)
+            return
+        if result.returncode != 0:
+            log.warning(
+                "systemctl %s %s exited with status %d",
+                subcommand,
+                SETUP_AP_UNIT,
+                result.returncode,
+            )
 
     def _write_outcome(self, status: str, ssid: str) -> None:
         """Atomic tmp+replace, same convention as Settings.save()/setup_server.py's
