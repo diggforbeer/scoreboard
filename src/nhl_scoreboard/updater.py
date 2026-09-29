@@ -140,15 +140,17 @@ def _fetch_json(url: str) -> Any:
     request = urllib.request.Request(
         url, headers={"Accept": "application/vnd.github+json", "User-Agent": "nhl-scoreboard"}
     )
-    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:  # noqa: S310
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
         return json.load(response)
 
 
 def _download(url: str, dest: Path) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "nhl-scoreboard"})
-    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:  # noqa: S310
-        with dest.open("wb") as out:
-            shutil.copyfileobj(response, out)
+    with (
+        urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response,
+        dest.open("wb") as out,
+    ):
+        shutil.copyfileobj(response, out)
 
 
 def check() -> dict[str, Any]:
@@ -226,7 +228,7 @@ def _extract(bundle: Path, dest: Path) -> None:
             target = (dest / member.name).resolve()
             if not target.is_relative_to(dest.resolve()) or not (member.isfile() or member.isdir()):
                 raise ValueError(f"unsafe path in bundle: {member.name}")
-        tar.extractall(dest, members=members)  # noqa: S202 -- validated above
+        tar.extractall(dest, members=members)
     if not (dest / "nhl_scoreboard" / "__init__.py").is_file():
         raise ValueError("bundle does not contain nhl_scoreboard/")
 

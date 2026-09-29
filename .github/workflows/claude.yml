@@ -103,6 +103,32 @@ jobs:
           # needs no new entry -- `git add`/`commit`/`push` already work,
           # so a run commits the image into its own branch and links it by
           # raw.githubusercontent.com URL rather than trying to attach it.
+          # There is no `gh` command that uploads a real image attachment
+          # to a PR/issue comment either (`gh issue comment --help` /
+          # `gh pr comment --help` only take a text/markdown body, checked
+          # directly, not assumed) -- the inline-image drag-and-drop the
+          # web UI offers hits an undocumented, session-cookie-authenticated
+          # upload endpoint that isn't part of the public API `gh` wraps,
+          # so there's no tool to add here for that; the raw.githubusercontent.com
+          # link above is the actual mechanism, not a workaround for a
+          # missing one.
+          #
+          # `Bash(. .venv/bin/activate:*)`/`Bash(python3 -m venv:*)` added
+          # after PR #159's run reported venv setup and `pytest`/`ruff`
+          # "weren't permitted" even though `Bash(python3 -m venv .venv:*)`
+          # and `Bash(source .venv/bin/activate:*)` were already present --
+          # confirmed by reading that run's own log (`gh run view --log`):
+          # the full allowedTools list, both entries included, genuinely
+          # reached the SDK (printed verbatim before the run), yet
+          # `permission_denials_count: 3` still fired, and the action
+          # redacts the actual per-command denial detail ("full output
+          # hidden for security"), so the exact command text that failed
+          # to match couldn't be confirmed. Best available hypothesis, not
+          # confirmed: a syntactic variant of the two already-allowed
+          # commands (POSIX `. path` instead of `source path`, or a venv
+          # created without the literal `.venv` argument) -- these two
+          # additions cover that without widening scope, and it needs a
+          # real follow-up run to confirm either way.
           claude_args: |
-            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*)"
+            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*),Bash(. .venv/bin/activate:*),Bash(python3 -m venv:*)"
             --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Every other default instruction still applies."

@@ -52,7 +52,10 @@ def _fake_release(monkeypatch, *, tag="v2026.09.29", driver="abc1234", assets=Tr
             "assets": (
                 [
                     {"name": updater.BUNDLE_ASSET, "browser_download_url": "http://b/bundle"},
-                    {"name": updater.MANIFEST_ASSET, "browser_download_url": "http://b/manifest.json"},
+                    {
+                        "name": updater.MANIFEST_ASSET,
+                        "browser_download_url": "http://b/manifest.json",
+                    },
                 ]
                 if assets
                 else []

@@ -115,6 +115,14 @@ _FIELDS: tuple[_Field, ...] = (
         choices=("regular", "adafruit-hat", "adafruit-hat-pwm"),
         restart_required=True,
     ),
+    _Field(
+        "panel",
+        "rgb_sequence",
+        "select",
+        "RGB sequence (colour wire order)",
+        choices=("RGB", "RBG", "GRB", "GBR", "BRG", "BGR"),
+        restart_required=True,
+    ),
     _Field("panel", "gpio_slowdown", "int", "GPIO slowdown", restart_required=True),
     _Field("panel", "pwm_bits", "int", "PWM bits", restart_required=True),
     _Field("panel", "pwm_lsb_nanoseconds", "int", "PWM LSB nanoseconds", restart_required=True),
@@ -660,6 +668,16 @@ def _render_update_card() -> str:
     return f'<div class="card" id="software-update"><h3>Software update</h3>{body}{buttons}</div>'
 
 
+_REBOOT_CARD = (
+    '<form method="post" action="/reboot" class="card" id="reboot">'
+    "<h3>Reboot</h3>"
+    '<p class="hint">Reboots the whole board to apply any "applies after restart" '
+    "change. This interrupts whatever is on screen right now, including a live game.</p>"
+    '<button type="submit">Reboot board</button>'
+    "</form>"
+)
+
+
 def _render_page(
     snapshot: dict[str, str],
     settings: Settings,
@@ -723,7 +741,8 @@ def _render_page(
     rows = _snapshot_rows(snapshot)
     sections = (
         f"{_render_update_card()}"
-        f'<h2 class="settings-title">Settings</h2><div class="settings-grid">{sections}</div>'
+        f'<h2 class="settings-title">Settings</h2><div class="settings-grid">{sections}'
+        f"{_REBOOT_CARD}</div>"
     )
     return _PAGE_TEMPLATE.format(nav=nav, banner=banner, rows=rows, sections=sections).encode(
         "utf-8"
@@ -781,6 +800,23 @@ def _start_update_unit(action: str) -> None:
         log.warning("Could not start %s: %s", unit, exc)
 
 
+def _reboot_board() -> None:
+    """Fire-and-forget ``systemctl reboot`` so the HTTP response isn't blocked on it."""
+
+    def _run() -> None:
+        try:
+            subprocess.run(
+                ["systemctl", "reboot"],
+                check=False,
+                capture_output=True,
+                timeout=120,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            log.warning("Could not reboot: %s", exc)
+
+    threading.Thread(target=_run, daemon=True, name="reboot").start()
+
+
 # -- HTTP handler --------------------------------------------------------
 
 
@@ -789,6 +825,7 @@ def _make_handler(
     settings: Callable[[], Settings],
     wifi_restart: Callable[[], None],
     update_trigger: Callable[[str], None],
+    reboot: Callable[[], None],
 ) -> type[BaseHTTPRequestHandler]:
     class StatusRequestHandler(BaseHTTPRequestHandler):
         server_version = "nhl-scoreboard-status/1.0"
@@ -825,11 +862,20 @@ def _make_handler(
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            if self.path not in ("/", "/save"):
+            if self.path not in ("/", "/save", "/reboot"):
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
             if not self._is_same_origin():
                 self.send_error(HTTPStatus.FORBIDDEN, "Cross-site POST rejected")
+                return
+            if self.path == "/reboot":
+                reboot()
+                body = (
+                    b"<!doctype html><meta charset=utf-8><title>Rebooting</title>"
+                    b"<p>Rebooting the board now. This page will be unreachable for a minute "
+                    b"or so.</p>"
+                )
+                self._write_html(HTTPStatus.OK, body)
                 return
 
             length = int(self.headers.get("Content-Length") or 0)
@@ -1013,6 +1059,7 @@ class StatusServer:
         host: str = "0.0.0.0",  # intentional: a LAN status page, see module docstring
         wifi_restart: Callable[[], None] | None = None,
         update_trigger: Callable[[str], None] | None = None,
+        reboot: Callable[[], None] | None = None,
     ) -> None:
         self._snapshot = snapshot
         self._settings = settings
@@ -1020,6 +1067,7 @@ class StatusServer:
         self._port = port
         self._wifi_restart = wifi_restart or _restart_wifi_provisioning
         self._update_trigger = update_trigger or _start_update_unit
+        self._reboot = reboot or _reboot_board
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -1032,7 +1080,11 @@ class StatusServer:
 
     def start(self) -> None:
         handler = _make_handler(
-            self._snapshot, self._settings, self._wifi_restart, self._update_trigger
+            self._snapshot,
+            self._settings,
+            self._wifi_restart,
+            self._update_trigger,
+            self._reboot,
         )
         self._httpd = ThreadingHTTPServer((self._host, self._port), handler)
         self._thread = threading.Thread(

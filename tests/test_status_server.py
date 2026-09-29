@@ -13,6 +13,7 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.status_server import (
     _FIELDS_BY_SECTION,
     StatusServer,
+    _reboot_board,
     _render_html,
     _restart_wifi_provisioning,
 )
@@ -584,3 +585,71 @@ def test_default_wifi_restart_invokes_systemctl(monkeypatch):
     (cmd,), kwargs = calls[0]
     assert cmd == ["systemctl", "restart", "scoreboard-provision.service"]
     assert kwargs["check"] is False
+
+
+def test_post_reboot_triggers_reboot_and_requires_same_origin(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    calls: list[int] = []
+    server = StatusServer(
+        snapshot=dict,
+        port=0,
+        settings=lambda: settings,
+        host="127.0.0.1",
+        reboot=lambda: calls.append(1),
+    )
+    server.start()
+    try:
+
+        def post_reboot(origin: bool) -> int:
+            headers = {"Origin": f"http://127.0.0.1:{server.port}"} if origin else {}
+            conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+            try:
+                conn.request("POST", "/reboot", body="", headers=headers)
+                resp = conn.getresponse()
+                resp.read()
+                return resp.status
+            finally:
+                conn.close()
+
+        assert post_reboot(origin=False) == 403
+        assert calls == []
+        assert post_reboot(origin=True) == 200
+        assert calls == [1]
+    finally:
+        server.stop()
+
+
+def test_panel_rgb_sequence_is_restart_required_select_with_six_permutations(tmp_path):
+    field = next(f for f in _FIELDS_BY_SECTION["panel"] if f.key == "rgb_sequence")
+    assert field.kind == "select"
+    assert field.restart_required
+    assert sorted(field.choices) == sorted(["RGB", "RBG", "GRB", "GBR", "BRG", "BGR"])
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("")
+    settings = Settings.load(path)
+    server = StatusServer(snapshot=dict, port=0, settings=lambda: settings, host="127.0.0.1")
+    server.start()
+    try:
+        status, _, _ = _post(server.port, _form_for(settings, "panel", rgb_sequence="RBG"))
+        assert status == 303
+        status, _, _ = _post(server.port, _form_for(settings, "panel", rgb_sequence="XYZ"))
+        assert status == 400
+    finally:
+        server.stop()
+    assert Settings.load(path).panel.rgb_sequence == "RBG"
+
+
+def test_default_reboot_invokes_systemctl(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "nhl_scoreboard.status_server.subprocess.run",
+        lambda *args, **kwargs: calls.append(args),
+    )
+    _reboot_board()
+    for _ in range(50):
+        if calls:
+            break
+        time.sleep(0.05)
+    assert calls == [(["systemctl", "reboot"],)]
