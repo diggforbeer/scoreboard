@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game, GoalEvent, StandingsRow
+from ..nhl.models import Game, GoalEvent, StandingsRow, Star
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_secondary_color
@@ -340,6 +340,84 @@ class Renderer:
         if not event.assists:
             return ("UNASSISTED",)
         return tuple(f"{a.name} {a.assists_to_date}" for a in event.assists)
+
+    def draw_three_stars(self, canvas: Any, game: Game, stars: Sequence[Star]) -> None:
+        """The three stars of a finished favourite game (#156), all on one frame.
+
+        Same two-logo layout and narrow-panel crop (_logo_span, #38) as
+        draw_goal_detail, text-only when either logo is missing. One line
+        per star in the tiny face: rank, name in that player's team colour
+        (a star can come from either side -- nothing here filters by the
+        favourite), and this game's own G/A, not a season total. Unlike
+        goal_detail there are three names to fit, not one, so a name that
+        doesn't fit its slot falls back to the surname alone, then to a
+        truncated one, rather than running into the stat or the logo.
+        """
+        canvas.Clear()
+        if self.logos is not None:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                left, right = self._draw_logos(canvas, away, home)
+                self._draw_three_stars_content(canvas, stars, left, right)
+                return
+        self._draw_three_stars_content(canvas, stars, 0, self.width)
+
+    #: Baselines of the title and the (up to) three star lines, tiny face.
+    _THREE_STARS_TITLE_BASELINE = 6
+    _THREE_STARS_BASELINES = (14, 22, 30)
+
+    def _draw_three_stars_content(
+        self, canvas: Any, stars: Sequence[Star], left: int, right: int
+    ) -> None:
+        font = self.fonts.tiny
+        cx = (left + right) // 2
+        self.text_center(canvas, font, cx, self._THREE_STARS_TITLE_BASELINE, ACCENT, "3 STARS")
+        rank_x = left + 1
+        name_x = rank_x + text_width(font, "0") + 2
+        for baseline, star in zip(self._THREE_STARS_BASELINES, stars, strict=False):
+            self.text(canvas, font, rank_x, baseline, ACCENT, str(star.star))
+            stat = self._star_stat(star)
+            stat_x = right - 1 - text_width(font, stat)
+            if stat:
+                self.text(canvas, font, stat_x, baseline, WHITE, stat)
+            name_room = (stat_x - 3 if stat else right - 1) - name_x
+            self.text(
+                canvas,
+                font,
+                name_x,
+                baseline,
+                team_color(star.team_abbrev),
+                self._fit_name(font, star.name, name_room),
+            )
+
+    @staticmethod
+    def _star_stat(star: Star) -> str:
+        """One short stat: ``2G``, ``1A``, or ``3P`` when it's both goals and assists.
+
+        Deliberately one token, not ``2G 1A``: between two logos the name
+        only gets what the stat leaves over, and the long form cost a
+        typical multi-point star's surname its last few letters. Empty for
+        a goalie or a pointless skater -- a goalie's star carries goalie
+        stats instead, which aren't modelled.
+        """
+        if star.goals and star.assists:
+            return f"{star.points or star.goals + star.assists}P"
+        if star.goals:
+            return f"{star.goals}G"
+        if star.assists:
+            return f"{star.assists}A"
+        return ""
+
+    @classmethod
+    def _fit_name(cls, font: Any, name: str, max_width: int) -> str:
+        """``F. Lastname`` if it fits, else ``Lastname``, else a truncated surname."""
+        if text_width(font, name) <= max_width:
+            return name
+        _, sep, surname = name.partition(". ")
+        if sep and surname:
+            name = surname
+        return cls._fit_text(font, name, max_width)
 
     def draw_preview(self, canvas: Any, game: Game, now: datetime) -> None:
         """The favourite's next game: who, which day, what time."""

@@ -188,6 +188,10 @@ class ScoreboardConfig:
     #: meaningfully more to read (name, season totals, assist(s)) than the
     #: "GOAL" + score flash.
     goal_detail_seconds: float = 8.0
+    #: How long the three-stars screen (#156) stays up once the favourite's
+    #: game is final and the NHL has named its stars, before the normal
+    #: held-final scoreboard takes over for the rest of final_hold_minutes.
+    three_stars_seconds: float = 8.0
     #: Inside this many hours of puck drop the preview becomes a countdown.
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.
