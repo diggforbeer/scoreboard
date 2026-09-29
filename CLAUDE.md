@@ -924,14 +924,37 @@ slices, one story at a time.
   remaining two, saved, and confirmed the file on disk matched exactly
   (right screens, right seconds, right order) -- not just that the UI
   looked right.
+- **Story 4 (done): Reboot and Software update.** The first two things
+  that are actions on the real system rather than config file edits, and
+  the first real use of *push* rather than request/response --
+  `updater.check()`/`apply()` run out of process (the real
+  `nhl-scoreboard-update-{now,apply}.service` units `status_server.py`
+  already triggers via `systemctl start --no-block`, not reimplemented
+  here) and write `updater.STATE_FILE` on their own schedule, with no way
+  for this process to know when except by watching for it -- exactly the
+  "click Check, refresh manually to see if anything changed" gap this
+  whole rebuild started from. `_watch_update_state` polls that file's
+  mtime and broadcasts a fresh `config`/`update` message to *every*
+  connected client the moment it changes -- the first thing here that
+  isn't scoped to the one connection that asked. Reboot has no such
+  watch: the board going down *is* the confirmation, and nothing is left
+  running to report back once it does. Verified two ways: a real headless-
+  browser click-through with the real `systemctl` shadowed by a fake
+  binary on `PATH` (logging its args instead of running -- confirmed the
+  exact right unit names got called, and confirmed the real one was never
+  touched), and, separately, writing straight to the state file with zero
+  clicks at all to prove the actual point -- the page updated itself
+  (installed/latest/checked-at, the Install button appearing) with no
+  user action whatsoever, which is the literal thing this rebuild was
+  for.
 - Not yet decided or built: every other section, the JSON-API-vs-
-  WebSocket-for-everything question (both Audio's and rotation's saves
-  went straight over the existing WebSocket connection rather than a
-  separate HTTP endpoint -- worth confirming that's still the right call
-  once a section needs something WebSocket-shaped push doesn't fit as
-  naturally), deploying this to the real device, or anything about the
-  production React build reaching the image (`frontend/`'s `dist/` is
-  git-ignored, nothing here ships yet).
+  WebSocket-for-everything question (every save/action so far has gone
+  straight over the existing WebSocket connection rather than a separate
+  HTTP endpoint -- worth confirming that's still the right call once
+  something needs a shape this doesn't fit as naturally), deploying this
+  to the real device, or anything about the production React build
+  reaching the image (`frontend/`'s `dist/` is git-ignored, nothing here
+  ships yet).
 
 ## Disk-destructive code (grow-rootfs)
 

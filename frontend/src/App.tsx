@@ -25,12 +25,27 @@ interface RotationRow {
   seconds: number
 }
 
+interface UpdateConfig {
+  installed: string
+  latest: string
+  checked_at: string
+  error: string
+  reason: string
+  available: boolean
+  applicable: boolean
+  last_apply: string
+}
+
 type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
+  | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'saved'; section: string }
   | { type: 'error'; section?: string; message: string }
+  | { type: 'checking' }
+  | { type: 'applying' }
+  | { type: 'rebooting' }
 
 function connectionBadge(state: ConnectionState) {
   const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
@@ -55,6 +70,13 @@ function App() {
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
   const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
 
+  const [update, setUpdate] = useState<UpdateConfig | null>(null)
+  // 'checking'/'applying' cover the gap between clicking the button and the
+  // watcher's broadcast landing once the real check/apply (out of process)
+  // finishes -- this is the actual thing story 4 is for.
+  const [updatePhase, setUpdatePhase] = useState<'idle' | 'checking' | 'applying'>('idle')
+  const [rebooting, setRebooting] = useState(false)
+
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
@@ -72,6 +94,10 @@ function App() {
         case 'config':
           if (message.section === 'audio') setAudio(message.data)
           else if (message.section === 'rotation') setRotation(message.data)
+          else if (message.section === 'update') {
+            setUpdate(message.data)
+            setUpdatePhase('idle') // real data just arrived -- whatever was in flight is done
+          }
           break
         case 'saved':
           if (message.section === 'audio') setAudioSaveStatus('saved')
@@ -85,6 +111,15 @@ function App() {
             setRotationSaveStatus('error')
             setRotationSaveError(message.message)
           }
+          break
+        case 'checking':
+          setUpdatePhase('checking')
+          break
+        case 'applying':
+          setUpdatePhase('applying')
+          break
+        case 'rebooting':
+          setRebooting(true)
           break
       }
     }
@@ -135,6 +170,21 @@ function App() {
     const next = [...rotation]
     ;[next[index], next[target]] = [next[target], next[index]]
     setRotation(next)
+  }
+
+  function checkForUpdate() {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    socketRef.current.send(JSON.stringify({ type: 'update_check' }))
+  }
+
+  function applyUpdate() {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    socketRef.current.send(JSON.stringify({ type: 'update_apply' }))
+  }
+
+  function rebootBoard() {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    socketRef.current.send(JSON.stringify({ type: 'reboot' }))
   }
 
   return (
@@ -288,6 +338,75 @@ function App() {
             </form>
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mt-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Software update</h2>
+          {update ? (
+            <>
+              <p className="mb-1">Installed: {update.installed}</p>
+              {update.latest && <p className="mb-1">Latest release: {update.latest}</p>}
+              {update.checked_at && (
+                <p className="text-body-secondary small mb-1">Last checked: {update.checked_at}</p>
+              )}
+              {update.error && <p className="text-danger mb-1">{update.error}</p>}
+              {!update.error && update.reason && (
+                <p className="text-body-secondary small mb-1">{update.reason}</p>
+              )}
+              {update.last_apply && (
+                <p className="text-body-secondary small mb-1">Last install: {update.last_apply}</p>
+              )}
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={checkForUpdate}
+                  disabled={updatePhase !== 'idle'}
+                >
+                  Check for updates now
+                </button>
+                {update.available && update.applicable && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={applyUpdate}
+                    disabled={updatePhase !== 'idle'}
+                  >
+                    Install {update.latest}
+                  </button>
+                )}
+                {updatePhase === 'checking' && (
+                  <span className="text-body-secondary">Checking...</span>
+                )}
+                {updatePhase === 'applying' && (
+                  <span className="text-body-secondary">
+                    Installing. The board restarts and rolls back by itself if it doesn't come up.
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mt-4 mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Reboot</h2>
+          <p className="text-body-secondary small">
+            Reboots the whole board to apply any "applies after restart" change. This interrupts
+            whatever is on screen right now, including a live game.
+          </p>
+          {rebooting ? (
+            <p className="text-warning mb-0">Rebooting the board now...</p>
+          ) : (
+            <button type="button" className="btn btn-danger" onClick={rebootBoard}>
+              Reboot board
+            </button>
           )}
         </div>
       </div>

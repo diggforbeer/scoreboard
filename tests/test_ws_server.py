@@ -10,6 +10,7 @@ for that.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 
 import pytest
@@ -33,6 +34,20 @@ def config_path(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture
+def state_file(tmp_path, monkeypatch):
+    path = tmp_path / "update-state.json"
+    monkeypatch.setattr(updater, "STATE_FILE", path)
+    return path
+
+
+@pytest.fixture
+def fake_systemctl(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ws_server.subprocess, "run", lambda *args, **kwargs: calls.append(args[0]))
+    return calls
+
+
 async def _serve_and_run(scenario):
     async with serve(ws_server._handle, "localhost", 0) as server:
         port = server.sockets[0].getsockname()[1]
@@ -40,8 +55,9 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
-async def _skip_initial(client, n=3):
-    """Drain the version/audio/rotation messages every connection opens with."""
+async def _skip_initial(client, n=4):
+    """Drain the version/audio/rotation/update messages every connection
+    opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -292,3 +308,145 @@ def test_rotation_save_accepts_an_empty_list(app_dir, config_path):
 
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received) == {"type": "saved", "section": "rotation"}
+
+
+# -- story 4: Software update and Reboot -------------------------------------
+
+
+def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_file):
+    state_file.write_text(
+        json.dumps(
+            {
+                "installed": "v2026.09.29",
+                "latest": "v2026.09.30",
+                "checked_at": "2026-09-30T00:00:00+00:00",
+                "available": True,
+                "applicable": True,
+            }
+        )
+    )
+
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        await client.recv()  # rotation
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "update",
+        "data": {
+            "installed": "v2026.09.29",
+            "latest": "v2026.09.30",
+            "checked_at": "2026-09-30T00:00:00+00:00",
+            "error": "",
+            "reason": "",
+            "available": True,
+            "applicable": True,
+            "last_apply": "",
+        },
+    }
+
+
+def test_update_check_acks_immediately_and_starts_the_check_unit(
+    app_dir, config_path, fake_systemctl
+):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "update_check"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "checking"}
+    assert fake_systemctl == [
+        ["systemctl", "start", "--no-block", "nhl-scoreboard-update-now.service"]
+    ]
+
+
+def test_update_apply_acks_immediately_and_starts_the_apply_unit(
+    app_dir, config_path, fake_systemctl
+):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "update_apply"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "applying"}
+    assert fake_systemctl == [
+        ["systemctl", "start", "--no-block", "nhl-scoreboard-update-apply.service"]
+    ]
+
+
+def test_reboot_acks_immediately_and_calls_systemctl_reboot(app_dir, config_path, fake_systemctl):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "reboot"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "rebooting"}
+    assert fake_systemctl == [["systemctl", "reboot"]]
+
+
+def test_watcher_broadcasts_when_the_update_state_file_changes(
+    app_dir, config_path, state_file, monkeypatch
+):
+    """The actual point of story 4: a check/apply happening out of process
+    (a real board would run it via systemd, not this call) still reaches
+    every connected client without anyone asking again."""
+    monkeypatch.setattr(ws_server, "UPDATE_POLL_SECONDS", 0.02)
+
+    async def scenario():
+        watcher = asyncio.create_task(ws_server._watch_update_state())
+        try:
+            async with serve(ws_server._handle, "localhost", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                async with connect(f"ws://localhost:{port}/") as client:
+                    await _skip_initial(client)
+                    state_file.write_text(
+                        json.dumps({"installed": "v1", "latest": "v2", "available": True})
+                    )
+                    message = await asyncio.wait_for(client.recv(), timeout=2)
+                    return json.loads(message)
+        finally:
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+
+    received = asyncio.run(scenario())
+    assert received["type"] == "config"
+    assert received["section"] == "update"
+    assert received["data"]["installed"] == "v1"
+    assert received["data"]["latest"] == "v2"
+    assert received["data"]["available"] is True
+
+
+def test_watcher_broadcasts_to_every_connected_client(
+    app_dir, config_path, state_file, monkeypatch
+):
+    monkeypatch.setattr(ws_server, "UPDATE_POLL_SECONDS", 0.02)
+
+    async def scenario():
+        watcher = asyncio.create_task(ws_server._watch_update_state())
+        try:
+            async with serve(ws_server._handle, "localhost", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                async with (
+                    connect(f"ws://localhost:{port}/") as client_a,
+                    connect(f"ws://localhost:{port}/") as client_b,
+                ):
+                    await _skip_initial(client_a)
+                    await _skip_initial(client_b)
+                    state_file.write_text(json.dumps({"installed": "v1"}))
+                    a = await asyncio.wait_for(client_a.recv(), timeout=2)
+                    b = await asyncio.wait_for(client_b.recv(), timeout=2)
+                    return json.loads(a), json.loads(b)
+        finally:
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
+
+    a, b = asyncio.run(scenario())
+    assert a["data"]["installed"] == b["data"]["installed"] == "v1"

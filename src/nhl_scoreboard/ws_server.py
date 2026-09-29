@@ -36,6 +36,23 @@ thing:
   around having no client-side JS (#151); now that there's a real one,
   neither is needed, and the frontend does real add/remove/reorder in
   local state before a single Save sends the whole list.
+* Story 4: Reboot and Software update -- the first things that are
+  actions on the real system, not config file edits, and the first
+  place this server actually *pushes* something instead of only
+  answering a request. ``updater.check()``/``apply()`` run out of
+  process (the same ``systemctl start --no-block
+  nhl-scoreboard-update-{now,apply}.service`` units
+  ``status_server.py`` already triggers, not reimplemented here) and
+  write their result to ``updater.STATE_FILE`` on their own schedule --
+  this process has no way to know when that happens except by watching
+  for it, which is exactly the "click Check, refresh manually to see if
+  anything changed" gap the whole rebuild started from (see CLAUDE.md).
+  ``_watch_update_state`` polls that file's mtime every
+  ``UPDATE_POLL_SECONDS`` and broadcasts a fresh ``config``/``update``
+  message to *every* connected client the moment it changes -- the
+  first real use of a client set here, not just request/response on one
+  connection. Reboot has no equivalent watch: the board going down *is*
+  the confirmation, and there's nothing left running to report back.
 
 No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
 """
@@ -48,10 +65,12 @@ import dataclasses
 import json
 import logging
 import os
+import subprocess
 
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
 
+from . import updater
 from .config import VALID_ROTATION_SCREENS, AudioConfig, ConfigWriteError, Settings
 from .updater import installed_version
 
@@ -71,6 +90,14 @@ CONFIG_PATH = os.environ.get("NHL_SCOREBOARD_CONFIG", "scoreboard.local.toml")
 #: pagination story. Enforced server-side here too, not just by the
 #: frontend disabling its own "Add row" button at this count.
 ROTATION_MAX_ROWS = 8
+#: How often to check updater.STATE_FILE for a change while a check/apply
+#: might be running. Overridable so tests don't wait a real second.
+UPDATE_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_WS_UPDATE_POLL", "1"))
+
+#: Every currently-open connection -- the update-state watcher broadcasts
+#: to all of them, unlike everything else here, which only ever replies to
+#: whoever sent the request.
+_clients: set[ServerConnection] = set()
 
 
 def _audio_payload(settings: Settings) -> dict[str, object]:
@@ -83,6 +110,34 @@ def _rotation_payload(settings: Settings) -> dict[str, object]:
         "section": "rotation",
         "data": [dataclasses.asdict(entry) for entry in settings.rotation],
     }
+
+
+def _update_payload() -> dict[str, object]:
+    state = updater.read_state()
+    return {
+        "type": "config",
+        "section": "update",
+        "data": {
+            "installed": state.get("installed") or "unknown (factory image)",
+            "latest": state.get("latest") or "",
+            "checked_at": state.get("checked_at") or "",
+            "error": state.get("error") or "",
+            "reason": state.get("reason") or "",
+            "available": bool(state.get("available")),
+            "applicable": bool(state.get("applicable")),
+            "last_apply": (state.get("last_apply") or {}).get("detail") or "",
+        },
+    }
+
+
+async def _broadcast(payload: dict[str, object]) -> None:
+    raw = json.dumps(payload)
+    # A snapshot, not a live iteration over _clients -- a connection can
+    # close (and remove itself, see _handle's finally) while this awaits,
+    # which would otherwise be mutating the set mid-loop.
+    for client in list(_clients):
+        with contextlib.suppress(websockets.exceptions.ConnectionClosed):
+            await client.send(raw)
 
 
 async def _send_version(connection: ServerConnection) -> None:
@@ -98,6 +153,58 @@ async def _send_audio_config(connection: ServerConnection) -> None:
 async def _send_rotation_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_rotation_payload(settings)))
+
+
+async def _send_update_config(connection: ServerConnection) -> None:
+    await connection.send(json.dumps(_update_payload()))
+
+
+def _start_update_unit(action: str) -> None:
+    """Same mechanism as status_server.py's own ``_start_update_unit`` --
+    duplicated rather than imported, same "hardcoded per-thing, not shared
+    yet" call as every other section here. Fire-and-forget: the actual
+    check/apply happens in the unit's own process, on its own schedule;
+    ``_watch_update_state`` is what notices and reports the result, not
+    this call returning.
+    """
+    unit = {
+        "check": "nhl-scoreboard-update-now.service",
+        "apply": "nhl-scoreboard-update-apply.service",
+    }[action]
+    try:
+        subprocess.run(
+            ["systemctl", "start", "--no-block", unit], check=False, capture_output=True, timeout=30
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("Could not start %s: %s", unit, exc)
+
+
+def _reboot() -> None:
+    """Same mechanism as status_server.py's own ``_reboot_board``."""
+    try:
+        subprocess.run(["systemctl", "reboot"], check=False, capture_output=True, timeout=120)
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("Could not reboot: %s", exc)
+
+
+async def _watch_update_state() -> None:
+    """Broadcast a fresh update config to every client whenever
+    updater.STATE_FILE changes -- the actual point of story 4. check()/
+    apply() run out of process and write that file on their own schedule;
+    this is what turns "the file changed" into "the page updated itself",
+    without the admin page (or a person) ever having to ask again.
+    """
+    last_mtime: float | None = None
+    while True:
+        try:
+            mtime = updater.STATE_FILE.stat().st_mtime
+        except OSError:
+            mtime = None
+        if mtime != last_mtime:
+            last_mtime = mtime
+            if _clients:
+                await _broadcast(_update_payload())
+        await asyncio.sleep(UPDATE_POLL_SECONDS)
 
 
 def _coerce_audio(data: dict[str, object]) -> dict[str, object]:
@@ -177,26 +284,48 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
 
 
 async def _handle(connection: ServerConnection) -> None:
-    await _send_version(connection)
-    await _send_audio_config(connection)
-    await _send_rotation_config(connection)
-    log.info("Sent initial state to %s", connection.remote_address)
-    async for raw in connection:
-        try:
-            message = json.loads(raw)
-        except json.JSONDecodeError:
-            await connection.send(json.dumps({"type": "error", "message": "invalid JSON"}))
-            continue
-        if message.get("type") == "save":
-            await _handle_save(connection, message)
-        else:
-            await connection.send(json.dumps({"type": "error", "message": "unknown message type"}))
+    _clients.add(connection)
+    try:
+        await _send_version(connection)
+        await _send_audio_config(connection)
+        await _send_rotation_config(connection)
+        await _send_update_config(connection)
+        log.info("Sent initial state to %s", connection.remote_address)
+        async for raw in connection:
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                await connection.send(json.dumps({"type": "error", "message": "invalid JSON"}))
+                continue
+            msg_type = message.get("type")
+            if msg_type == "save":
+                await _handle_save(connection, message)
+            elif msg_type == "update_check":
+                await connection.send(json.dumps({"type": "checking"}))
+                _start_update_unit("check")
+            elif msg_type == "update_apply":
+                await connection.send(json.dumps({"type": "applying"}))
+                _start_update_unit("apply")
+            elif msg_type == "reboot":
+                await connection.send(json.dumps({"type": "rebooting"}))
+                _reboot()
+            else:
+                error = {"type": "error", "message": "unknown message type"}
+                await connection.send(json.dumps(error))
+    finally:
+        _clients.discard(connection)
 
 
 async def run(host: str = HOST, port: int = PORT) -> None:
-    async with serve(_handle, host, port) as server:
-        log.info("Admin WebSocket server listening on ws://%s:%d/", host, port)
-        await server.serve_forever()
+    watcher = asyncio.create_task(_watch_update_state())
+    try:
+        async with serve(_handle, host, port) as server:
+            log.info("Admin WebSocket server listening on ws://%s:%d/", host, port)
+            await server.serve_forever()
+    finally:
+        watcher.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watcher
 
 
 def main() -> None:

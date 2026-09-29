@@ -6,18 +6,28 @@ exactly what's been ported over so far and what hasn't -- local-dev only,
 not wired into the actual admin page or the device image yet.
 
 So far: the installed version (read-only), the Audio section
-(`enabled`/`device`/`horn_dir`), and the idle rotation list
-(`[[rotation]]`) -- all read, edit, and save with no page reload, which
-was the actual point of moving off `status_server.py`'s HTML-form-POST
-model. The rotation editor does real add/remove/reorder in the browser
-(↑/↓ buttons, a row cap of 8) -- the old HTML version needed a numeric
-"order" field and a full-page round trip per click specifically because
-it had no JS to do this with; this one just does it. Styled with plain
-Bootstrap CSS (the `bootstrap` npm package, not `react-bootstrap`) --
-hand-applied classes on plain JSX, no component library, since nothing
-here needs JS-driven components (modals, dropdowns) yet. Dark by default
-(`data-bs-theme="dark"` on `<html>`, `index.html`), matching
-`status_server.py`'s existing theme.
+(`enabled`/`device`/`horn_dir`), the idle rotation list (`[[rotation]]`),
+and Reboot / Software update -- all with no page reload, which was the
+actual point of moving off `status_server.py`'s HTML-form-POST model. The
+rotation editor does real add/remove/reorder in the browser (↑/↓ buttons,
+a row cap of 8) -- the old HTML version needed a numeric "order" field
+and a full-page round trip per click specifically because it had no JS to
+do this with; this one just does it. Software update is the first thing
+that actually *pushes*: a check/apply runs out of process on its own
+schedule, and the page updates itself the moment it finishes -- no click,
+no manual refresh, which is the literal problem the whole rebuild started
+from. Styled with plain Bootstrap CSS (the `bootstrap` npm package, not
+`react-bootstrap`) -- hand-applied classes on plain JSX, no component
+library, since nothing here needs JS-driven components (modals,
+dropdowns) yet. Dark by default (`data-bs-theme="dark"` on `<html>`,
+`index.html`), matching `status_server.py`'s existing theme.
+
+**Reboot and Software update call real `systemctl` commands.** Harmless
+on the real board (the same commands `status_server.py` already runs),
+but if you're testing these locally, shadow `systemctl` with a fake
+binary on `PATH` first (log its args, exit 0) rather than let a dev
+machine actually try to reboot itself or start a systemd unit that
+doesn't exist there.
 
 ## Running it locally
 
@@ -37,6 +47,12 @@ npm run dev                               # http://localhost:5173/
 By default the WebSocket server reads/writes `scoreboard.local.toml` in the
 repo root (same git-ignored dev config every other local-dev command uses)
 -- override with `NHL_SCOREBOARD_CONFIG` to point at a different file.
+Similarly, `NHL_SCOREBOARD_UPDATE_STATE` overrides where it watches for the
+update-check/apply state file (real default: `/var/lib/nhl-scoreboard/
+update-state.json`, root-only, not writable as yourself) and
+`NHL_SCOREBOARD_WS_UPDATE_POLL` overrides how often it checks (default 1s)
+-- point the first at a scratch path and write JSON to it by hand to see
+the Software update card update itself with zero clicks.
 
 Open `http://localhost:5173/` -- it should show `WebSocket: open`, the
 installed version (`unknown (factory image)` unless something has written
