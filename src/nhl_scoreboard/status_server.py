@@ -40,6 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from . import updater
 from .config import VALID_ROTATION_SCREENS, ConfigWriteError, RotationEntry, Settings
 
 log = logging.getLogger(__name__)
@@ -161,6 +162,7 @@ _FIELDS: tuple[_Field, ...] = (
     # the network the board joins. Live-editable, not restart_required:
     # ScoreboardApp._sync_setup_server() already reacts to a reload the same
     # way it does for [status]'s own port.
+    _Field("update", "enabled", "bool", "Check for updates daily"),
     _Field("wifi_setup", "enabled", "bool", "WiFi setup page enabled (served while the AP is up)"),
     _Field("wifi_setup", "port", "int", "WiFi setup page port"),
 )
@@ -174,6 +176,7 @@ _SECTIONS: tuple[tuple[str, str], ...] = (
     ("panel", "Panel"),
     ("wifi", "Wi-Fi"),
     ("wifi_setup", "WiFi setup page"),
+    ("update", "Updates"),
 )
 _SECTION_TITLES: dict[str, str] = dict(_SECTIONS)
 
@@ -635,6 +638,36 @@ def _render_section(
     )
 
 
+def _render_update_card() -> str:
+    """Software-update status plus the manual Check / Install buttons (#32)."""
+    state = updater.read_state()
+    installed = state.get("installed") or "unknown (factory image)"
+    lines = [f"Installed: {html.escape(str(installed))}"]
+    if state.get("latest"):
+        lines.append(f"Latest release: {html.escape(str(state['latest']))}")
+    if state.get("checked_at"):
+        lines.append(f"Last checked: {html.escape(str(state['checked_at']))}")
+    if state.get("error"):
+        lines.append(html.escape(str(state["error"])))
+    elif state.get("reason"):
+        lines.append(html.escape(str(state["reason"])))
+    last = state.get("last_apply") or {}
+    if last:
+        lines.append(f"Last install: {html.escape(str(last.get('detail', '')))}")
+    body = "".join(f"<p class='hint'>{line}</p>" for line in lines)
+
+    def button(action: str, label: str) -> str:
+        return (
+            f'<form method="post" action="/update/{action}" style="display:inline">'
+            f'<button type="submit">{label}</button></form> '
+        )
+
+    buttons = button("check", "Check for updates now")
+    if state.get("available") and state.get("applicable"):
+        buttons += button("apply", f"Install {html.escape(str(state.get('latest', '')))}")
+    return f'<div class="card" id="software-update"><h3>Software update</h3>{body}{buttons}</div>'
+
+
 _REBOOT_CARD = (
     '<form method="post" action="/reboot" class="card" id="reboot">'
     "<h3>Reboot</h3>"
@@ -651,6 +684,7 @@ def _render_page(
     wifi_raw: dict[str, Any],
     *,
     banner_section: str | None = None,
+    update_action: str | None = None,
     error_section: str | None = None,
     form_error: str | None = None,
     errors: dict[str, str] | None = None,
@@ -673,6 +707,17 @@ def _render_page(
                 "connection may drop briefly."
             )
         banner = f'<div class="banner banner-ok">{message}</div>'
+    if update_action:
+        banner = (
+            '<div class="banner banner-ok">'
+            + (
+                "Checking for updates -- refresh in a few seconds."
+                if update_action == "check"
+                else "Installing the update. The board restarts and rolls back "
+                "by itself if it doesn't come up."
+            )
+            + "</div>"
+        )
 
     nav = (
         '<nav class="jump">'
@@ -695,6 +740,7 @@ def _render_page(
     )
     rows = _snapshot_rows(snapshot)
     sections = (
+        f"{_render_update_card()}"
         f'<h2 class="settings-title">Settings</h2><div class="settings-grid">{sections}'
         f"{_REBOOT_CARD}</div>"
     )
@@ -732,6 +778,28 @@ def _restart_wifi_provisioning() -> None:
     threading.Thread(target=_run, daemon=True, name="wifi-restart").start()
 
 
+def _start_update_unit(action: str) -> None:
+    """Start the oneshot unit for ``action`` ("check"/"apply") and return at once.
+
+    Not run in-process: an apply restarts nhl-scoreboard.service, which is
+    the process serving this page. ``--no-block`` because the apply waits
+    for the restarted service to prove itself.
+    """
+    unit = {
+        "check": "nhl-scoreboard-update-now.service",
+        "apply": "nhl-scoreboard-update-apply.service",
+    }[action]
+    try:
+        subprocess.run(
+            ["systemctl", "start", "--no-block", unit],
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("Could not start %s: %s", unit, exc)
+
+
 def _reboot_board() -> None:
     """Fire-and-forget ``systemctl reboot`` so the HTTP response isn't blocked on it."""
 
@@ -756,6 +824,7 @@ def _make_handler(
     snapshot: Callable[[], dict[str, str]],
     settings: Callable[[], Settings],
     wifi_restart: Callable[[], None],
+    update_trigger: Callable[[str], None],
     reboot: Callable[[], None],
 ) -> type[BaseHTTPRequestHandler]:
     class StatusRequestHandler(BaseHTTPRequestHandler):
@@ -768,16 +837,31 @@ def _make_handler(
                 return
             query = urllib.parse.parse_qs(parsed.query)
             banner_section = (query.get("saved") or [None])[0]
+            update_action = (query.get("update") or [None])[0]
             current = settings()
             body = _render_page(
                 snapshot(),
                 current,
                 _read_wifi_raw(current.source_path),
                 banner_section=banner_section,
+                update_action=update_action if update_action in ("check", "apply") else None,
             )
             self._write_html(HTTPStatus.OK, body)
 
         def do_POST(self) -> None:
+            # Map the path to a fixed literal so no request-derived text reaches the
+            # Location header (CodeQL: HTTP response splitting).
+            action = {"/update/check": "check", "/update/apply": "apply"}.get(self.path)
+            if action is not None:
+                if not self._is_same_origin():
+                    self.send_error(HTTPStatus.FORBIDDEN, "Cross-site POST rejected")
+                    return
+                update_trigger(action)
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", f"/?update={action}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if self.path not in ("/", "/save", "/reboot"):
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
@@ -974,6 +1058,7 @@ class StatusServer:
         settings: Callable[[], Settings],
         host: str = "0.0.0.0",  # intentional: a LAN status page, see module docstring
         wifi_restart: Callable[[], None] | None = None,
+        update_trigger: Callable[[str], None] | None = None,
         reboot: Callable[[], None] | None = None,
     ) -> None:
         self._snapshot = snapshot
@@ -981,6 +1066,7 @@ class StatusServer:
         self._host = host
         self._port = port
         self._wifi_restart = wifi_restart or _restart_wifi_provisioning
+        self._update_trigger = update_trigger or _start_update_unit
         self._reboot = reboot or _reboot_board
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -993,7 +1079,13 @@ class StatusServer:
         return self._port
 
     def start(self) -> None:
-        handler = _make_handler(self._snapshot, self._settings, self._wifi_restart, self._reboot)
+        handler = _make_handler(
+            self._snapshot,
+            self._settings,
+            self._wifi_restart,
+            self._update_trigger,
+            self._reboot,
+        )
         self._httpd = ThreadingHTTPServer((self._host, self._port), handler)
         self._thread = threading.Thread(
             target=self._httpd.serve_forever, name="status-server", daemon=True
