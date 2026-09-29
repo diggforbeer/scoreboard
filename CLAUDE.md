@@ -354,6 +354,18 @@ exit; with `show_logos = false` every step is just text.
   `regular` mapping, pin for pin. OE on GPIO 18 = hardware PWM without the
   Adafruit solder mod. It back-powers the Pi: **one** supply, into the
   board's barrel jack; nothing into the Pi's USB-C.
+- **A wrong `hardware_mapping` is a silent failure, not an error** --
+  verified on real hardware (an Adafruit RGB Matrix Bonnet left on the
+  shipped `"regular"` default): `nhl-scoreboard.service` starts, stays
+  active, keeps polling the NHL API, logs nothing wrong -- it is just
+  driving the wrong physical GPIO pins for that adapter, so the panel
+  stays completely dark with zero diagnostic signal anywhere
+  (`systemctl status`/`journalctl` both look completely healthy).
+  Switching to `"adafruit-hat"` (no other change) fixed it immediately.
+  `[panel]` settings including `hardware_mapping` don't hot-reload
+  (baked into the constructed `RGBMatrix`) -- a restart is required
+  after changing it, not just a config save. First thing to check on a
+  dark panel with an otherwise-healthy service.
 - `dtparam=audio=off` and `isolcpus=3` are required; the HUB75 driver and
   onboard audio share the PWM peripheral. Audio → USB. Not the 3.5mm jack,
   not I2S (GPIO 21 is LAT).
