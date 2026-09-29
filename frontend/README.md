@@ -8,7 +8,11 @@ not wired into the actual admin page or the device image yet.
 So far: the installed version (read-only), and the Audio section
 (`enabled`/`device`/`horn_dir`) -- read, edit, and save, with no page
 reload, which was the actual point of moving off `status_server.py`'s
-HTML-form-POST model.
+HTML-form-POST model. Styled with plain Bootstrap CSS (the `bootstrap`
+npm package, not `react-bootstrap`) -- hand-applied classes on plain JSX,
+no component library, since nothing here needs JS-driven components
+(modals, dropdowns) yet. Dark by default (`data-bs-theme="dark"` on
+`<html>`, `index.html`), matching `status_server.py`'s existing theme.
 
 ## Running it locally
 

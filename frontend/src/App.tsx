@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import './App.css'
 
 // Python WebSocket server (nhl_scoreboard.ws_server, run separately for now:
 // `python -m nhl_scoreboard.ws_server`). See its own docstring for the
@@ -21,6 +20,11 @@ type ServerMessage =
   | { type: 'error'; section?: string; message: string }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+function connectionBadge(state: ConnectionState) {
+  const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
+  return <span className={`badge text-bg-${variant}`}>{state}</span>
+}
 
 function App() {
   const [connection, setConnection] = useState<ConnectionState>('connecting')
@@ -67,56 +71,71 @@ function App() {
   }
 
   return (
-    <main>
-      <h1>Hockey Scoreboard</h1>
-      <p>WebSocket: {connection}</p>
-      <p>Installed version: {version ?? 'waiting for server...'}</p>
+    <div className="container py-4" style={{ maxWidth: '40rem' }}>
+      <header className="d-flex justify-content-between align-items-center mb-4">
+        <h1 className="h3 mb-0">Hockey Scoreboard</h1>
+        {connectionBadge(connection)}
+      </header>
 
-      <section>
-        <h2>Audio</h2>
-        {audio ? (
-          <form onSubmit={saveAudio}>
-            <label>
-              <input
-                type="checkbox"
-                checked={audio.enabled}
-                onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
-              />{' '}
-              Goal horn enabled
-            </label>
-            <div>
-              <label>
-                ALSA device (blank for default)
-                <br />
+      <p className="text-body-secondary">
+        Installed version: {version ?? 'waiting for server...'}
+      </p>
+
+      <div className="card">
+        <div className="card-body">
+          <h2 className="card-title h5">Audio</h2>
+          {audio ? (
+            <form onSubmit={saveAudio}>
+              <div className="form-check mb-3">
                 <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-enabled"
+                  checked={audio.enabled}
+                  onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-enabled">
+                  Goal horn enabled
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-device">
+                  ALSA device (blank for default)
+                </label>
+                <input
+                  className="form-control"
+                  id="audio-device"
                   type="text"
                   value={audio.device}
                   onChange={(e) => setAudio({ ...audio, device: e.target.value })}
                 />
-              </label>
-            </div>
-            <div>
-              <label>
-                Horn directory override (blank for default)
-                <br />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-horn-dir">
+                  Horn directory override (blank for default)
+                </label>
                 <input
+                  className="form-control"
+                  id="audio-horn-dir"
                   type="text"
                   value={audio.horn_dir}
                   onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
                 />
-              </label>
-            </div>
-            <button type="submit" disabled={saveStatus === 'saving'}>
-              Save Audio
-            </button>
-            {saveStatus === 'saved' && <span> Saved.</span>}
-            {saveStatus === 'error' && <span style={{ color: 'crimson' }}> {saveError}</span>}
-          </form>
-        ) : (
-          <p>waiting for server...</p>
-        )}
-      </section>
-    </main>
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button type="submit" className="btn btn-primary" disabled={saveStatus === 'saving'}>
+                  Save Audio
+                </button>
+                {saveStatus === 'saved' && <span className="text-success">Saved.</span>}
+                {saveStatus === 'error' && <span className="text-danger">{saveError}</span>}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
