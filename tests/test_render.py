@@ -37,7 +37,14 @@ from nhl_scoreboard.display.renderer import (
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color, team_secondary_color
-from nhl_scoreboard.nhl.models import AssistDetail, Game, GoalEvent, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import (
+    AssistDetail,
+    Game,
+    GoalEvent,
+    Situation,
+    StandingsRow,
+    Star,
+)
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -1057,6 +1064,134 @@ def test_goal_detail_reflects_the_actual_event(games, synthetic_logos):
 
 
 # --------------------------------------------------------------------------
+# three stars (#156): title + one line per star, all on one frame
+# --------------------------------------------------------------------------
+
+# Rows each part of the frame owns: title, then star 1/2/3 (tiny face,
+# baselines 6/14/22/30 in the renderer).
+THREE_STARS_TITLE_ROWS = (0, 7)
+THREE_STARS_LINE_ROWS = ((8, 15), (16, 23), (24, 31))
+
+
+def a_star(rank: int, team: str, name: str, goals: int = 0, assists: int = 0, pos="C") -> Star:
+    return Star(
+        star=rank,
+        player_id=8470000 + rank,
+        team_abbrev=team,
+        name=name,
+        sweater_no=rank,
+        position=pos,
+        goals=goals,
+        assists=assists,
+        points=goals + assists,
+    )
+
+
+def three_stars_for(game: Game) -> tuple[Star, ...]:
+    """Both teams represented, a multi-point skater, and a goalie with no skater stat."""
+    return (
+        a_star(1, game.home.abbrev, "N. Kadri", goals=2, assists=1),
+        a_star(2, game.away.abbrev, "J. Eberle", goals=1),
+        a_star(3, game.home.abbrev, "D. Vladar", pos="G"),
+    )
+
+
+def assert_three_stars_layout(c: AsciiCanvas, stars, left: int, right: int) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    cx = (left + right) // 2
+    top, bottom = THREE_STARS_TITLE_ROWS
+    title = c.bbox(left, top, right - 1, bottom)
+    assert title is not None, "title missing"
+    assert abs(title.center_x - cx) <= 2, f"title not centred: {title.center_x}"
+    assert c.colors(left, top, right - 1, bottom) == {ACCENT}
+
+    for (y0, y1), s in zip(THREE_STARS_LINE_ROWS, stars, strict=False):
+        line = c.bbox(left, y0, right - 1, y1)
+        assert line is not None, f"star {s.star} line missing"
+        assert line.x0 >= left and line.x1 < right, f"star {s.star} spills out of its column"
+        # Rank leads the line, in amber.
+        assert c.colors(left, y0, left + 4, y1) == {ACCENT}, f"star {s.star} rank"
+        colors = c.colors(left, y0, right - 1, y1)
+        assert team_color(s.team_abbrev) in colors, f"star {s.star} name not in team colour"
+        has_stat = bool(s.goals or s.assists)
+        assert (WHITE in colors) == has_stat, f"star {s.star} stat shown iff it has points"
+
+
+@pytest.mark.parametrize("layout", ["logo", "text"])
+def test_three_stars(games, synthetic_logos, layout, update_snapshots):
+    game = games["live"]  # SEA @ CGY
+    stars = three_stars_for(game)
+    c = canvas()
+    make_renderer(logos=synthetic_logos if layout == "logo" else None).draw_three_stars(
+        c, game, stars
+    )
+    art = show(f"{layout}, three stars: {', '.join(s.name for s in stars)}", c)
+
+    if layout == "logo":
+        assert_three_stars_layout(c, stars, MID_LEFT, MID_RIGHT)
+        for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
+            assert team_color(side.abbrev) in c.colors(x0, 0, x0 + LOGO - 1, H - 1)
+    else:
+        assert_three_stars_layout(c, stars, 0, W)
+    check_snapshot(f"{layout}_three_stars", art, update_snapshots)
+
+
+def test_three_stars_all_from_one_team_are_all_drawn(games):
+    """Whoever the NHL named -- nothing filters stars to the favourite's side."""
+    game = games["live"]
+    stars = tuple(a_star(i, game.away.abbrev, f"P. Away{i}", goals=1) for i in (1, 2, 3))
+    c = canvas()
+    make_renderer().draw_three_stars(c, game, stars)
+    assert_three_stars_layout(c, stars, 0, W)
+    for y0, y1 in THREE_STARS_LINE_ROWS:
+        assert team_color(game.home.abbrev) not in c.colors(0, y0, W - 1, y1)
+
+
+def test_three_stars_long_name_falls_back_to_the_surname_between_logos(games, synthetic_logos):
+    game = games["live"]
+    long = a_star(1, game.home.abbrev, "R. Nugent-Hopkins", goals=1)
+    r = make_renderer(logos=synthetic_logos)
+
+    c = canvas()
+    r.draw_three_stars(c, game, (long,))
+    assert_three_stars_layout(c, (long,), MID_LEFT, MID_RIGHT)
+    # The stat (white) keeps its own slot at the column's right edge: the
+    # rank and name (everything else on the line) never run into it.
+    y0, y1 = THREE_STARS_LINE_ROWS[0]
+    line = {x: rgb for (x, y), rgb in c.lit(MID_LEFT, y0, MID_RIGHT - 1, y1).items()}
+    others = [x for x, rgb in line.items() if rgb != WHITE]
+    stat = [x for x, rgb in line.items() if rgb == WHITE]
+    assert stat and max(others) < min(stat), "name overlaps the stat"
+
+    tiny = r.fonts.tiny
+    assert Renderer._fit_name(tiny, "N. Kadri", 40) == "N. Kadri", "fits: kept whole"
+    assert Renderer._fit_name(tiny, "R. Nugent-Hopkins", 56) == "Nugent-Hopkins"
+    assert Renderer._fit_name(tiny, "R. Nugent-Hopkins", 44) == "Nugent-H..."
+
+
+def test_three_stars_stat_is_one_token():
+    assert Renderer._star_stat(a_star(1, "NSH", "A", goals=2)) == "2G"
+    assert Renderer._star_stat(a_star(1, "NSH", "A", assists=1)) == "1A"
+    assert Renderer._star_stat(a_star(1, "NSH", "A", goals=2, assists=1)) == "3P"
+    assert Renderer._star_stat(a_star(1, "NSH", "A", pos="G")) == ""
+
+
+def test_three_stars_falls_back_to_text_when_a_logo_is_missing(games, synthetic_logos, tmp_path):
+    from PIL import Image
+
+    game = games["live"]
+    stars = three_stars_for(game)
+    without_home = tmp_path / "partial"
+    without_home.mkdir()
+    Image.open(synthetic_logos.path_for(game.away.abbrev)).save(
+        without_home / f"{game.away.abbrev}.png"
+    )
+    c = canvas()
+    make_renderer(logos=LogoLibrary([without_home])).draw_three_stars(c, game, stars)
+    assert_three_stars_layout(c, stars, 0, W)  # full width: the text layout's signature
+
+
+# --------------------------------------------------------------------------
 # narrow panel: a single 64x32 (chain_length=1), not the default 128x32
 # chain -- #38. Two full 32px logos would meet with zero room left for the
 # score column, so each logo crops its centre-facing edge (Renderer.
@@ -1166,3 +1301,17 @@ def test_goal_detail_narrow_panel_stays_on_panel(games, synthetic_logos):
     c = AsciiCanvas(NARROW_W, H)
     make_narrow_renderer(synthetic_logos).draw_goal_detail(c, game, event)
     assert not c.out_of_bounds
+
+
+def test_three_stars_narrow_panel_stays_in_the_middle_column(games, synthetic_logos):
+    """At 64px the column between cropped logos is 32px: names shrink to a
+    truncated surname, but nothing leaves the column or the panel (#38)."""
+    game = games["live"]
+    stars = three_stars_for(game)
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_three_stars(c, game, stars)
+    assert not c.out_of_bounds
+    for y0, y1 in THREE_STARS_LINE_ROWS:
+        line = c.bbox(NARROW_LEFT, y0, NARROW_RIGHT - 1, y1)
+        assert line is not None
+        assert line.x0 >= NARROW_LEFT and line.x1 < NARROW_RIGHT

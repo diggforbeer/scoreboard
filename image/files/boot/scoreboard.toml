@@ -67,6 +67,10 @@ goal_flash_seconds = 6
 # catches up with who actually scored).
 goal_detail_seconds = 8
 
+# How long the "3 STARS" screen stays up once your team's game is final and
+# the NHL has named its three stars, before the final score takes over.
+three_stars_seconds = 8
+
 # Show the favourite's conference playoff picture (their spot plus a few
 # teams on either side), interleaved with the preview/countdown screen.
 # Only appears once favourite_team has actually played a game this season.

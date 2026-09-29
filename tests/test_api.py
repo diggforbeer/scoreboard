@@ -251,6 +251,43 @@ def test_goal_scoring_returns_empty_when_scoring_is_absent():
 
 
 @responses.activate
+def test_three_stars_url_and_parsed_payload():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/42/landing",
+        json={
+            "threeStars": [
+                {
+                    "star": 1,
+                    "playerId": 8484392,
+                    "teamAbbrev": "CAR",
+                    "name": {"default": "F. Unger Sorum"},
+                    "sweaterNo": 36,
+                    "position": "R",
+                    "goals": 1,
+                    "assists": 0,
+                    "points": 1,
+                }
+            ]
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        stars = client.three_stars(42)
+    assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/landing"
+    assert [(s.star, s.name, s.team_abbrev, s.goals) for s in stars] == [
+        (1, "F. Unger Sorum", "CAR", 1)
+    ]
+
+
+@responses.activate
+def test_three_stars_empty_until_named():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
+    with NHLClient() as client:
+        assert client.three_stars(1) == ()
+
+
+@responses.activate
 def test_standings_hits_standings_date():
     responses.add(responses.GET, f"{BASE_URL}/standings/now", json={"standings": []}, status=200)
     with NHLClient() as client:

@@ -17,7 +17,7 @@ from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, Scor
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow, Star
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -89,6 +89,9 @@ class FlowClient:
         self.standings_calls = 0
         self.fail_standings = False
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        self.stars: dict[int, tuple[Star, ...]] = {}
+        self.three_stars_calls: list[int] = []
+        self.fail_three_stars = False
 
     def scores(self, date="now"):
         return list(self.today)
@@ -98,6 +101,12 @@ class FlowClient:
 
     def goal_scoring(self, game_id):
         return self.goal_events.get(game_id, ())
+
+    def three_stars(self, game_id):
+        self.three_stars_calls.append(game_id)
+        if self.fail_three_stars:
+            raise NHLApiError("boom")
+        return self.stars.get(game_id, ())
 
     def schedule(self, team):
         self.schedule_calls += 1
@@ -588,6 +597,199 @@ def test_draw_dispatches_goal_detail_scene(day):
     app.refresh_goal_details()
     assert scene(app) == ("goal_detail", 1)
     app.draw()  # must not raise; exercises Renderer.draw_goal_detail via the real dispatch
+    assert app.matrix.swaps >= 1
+
+
+# --------------------------------------------------------------------------
+# three stars of the game -- #156
+# --------------------------------------------------------------------------
+
+
+def star(rank: int, team: str = FAV, name: str = "F. Forsberg", goals=1, assists=0) -> Star:
+    return Star(
+        star=rank,
+        player_id=8470000 + rank,
+        team_abbrev=team,
+        name=name,
+        sweater_no=9,
+        position="L",
+        goals=goals,
+        assists=assists,
+        points=goals + assists,
+    )
+
+
+STARS = (star(1), star(2, "TBL", "N. Kucherov", 0, 2), star(3, name="J. Saros", goals=0))
+
+
+def _watch_the_favourite_go_final(app, clock, client) -> None:
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=2)
+    tick(app, clock, hours=7)
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL", period=3)
+    tick(app, clock, hours=1, minutes=40)
+
+
+def test_three_stars_shows_once_landing_names_them(day):
+    """FINAL can land in score/now before landing's threeStars -- poll until it's there."""
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 15
+    _watch_the_favourite_go_final(app, clock, client)
+
+    app.refresh_three_stars()  # landing hasn't named them yet
+    assert client.three_stars_calls == [1]
+    assert scene(app) == ("game", 1)
+
+    client.stars[1] = STARS
+    app.refresh_three_stars()  # inside live_poll_seconds: no refetch yet
+    assert client.three_stars_calls == [1]
+
+    clock.advance(seconds=15)
+    app.refresh_three_stars()
+    assert client.three_stars_calls == [1, 1]
+    assert scene(app) == ("three_stars", 1)
+    assert app.select_scene().stars == STARS
+
+
+def test_three_stars_fetch_failure_is_retried(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    client.fail_three_stars = True
+    app.refresh_three_stars()
+    assert scene(app) == ("game", 1)
+
+    client.fail_three_stars = False
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+
+
+def test_three_stars_reverts_to_the_held_final_after_three_stars_seconds(day):
+    app, clock, client = day
+    app.settings.scoreboard.three_stars_seconds = 10
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+
+    clock.advance(seconds=9)
+    assert scene(app) == ("three_stars", 1), "still inside the three-stars window"
+
+    clock.advance(seconds=2)
+    assert scene(app) == ("game", 1), "window elapsed: the normal held final takes over"
+
+
+def test_three_stars_never_fires_twice_for_the_same_game(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert app._three_stars is not None
+
+    app._three_stars = None  # as if the on-screen window already elapsed
+    tick(app, clock, seconds=30)
+    app.refresh_three_stars()
+
+    assert app._three_stars is None
+    assert client.three_stars_calls == [1], "fetched once, never re-armed"
+
+
+def test_three_stars_not_shown_after_a_restart_mid_hold(fake_backend, day):
+    """Found already final at startup is a first sighting, not a transition -- a
+    restart after the screen already showed (or should have) must not show it again."""
+    _, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL", period=3)
+    client.stars[1] = STARS
+    clock.now = PUCK_DROP + timedelta(hours=2, minutes=40)  # inside the estimated hold
+    restarted = make_app(fake_backend, clock, client)
+    restarted.refresh()
+    restarted.refresh_three_stars()
+
+    assert scene(restarted) == ("game", 1)
+    assert client.three_stars_calls == []
+
+
+def test_three_stars_ignores_a_non_favourite_game_going_final(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    client.stars[9] = STARS
+    client.today[0] = dataclasses.replace(client.today[0], state="FINAL")  # SEA @ CGY, watched
+    tick(app, clock, minutes=5)
+    app.refresh_three_stars()
+
+    assert client.three_stars_calls == []
+    assert app._three_stars is None
+
+
+def test_three_stars_keeps_an_all_opponent_selection(day):
+    """Stars are whoever the NHL named -- nothing filters them to the favourite."""
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    opponents = tuple(star(i, "TBL", f"P. Opponent{i}") for i in (1, 2, 3))
+    client.stars[1] = opponents
+    app.refresh_three_stars()
+
+    assert app.select_scene().stars == opponents
+
+
+def test_three_stars_stops_polling_once_the_final_hold_is_over(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    app.refresh_three_stars()  # never named
+    assert app._three_stars_pending
+
+    tick(app, clock, minutes=31)
+    app.refresh_three_stars()
+    assert app._three_stars_pending == {}
+    assert client.three_stars_calls == [1]
+
+
+def test_three_stars_state_pruned_once_the_game_leaves_the_slate(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert app._three_stars_shown == {1}
+
+    client.today = [g for g in client.today if g.id != 1]
+    tick(app, clock, minutes=1)
+    assert app._three_stars_shown == set()
+    assert app._three_stars_pending == {}
+
+
+def test_three_stars_pending_pruned_once_the_game_leaves_the_slate(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    assert 1 in app._three_stars_pending
+
+    client.today = [g for g in client.today if g.id != 1]
+    tick(app, clock, minutes=1)
+    app.refresh_three_stars()
+    assert app._three_stars_pending == {}
+    assert client.three_stars_calls == []
+
+
+def test_three_stars_does_not_override_a_different_game(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+
+    from nhl_scoreboard.app import Scene
+
+    unrelated = Scene("game", client.today[0])
+    assert app._apply_goal_override(unrelated) is unrelated
+
+
+def test_draw_dispatches_three_stars_scene(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+    app.draw()  # must not raise; exercises Renderer.draw_three_stars via the real dispatch
     assert app.matrix.swaps >= 1
 
 

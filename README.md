@@ -82,6 +82,7 @@ Early development. Working today:
 - [x] Shots on goal, live, for every game; favourite's power play/empty net indicator
 - [x] Favourite's conference standings, interleaved with the idle rotation
 - [x] Goal horn and GOAL celebration screen
+- [x] Three stars of the game, once the favourite's game goes final
 - [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
@@ -140,6 +141,7 @@ live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
+three_stars_seconds = 8     # how long the 3 STARS screen stays up once your team's game is final
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
@@ -218,6 +220,7 @@ With a `favourite_team` set (the default, `NSH`), the board follows your team's 
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
 | Your team scores | **GOAL** — a celebration screen, for `goal_flash_seconds`, then back to live |
+| Game just went final | **3 STARS** — the NHL's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |
 
