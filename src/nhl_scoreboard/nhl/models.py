@@ -168,6 +168,60 @@ def goal_events_from_landing(raw: dict[str, Any] | None) -> tuple[GoalEvent, ...
 
 
 @dataclass(frozen=True, slots=True)
+class Star:
+    """One entry from ``gamecenter/{id}/landing``'s top-level ``threeStars`` (#156).
+
+    Present once a game is final (verified against a real completed game's
+    landing payload). ``goals``/``assists``/``points`` are this game's own
+    totals, *not* season-to-date -- the opposite convention from
+    ``GoalEvent``'s ``goalsToDate``/``assistsToDate``, hence the plain names.
+    A goalie's entry carries goalie stats instead of these three, so they
+    read as zero for one.
+    """
+
+    star: int
+    player_id: int
+    team_abbrev: str
+    name: str
+    sweater_no: int
+    position: str
+    goals: int
+    assists: int
+    points: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> Star:
+        return cls(
+            star=int(raw["star"]),
+            player_id=int(raw.get("playerId") or 0),
+            team_abbrev=_default_str(raw.get("teamAbbrev")).upper(),
+            name=_default_str(raw.get("name")),
+            sweater_no=int(raw.get("sweaterNo") or 0),
+            position=str(raw.get("position") or "").upper(),
+            goals=int(raw.get("goals") or 0),
+            assists=int(raw.get("assists") or 0),
+            points=int(raw.get("points") or 0),
+        )
+
+
+def three_stars_from_landing(raw: dict[str, Any] | None) -> tuple[Star, ...]:
+    """``threeStars``, ordered by rank; empty until the NHL has named them.
+
+    One malformed entry is skipped rather than losing the rest -- same
+    precedent as ``goal_events_from_landing``.
+    """
+    if not raw:
+        return ()
+    stars = []
+    for entry in raw.get("threeStars") or []:
+        try:
+            stars.append(Star.from_api(entry))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    return tuple(sorted(stars, key=lambda s: s.star))
+
+
+@dataclass(frozen=True, slots=True)
 class Game:
     id: int
     state: str

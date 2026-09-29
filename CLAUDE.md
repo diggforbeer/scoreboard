@@ -212,6 +212,35 @@ preview, or a different game mid-rotation. The baseline score for a game is
 recorded on first sighting *without* firing, so a game already 3-1 at
 startup does not celebrate.
 
+The `three_stars` scene (#156) is the NHL's three stars of the favourite's
+game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
+present on a real final game; `NHLClient.three_stars()`, a third separate
+fetch of the same URL `situation()`/`goal_scoring()` already hit). The
+trigger is **not** a detector of its own: it's `refresh()`'s existing
+first-time-final branch (the one that records `ended_at`), filtered to the
+favourite's game and to one we actually watched go live -- a game already
+final at startup is a first sighting, same "baseline without firing"
+precedent as goal detection, so a restart mid-hold doesn't re-show it.
+Fetching is decoupled from that transition (`refresh_three_stars()`, every
+loop tick, throttled to `live_poll_seconds`) for the same reason
+`refresh_goal_details()` is: `score/now` may flip to FINAL/OFF before
+`landing` has named the stars (not verified either way -- the only real
+payload checked was days old), so an empty result is retried until the
+stars arrive, the game leaves `self.games`, or its `final_hold_minutes`
+is over. Fire-once is a separate guarantee (`_three_stars_shown`, pruned
+with the other per-game state, #64). It's the last layer of
+`_apply_goal_override`'s chain, over the held-final `game` scene only,
+for `three_stars_seconds`, then the normal final takes over. Stars are
+whoever the NHL named -- either team, never filtered to the favourite.
+`Star.goals`/`assists`/`points` are **per-game** totals, not
+season-to-date like `GoalEvent`'s `goalsToDate`/`assistsToDate`; a
+goalie's entry carries goalie stats instead (unmodelled), so it reads 0
+and draws no stat. Layout: one static frame, "3 STARS" plus one tiny-font
+line per star (rank, name in team colour, one stat token `2G`/`1A`/`3P`),
+between the two logos like `goal_detail`; a name that doesn't fit drops
+to the surname, then truncates. The one-star-per-frame alternative wasn't
+needed at 128px -- only 12+ letter surnames truncate between logos.
+
 The `standings` scene (#40) is the favourite's conference playoff picture:
 `conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
 favourite's conference by `conferenceSequence` and trim it to the
@@ -284,6 +313,31 @@ that precedent covers exactly this win tally and nothing broader
 (opponent leaders, injuries, etc. each need their own decision). Only the
 tally ships -- individual past-meeting scores (#168) and team/player
 stat leaders (#169) are separate follow-ups.
+
+The physical button (#50, `button.py`, `[button]`, off by default) is one
+momentary switch between a GPIO pin and GND -- GPIO 26 by default, 16 the
+documented alternative, both from the verified free-pin table in Hardware
+facts; don't pick another pin without re-checking that table. A short
+press mutes the goal horn for `mute_minutes` (`_on_goal()` still records
+the goal and shows the goal scene, it just skips `horn.play()`); a hold of
+`hold_seconds` calls `advance()`. That long press is a no-op whenever the
+favourite's own scene is up, since that flow never reads `self.index` --
+expected, not a bug; stepping `_rotate_idle_scenes`'s time-based slots is
+out of scope. Thread safety is the non-obvious part: gpiozero fires
+`when_pressed`/`when_released` from its pin-monitoring thread and
+`when_held` from a separate hold-timer thread, so those callbacks only set
+plain bools, and `run()`'s own thread consumes them once per iteration
+(`handle_button()`) and does every actual mutation -- the same rule
+`status_server.py` follows for its request thread. A long press is told
+apart from a short one by a per-press "hold already fired" bool that
+`when_pressed` resets and `when_released` checks, so a hold never also
+counts as a tap on release. Dependency follows the light sensor's pattern:
+`gpiozero` is a dev extra (tests drive the real `gpiozero.Button` through
+its `MockFactory`, conftest's `mock_pins`), the image gets
+`python3-gpiozero` from apt, and a missing library or unclaimable pin makes
+`Button.open()` return `None`, never raise. Not yet verified on hardware
+(#164, part of #4): notably, which gpiozero pin backend Debian's package picks on the
+Pi, and that it coexists with the HUB75 driver's own direct GPIO access.
 
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`

@@ -389,3 +389,64 @@ def test_goal_events_from_landing_skips_a_malformed_goal_without_losing_the_rest
     }
     events = goal_events_from_landing(raw)
     assert [e.scorer_name for e in events] == ["OK"]
+
+
+# -- three stars (#156) -------------------------------------------------------
+
+from nhl_scoreboard.nhl.models import Star, three_stars_from_landing  # noqa: E402
+
+
+def _star_raw(star=1, team="CAR", name="F. Unger Sorum", goals=1, assists=0, points=1):
+    """Shaped like a real final game's landing ``threeStars`` entry."""
+    return {
+        "star": star,
+        "playerId": 8484392,
+        "teamAbbrev": team,
+        "name": {"default": name},
+        "sweaterNo": 36,
+        "position": "R",
+        "goals": goals,
+        "assists": assists,
+        "points": points,
+    }
+
+
+def test_star_parses_a_real_shaped_entry():
+    star = Star.from_api(_star_raw())
+    assert star == Star(
+        star=1,
+        player_id=8484392,
+        team_abbrev="CAR",
+        name="F. Unger Sorum",
+        sweater_no=36,
+        position="R",
+        goals=1,
+        assists=0,
+        points=1,
+    )
+
+
+def test_star_goalie_entry_without_skater_stats_reads_as_zero():
+    raw = _star_raw(star=3)
+    for key in ("goals", "assists", "points"):
+        del raw[key]
+    raw["position"] = "G"
+    star = Star.from_api(raw)
+    assert (star.goals, star.assists, star.points, star.position) == (0, 0, 0, "G")
+
+
+def test_three_stars_from_landing_orders_by_rank():
+    raw = {"threeStars": [_star_raw(star=3), _star_raw(star=1), _star_raw(star=2)]}
+    assert [s.star for s in three_stars_from_landing(raw)] == [1, 2, 3]
+
+
+def test_three_stars_from_landing_absent_is_empty():
+    assert three_stars_from_landing(None) == ()
+    assert three_stars_from_landing({}) == ()
+    assert three_stars_from_landing({"threeStars": None}) == ()
+    assert three_stars_from_landing({"threeStars": []}) == ()
+
+
+def test_three_stars_from_landing_skips_a_malformed_entry_without_losing_the_rest():
+    raw = {"threeStars": [{"name": {"default": "NO RANK"}}, _star_raw(star=2, name="OK")]}
+    assert [s.name for s in three_stars_from_landing(raw)] == ["OK"]

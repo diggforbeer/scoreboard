@@ -48,6 +48,7 @@ works, and still fully supported, not replaced by the flow above.
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
 | Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
+| Button (optional) | Momentary push-button between GPIO 26 and GND, for `[button]` (#50) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -83,11 +84,13 @@ Early development. Working today:
 - [x] Favourite's conference standings, interleaved with the idle rotation
 - [x] Opt-in season-series screen: the favourite's head-to-head record against their next opponent
 - [x] Goal horn and GOAL celebration screen
+- [x] Three stars of the game, once the favourite's game goes final
 - [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
 - [x] Optional web status page for headless debugging, with a config editor
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
+- [x] Optional push-button on GPIO 26: tap to mute the goal horn, hold to skip to the next game
 - [ ] Verified on real hardware
 
 ## Development
@@ -141,6 +144,7 @@ live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
+three_stars_seconds = 8     # how long the 3 STARS screen stays up once your team's game is final
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
@@ -220,6 +224,7 @@ With a `favourite_team` set (the default, `NSH`), the board follows your team's 
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
 | Your team scores | **GOAL** — a celebration screen, for `goal_flash_seconds`, then back to live |
+| Game just went final | **3 STARS** — the NHL's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |
 

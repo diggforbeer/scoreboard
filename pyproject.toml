@@ -32,6 +32,9 @@ dev = [
     "responses>=0.25",
     "cairosvg>=2.7",
     "smbus2>=0.4",
+    # button.py's tests drive the real gpiozero.Button through its MockFactory;
+    # on the board it comes from apt (python3-gpiozero), same as smbus above.
+    "gpiozero>=1.6",
 ]
 
 [project.scripts]

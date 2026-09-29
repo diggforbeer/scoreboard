@@ -188,6 +188,10 @@ class ScoreboardConfig:
     #: meaningfully more to read (name, season totals, assist(s)) than the
     #: "GOAL" + score flash.
     goal_detail_seconds: float = 8.0
+    #: How long the three-stars screen (#156) stays up once the favourite's
+    #: game is final and the NHL has named its stars, before the normal
+    #: held-final scoreboard takes over for the rest of final_hold_minutes.
+    three_stars_seconds: float = 8.0
     #: Inside this many hours of puck drop the preview becomes a countdown.
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.
@@ -394,6 +398,42 @@ class NightModeConfig:
         self.cooldown_minutes = max(0.0, float(self.cooldown_minutes))
 
 
+#: Floor for button.hold_seconds. An ordinary tap on a momentary switch
+#: lasts roughly 100-300ms; a hold threshold inside that range would turn
+#: plain taps into holds and erase the short/long distinction entirely.
+MIN_HOLD_SECONDS = 0.5
+
+
+@dataclass(slots=True)
+class ButtonConfig:
+    """Physical push-button on a spare GPIO pin (#50). See ``button.Button``.
+
+    Off by default: not every board has one wired up, and there's no point
+    claiming a GPIO pin nobody pressed anything into.
+    """
+
+    enabled: bool = False
+    #: BCM numbering. 26 (or 16) are free at this project's parallel=1
+    #: panel config -- see CLAUDE.md's Hardware facts pin table.
+    pin: int = 26
+    #: How long a short press silences the goal horn. 0 is valid: a press
+    #: then mutes for no time at all.
+    mute_minutes: float = 60.0
+    #: Held at least this long, a press forces the next rotation instead.
+    hold_seconds: float = 1.0
+
+    def __post_init__(self) -> None:
+        self.mute_minutes = max(0.0, float(self.mute_minutes))
+        if self.hold_seconds < MIN_HOLD_SECONDS:
+            log.warning(
+                "button.hold_seconds (%s) is below the floor of %s seconds; using %s",
+                self.hold_seconds,
+                MIN_HOLD_SECONDS,
+                MIN_HOLD_SECONDS,
+            )
+            self.hold_seconds = MIN_HOLD_SECONDS
+
+
 def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
     """Parse a 24-hour "HH:MM", warning and falling back to ``default`` if it isn't one."""
     try:
@@ -420,6 +460,7 @@ class Settings:
     wifi: WifiConfig = field(default_factory=WifiConfig)
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
     update: UpdateConfig = field(default_factory=UpdateConfig)
+    button: ButtonConfig = field(default_factory=ButtonConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -453,6 +494,7 @@ class Settings:
             wifi=_wifi_config(raw.get("wifi", {})),
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
             update=_build(UpdateConfig, raw.get("update", {})),
+            button=_build(ButtonConfig, raw.get("button", {})),
         )
 
     def save(self, updates: Mapping[str, Any]) -> None:
@@ -519,6 +561,7 @@ class Settings:
         self.wifi = reloaded.wifi
         self.night_mode = reloaded.night_mode
         self.update = reloaded.update
+        self.button = reloaded.button
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:

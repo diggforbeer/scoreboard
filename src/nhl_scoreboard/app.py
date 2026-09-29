@@ -19,6 +19,7 @@ import qrcode
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
+from .button import Button
 from .config import DEFAULT_CONFIG_PATHS, RotationEntry, Settings, resolve_timezone
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
@@ -32,11 +33,13 @@ from .nhl.models import (
     SeasonSeriesRecord,
     Situation,
     StandingsRow,
+    Star,
     conference_standings,
     standings_window,
 )
 from .setup_server import SetupServer
 from .status_server import StatusServer
+from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
 
 log = logging.getLogger(__name__)
@@ -95,9 +98,8 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``countdown``, ``preview``, ``standings``, ``matchup``,
-    ``clock``, ``no_games``, ``connecting``, ``no_data``, ``ap_setup``,
-    ``wifi_join``.
+    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``, ``matchup``,
+    ``clock``, ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
     kind: str
@@ -109,6 +111,9 @@ class Scene:
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
+    #: Set only for ``three_stars`` -- the NHL's three stars of a finished
+    #: favourite game, ranked, per-game stats (#156).
+    stars: tuple[Star, ...] | None = None
     #: Set only for ``ap_setup`` (#131 follow-up) -- the board's own
     #: first-boot WiFi AP, so a phone can join and finish setup. ``None``
     #: password means the AP came up open, not WPA2-protected.
@@ -137,6 +142,7 @@ class ScoreboardApp:
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
+        button: Button | None = None,
         sleep: Callable[[float], None] | None = None,
         ap_setup_state_path: Path | None = None,
         ap_scan_state_path: Path | None = None,
@@ -190,6 +196,19 @@ class ScoreboardApp:
         else:
             self.light_sensor = None
         self._smoothed_lux: float | None = None
+        # Same lazy-open rule as the light sensor: no GPIO claimed, and no
+        # gpiozero import attempted, unless the button is actually enabled.
+        if button is not None:
+            self.button = button
+        elif settings.button.enabled:
+            self.button = Button.open(
+                pin=settings.button.pin, hold_seconds=settings.button.hold_seconds
+            )
+        else:
+            self.button = None
+        #: monotonic time the goal horn stays silent until, after a short
+        #: button press (#50). None means not muted.
+        self._horn_muted_until: float | None = None
         self._applied_brightness = settings.panel.brightness
         self.tz = resolve_timezone(settings.scoreboard.timezone)
         self._config_mtime = self._source_mtime()
@@ -270,6 +289,16 @@ class ScoreboardApp:
         #: (game id, monotonic time, event) of the most recent goal_detail
         #: screen, for how long it stays up.
         self._goal_detail: tuple[int, float, GoalEvent] | None = None
+        #: game id -> monotonic time of the last three-stars fetch attempt,
+        #: for the favourite's games we watched go final and haven't got a
+        #: non-empty threeStars for yet (#156). None = not tried yet.
+        self._three_stars_pending: dict[int, float | None] = {}
+        #: Game ids whose three-stars screen has already fired -- never again
+        #: for the same game, independent of whether pending still has it.
+        self._three_stars_shown: set[int] = set()
+        #: (game id, monotonic time, stars) of the three-stars screen, for
+        #: how long it stays up.
+        self._three_stars: tuple[int, float, tuple[Star, ...]] | None = None
         #: The configured logo library, held by run_demo() while it toggles
         #: renderer.logos between it and None for the text layout.
         self._demo_real_logos: LogoLibrary | None = logos
@@ -298,6 +327,7 @@ class ScoreboardApp:
         while self._running:
             now = self.monotonic()
             self.reload_config_if_changed()
+            self.handle_button()
             if now >= next_poll:
                 self.refresh()
                 next_poll = now + self.poll_interval()
@@ -309,6 +339,7 @@ class ScoreboardApp:
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
             self.refresh_goal_details()
+            self.refresh_three_stars()
             self._sync_setup_server()
             self.wifi_join.poll()
             self.wifi_join.expire_outcome_if_stale()
@@ -362,6 +393,8 @@ class ScoreboardApp:
                 self.status_server.stop()
             if self.setup_server is not None:
                 self.setup_server.stop()
+            if self.button is not None:
+                self.button.close()
             self.matrix.Clear()
         finally:
             self.client.close()
@@ -391,6 +424,7 @@ class ScoreboardApp:
                 # full window from whenever we happened to start.
                 watched = game.id in self._seen_live
                 self.ended_at[game.id] = now if watched else min(now, game.estimated_end())
+                self._queue_three_stars(game, watched=watched)
                 log.debug(
                     "Game %s ended at %s (%s)",
                     game.id,
@@ -405,9 +439,10 @@ class ScoreboardApp:
     def _prune_game_state(self) -> None:
         """Drop bookkeeping for games no longer in today's slate.
 
-        ``_seen_live``, ``ended_at`` and ``_known_favourite_score`` are
-        keyed by game id and otherwise never cleared, growing by one entry
-        per game for as long as the process runs (#64). ``self.games`` is
+        ``_seen_live``, ``ended_at``, ``_known_favourite_score`` and the
+        goal-detail/three-stars bookkeeping are keyed by game id and
+        otherwise never cleared, growing by one entry per game for as long
+        as the process runs (#64). ``self.games`` is
         refreshed from the live schedule every poll, so any id no longer in
         it is done for today and safe to forget.
         """
@@ -425,6 +460,10 @@ class ScoreboardApp:
         for game_id in list(self._shown_goal_events):
             if game_id not in current_ids:
                 del self._shown_goal_events[game_id]
+        for game_id in list(self._three_stars_pending):
+            if game_id not in current_ids:
+                del self._three_stars_pending[game_id]
+        self._three_stars_shown &= current_ids
 
     def _record_error(self, message: str) -> None:
         """Track the most recent fetch failure, for the status page (#48)."""
@@ -451,9 +490,10 @@ class ScoreboardApp:
         editor (#48) -- and all three need to pick up a change the same way.
         Most settings are already read fresh from ``self.settings`` every
         loop iteration; ``[audio]``, the logo library, the ambient light
-        sensor (``panel.auto_brightness``) and the status server
-        (``status.enabled``/``status.port``) are built once from it instead,
-        so those get rebuilt explicitly here (#62). A rebuilt status server
+        sensor (``panel.auto_brightness``), the status server
+        (``status.enabled``/``status.port``) and the physical button
+        (``[button]``, #50) are built once from it instead, so those get
+        rebuilt explicitly here (#62). A rebuilt status server
         is only started if ``run()``'s loop is live (``self._running``):
         ``run()`` starts it exactly once before looping, so a reload outside
         that loop -- e.g. a test calling this directly -- builds it without
@@ -487,6 +527,12 @@ class ScoreboardApp:
         status_changed = (old.status.enabled, old.status.port) != (
             new_settings.status.enabled,
             new_settings.status.port,
+        )
+        # mute_minutes is read fresh on every press, so it alone needs no rebuild.
+        button_changed = (old.button.enabled, old.button.pin, old.button.hold_seconds) != (
+            new_settings.button.enabled,
+            new_settings.button.pin,
+            new_settings.button.hold_seconds,
         )
 
         self.settings = new_settings
@@ -536,6 +582,19 @@ class ScoreboardApp:
                     self.status_server.start()
             else:
                 self.status_server = None
+
+        if button_changed:
+            # gpiozero fixes pin and hold_time at construction; close first
+            # so the rebuilt one can reclaim the same pin.
+            if self.button is not None:
+                self.button.close()
+            self.button = (
+                Button.open(
+                    pin=new_settings.button.pin, hold_seconds=new_settings.button.hold_seconds
+                )
+                if new_settings.button.enabled
+                else None
+            )
 
         # wifi.connect_timeout_seconds: plain attribute update, no
         # stop/rebuild needed the way StatusServer's fixed-at-construction
@@ -660,7 +719,32 @@ class ScoreboardApp:
             game.home.abbrev,
         )
         self.last_goal = (game.id, self.monotonic())
+        if self._horn_muted():
+            log.info("Goal horn muted by button press; not playing")
+            return
         self.horn.play(favourite)
+
+    def _horn_muted(self) -> bool:
+        return self._horn_muted_until is not None and self.monotonic() < self._horn_muted_until
+
+    # -- physical button (#50) ---------------------------------------------
+
+    def handle_button(self) -> None:
+        """Act on any button presses since the last loop iteration.
+
+        The only place button presses turn into state changes: the button's
+        own gpiozero callbacks run on background threads and just set flags
+        (see button.py), so every mutation here happens on run()'s thread.
+        """
+        if self.button is None:
+            return
+        if self.button.consume_short_press():
+            minutes = self.settings.button.mute_minutes
+            self._horn_muted_until = self.monotonic() + minutes * 60
+            log.info("Button: goal horn muted for %g minutes", minutes)
+        if self.button.consume_long_press():
+            log.info("Button: forcing next rotation")
+            self.advance()
 
     # -- goal detail (#122 phase 2) ---------------------------------------
 
@@ -722,6 +806,74 @@ class ScoreboardApp:
         if len(events) > previous:
             self._shown_goal_events[game_id] = previous + 1
             self._goal_detail = (game_id, self.monotonic(), events[previous])
+
+    # -- three stars (#156) -------------------------------------------------
+
+    def _queue_three_stars(self, game: Game, *, watched: bool) -> None:
+        """The favourite's game just went final: start polling for its three stars.
+
+        Called from ``refresh()``'s existing first-time-final branch (the
+        same one that records ``ended_at``), not a detector of its own.
+        Only for a game we actually watched go live -- one already final
+        at startup is a first sighting, and records nothing, same "baseline
+        without firing" precedent as goal detection, so a restart mid-hold
+        doesn't show the screen a second time. Favourite-only, same scoping
+        as goal detection and the PP indicator.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not watched or not favourite or not game.involves(favourite):
+            return
+        if game.id not in self._three_stars_shown:
+            self._three_stars_pending.setdefault(game.id, None)
+
+    def refresh_three_stars(self) -> None:
+        """Fetch the three stars for a just-final favourite game, retrying until named.
+
+        Decoupled from the final transition itself for the same reason
+        ``refresh_goal_details`` is decoupled from the score increase:
+        ``score/now`` can flip a game to FINAL/OFF before ``landing`` has
+        its ``threeStars`` populated, so an empty result is retried every
+        ``live_poll_seconds`` rather than given up on. Stops once the stars
+        arrive, once the game leaves today's slate (pruned with the rest of
+        the per-game state), or once its final hold is over -- nothing would
+        show the screen after that anyway.
+        """
+        now = self.monotonic()
+        interval = self.settings.scoreboard.live_poll_seconds
+        hold = timedelta(minutes=self.settings.scoreboard.final_hold_minutes)
+        for game_id, tried_at in list(self._three_stars_pending.items()):
+            ended = self.ended_at.get(game_id)
+            if game_id in self._three_stars_shown or (
+                ended is not None and self.clock() - ended >= hold
+            ):
+                del self._three_stars_pending[game_id]
+                continue
+            if tried_at is not None and now - tried_at < interval:
+                continue
+            self._three_stars_pending[game_id] = now
+            try:
+                stars = self.client.three_stars(game_id)
+            except NHLApiError as exc:
+                log.debug("Three stars fetch for %s failed: %s", game_id, exc)
+                continue
+            if not stars:
+                continue
+            del self._three_stars_pending[game_id]
+            self._three_stars_shown.add(game_id)
+            self._three_stars = (game_id, now, stars)
+
+    def _three_stars_override(self, game_id: int) -> Scene | None:
+        if self._three_stars is None:
+            return None
+        stars_game_id, shown_at, stars = self._three_stars
+        if stars_game_id != game_id:
+            return None
+        if self.monotonic() - shown_at >= self.settings.scoreboard.three_stars_seconds:
+            return None
+        game = next((g for g in self.games if g.id == game_id), None)
+        if game is None:
+            return None
+        return Scene("three_stars", game, stars=stars)
 
     # -- favourite mode --------------------------------------------------
 
@@ -1116,20 +1268,26 @@ class ScoreboardApp:
         goal scene's own score-increase trigger (see refresh_goal_details),
         so by the time it is ready there is no point re-showing the plainer
         "GOAL" + score flash for the same goal.
+
+        three_stars (#156) is the last layer: it only arms once the game is
+        final, so it's temporally disjoint from the other two in practice.
+        If a late game-winner's flash does overlap it, the goal screens win
+        and three_stars just loses that slice of its own window.
         """
         if scene.kind != "game":
             return scene
         detail = self._goal_detail_override(scene.game.id)
         if detail is not None:
             return detail
-        if self.last_goal is None:
-            return scene
-        goal_game_id, goal_time = self.last_goal
-        if scene.game.id != goal_game_id:
-            return scene
-        if self.monotonic() - goal_time >= self.settings.scoreboard.goal_flash_seconds:
-            return scene
-        return Scene("goal", scene.game)
+        if self.last_goal is not None:
+            goal_game_id, goal_time = self.last_goal
+            if (
+                scene.game.id == goal_game_id
+                and self.monotonic() - goal_time < self.settings.scoreboard.goal_flash_seconds
+            ):
+                return Scene("goal", scene.game)
+        stars = self._three_stars_override(scene.game.id)
+        return stars if stars is not None else scene
 
     def _goal_detail_override(self, game_id: int) -> Scene | None:
         if self._goal_detail is None:
@@ -1254,6 +1412,7 @@ class ScoreboardApp:
         scene = self.select_scene(allow_fetch=False)
         cfg = self.settings.scoreboard
         return {
+            "version": installed_version() or "unknown (factory image)",
             "scene": scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",
@@ -1291,6 +1450,8 @@ class ScoreboardApp:
             r.draw_goal(self.canvas, scene.game)
         elif scene.kind == "goal_detail":
             r.draw_goal_detail(self.canvas, scene.game, scene.goal_event)
+        elif scene.kind == "three_stars":
+            r.draw_three_stars(self.canvas, scene.game, scene.stars)
         elif scene.kind == "countdown":
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
