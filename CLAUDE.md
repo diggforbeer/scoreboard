@@ -974,6 +974,28 @@ slices, one story at a time.
   `status_server.py`'s own section order. Verified with a real
   headless-browser interaction: changed the port, saved, confirmed
   "Saved." with the new value both in the live DOM and on disk.
+- **Story 7 (done): Panel -- 17 fields, the biggest section yet** (every
+  `PanelConfig` field except `pitch_mm`, which `status_server.py`'s own
+  form has never exposed either -- informational only, the driver never
+  reads it, per the Rendering rules note above). First real use of a new
+  `_FieldSpec.restart_required` flag: 12 of the 17 fields are baked into
+  the constructed `RGBMatrix` and only take effect after
+  `nhl-scoreboard.service` restarts (see the "wrong hardware_mapping is a
+  silent failure" hardware note); only the five brightness-related fields
+  (`brightness`, `auto_brightness`, `min_brightness`, `max_brightness`,
+  `brightness_poll_seconds`) hot-apply. The flag is informational for the
+  frontend to badge -- it doesn't change validation, same idea as
+  `status_server.py`'s own per-field `restart_required`. Also the second
+  real use of the `"select"` kind (`hardware_mapping`, `rgb_sequence`),
+  after `logo_variant` in Scoreboard. The frontend groups the 17 fields
+  into three subheadings (Geometry, Driver/PWM, Brightness), badging the
+  two restart-required groups -- the natural tie-in to the Reboot card
+  two sections down, which is literally what those fields need after a
+  save. Verified with a real headless-browser interaction: edited one
+  field of each kind (int, select ×2, bool, str, float), saved, confirmed
+  the live DOM reflected every change, and confirmed
+  `scoreboard.local.toml` on disk matched exactly -- including that
+  `pitch_mm`, never sent, was untouched.
 - Not yet decided or built: every other section, the JSON-API-vs-
   WebSocket-for-everything question (every save/action so far has gone
   straight over the existing WebSocket connection rather than a separate

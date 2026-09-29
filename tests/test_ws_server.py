@@ -55,9 +55,9 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
-async def _skip_initial(client, n=6):
-    """Drain the version/audio/scoreboard/status/rotation/update messages
-    every connection opens with."""
+async def _skip_initial(client, n=7):
+    """Drain the version/audio/scoreboard/status/panel/rotation/update
+    messages every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -212,6 +212,7 @@ def test_sends_the_current_rotation_on_connect(app_dir, config_path):
         await client.recv()  # audio
         await client.recv()  # scoreboard
         await client.recv()  # status
+        await client.recv()  # panel
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -333,6 +334,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
         await client.recv()  # audio
         await client.recv()  # scoreboard
         await client.recv()  # status
+        await client.recv()  # panel
         await client.recv()  # rotation
         return await client.recv()
 
@@ -628,3 +630,130 @@ def test_status_save_rejects_a_boolean_port(app_dir, config_path):
     assert message["type"] == "error"
     assert "port" in message["message"]
     assert config_path.read_text() == ""
+
+
+# -- story 7: the Panel section -------------------------------------------------
+
+
+#: What a legal save can contain -- every _PANEL_FIELDS key. Excludes
+#: pitch_mm: it's a real PanelConfig field (so it shows up in the payload
+#: the server sends), but not one _PANEL_FIELDS validates, same as
+#: status_server.py's own form never exposing it either (informational
+#: only, the driver never reads it).
+_DEFAULT_PANEL_SAVE_DATA = {
+    "rows": 32,
+    "cols": 64,
+    "chain_length": 2,
+    "parallel": 1,
+    "hardware_mapping": "regular",
+    "rgb_sequence": "RGB",
+    "gpio_slowdown": 4,
+    "pwm_bits": 11,
+    "pwm_lsb_nanoseconds": 130,
+    "brightness": 60,
+    "limit_refresh_rate_hz": 0,
+    "disable_hardware_pulsing": False,
+    "pixel_mapper": "",
+    "auto_brightness": False,
+    "min_brightness": 10,
+    "max_brightness": 100,
+    "brightness_poll_seconds": 5.0,
+}
+
+
+def test_sends_the_current_panel_config_on_connect(app_dir, config_path):
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        await client.recv()  # scoreboard
+        await client.recv()  # status
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "panel",
+        "data": {**_DEFAULT_PANEL_SAVE_DATA, "pitch_mm": 2.5},
+    }
+
+
+def test_panel_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    new_values = {**_DEFAULT_PANEL_SAVE_DATA, "brightness": 80, "hardware_mapping": "adafruit-hat"}
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "panel", "data": new_values}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "panel"}
+    fresh_data = json.loads(fresh)["data"]
+    assert fresh_data["brightness"] == 80
+    assert fresh_data["hardware_mapping"] == "adafruit-hat"
+    assert 'hardware_mapping = "adafruit-hat"' in config_path.read_text()
+
+
+def test_panel_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_PANEL_SAVE_DATA, "pitch_mm": 3.0}
+        await client.send(json.dumps({"type": "save", "section": "panel", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "pitch_mm" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_panel_save_rejects_the_wrong_type(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_PANEL_SAVE_DATA, "rows": "not an int"}
+        await client.send(json.dumps({"type": "save", "section": "panel", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "rows" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_panel_save_rejects_an_invalid_hardware_mapping(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_PANEL_SAVE_DATA, "hardware_mapping": "bogus-mapping"}
+        await client.send(json.dumps({"type": "save", "section": "panel", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "hardware_mapping" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_panel_save_rejects_an_invalid_rgb_sequence(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_PANEL_SAVE_DATA, "rgb_sequence": "XYZ"}
+        await client.send(json.dumps({"type": "save", "section": "panel", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "rgb_sequence" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_panel_save_rejects_a_non_object_payload(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "panel", "data": [1, 2]}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received)["type"] == "error"

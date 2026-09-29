@@ -75,6 +75,19 @@ thing:
   far had been bool/str/float). Otherwise nothing new -- exactly the
   ``_coerce_scalar_fields`` pattern Scoreboard's story already proved
   out, applied to a two-field section this time.
+* Story 7: Panel -- 17 fields (everything ``PanelConfig`` has except
+  ``pitch_mm``, which ``status_server.py``'s own form has never exposed
+  either: it's informational only, the driver never reads it). The
+  biggest section yet, and the first real use of ``_FieldSpec.
+  restart_required`` -- 12 of the 17 fields are baked into the
+  constructed ``RGBMatrix`` and only take effect after
+  ``nhl-scoreboard.service`` restarts (see CLAUDE.md's "wrong
+  hardware_mapping is a silent failure" hardware note); only the five
+  brightness-related fields hot-apply. The flag is informational for the
+  frontend to badge, same as ``status_server.py``'s own per-field
+  ``restart_required`` -- it doesn't change validation. Also the second
+  real use of the ``"select"`` kind (``hardware_mapping``,
+  ``rgb_sequence``), after ``logo_variant`` in Scoreboard.
 
 No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
 """
@@ -126,6 +139,12 @@ _clients: set[ServerConnection] = set()
 class _FieldSpec:
     kind: str  # "bool" | "str" | "float" | "int" | "select"
     choices: tuple[str, ...] = ()
+    #: Mirrors status_server.py's own per-field flag (#178 story 7) -- a
+    #: value that only takes effect after nhl-scoreboard.service restarts,
+    #: because it's baked into the constructed RGBMatrix (see CLAUDE.md's
+    #: "wrong hardware_mapping is a silent failure" hardware note). Purely
+    #: informational for the frontend to badge; doesn't change validation.
+    restart_required: bool = False
 
 
 #: Mirrors AudioConfig's own fields (config.py) -- kept as an explicit spec
@@ -166,6 +185,35 @@ _STATUS_FIELDS: dict[str, _FieldSpec] = {
     "port": _FieldSpec("int"),
 }
 
+#: Mirrors PanelConfig's own fields (config.py), same convention -- except
+#: pitch_mm, which status_server.py's own form has never exposed either:
+#: it's informational only, the driver never reads it (CLAUDE.md). The
+#: five brightness-related fields hot-apply; every other field here is
+#: restart_required, since it's baked into the constructed RGBMatrix.
+_PANEL_FIELDS: dict[str, _FieldSpec] = {
+    "brightness": _FieldSpec("int"),
+    "auto_brightness": _FieldSpec("bool"),
+    "min_brightness": _FieldSpec("int"),
+    "max_brightness": _FieldSpec("int"),
+    "brightness_poll_seconds": _FieldSpec("float"),
+    "rows": _FieldSpec("int", restart_required=True),
+    "cols": _FieldSpec("int", restart_required=True),
+    "chain_length": _FieldSpec("int", restart_required=True),
+    "parallel": _FieldSpec("int", restart_required=True),
+    "hardware_mapping": _FieldSpec(
+        "select", choices=("regular", "adafruit-hat", "adafruit-hat-pwm"), restart_required=True
+    ),
+    "rgb_sequence": _FieldSpec(
+        "select", choices=("RGB", "RBG", "GRB", "GBR", "BRG", "BGR"), restart_required=True
+    ),
+    "gpio_slowdown": _FieldSpec("int", restart_required=True),
+    "pwm_bits": _FieldSpec("int", restart_required=True),
+    "pwm_lsb_nanoseconds": _FieldSpec("int", restart_required=True),
+    "disable_hardware_pulsing": _FieldSpec("bool", restart_required=True),
+    "pixel_mapper": _FieldSpec("str", restart_required=True),
+    "limit_refresh_rate_hz": _FieldSpec("int", restart_required=True),
+}
+
 
 def _audio_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "audio", "data": dataclasses.asdict(settings.audio)}
@@ -181,6 +229,10 @@ def _scoreboard_payload(settings: Settings) -> dict[str, object]:
 
 def _status_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "status", "data": dataclasses.asdict(settings.status)}
+
+
+def _panel_payload(settings: Settings) -> dict[str, object]:
+    return {"type": "config", "section": "panel", "data": dataclasses.asdict(settings.panel)}
 
 
 def _rotation_payload(settings: Settings) -> dict[str, object]:
@@ -242,6 +294,11 @@ async def _send_scoreboard_config(connection: ServerConnection) -> None:
 async def _send_status_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_status_payload(settings)))
+
+
+async def _send_panel_config(connection: ServerConnection) -> None:
+    settings = Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_panel_payload(settings)))
 
 
 async def _send_update_config(connection: ServerConnection) -> None:
@@ -368,6 +425,7 @@ _SEND_AFTER_SAVE = {
     "audio": _send_audio_config,
     "scoreboard": _send_scoreboard_config,
     "status": _send_status_config,
+    "panel": _send_panel_config,
     "rotation": _send_rotation_config,
 }
 
@@ -381,6 +439,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_scalar_fields(message.get("data"), _SCOREBOARD_FIELDS)
         elif section == "status":
             values = _coerce_scalar_fields(message.get("data"), _STATUS_FIELDS)
+        elif section == "panel":
+            values = _coerce_scalar_fields(message.get("data"), _PANEL_FIELDS)
         elif section == "rotation":
             values = _coerce_rotation(message.get("data"))
         else:
@@ -403,6 +463,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_audio_config(connection)
         await _send_scoreboard_config(connection)
         await _send_status_config(connection)
+        await _send_panel_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
         log.info("Sent initial state to %s", connection.remote_address)

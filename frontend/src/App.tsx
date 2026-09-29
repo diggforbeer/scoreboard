@@ -44,6 +44,32 @@ interface StatusConfig {
   port: number
 }
 
+// Mirrors PanelConfig (config.py) except pitch_mm -- informational only,
+// the driver never reads it, so status_server.py's own form has never
+// exposed it either. Still typed here since the server's payload
+// (dataclasses.asdict of the whole dataclass) includes it regardless;
+// savePanel strips it back out before sending.
+interface PanelConfig {
+  rows: number
+  cols: number
+  chain_length: number
+  parallel: number
+  pitch_mm: number
+  hardware_mapping: string
+  rgb_sequence: string
+  gpio_slowdown: number
+  pwm_bits: number
+  pwm_lsb_nanoseconds: number
+  brightness: number
+  limit_refresh_rate_hz: number
+  disable_hardware_pulsing: boolean
+  pixel_mapper: string
+  auto_brightness: boolean
+  min_brightness: number
+  max_brightness: number
+  brightness_poll_seconds: number
+}
+
 interface RotationRow {
   screen: string
   seconds: number
@@ -65,6 +91,7 @@ type ServerMessage =
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'status'; data: StatusConfig }
+  | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'saved'; section: string }
@@ -100,6 +127,10 @@ function App() {
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
   const [statusSaveError, setStatusSaveError] = useState<string | null>(null)
 
+  const [panel, setPanel] = useState<PanelConfig | null>(null)
+  const [panelSaveStatus, setPanelSaveStatus] = useState<SaveStatus>('idle')
+  const [panelSaveError, setPanelSaveError] = useState<string | null>(null)
+
   const [rotation, setRotation] = useState<RotationRow[] | null>(null)
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
   const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
@@ -129,6 +160,7 @@ function App() {
           if (message.section === 'audio') setAudio(message.data)
           else if (message.section === 'scoreboard') setScoreboard(message.data)
           else if (message.section === 'status') setStatus(message.data)
+          else if (message.section === 'panel') setPanel(message.data)
           else if (message.section === 'rotation') setRotation(message.data)
           else if (message.section === 'update') {
             setUpdate(message.data)
@@ -139,6 +171,7 @@ function App() {
           if (message.section === 'audio') setAudioSaveStatus('saved')
           else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
           else if (message.section === 'status') setStatusSaveStatus('saved')
+          else if (message.section === 'panel') setPanelSaveStatus('saved')
           else if (message.section === 'rotation') setRotationSaveStatus('saved')
           break
         case 'error':
@@ -151,6 +184,9 @@ function App() {
           } else if (message.section === 'status') {
             setStatusSaveStatus('error')
             setStatusSaveError(message.message)
+          } else if (message.section === 'panel') {
+            setPanelSaveStatus('error')
+            setPanelSaveError(message.message)
           } else if (message.section === 'rotation') {
             setRotationSaveStatus('error')
             setRotationSaveError(message.message)
@@ -198,6 +234,18 @@ function App() {
     setStatusSaveStatus('saving')
     setStatusSaveError(null)
     save('status', status)
+  }
+
+  function savePanel(event: React.FormEvent) {
+    event.preventDefault()
+    if (!panel) return
+    setPanelSaveStatus('saving')
+    setPanelSaveError(null)
+    // pitch_mm is in the payload the server sends (it's a real PanelConfig
+    // field) but not one it validates on save -- status_server.py's own
+    // form never exposed it either, since it's informational only.
+    const { pitch_mm: _pitchMm, ...data } = panel
+    save('panel', data)
   }
 
   function saveRotation(event: React.FormEvent) {
@@ -474,6 +522,211 @@ function App() {
                   Save Status page
                 </button>
                 {saveFeedback(statusSaveStatus, statusSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Panel</h2>
+          {panel ? (
+            <form onSubmit={savePanel}>
+              <h3 className="h6 text-body-secondary mt-2">
+                Geometry <span className="badge text-bg-secondary fw-normal">restart required</span>
+              </h3>
+              {(
+                [
+                  ['rows', 'Rows per panel'],
+                  ['cols', 'Columns per panel'],
+                  ['chain_length', 'Chain length'],
+                  ['parallel', 'Parallel chains'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`panel-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`panel-${key}`}
+                    type="number"
+                    step="1"
+                    value={panel[key]}
+                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+
+              <h3 className="h6 text-body-secondary mt-4">
+                Driver / PWM <span className="badge text-bg-secondary fw-normal">restart required</span>
+              </h3>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-hardware-mapping">
+                  Hardware mapping
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="panel-hardware-mapping"
+                  value={panel.hardware_mapping}
+                  onChange={(e) => setPanel({ ...panel, hardware_mapping: e.target.value })}
+                >
+                  <option value="regular">regular</option>
+                  <option value="adafruit-hat">adafruit-hat</option>
+                  <option value="adafruit-hat-pwm">adafruit-hat-pwm</option>
+                </select>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-rgb-sequence">
+                  RGB sequence (colour wire order)
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="panel-rgb-sequence"
+                  value={panel.rgb_sequence}
+                  onChange={(e) => setPanel({ ...panel, rgb_sequence: e.target.value })}
+                >
+                  {(['RGB', 'RBG', 'GRB', 'GBR', 'BRG', 'BGR'] as const).map((seq) => (
+                    <option key={seq} value={seq}>
+                      {seq}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(
+                [
+                  ['gpio_slowdown', 'GPIO slowdown'],
+                  ['pwm_bits', 'PWM bits'],
+                  ['pwm_lsb_nanoseconds', 'PWM LSB nanoseconds'],
+                  ['limit_refresh_rate_hz', 'Refresh rate limit (Hz, 0 = unlimited)'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`panel-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`panel-${key}`}
+                    type="number"
+                    step="1"
+                    value={panel[key]}
+                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="panel-disable-hardware-pulsing"
+                  checked={panel.disable_hardware_pulsing}
+                  onChange={(e) =>
+                    setPanel({ ...panel, disable_hardware_pulsing: e.target.checked })
+                  }
+                />
+                <label className="form-check-label" htmlFor="panel-disable-hardware-pulsing">
+                  Disable hardware pulsing
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-pixel-mapper">
+                  Pixel mapper (blank for none)
+                </label>
+                <input
+                  className="form-control"
+                  id="panel-pixel-mapper"
+                  type="text"
+                  value={panel.pixel_mapper}
+                  onChange={(e) => setPanel({ ...panel, pixel_mapper: e.target.value })}
+                />
+              </div>
+
+              <h3 className="h6 text-body-secondary mt-4">Brightness</h3>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-brightness">
+                  Brightness (1-100)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="panel-brightness"
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="100"
+                  value={panel.brightness}
+                  onChange={(e) => setPanel({ ...panel, brightness: Number(e.target.value) })}
+                />
+              </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="panel-auto-brightness"
+                  checked={panel.auto_brightness}
+                  onChange={(e) => setPanel({ ...panel, auto_brightness: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="panel-auto-brightness">
+                  Auto brightness from ambient sensor
+                </label>
+              </div>
+              {(
+                [
+                  ['min_brightness', 'Auto-brightness minimum'],
+                  ['max_brightness', 'Auto-brightness maximum'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`panel-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`panel-${key}`}
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="100"
+                    value={panel[key]}
+                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-brightness-poll-seconds">
+                  Brightness sensor poll interval (seconds)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="panel-brightness-poll-seconds"
+                  type="number"
+                  step="any"
+                  value={panel.brightness_poll_seconds}
+                  onChange={(e) =>
+                    setPanel({ ...panel, brightness_poll_seconds: Number(e.target.value) })
+                  }
+                />
+              </div>
+
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={panelSaveStatus === 'saving'}
+                >
+                  Save Panel
+                </button>
+                {saveFeedback(panelSaveStatus, panelSaveError)}
               </div>
             </form>
           ) : (
