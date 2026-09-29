@@ -1017,6 +1017,22 @@ slices, one story at a time.
   changed `dim_brightness`, switched `suppress_scope` to `all`, edited
   `cooldown_minutes`, saved, confirmed the live DOM and
   `scoreboard.local.toml` on disk matched exactly.
+- **Story 9 (done): Wi-Fi -- the smallest section yet, one field**
+  (`connect_timeout_seconds`). `ssid`/`password`/`country` live in the
+  same `[wifi]` TOML table but are deliberately not modelled by
+  `WifiConfig` at all (`config.py`'s own `_wifi_config` filters them out
+  before `_build()` sees them) -- actually joining a network is
+  `setup_server.py`'s job, the offline-first captive-portal page, out of
+  scope for this whole rebuild (see the note right after Story 1). A
+  save here only ever patches `connect_timeout_seconds`, matching
+  `Settings.save()`'s own per-key patching -- verified with a real
+  headless-browser interaction against a dev config with no `[wifi]`
+  table at all yet (the boot-partition template ships without one):
+  changed the timeout, saved, confirmed the new table was created on
+  disk with exactly that one key, and confirmed with `ssid`/`password`
+  already present in the file (a real-world case, since scoreboard-
+  provision writes those from a completed setup flow) that a save
+  doesn't disturb them.
 - Not yet decided or built: every other section, the JSON-API-vs-
   WebSocket-for-everything question (every save/action so far has gone
   straight over the existing WebSocket connection rather than a separate

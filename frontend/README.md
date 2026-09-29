@@ -11,7 +11,9 @@ page section (`enabled`/`port`), the Panel section (17 fields, grouped
 into Geometry/Driver-PWM/Brightness, with a "restart required" badge on
 the 12 fields that need `nhl-scoreboard.service` to restart before they
 take effect), the Night mode section (6 fields: enabled, the dim window's
-start/end time, dimmed brightness, suppress scope, cooldown), the idle
+start/end time, dimmed brightness, suppress scope, cooldown), the Wi-Fi
+section (just `connect_timeout_seconds` -- actually joining a network is
+the board's own offline setup page's job, not this one), the idle
 rotation list (`[[rotation]]`), and Reboot / Software update -- all with
 no page reload, which was the actual point of moving off
 `status_server.py`'s HTML-form-POST model. The rotation editor does real

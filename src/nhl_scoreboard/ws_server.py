@@ -98,6 +98,15 @@ thing:
   re-parses the strings itself) that aren't JSON-serialisable and were
   never a value a person sets directly -- ``_night_mode_payload`` builds
   the dict by hand instead, naming only the 6 editable fields.
+* Story 9: Wi-Fi (``[wifi]``) -- the smallest section yet, one field
+  (``connect_timeout_seconds``). ``ssid``/``password``/``country`` live
+  in the same TOML table but are deliberately not modelled by
+  ``WifiConfig`` at all (``config.py``'s own ``_wifi_config`` filters
+  them out before ``_build()`` sees them) -- actually joining a network
+  is ``setup_server.py``'s job, the offline-first captive-portal page,
+  out of scope for this whole rebuild (see the note right after story
+  1). This section only tunes how long a join attempt waits before
+  deciding it failed.
 
 No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
 """
@@ -243,6 +252,17 @@ _NIGHT_MODE_FIELDS: dict[str, _FieldSpec] = {
     "cooldown_minutes": _FieldSpec("float"),
 }
 
+#: WifiConfig only models one field -- ssid/password/country live in the
+#: same [wifi] TOML table but are read directly out of the raw dict by
+#: scoreboard-provision (predates this dataclass, #133) and deliberately
+#: NOT exposed here: actually setting up a network is setup_server.py's
+#: job (the offline-first captive-portal page, #132), not this one. This
+#: only tunes how long a join attempt (boot-time or live, #133) waits
+#: before deciding it failed.
+_WIFI_FIELDS: dict[str, _FieldSpec] = {
+    "connect_timeout_seconds": _FieldSpec("float"),
+}
+
 
 def _audio_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "audio", "data": dataclasses.asdict(settings.audio)}
@@ -278,6 +298,10 @@ def _night_mode_payload(settings: Settings) -> dict[str, object]:
             "cooldown_minutes": nm.cooldown_minutes,
         },
     }
+
+
+def _wifi_payload(settings: Settings) -> dict[str, object]:
+    return {"type": "config", "section": "wifi", "data": dataclasses.asdict(settings.wifi)}
 
 
 def _rotation_payload(settings: Settings) -> dict[str, object]:
@@ -349,6 +373,11 @@ async def _send_panel_config(connection: ServerConnection) -> None:
 async def _send_night_mode_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_night_mode_payload(settings)))
+
+
+async def _send_wifi_config(connection: ServerConnection) -> None:
+    settings = Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_wifi_payload(settings)))
 
 
 async def _send_update_config(connection: ServerConnection) -> None:
@@ -477,6 +506,7 @@ _SEND_AFTER_SAVE = {
     "status": _send_status_config,
     "panel": _send_panel_config,
     "night_mode": _send_night_mode_config,
+    "wifi": _send_wifi_config,
     "rotation": _send_rotation_config,
 }
 
@@ -494,6 +524,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_scalar_fields(message.get("data"), _PANEL_FIELDS)
         elif section == "night_mode":
             values = _coerce_scalar_fields(message.get("data"), _NIGHT_MODE_FIELDS)
+        elif section == "wifi":
+            values = _coerce_scalar_fields(message.get("data"), _WIFI_FIELDS)
         elif section == "rotation":
             values = _coerce_rotation(message.get("data"))
         else:
@@ -518,6 +550,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_status_config(connection)
         await _send_panel_config(connection)
         await _send_night_mode_config(connection)
+        await _send_wifi_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
         log.info("Sent initial state to %s", connection.remote_address)

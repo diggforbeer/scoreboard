@@ -55,9 +55,9 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
-async def _skip_initial(client, n=8):
-    """Drain the version/audio/scoreboard/status/panel/night_mode/rotation/
-    update messages every connection opens with."""
+async def _skip_initial(client, n=9):
+    """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
+    rotation/update messages every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -169,13 +169,13 @@ def test_save_rejects_the_wrong_type_without_writing_the_file(app_dir, config_pa
 def test_save_rejects_an_unknown_section(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
-        await client.send(json.dumps({"type": "save", "section": "wifi", "data": {}}))
+        await client.send(json.dumps({"type": "save", "section": "bogus-section", "data": {}}))
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
     message = json.loads(received)
     assert message["type"] == "error"
-    assert "wifi" in message["message"]
+    assert "bogus-section" in message["message"]
 
 
 def test_unknown_message_type_gets_an_error_not_a_crash(app_dir, config_path):
@@ -214,6 +214,7 @@ def test_sends_the_current_rotation_on_connect(app_dir, config_path):
         await client.recv()  # status
         await client.recv()  # panel
         await client.recv()  # night_mode
+        await client.recv()  # wifi
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -337,6 +338,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
         await client.recv()  # status
         await client.recv()  # panel
         await client.recv()  # night_mode
+        await client.recv()  # wifi
         await client.recv()  # rotation
         return await client.recv()
 
@@ -853,6 +855,103 @@ def test_night_mode_save_rejects_a_non_object_payload(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
         await client.send(json.dumps({"type": "save", "section": "night_mode", "data": [1, 2]}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received)["type"] == "error"
+
+
+# -- story 9: the Wi-Fi section -----------------------------------------------
+
+
+def test_sends_the_current_wifi_config_on_connect(app_dir, config_path):
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        await client.recv()  # scoreboard
+        await client.recv()  # status
+        await client.recv()  # panel
+        await client.recv()  # night_mode
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "wifi",
+        "data": {"connect_timeout_seconds": 90.0},
+    }
+
+
+def test_wifi_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"connect_timeout_seconds": 45}
+        await client.send(json.dumps({"type": "save", "section": "wifi", "data": data}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "wifi"}
+    assert json.loads(fresh) == {
+        "type": "config",
+        "section": "wifi",
+        "data": {"connect_timeout_seconds": 45.0},
+    }
+    assert "connect_timeout_seconds = 45" in config_path.read_text()
+
+
+def test_wifi_save_does_not_disturb_ssid_or_password_in_the_file(app_dir, config_path):
+    """ssid/password/country aren't modelled by _WIFI_FIELDS at all -- a
+    save must only ever touch connect_timeout_seconds, never clobber the
+    other keys in the same [wifi] table (config.py's Settings.save()
+    patches individual keys, not the whole table, but this is the one
+    section where accidentally doing the latter would be dangerous)."""
+    config_path.write_text('[wifi]\nssid = "MyNetwork"\npassword = "hunter2"\n')
+
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"connect_timeout_seconds": 30}
+        await client.send(json.dumps({"type": "save", "section": "wifi", "data": data}))
+        return await client.recv(), await client.recv()
+
+    asyncio.run(_serve_and_run(scenario))
+    text = config_path.read_text()
+    assert 'ssid = "MyNetwork"' in text
+    assert 'password = "hunter2"' in text
+    assert "connect_timeout_seconds = 30" in text
+
+
+def test_wifi_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"connect_timeout_seconds": 90, "ssid": "MyNetwork"}
+        await client.send(json.dumps({"type": "save", "section": "wifi", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "ssid" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_wifi_save_rejects_the_wrong_type(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"connect_timeout_seconds": "not a number"}
+        await client.send(json.dumps({"type": "save", "section": "wifi", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "connect_timeout_seconds" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_wifi_save_rejects_a_non_object_payload(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "wifi", "data": [1, 2]}))
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))

@@ -82,6 +82,14 @@ interface NightModeConfig {
   cooldown_minutes: number
 }
 
+// Mirrors WifiConfig (config.py) -- ssid/password/country live in the
+// same [wifi] TOML table but aren't modelled here at all: actually
+// joining a network is setup_server.py's job (the offline-first
+// captive-portal page), out of scope for this whole rebuild.
+interface WifiConfig {
+  connect_timeout_seconds: number
+}
+
 interface RotationRow {
   screen: string
   seconds: number
@@ -105,6 +113,7 @@ type ServerMessage =
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
+  | { type: 'config'; section: 'wifi'; data: WifiConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'saved'; section: string }
@@ -148,6 +157,10 @@ function App() {
   const [nightModeSaveStatus, setNightModeSaveStatus] = useState<SaveStatus>('idle')
   const [nightModeSaveError, setNightModeSaveError] = useState<string | null>(null)
 
+  const [wifi, setWifi] = useState<WifiConfig | null>(null)
+  const [wifiSaveStatus, setWifiSaveStatus] = useState<SaveStatus>('idle')
+  const [wifiSaveError, setWifiSaveError] = useState<string | null>(null)
+
   const [rotation, setRotation] = useState<RotationRow[] | null>(null)
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
   const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
@@ -179,6 +192,7 @@ function App() {
           else if (message.section === 'status') setStatus(message.data)
           else if (message.section === 'panel') setPanel(message.data)
           else if (message.section === 'night_mode') setNightMode(message.data)
+          else if (message.section === 'wifi') setWifi(message.data)
           else if (message.section === 'rotation') setRotation(message.data)
           else if (message.section === 'update') {
             setUpdate(message.data)
@@ -191,6 +205,7 @@ function App() {
           else if (message.section === 'status') setStatusSaveStatus('saved')
           else if (message.section === 'panel') setPanelSaveStatus('saved')
           else if (message.section === 'night_mode') setNightModeSaveStatus('saved')
+          else if (message.section === 'wifi') setWifiSaveStatus('saved')
           else if (message.section === 'rotation') setRotationSaveStatus('saved')
           break
         case 'error':
@@ -209,6 +224,9 @@ function App() {
           } else if (message.section === 'night_mode') {
             setNightModeSaveStatus('error')
             setNightModeSaveError(message.message)
+          } else if (message.section === 'wifi') {
+            setWifiSaveStatus('error')
+            setWifiSaveError(message.message)
           } else if (message.section === 'rotation') {
             setRotationSaveStatus('error')
             setRotationSaveError(message.message)
@@ -276,6 +294,14 @@ function App() {
     setNightModeSaveStatus('saving')
     setNightModeSaveError(null)
     save('night_mode', nightMode)
+  }
+
+  function saveWifi(event: React.FormEvent) {
+    event.preventDefault()
+    if (!wifi) return
+    setWifiSaveStatus('saving')
+    setWifiSaveError(null)
+    save('wifi', wifi)
   }
 
   function saveRotation(event: React.FormEvent) {
@@ -869,6 +895,49 @@ function App() {
                   Save Night mode
                 </button>
                 {saveFeedback(nightModeSaveStatus, nightModeSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Wi-Fi</h2>
+          <p className="text-body-secondary small">
+            Network name and password are set from the board's own setup page, not here -- this
+            only tunes how long a join attempt waits before deciding it failed.
+          </p>
+          {wifi ? (
+            <form onSubmit={saveWifi}>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="wifi-connect-timeout-seconds">
+                  Join attempt timeout (seconds)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="wifi-connect-timeout-seconds"
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={wifi.connect_timeout_seconds}
+                  onChange={(e) =>
+                    setWifi({ ...wifi, connect_timeout_seconds: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={wifiSaveStatus === 'saving'}
+                >
+                  Save Wi-Fi
+                </button>
+                {saveFeedback(wifiSaveStatus, wifiSaveError)}
               </div>
             </form>
           ) : (
