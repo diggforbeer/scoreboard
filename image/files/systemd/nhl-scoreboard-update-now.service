@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for a newer scoreboard release (admin page button)
+Documentation=https://github.com/diggforbeer/scoreboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/
+Environment=PYTHONPATH=/opt/nhl-scoreboard
+# --force: a person asked, so check even if the daily check is disabled.
+ExecStart=/usr/bin/python3 -m nhl_scoreboard.updater check --force

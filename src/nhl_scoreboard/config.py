@@ -315,6 +315,18 @@ class WifiSetupConfig:
 
 
 @dataclass(slots=True)
+class UpdateConfig:
+    """Daily check for a newer release (#32).
+
+    On by default, but only ever *checks* -- applying is always the admin
+    page's button. This is the one thing that has the board contact anything
+    besides the NHL API on its own (GitHub Releases), hence the switch.
+    """
+
+    enabled: bool = True
+
+
+@dataclass(slots=True)
 class WifiConfig:
     """How long a WiFi join attempt waits before deciding it failed (#133).
 
@@ -406,6 +418,7 @@ class Settings:
     wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
     wifi: WifiConfig = field(default_factory=WifiConfig)
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
+    update: UpdateConfig = field(default_factory=UpdateConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -438,6 +451,7 @@ class Settings:
             wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
             wifi=_wifi_config(raw.get("wifi", {})),
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
+            update=_build(UpdateConfig, raw.get("update", {})),
         )
 
     def save(self, updates: Mapping[str, Any]) -> None:
@@ -503,6 +517,7 @@ class Settings:
         self.wifi_setup = reloaded.wifi_setup
         self.wifi = reloaded.wifi
         self.night_mode = reloaded.night_mode
+        self.update = reloaded.update
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:
