@@ -269,6 +269,31 @@ which only covers the unrelated "no games left to preview at all" case
 entirely). Admin-UI support for editing `[[rotation]]` itself is #151, not
 built yet -- today it's boot-partition-TOML-only.
 
+The physical button (#50, `button.py`, `[button]`, off by default) is one
+momentary switch between a GPIO pin and GND -- GPIO 26 by default, 16 the
+documented alternative, both from the verified free-pin table in Hardware
+facts; don't pick another pin without re-checking that table. A short
+press mutes the goal horn for `mute_minutes` (`_on_goal()` still records
+the goal and shows the goal scene, it just skips `horn.play()`); a hold of
+`hold_seconds` calls `advance()`. That long press is a no-op whenever the
+favourite's own scene is up, since that flow never reads `self.index` --
+expected, not a bug; stepping `_rotate_idle_scenes`'s time-based slots is
+out of scope. Thread safety is the non-obvious part: gpiozero fires
+`when_pressed`/`when_released` from its pin-monitoring thread and
+`when_held` from a separate hold-timer thread, so those callbacks only set
+plain bools, and `run()`'s own thread consumes them once per iteration
+(`handle_button()`) and does every actual mutation -- the same rule
+`status_server.py` follows for its request thread. A long press is told
+apart from a short one by a per-press "hold already fired" bool that
+`when_pressed` resets and `when_released` checks, so a hold never also
+counts as a tap on release. Dependency follows the light sensor's pattern:
+`gpiozero` is a dev extra (tests drive the real `gpiozero.Button` through
+its `MockFactory`, conftest's `mock_pins`), the image gets
+`python3-gpiozero` from apt, and a missing library or unclaimable pin makes
+`Button.open()` return `None`, never raise. Not yet verified on hardware
+(#164, part of #4): notably, which gpiozero pin backend Debian's package picks on the
+Pi, and that it coexists with the HUB75 driver's own direct GPIO access.
+
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
 (`renderer.py`) tries PP/EN first, then always falls through to

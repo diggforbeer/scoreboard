@@ -11,6 +11,7 @@ import json
 import os
 import signal
 import threading
+import time
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
@@ -25,6 +26,7 @@ from nhl_scoreboard.app import (
     Scene,
     ScoreboardApp,
 )
+from nhl_scoreboard.button import Button
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
@@ -1195,6 +1197,229 @@ def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, t
             assert "Hockey Scoreboard" in resp.read().decode("utf-8")
     finally:
         app.status_server.stop()
+
+
+# -- physical button (#50) -------------------------------------------------
+#
+# Presses go through the real button.Button + gpiozero.Button on gpiozero's
+# MockFactory (conftest's mock_pins), so what reaches the app is exactly what
+# gpiozero's own press/hold/release logic produced. The reload tests only
+# care whether the button was rebuilt or closed, so they use a spy instead.
+
+BUTTON_PIN = 26
+BUTTON_HOLD = 0.1
+
+
+class SpyButton:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def consume_short_press(self) -> bool:
+        return False
+
+    def consume_long_press(self) -> bool:
+        return False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def button_app(fake_backend, games, mock_pins, **button_kwargs):
+    src = FakeClockSource()
+    settings = Settings()
+    for key, value in button_kwargs.items():
+        setattr(settings.button, key, value)
+    button = Button.open(BUTTON_PIN, hold_seconds=BUTTON_HOLD)
+    assert button is not None
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+        horn=RecordingHorn(),
+        button=button,
+    )
+    return app, src, mock_pins.pin(BUTTON_PIN)
+
+
+def tap(pin) -> None:
+    pin.drive_low()
+    pin.drive_high()
+
+
+def hold(app: ScoreboardApp, pin) -> None:
+    pin.drive_low()
+    deadline = time.monotonic() + 2
+    while not app.button._long_press and time.monotonic() < deadline:
+        time.sleep(0.01)
+    pin.drive_high()
+
+
+def test_button_is_not_opened_when_disabled(fake_backend, games):
+    app = build_app(fake_backend, games)
+    assert app.settings.button.enabled is False
+    assert app.button is None
+    app.handle_button()  # no button: a no-op, not an AttributeError
+
+
+def test_button_is_opened_from_settings_when_enabled(fake_backend, games, mock_pins):
+    settings = Settings()
+    settings.button.enabled = True
+    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+    assert app.button is not None
+
+
+def test_short_press_mutes_the_next_goal_horn(fake_backend, games, mock_pins):
+    app, _src, pin = button_app(fake_backend, games, mock_pins)
+    app.refresh()
+    game = app.games[0]
+
+    tap(pin)
+    app.handle_button()
+    app._on_goal(game)
+
+    assert app.horn.calls == []
+    assert app.last_goal is not None, "muting the horn must not suppress the goal scene"
+
+
+def test_horn_plays_again_once_mute_minutes_pass(fake_backend, games, mock_pins):
+    app, src, pin = button_app(fake_backend, games, mock_pins, mute_minutes=30)
+    app.refresh()
+    game = app.games[0]
+
+    tap(pin)
+    app.handle_button()
+    src.now += 30 * 60 - 1
+    app._on_goal(game)
+    assert app.horn.calls == []
+
+    src.now += 1
+    app._on_goal(game)
+    assert app.horn.calls == [app.settings.scoreboard.favourite_team]
+
+
+def test_mute_minutes_zero_never_mutes(fake_backend, games, mock_pins):
+    app, _src, pin = button_app(fake_backend, games, mock_pins, mute_minutes=0)
+    app.refresh()
+
+    tap(pin)
+    app.handle_button()
+    app._on_goal(app.games[0])
+
+    assert len(app.horn.calls) == 1
+
+
+def test_long_press_advances_the_rotation_exactly_once(fake_backend, games, mock_pins):
+    app, _src, pin = button_app(fake_backend, games, mock_pins)
+    app.refresh()
+    assert len(app.games) > 1
+    assert app.index == 0
+
+    hold(app, pin)
+    app.handle_button()
+    assert app.index == 1
+    assert app._horn_muted_until is None, "a long press is not also a mute"
+
+    app.handle_button()  # the same press, consumed already
+    assert app.index == 1
+
+
+def test_short_press_is_consumed_once(fake_backend, games, mock_pins):
+    app, src, pin = button_app(fake_backend, games, mock_pins)
+
+    tap(pin)
+    app.handle_button()
+    first = app._horn_muted_until
+    assert first is not None
+
+    src.now += 10
+    app.handle_button()  # nothing new pressed: the mute window isn't pushed out
+    assert app._horn_muted_until == first
+
+
+def test_run_loop_handles_button_presses(fake_backend, games, mock_pins):
+    app, src, pin = button_app(fake_backend, games, mock_pins, mute_minutes=5)
+    tap(pin)
+
+    run_for_frames(app, src, 1)
+
+    assert app._horn_muted_until == 5 * 60
+
+
+def test_shutdown_releases_the_button(fake_backend, games):
+    spy = SpyButton()
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, button=spy)
+    app.shutdown()
+    assert spy.closed
+
+
+def test_reload_opens_button_when_enabled(fake_backend, games, tmp_path, mock_pins):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = false\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.button is None
+
+    path.write_text("[button]\nenabled = true\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.button is not None
+
+
+def test_reload_closes_button_when_disabled(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = true\n")
+    spy = SpyButton()
+    app = ScoreboardApp(
+        Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
+    )
+
+    path.write_text("[button]\nenabled = false\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert spy.closed
+    assert app.button is None
+
+
+@pytest.mark.parametrize("change", ["pin = 16", "hold_seconds = 2.0"])
+def test_reload_rebuilds_button_on_pin_or_hold_change(
+    fake_backend, games, tmp_path, mock_pins, change
+):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = true\n")
+    spy = SpyButton()
+    app = ScoreboardApp(
+        Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
+    )
+
+    path.write_text(f"[button]\nenabled = true\n{change}\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert spy.closed
+    assert app.button is not spy
+    assert app.button is not None
+
+
+def test_reload_keeps_button_when_button_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[button]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    spy = SpyButton()
+    app = ScoreboardApp(
+        Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
+    )
+
+    # mute_minutes is read per press, so changing it alone needs no rebuild either.
+    path.write_text(
+        '[button]\nenabled = true\nmute_minutes = 5\n[scoreboard]\nfavourite_team = "TOR"\n'
+    )
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.button is spy
+    assert not spy.closed
 
 
 # -- status page config editor (#110) --------------------------------------
