@@ -16,7 +16,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import Game, GoalEvent, Situation, StandingsRow, goal_events_from_landing
+from .models import (
+    Game,
+    GoalEvent,
+    Situation,
+    StandingsRow,
+    Star,
+    goal_events_from_landing,
+    three_stars_from_landing,
+)
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +93,20 @@ class NHLClient:
             return goal_events_from_landing(payload)
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             log.warning("Skipping malformed scoring for game %s: %s", game_id, exc)
+            return ()
+
+    def three_stars(self, game_id: int) -> tuple[Star, ...]:
+        """The three stars of a finished game (#156), or ``()`` until they're named.
+
+        A third request to the same landing URL ``situation()`` and
+        ``goal_scoring()`` already fetch, for the same reason those two are
+        separate: each feature polls on its own schedule.
+        """
+        payload = self._get(f"/gamecenter/{game_id}/landing")
+        try:
+            return three_stars_from_landing(payload)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Skipping malformed three stars for game %s: %s", game_id, exc)
             return ()
 
     def standings(self, date: str = "now") -> list[StandingsRow]:
