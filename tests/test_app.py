@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from nhl_scoreboard import updater
 from nhl_scoreboard.app import (
     DEMO_SCENE_SECONDS,
     FRAME_INTERVAL,
@@ -555,6 +556,18 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     snapshot = app.status_snapshot()
     assert "score refresh" in snapshot["last error"]
     assert snapshot["last error at"] != ""
+
+
+def test_status_snapshot_shows_the_installed_version(fake_backend, games, tmp_path, monkeypatch):
+    """A factory image (never hot-updated) has no VERSION file at all --
+    installed_version() reads it fresh every call, so this must never go
+    stale even if [update]'s own daily check hasn't run yet (#32)."""
+    monkeypatch.setattr(updater, "APP_DIR", tmp_path)
+    app = build_app(fake_backend, games, favourite_team="TOR")
+    assert app.status_snapshot()["version"] == "unknown (factory image)"
+
+    (tmp_path / "VERSION").write_text("v2026.09.29.4\n")
+    assert app.status_snapshot()["version"] == "v2026.09.29.4"
 
 
 def test_status_snapshot_never_fetches_or_mutates_shared_state(fake_backend, games):

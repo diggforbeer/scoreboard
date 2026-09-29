@@ -37,6 +37,7 @@ from .nhl.models import (
 )
 from .setup_server import SetupServer
 from .status_server import StatusServer
+from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
 
 log = logging.getLogger(__name__)
@@ -1275,6 +1276,7 @@ class ScoreboardApp:
         scene = self.select_scene(allow_fetch=False)
         cfg = self.settings.scoreboard
         return {
+            "version": installed_version() or "unknown (factory image)",
             "scene": scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",

@@ -47,3 +47,12 @@ sb:
   srcdir: ${@SRCROOT}/..
   assetdir: ${@SRCROOT}/files
   vendordir: ${@SRCROOT}/files/vendor
+  # The release tag this image was built from, e.g. v2026.09.29.4 --
+  # stamped into /opt/nhl-scoreboard/VERSION at build time so the admin
+  # page can show it even on a board that's never taken a hot update
+  # (nhl_scoreboard.updater only ever writes that file itself on a
+  # successful apply(), never at image-build time). Empty by default;
+  # build-image.yml overrides this with the real tag for an actual
+  # release build (-- IGconf_sb_version=...), left blank for a PR/dev
+  # build, which has no meaningful release version to claim.
+  version: ""

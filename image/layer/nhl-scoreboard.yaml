@@ -222,6 +222,14 @@ mmdebstrap:
         "$1/etc/systemd/system/timers.target.wants/nhl-scoreboard-update.timer"
       git -C "$IGconf_sb_vendordir/rpi-rgb-led-matrix" rev-parse HEAD \
         > "$1/usr/share/nhl-scoreboard/driver-commit"
+      # Only a real release build sets sb.version (build-image.yml, --
+      # IGconf_sb_version=<tag>, refs/tags/v* only) -- a PR/dev build
+      # leaves it empty, and installed_version() already treats a missing
+      # VERSION file as "unknown (factory image)", so nothing is written
+      # rather than stamping a fake/blank version.
+      if [ -n "${IGconf_sb_version:-}" ]; then
+        printf '%s\n' "$IGconf_sb_version" > "$1/opt/nhl-scoreboard/VERSION"
+      fi
 
     # ---- boot partition settings file --------------------------------
     - |-
