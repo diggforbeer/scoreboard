@@ -6,9 +6,10 @@ exactly what's been ported over so far and what hasn't -- local-dev only,
 not wired into the actual admin page or the device image yet.
 
 So far: the installed version (read-only), the Scoreboard section (16
-fields), the Audio section (`enabled`/`device`/`horn_dir`), the idle
-rotation list (`[[rotation]]`), and Reboot / Software update -- all with
-no page reload, which was the actual point of moving off
+fields), the Audio section (`enabled`/`device`/`horn_dir`), the Status
+page section (`enabled`/`port`), the idle rotation list (`[[rotation]]`),
+and Reboot / Software update -- all with no page reload, which was the
+actual point of moving off
 `status_server.py`'s HTML-form-POST model. The rotation editor does real
 add/remove/reorder in the browser (↑/↓ buttons, a row cap of 8) -- the old
 HTML version needed a numeric "order" field and a full-page round trip

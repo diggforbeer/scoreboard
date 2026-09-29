@@ -55,9 +55,9 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
-async def _skip_initial(client, n=5):
-    """Drain the version/audio/scoreboard/rotation/update messages every
-    connection opens with."""
+async def _skip_initial(client, n=6):
+    """Drain the version/audio/scoreboard/status/rotation/update messages
+    every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -211,6 +211,7 @@ def test_sends_the_current_rotation_on_connect(app_dir, config_path):
         await client.recv()  # version
         await client.recv()  # audio
         await client.recv()  # scoreboard
+        await client.recv()  # status
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -331,6 +332,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
         await client.recv()  # version
         await client.recv()  # audio
         await client.recv()  # scoreboard
+        await client.recv()  # status
         await client.recv()  # rotation
         return await client.recv()
 
@@ -557,3 +559,72 @@ def test_scoreboard_save_rejects_a_non_object_payload(app_dir, config_path):
 
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received)["type"] == "error"
+
+
+# -- story 6: the Status page section -----------------------------------------
+
+
+def test_sends_the_current_status_config_on_connect(app_dir, config_path):
+    config_path.write_text("[status]\nenabled = false\nport = 9000\n")
+
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        await client.recv()  # scoreboard
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "status",
+        "data": {"enabled": False, "port": 9000},
+    }
+
+
+def test_status_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"enabled": False, "port": 9090}
+        await client.send(json.dumps({"type": "save", "section": "status", "data": data}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "status"}
+    assert json.loads(fresh) == {
+        "type": "config",
+        "section": "status",
+        "data": {"enabled": False, "port": 9090},
+    }
+    assert "port = 9090" in config_path.read_text()
+
+
+def test_status_save_rejects_a_non_integer_port(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"enabled": True, "port": 8080.5}
+        await client.send(json.dumps({"type": "save", "section": "status", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "port" in message["message"]
+    assert "whole number" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_status_save_rejects_a_boolean_port(app_dir, config_path):
+    """bool is a subclass of int in Python -- True/False must not slip
+    through the "must be an int" check."""
+
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {"enabled": True, "port": True}
+        await client.send(json.dumps({"type": "save", "section": "status", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "port" in message["message"]
+    assert config_path.read_text() == ""

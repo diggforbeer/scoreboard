@@ -39,6 +39,11 @@ interface ScoreboardConfig {
   show_clock_between_games: boolean
 }
 
+interface StatusConfig {
+  enabled: boolean
+  port: number
+}
+
 interface RotationRow {
   screen: string
   seconds: number
@@ -59,6 +64,7 @@ type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
+  | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'saved'; section: string }
@@ -90,6 +96,10 @@ function App() {
   const [scoreboardSaveStatus, setScoreboardSaveStatus] = useState<SaveStatus>('idle')
   const [scoreboardSaveError, setScoreboardSaveError] = useState<string | null>(null)
 
+  const [status, setStatus] = useState<StatusConfig | null>(null)
+  const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
+  const [statusSaveError, setStatusSaveError] = useState<string | null>(null)
+
   const [rotation, setRotation] = useState<RotationRow[] | null>(null)
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
   const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
@@ -118,6 +128,7 @@ function App() {
         case 'config':
           if (message.section === 'audio') setAudio(message.data)
           else if (message.section === 'scoreboard') setScoreboard(message.data)
+          else if (message.section === 'status') setStatus(message.data)
           else if (message.section === 'rotation') setRotation(message.data)
           else if (message.section === 'update') {
             setUpdate(message.data)
@@ -127,6 +138,7 @@ function App() {
         case 'saved':
           if (message.section === 'audio') setAudioSaveStatus('saved')
           else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
+          else if (message.section === 'status') setStatusSaveStatus('saved')
           else if (message.section === 'rotation') setRotationSaveStatus('saved')
           break
         case 'error':
@@ -136,6 +148,9 @@ function App() {
           } else if (message.section === 'scoreboard') {
             setScoreboardSaveStatus('error')
             setScoreboardSaveError(message.message)
+          } else if (message.section === 'status') {
+            setStatusSaveStatus('error')
+            setStatusSaveError(message.message)
           } else if (message.section === 'rotation') {
             setRotationSaveStatus('error')
             setRotationSaveError(message.message)
@@ -175,6 +190,14 @@ function App() {
     setScoreboardSaveStatus('saving')
     setScoreboardSaveError(null)
     save('scoreboard', scoreboard)
+  }
+
+  function saveStatus(event: React.FormEvent) {
+    event.preventDefault()
+    if (!status) return
+    setStatusSaveStatus('saving')
+    setStatusSaveError(null)
+    save('status', status)
   }
 
   function saveRotation(event: React.FormEvent) {
@@ -403,6 +426,54 @@ function App() {
                   Save Audio
                 </button>
                 {saveFeedback(audioSaveStatus, audioSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Status page</h2>
+          {status ? (
+            <form onSubmit={saveStatus}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="status-enabled"
+                  checked={status.enabled}
+                  onChange={(e) => setStatus({ ...status, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="status-enabled">
+                  Status page enabled
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="status-port">
+                  Status page port
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="status-port"
+                  type="number"
+                  step="1"
+                  value={status.port}
+                  onChange={(e) => setStatus({ ...status, port: Number(e.target.value) })}
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={statusSaveStatus === 'saving'}
+                >
+                  Save Status page
+                </button>
+                {saveFeedback(statusSaveStatus, statusSaveError)}
               </div>
             </form>
           ) : (

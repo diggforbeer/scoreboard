@@ -965,6 +965,15 @@ slices, one story at a time.
   edited a timing field, saved, and confirmed both the re-rendered form
   (read back from the live DOM, not just component state) and the file
   on disk matched exactly.
+- **Story 6 (done): Status page, `enabled`/`port`.** The smallest
+  section after Audio, and the first `"int"` field -- `_FieldSpec`
+  gained that kind (`port` must be a whole number, not `8080.5`;
+  everything before this had been bool/str/float). Otherwise nothing
+  new: straight application of the `_coerce_scalar_fields` pattern
+  Scoreboard's story already proved out. Placed after Audio, matching
+  `status_server.py`'s own section order. Verified with a real
+  headless-browser interaction: changed the port, saved, confirmed
+  "Saved." with the new value both in the live DOM and on disk.
 - Not yet decided or built: every other section, the JSON-API-vs-
   WebSocket-for-everything question (every save/action so far has gone
   straight over the existing WebSocket connection rather than a separate

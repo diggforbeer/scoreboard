@@ -69,6 +69,12 @@ thing:
   ``three_stars_seconds`` (#122, #156), which were never actually added
   to ``status_server.py``'s own HTML form -- a real, small gap in the
   page this is replacing, fixed in passing rather than carried forward.
+* Story 6: Status page (``enabled``/``port``) -- the smallest section
+  after Audio, and the first ``"int"`` field (``_FieldSpec`` gains that
+  kind: ``port`` must be a whole number, not ``8080.5``; everything so
+  far had been bool/str/float). Otherwise nothing new -- exactly the
+  ``_coerce_scalar_fields`` pattern Scoreboard's story already proved
+  out, applied to a two-field section this time.
 
 No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
 """
@@ -118,7 +124,7 @@ _clients: set[ServerConnection] = set()
 
 @dataclasses.dataclass(frozen=True)
 class _FieldSpec:
-    kind: str  # "bool" | "str" | "float" | "select"
+    kind: str  # "bool" | "str" | "float" | "int" | "select"
     choices: tuple[str, ...] = ()
 
 
@@ -152,6 +158,14 @@ _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
     "show_clock_between_games": _FieldSpec("bool"),
 }
 
+#: Mirrors StatusServerConfig's own fields (config.py), same convention.
+#: The first "int" field here -- port must be a whole number, not
+#: 8080.5 -- everything else so far has been bool/str/float.
+_STATUS_FIELDS: dict[str, _FieldSpec] = {
+    "enabled": _FieldSpec("bool"),
+    "port": _FieldSpec("int"),
+}
+
 
 def _audio_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "audio", "data": dataclasses.asdict(settings.audio)}
@@ -163,6 +177,10 @@ def _scoreboard_payload(settings: Settings) -> dict[str, object]:
         "section": "scoreboard",
         "data": dataclasses.asdict(settings.scoreboard),
     }
+
+
+def _status_payload(settings: Settings) -> dict[str, object]:
+    return {"type": "config", "section": "status", "data": dataclasses.asdict(settings.status)}
 
 
 def _rotation_payload(settings: Settings) -> dict[str, object]:
@@ -219,6 +237,11 @@ async def _send_rotation_config(connection: ServerConnection) -> None:
 async def _send_scoreboard_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_scoreboard_payload(settings)))
+
+
+async def _send_status_config(connection: ServerConnection) -> None:
+    settings = Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_status_payload(settings)))
 
 
 async def _send_update_config(connection: ServerConnection) -> None:
@@ -299,6 +322,8 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             not isinstance(value, (int, float)) or isinstance(value, bool)
         ):
             errors[key] = "must be a number"
+        elif spec.kind == "int" and (not isinstance(value, int) or isinstance(value, bool)):
+            errors[key] = "must be a whole number"
         elif spec.kind == "select" and value not in spec.choices:
             errors[key] = f"must be one of {', '.join(spec.choices)}"
     if errors:
@@ -342,6 +367,7 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
 _SEND_AFTER_SAVE = {
     "audio": _send_audio_config,
     "scoreboard": _send_scoreboard_config,
+    "status": _send_status_config,
     "rotation": _send_rotation_config,
 }
 
@@ -353,6 +379,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values: object = _coerce_scalar_fields(message.get("data"), _AUDIO_FIELDS)
         elif section == "scoreboard":
             values = _coerce_scalar_fields(message.get("data"), _SCOREBOARD_FIELDS)
+        elif section == "status":
+            values = _coerce_scalar_fields(message.get("data"), _STATUS_FIELDS)
         elif section == "rotation":
             values = _coerce_rotation(message.get("data"))
         else:
@@ -374,6 +402,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_version(connection)
         await _send_audio_config(connection)
         await _send_scoreboard_config(connection)
+        await _send_status_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
         log.info("Sent initial state to %s", connection.remote_address)
