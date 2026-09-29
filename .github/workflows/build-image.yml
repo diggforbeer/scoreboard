@@ -266,12 +266,27 @@ jobs:
           retention-days: 14
           compression-level: 0
 
+      # Feeds the on-device auto-updater (#32): nhl_scoreboard.updater's
+      # check() looks for exactly these two asset names on the latest
+      # release (BUNDLE_ASSET/MANIFEST_ASSET) and shows "This release has
+      # no app bundle (reflash to update)" on the admin page when they're
+      # missing -- confirmed live against a real release (v2026.09.29.4)
+      # that had neither, because nothing before this step ever built or
+      # attached them. scripts/build-app-bundle.py already existed and
+      # worked standalone; it was just never wired into a workflow.
+      - name: Build app-update bundle
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: scoreboard
+        run: python3 scripts/build-app-bundle.py --version "${{ github.ref_name }}" --out dist
+
       - name: Attach image to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             deploy/*.xz
+            scoreboard/dist/nhl-scoreboard-app.tar.gz
+            scoreboard/dist/manifest.json
             deploy/*.sha256
           # append_body, not body-replaces-body: release.yml's `gh release
           # create --generate-notes` already wrote a "What's Changed" PR
