@@ -209,6 +209,16 @@ pixel_mapper = ""
 #                      OE is on GPIO 18, so hardware PWM works unmodified.
 #   "adafruit-hat"     Adafruit RGB Matrix Bonnet or HAT, stock.
 #   "adafruit-hat-pwm" Adafruit board with the GPIO4-GPIO18 solder mod.
+#
+# IMPORTANT if the panel stays completely dark after setup: a wrong value
+# here does NOT show up as an error anywhere. nhl-scoreboard.service
+# starts fine, keeps running, keeps polling the NHL API -- it's just
+# driving the wrong physical pins for your actual adapter, so nothing
+# ever lights up. Verified on real hardware: an Adafruit RGB Matrix
+# Bonnet left on the "regular" default ran for 7+ minutes with an
+# entirely healthy, error-free service log and a totally blank panel;
+# switching to "adafruit-hat" (no other change) fixed it immediately.
+# If your panel is dark, check this line before anything else.
 hardware_mapping = "regular"
 
 # The order the three colour wires are actually driven in. Leave at "RGB"
