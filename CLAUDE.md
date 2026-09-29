@@ -49,6 +49,40 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   PR rather than just a link before trusting it. Either way, review what
   it produces the same as any other PR — a real test run doesn't make the
   *change* correct, only that it doesn't fail the suite as written.
+- **What a cloud run can actually execute, concretely.** The current
+  full `--allowedTools` list lives in exactly one place --
+  `claude.yml`'s own `claude_args` -- and is intentionally not
+  duplicated here verbatim, since the two would drift the moment either
+  changes; read that file for the exact string. In broad strokes, as of
+  this writing it covers: venv setup and test/lint (`python3 -m venv`,
+  `source`/`. path/to/activate`, `pip install`, `pytest`, `ruff check`,
+  `ruff format`), `python3` and `nhl-scoreboard` generally plus
+  `playwright install` (for rendering/screenshotting the admin page or
+  demo-mode panel scenes, #153), `git fetch`/`git merge`/`gh pr view`
+  (resolving a merge conflict against `main`), and
+  `gh pr create`/`gh issue create`/`gh issue list`/`gh issue close`/
+  `gh issue view`/`gh label list`. Deliberately **not** `Bash(gh:*)` or
+  general Bash -- see `claude.yml`'s own comments for why, and extend
+  the list there (one confirmed-blocked command at a time, with the
+  real evidence for why) rather than assuming a tool exists because it
+  would be convenient.
+- **To actually reproduce CI locally or in a cloud run**, this is what
+  each `ci.yml` job runs, in order -- the same commands work either
+  place:
+  ```bash
+  python3 -m venv .venv && source .venv/bin/activate   # skip if .venv already exists
+  pip install -e '.[dev]'
+  pytest --cov --cov-report=term-missing   # plain `pytest` (no --cov) is fine too, just less CI-faithful
+  ruff check .
+  ruff format --check .
+  ```
+  `ci.yml` also runs a `shell` job (`shellcheck` on `scripts/*.sh` and
+  the two grow-rootfs/setup-ap scripts) and a `layer-lint` job
+  (`python -m py_compile image/files/scripts/scoreboard-provision` plus
+  parsing the image layer YAML) -- neither is in the cloud run's
+  allowlist today (no `Bash(shellcheck:*)` or general Bash), so a cloud
+  run can't reproduce those two locally; they're still checked by CI
+  itself on the PR regardless.
 
 ## Commands
 
