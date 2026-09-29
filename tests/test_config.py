@@ -309,6 +309,53 @@ def test_night_mode_cooldown_clamped_to_zero():
     assert NightModeConfig(cooldown_minutes=0).cooldown_minutes == 0
 
 
+def test_button_defaults_off_without_a_section(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    button = Settings.load(path).button
+    assert button.enabled is False
+    assert button.pin == 26
+    assert button.mute_minutes == 60.0
+    assert button.hold_seconds == 1.0
+
+
+def test_button_parses_its_section(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = true\npin = 16\nmute_minutes = 15\nhold_seconds = 2\n")
+    button = Settings.load(path).button
+    assert (button.enabled, button.pin, button.mute_minutes, button.hold_seconds) == (
+        True,
+        16,
+        15.0,
+        2,
+    )
+
+
+def test_button_mute_minutes_clamped_to_zero(caplog):
+    from nhl_scoreboard.config import ButtonConfig
+
+    assert ButtonConfig(mute_minutes=-5).mute_minutes == 0
+    assert ButtonConfig(mute_minutes=0).mute_minutes == 0
+    assert "mute_minutes" not in caplog.text, "0 is valid; clamping it isn't worth a warning"
+
+
+@pytest.mark.parametrize("given", [0, 0.1, -1])
+def test_button_hold_seconds_floored_with_a_warning(given, caplog):
+    from nhl_scoreboard.config import MIN_HOLD_SECONDS, ButtonConfig
+
+    with caplog.at_level(logging.WARNING):
+        assert ButtonConfig(hold_seconds=given).hold_seconds == MIN_HOLD_SECONDS
+    assert "hold_seconds" in caplog.text
+
+
+def test_button_reasonable_hold_seconds_left_alone(caplog):
+    from nhl_scoreboard.config import ButtonConfig
+
+    assert ButtonConfig(hold_seconds=0.5).hold_seconds == 0.5
+    assert ButtonConfig(hold_seconds=3).hold_seconds == 3
+    assert "hold_seconds" not in caplog.text
+
+
 def test_night_mode_derived_times_are_not_settable_from_toml(tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[night_mode]\nstart = "01:00"\n')

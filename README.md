@@ -48,6 +48,7 @@ works, and still fully supported, not replaced by the flow above.
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
 | Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
+| Button (optional) | Momentary push-button between GPIO 26 and GND, for `[button]` (#50) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -88,6 +89,7 @@ Early development. Working today:
 - [x] Root filesystem grows to fill the SD card on first boot
 - [x] Optional web status page for headless debugging, with a config editor
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
+- [x] Optional push-button on GPIO 26: tap to mute the goal horn, hold to skip to the next game
 - [ ] Verified on real hardware
 
 ## Development

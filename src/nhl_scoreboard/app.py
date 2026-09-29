@@ -19,6 +19,7 @@ import qrcode
 
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
+from .button import Button
 from .config import DEFAULT_CONFIG_PATHS, RotationEntry, Settings, resolve_timezone
 from .display.fonts import FontSet
 from .display.logos import LogoLibrary
@@ -37,6 +38,7 @@ from .nhl.models import (
 )
 from .setup_server import SetupServer
 from .status_server import StatusServer
+from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
 
 log = logging.getLogger(__name__)
@@ -133,6 +135,7 @@ class ScoreboardApp:
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
         status_server: StatusServer | None = None,
+        button: Button | None = None,
         sleep: Callable[[float], None] | None = None,
         ap_setup_state_path: Path | None = None,
         ap_scan_state_path: Path | None = None,
@@ -186,6 +189,19 @@ class ScoreboardApp:
         else:
             self.light_sensor = None
         self._smoothed_lux: float | None = None
+        # Same lazy-open rule as the light sensor: no GPIO claimed, and no
+        # gpiozero import attempted, unless the button is actually enabled.
+        if button is not None:
+            self.button = button
+        elif settings.button.enabled:
+            self.button = Button.open(
+                pin=settings.button.pin, hold_seconds=settings.button.hold_seconds
+            )
+        else:
+            self.button = None
+        #: monotonic time the goal horn stays silent until, after a short
+        #: button press (#50). None means not muted.
+        self._horn_muted_until: float | None = None
         self._applied_brightness = settings.panel.brightness
         self.tz = resolve_timezone(settings.scoreboard.timezone)
         self._config_mtime = self._source_mtime()
@@ -296,6 +312,7 @@ class ScoreboardApp:
         while self._running:
             now = self.monotonic()
             self.reload_config_if_changed()
+            self.handle_button()
             if now >= next_poll:
                 self.refresh()
                 next_poll = now + self.poll_interval()
@@ -361,6 +378,8 @@ class ScoreboardApp:
                 self.status_server.stop()
             if self.setup_server is not None:
                 self.setup_server.stop()
+            if self.button is not None:
+                self.button.close()
             self.matrix.Clear()
         finally:
             self.client.close()
@@ -456,9 +475,10 @@ class ScoreboardApp:
         editor (#48) -- and all three need to pick up a change the same way.
         Most settings are already read fresh from ``self.settings`` every
         loop iteration; ``[audio]``, the logo library, the ambient light
-        sensor (``panel.auto_brightness``) and the status server
-        (``status.enabled``/``status.port``) are built once from it instead,
-        so those get rebuilt explicitly here (#62). A rebuilt status server
+        sensor (``panel.auto_brightness``), the status server
+        (``status.enabled``/``status.port``) and the physical button
+        (``[button]``, #50) are built once from it instead, so those get
+        rebuilt explicitly here (#62). A rebuilt status server
         is only started if ``run()``'s loop is live (``self._running``):
         ``run()`` starts it exactly once before looping, so a reload outside
         that loop -- e.g. a test calling this directly -- builds it without
@@ -492,6 +512,12 @@ class ScoreboardApp:
         status_changed = (old.status.enabled, old.status.port) != (
             new_settings.status.enabled,
             new_settings.status.port,
+        )
+        # mute_minutes is read fresh on every press, so it alone needs no rebuild.
+        button_changed = (old.button.enabled, old.button.pin, old.button.hold_seconds) != (
+            new_settings.button.enabled,
+            new_settings.button.pin,
+            new_settings.button.hold_seconds,
         )
 
         self.settings = new_settings
@@ -541,6 +567,19 @@ class ScoreboardApp:
                     self.status_server.start()
             else:
                 self.status_server = None
+
+        if button_changed:
+            # gpiozero fixes pin and hold_time at construction; close first
+            # so the rebuilt one can reclaim the same pin.
+            if self.button is not None:
+                self.button.close()
+            self.button = (
+                Button.open(
+                    pin=new_settings.button.pin, hold_seconds=new_settings.button.hold_seconds
+                )
+                if new_settings.button.enabled
+                else None
+            )
 
         # wifi.connect_timeout_seconds: plain attribute update, no
         # stop/rebuild needed the way StatusServer's fixed-at-construction
@@ -665,7 +704,32 @@ class ScoreboardApp:
             game.home.abbrev,
         )
         self.last_goal = (game.id, self.monotonic())
+        if self._horn_muted():
+            log.info("Goal horn muted by button press; not playing")
+            return
         self.horn.play(favourite)
+
+    def _horn_muted(self) -> bool:
+        return self._horn_muted_until is not None and self.monotonic() < self._horn_muted_until
+
+    # -- physical button (#50) ---------------------------------------------
+
+    def handle_button(self) -> None:
+        """Act on any button presses since the last loop iteration.
+
+        The only place button presses turn into state changes: the button's
+        own gpiozero callbacks run on background threads and just set flags
+        (see button.py), so every mutation here happens on run()'s thread.
+        """
+        if self.button is None:
+            return
+        if self.button.consume_short_press():
+            minutes = self.settings.button.mute_minutes
+            self._horn_muted_until = self.monotonic() + minutes * 60
+            log.info("Button: goal horn muted for %g minutes", minutes)
+        if self.button.consume_long_press():
+            log.info("Button: forcing next rotation")
+            self.advance()
 
     # -- goal detail (#122 phase 2) ---------------------------------------
 
@@ -1275,6 +1339,7 @@ class ScoreboardApp:
         scene = self.select_scene(allow_fetch=False)
         cfg = self.settings.scoreboard
         return {
+            "version": installed_version() or "unknown (factory image)",
             "scene": scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",
