@@ -358,6 +358,35 @@ class StandingsRow:
         return f"{self.wins}-{self.losses}-{self.ot_losses}"
 
 
+@dataclass(frozen=True, slots=True)
+class SeasonSeriesRecord:
+    """``seasonSeriesWins`` from ``gamecenter/{id}/right-rail`` (#157).
+
+    Verified against real responses: the tally is oriented to *the
+    requested game's own* away/home sides (the same NSH-CGY series read
+    ``0-3`` from a game NSH hosted and ``3-0`` from one it played away), and
+    it is the season-to-date total of completed regular-season meetings,
+    not a running count up to that game -- every meeting's right-rail
+    reported the same ``2-2`` for a finished four-game series. OT/SO wins
+    count as wins. The object carries no team abbreviations of its own, so
+    callers pair it with the ``Game`` it was fetched for.
+    """
+
+    away_wins: int
+    home_wins: int
+
+    @classmethod
+    def from_api(cls, raw: Any) -> SeasonSeriesRecord | None:
+        """None for a missing or malformed ``seasonSeriesWins``, never raises."""
+        if not isinstance(raw, dict):
+            return None
+        away, home = raw.get("awayTeamWins"), raw.get("homeTeamWins")
+        # bool is an int subclass; a True/False here is malformed, not 1/0.
+        if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (away, home)):
+            return None
+        return cls(away_wins=away, home_wins=home)
+
+
 def conference_standings(rows: list[StandingsRow], conference: str) -> list[StandingsRow]:
     """``rows`` for one conference, ranked by overall conference position."""
     matches = [r for r in rows if r.conference == conference.strip().upper()]

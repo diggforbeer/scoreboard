@@ -37,7 +37,14 @@ from nhl_scoreboard.display.renderer import (
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color, team_secondary_color
-from nhl_scoreboard.nhl.models import AssistDetail, Game, GoalEvent, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import (
+    AssistDetail,
+    Game,
+    GoalEvent,
+    SeasonSeriesRecord,
+    Situation,
+    StandingsRow,
+)
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -747,6 +754,64 @@ def test_upcoming_text_layout(name, method, now, bottom_color, update_snapshots)
 
 
 # --------------------------------------------------------------------------
+# matchup: season-series tally for the upcoming game (#157)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "record", "tally"),
+    [
+        ("matchup", SeasonSeriesRecord(away_wins=2, home_wins=1), "2-1"),
+        ("matchup_preseason", SeasonSeriesRecord(away_wins=0, home_wins=0), "0-0"),
+    ],
+)
+def test_matchup_logo_layout(synthetic_logos, name, record, tally, update_snapshots):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_matchup(c, UPCOMING, record)
+    art = show(f"logos, {name}: {tally} / SEASON SERIES", c)
+
+    assert not c.out_of_bounds
+    for x0, side in ((0, UPCOMING.away), (MID_RIGHT, UPCOMING.home)):
+        assert team_color(side.abbrev) in c.colors(x0, 0, x0 + LOGO - 1, H - 1), (
+            f"{side.abbrev} logo"
+        )
+    tally_box = c.bbox(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1)
+    assert tally_box and abs(tally_box.center_x - (W - 1) / 2) <= 1, "tally not centred"
+    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1) == {WHITE}
+    assert c.lit(MID_LEFT + 3, RULE_Y, MID_RIGHT - 4, RULE_Y), "rule missing"
+    assert_centered(c, STATUS_TOP, H - 1, "caption")
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {SUBDUED}
+    check_snapshot(f"logo_{name}", art, update_snapshots)
+
+
+def test_matchup_text_layout(update_snapshots):
+    c = canvas()
+    make_renderer().draw_matchup(c, UPCOMING, SeasonSeriesRecord(2, 1))
+    art = show("text, matchup: TOR 2-1 MTL / SEASON SERIES", c)
+
+    assert not c.out_of_bounds
+    top = c.colors(0, 0, W - 1, RULE_Y - 1)
+    assert top == {team_color("TOR"), team_color("MTL"), WHITE}, "abbrevs in colour, tally white"
+    assert_centered(c, 0, RULE_Y - 1, "tally line")
+    assert c.row_is_solid(RULE_Y)
+    assert_centered(c, STATUS_TOP, H - 1, "caption")
+    assert status_color(c) == {SUBDUED}
+    # Away on the left, like every other scene: TOR's colour sits left of MTL's.
+    tor_x = [x for (x, _y), rgb in c.pixels.items() if rgb == team_color("TOR")]
+    mtl_x = [x for (x, _y), rgb in c.pixels.items() if rgb == team_color("MTL")]
+    assert max(tor_x) < min(mtl_x)
+    check_snapshot("text_matchup", art, update_snapshots)
+
+
+def test_matchup_missing_logo_falls_back_to_text(synthetic_logos):
+    game = dataclasses.replace(UPCOMING, home=dataclasses.replace(UPCOMING.home, abbrev="ZZZ"))
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_matchup(c, game, SeasonSeriesRecord(1, 1))
+    assert not c.out_of_bounds
+    assert c.row_is_solid(RULE_Y), "text layout's full-width rule"
+
+
+# --------------------------------------------------------------------------
 # goal celebration
 # --------------------------------------------------------------------------
 
@@ -1151,6 +1216,38 @@ def test_upcoming_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
     top_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
     assert top_box is not None, "top line missing"
     check_snapshot("logo_narrow_preview", art, update_snapshots)
+
+
+def test_matchup_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_matchup(c, UPCOMING, SeasonSeriesRecord(2, 1))
+    art = show("narrow logos, matchup: 2-1 / SERIES", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.home.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    tally_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
+    assert tally_box is not None, "tally missing"
+    caption = c.bbox(NARROW_LEFT, STATUS_TOP, NARROW_RIGHT - 1, H - 1)
+    assert caption is not None, "caption missing"
+    assert c.colors(NARROW_LEFT, STATUS_TOP, NARROW_RIGHT - 1, H - 1) == {SUBDUED}
+    check_snapshot("logo_narrow_matchup", art, update_snapshots)
+
+
+def test_matchup_text_layout_narrow_panel(update_snapshots):
+    """The large face doesn't fit "TOR 2-1 MTL" in 64px; the small one does."""
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer().draw_matchup(c, UPCOMING, SeasonSeriesRecord(2, 1))
+    art = show("narrow text, matchup: TOR 2-1 MTL / SEASON SERIES", c)
+
+    assert not c.out_of_bounds
+    top = c.colors(0, 0, NARROW_W - 1, RULE_Y - 1)
+    assert {team_color("TOR"), team_color("MTL"), WHITE} <= top
+    caption = c.bbox(0, STATUS_TOP, NARROW_W - 1, H - 1)
+    assert caption is not None and abs(caption.center_x - (NARROW_W - 1) / 2) <= 1
+    check_snapshot("text_narrow_matchup", art, update_snapshots)
 
 
 def test_goal_detail_narrow_panel_stays_on_panel(games, synthetic_logos):

@@ -16,7 +16,14 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import Game, GoalEvent, Situation, StandingsRow, goal_events_from_landing
+from .models import (
+    Game,
+    GoalEvent,
+    SeasonSeriesRecord,
+    Situation,
+    StandingsRow,
+    goal_events_from_landing,
+)
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +93,21 @@ class NHLClient:
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             log.warning("Skipping malformed scoring for game %s: %s", game_id, exc)
             return ()
+
+    def season_series(self, game_id: int) -> SeasonSeriesRecord | None:
+        """Head-to-head wins this season between ``game_id``'s two teams (#157).
+
+        A different endpoint from ``landing``: ``right-rail`` carries
+        ``seasonSeriesWins``, oriented to this game's own away/home sides.
+        ``0-0`` (not None) before any regular-season meeting has finished,
+        including all through the preseason. None only when the key is
+        missing or malformed.
+        """
+        payload = self._get(f"/gamecenter/{game_id}/right-rail")
+        record = SeasonSeriesRecord.from_api(payload.get("seasonSeriesWins"))
+        if record is None:
+            log.warning("No usable seasonSeriesWins for game %s", game_id)
+        return record
 
     def standings(self, date: str = "now") -> list[StandingsRow]:
         """Every team's current standings line, unsorted across conferences.

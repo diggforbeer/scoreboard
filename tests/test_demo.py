@@ -20,6 +20,7 @@ EVERY_KIND = {
     "game",
     "goal",
     "standings",
+    "matchup",
     "clock",
     "no_games",
     "no_data",
@@ -36,7 +37,7 @@ def test_every_scene_kind_is_covered(favourite):
     assert {s.scene.kind for s in steps} == EVERY_KIND
 
 
-@pytest.mark.parametrize("kind", ["game", "goal", "standings"])
+@pytest.mark.parametrize("kind", ["game", "goal", "standings", "matchup"])
 def test_both_logo_and_text_layouts_are_shown(kind):
     steps = [s for s in demo_steps("NSH", NOW) if s.scene.kind == kind]
     assert {s.use_logos for s in steps} == {True, False}
@@ -127,6 +128,8 @@ def test_every_step_renders_on_panel(width):
             getattr(r, f"draw_{scene.kind}")(c, scene.game, NOW)
         elif scene.kind == "standings":
             r.draw_standings(c, scene.standings, "NSH")
+        elif scene.kind == "matchup":
+            r.draw_matchup(c, scene.game, scene.season_series)
         elif scene.kind == "clock":
             r.draw_clock(c, NOW)
         else:

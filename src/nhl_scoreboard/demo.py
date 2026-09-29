@@ -12,7 +12,14 @@ from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
 from .app import Scene
-from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
+from .nhl.models import (
+    Game,
+    SeasonSeriesRecord,
+    Situation,
+    StandingsRow,
+    conference_standings,
+    standings_window,
+)
 
 #: Stand-ins for the favourite's opponents; any of them is skipped if it
 #: happens to be the favourite itself, so a matchup never plays itself.
@@ -81,6 +88,10 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
     return [
         DemoStep(Scene("connecting")),
         DemoStep(Scene("preview", upcoming)),
+        DemoStep(Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1))),
+        DemoStep(
+            Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1)), use_logos=False
+        ),
         DemoStep(Scene("countdown", soon)),
         DemoStep(Scene("game", soon)),
         DemoStep(Scene("game", live)),

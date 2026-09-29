@@ -13,11 +13,16 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, ScoreboardApp
-from nhl_scoreboard.config import Settings
+from nhl_scoreboard.app import (
+    SCHEDULE_TTL_SECONDS,
+    SEASON_SERIES_TTL_SECONDS,
+    STANDINGS_TTL_SECONDS,
+    ScoreboardApp,
+)
+from nhl_scoreboard.config import RotationEntry, Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, SeasonSeriesRecord, StandingsRow
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -89,6 +94,16 @@ class FlowClient:
         self.standings_calls = 0
         self.fail_standings = False
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        #: game id -> tally; a missing id answers None, like a malformed payload.
+        self.series: dict[int, SeasonSeriesRecord | None] = {}
+        self.season_series_calls: list[int] = []
+        self.fail_season_series = False
+
+    def season_series(self, game_id):
+        self.season_series_calls.append(game_id)
+        if self.fail_season_series:
+            raise NHLApiError("boom")
+        return self.series.get(game_id)
 
     def scores(self, date="now"):
         return list(self.today)
@@ -799,6 +814,149 @@ def test_standings_failure_backs_off_instead_of_polling_every_frame(day):
     tick(app, clock, seconds=STANDINGS_TTL_SECONDS + 1)  # keeps refresh() fresh, unlike advance()
     app.select_scene()
     assert client.standings_calls == 2, "a retry is still expected once the backoff elapses"
+
+
+# -- matchup / season series (#157) -------------------------------------------
+
+
+def test_matchup_never_in_the_implicit_default_rotation(day):
+    """Opt-in only: a board with no [[rotation]] never shows it, or even fetches it."""
+    app, clock, client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    for _ in range(8):
+        assert scene(app)[0] != "matchup"
+        tick(app, clock, seconds=10)
+    assert client.season_series_calls == []
+
+
+def test_matchup_shown_when_listed_in_rotation(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(away_wins=1, home_wins=2)
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+
+    assert scene(app) == ("preview", 1)
+    tick(app, clock, seconds=5)
+    s = app.select_scene()
+    assert (s.kind, s.game.id) == ("matchup", 1)
+    assert s.season_series == SeasonSeriesRecord(1, 2)
+    assert client.season_series_calls == [1], "keyed on the upcoming game's own id"
+    tick(app, clock, seconds=5)
+    assert scene(app) == ("preview", 1)
+
+
+def test_matchup_preseason_zero_zero_still_shows(day):
+    """0-0 is a real answer (preseason, or no meeting finished yet), not "nothing to show"."""
+    app, _clock, client = day
+    client.series[1] = SeasonSeriesRecord(0, 0)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    s = app.select_scene()
+    assert s.kind == "matchup"
+    assert s.season_series == SeasonSeriesRecord(0, 0)
+
+
+def test_matchup_skipped_when_api_has_no_usable_tally(day):
+    app, clock, client = day
+    client.series = {}  # season_series() -> None, as for a missing/malformed payload
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+    for _ in range(4):
+        assert scene(app) == ("preview", 1)
+        tick(app, clock, seconds=5)
+
+
+def test_matchup_skipped_with_no_upcoming_game(fake_backend):
+    client = FlowClient()
+    client.today = []
+    client.season = []
+    app = make_app(fake_backend, Clock(PUCK_DROP), client)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    app.refresh()
+    assert scene(app)[0] == "clock"  # show_clock_when_idle's fallback, not a blank matchup
+    assert client.season_series_calls == []
+    assert app._matchup_scene(None) is None
+
+
+def test_matchup_not_shown_before_fetch_has_completed(day):
+    """The status page (allow_fetch=False) with nothing cached: skipped, and no fetch."""
+    app, _clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+    for _ in range(3):
+        assert app.select_scene(allow_fetch=False).kind == "preview"
+    assert client.season_series_calls == []
+
+
+def test_matchup_cached_for_its_ttl(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    for _ in range(20):
+        app.select_scene()
+    assert client.season_series_calls == [1]
+
+    client.series[1] = SeasonSeriesRecord(3, 1)
+    tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 1)
+    assert app.select_scene().season_series == SeasonSeriesRecord(3, 1)
+    assert client.season_series_calls == [1, 1]
+
+
+def test_matchup_failure_backs_off_instead_of_polling_every_frame(day):
+    app, clock, client = day
+    client.fail_season_series = True
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+
+    for _ in range(20):
+        assert scene(app)[0] == "preview"
+    assert client.season_series_calls == [1]
+
+    client.fail_season_series = False
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 5)  # past backoff, on the matchup slot
+    assert scene(app) == ("matchup", 1)
+    assert client.season_series_calls == [1, 1]
+
+
+def test_matchup_failed_refresh_keeps_serving_the_cached_tally(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    assert app.select_scene().season_series == SeasonSeriesRecord(2, 1)
+
+    client.fail_season_series = True
+    tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 1)
+    assert app.select_scene().season_series == SeasonSeriesRecord(2, 1)
+    assert len(client.season_series_calls) == 2
+
+
+def test_matchup_cache_follows_the_upcoming_game(day):
+    """A new upcoming matchup fetches its own tally; the old one isn't kept around."""
+    app, _clock, client = day
+    client.series = {1: SeasonSeriesRecord(2, 1), 2: SeasonSeriesRecord(0, 1)}
+    tonight, next_game = client.season[1], client.season[2]
+    assert app._matchup_scene(tonight).season_series == SeasonSeriesRecord(2, 1)
+    assert app._matchup_scene(next_game).season_series == SeasonSeriesRecord(0, 1)
+    assert client.season_series_calls == [1, 2]
+    assert set(app._season_series) == {2}
+
+
+def test_matchup_never_interrupts_a_live_game(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert scene(app) == ("game", 1)
+
+
+def test_draw_dispatches_matchup_scene(day):
+    app, _clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    assert scene(app)[0] == "matchup"
+    app.draw()  # must not raise; exercises Renderer.draw_matchup via the real dispatch
+    assert app.matrix.swaps == 1
 
 
 def test_draw_dispatches_standings_scene(fake_backend):
