@@ -993,9 +993,7 @@ class StatusServer:
         return self._port
 
     def start(self) -> None:
-        handler = _make_handler(
-            self._snapshot, self._settings, self._wifi_restart, self._reboot
-        )
+        handler = _make_handler(self._snapshot, self._settings, self._wifi_restart, self._reboot)
         self._httpd = ThreadingHTTPServer((self._host, self._port), handler)
         self._thread = threading.Thread(
             target=self._httpd.serve_forever, name="status-server", daemon=True
