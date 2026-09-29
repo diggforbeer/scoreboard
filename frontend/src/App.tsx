@@ -70,6 +70,18 @@ interface PanelConfig {
   brightness_poll_seconds: number
 }
 
+// Mirrors NightModeConfig's own *editable* fields (config.py) -- not
+// start/end, which are derived datetime.time values the server never
+// sends (see ws_server.py's _night_mode_payload).
+interface NightModeConfig {
+  enabled: boolean
+  start_time: string
+  end_time: string
+  dim_brightness: number
+  suppress_scope: string
+  cooldown_minutes: number
+}
+
 interface RotationRow {
   screen: string
   seconds: number
@@ -92,6 +104,7 @@ type ServerMessage =
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
+  | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'saved'; section: string }
@@ -131,6 +144,10 @@ function App() {
   const [panelSaveStatus, setPanelSaveStatus] = useState<SaveStatus>('idle')
   const [panelSaveError, setPanelSaveError] = useState<string | null>(null)
 
+  const [nightMode, setNightMode] = useState<NightModeConfig | null>(null)
+  const [nightModeSaveStatus, setNightModeSaveStatus] = useState<SaveStatus>('idle')
+  const [nightModeSaveError, setNightModeSaveError] = useState<string | null>(null)
+
   const [rotation, setRotation] = useState<RotationRow[] | null>(null)
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
   const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
@@ -161,6 +178,7 @@ function App() {
           else if (message.section === 'scoreboard') setScoreboard(message.data)
           else if (message.section === 'status') setStatus(message.data)
           else if (message.section === 'panel') setPanel(message.data)
+          else if (message.section === 'night_mode') setNightMode(message.data)
           else if (message.section === 'rotation') setRotation(message.data)
           else if (message.section === 'update') {
             setUpdate(message.data)
@@ -172,6 +190,7 @@ function App() {
           else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
           else if (message.section === 'status') setStatusSaveStatus('saved')
           else if (message.section === 'panel') setPanelSaveStatus('saved')
+          else if (message.section === 'night_mode') setNightModeSaveStatus('saved')
           else if (message.section === 'rotation') setRotationSaveStatus('saved')
           break
         case 'error':
@@ -187,6 +206,9 @@ function App() {
           } else if (message.section === 'panel') {
             setPanelSaveStatus('error')
             setPanelSaveError(message.message)
+          } else if (message.section === 'night_mode') {
+            setNightModeSaveStatus('error')
+            setNightModeSaveError(message.message)
           } else if (message.section === 'rotation') {
             setRotationSaveStatus('error')
             setRotationSaveError(message.message)
@@ -246,6 +268,14 @@ function App() {
     // form never exposed it either, since it's informational only.
     const { pitch_mm: _pitchMm, ...data } = panel
     save('panel', data)
+  }
+
+  function saveNightMode(event: React.FormEvent) {
+    event.preventDefault()
+    if (!nightMode) return
+    setNightModeSaveStatus('saving')
+    setNightModeSaveError(null)
+    save('night_mode', nightMode)
   }
 
   function saveRotation(event: React.FormEvent) {
@@ -727,6 +757,118 @@ function App() {
                   Save Panel
                 </button>
                 {saveFeedback(panelSaveStatus, panelSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Night mode</h2>
+          {nightMode ? (
+            <form onSubmit={saveNightMode}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="night-mode-enabled"
+                  checked={nightMode.enabled}
+                  onChange={(e) => setNightMode({ ...nightMode, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="night-mode-enabled">
+                  Night mode enabled
+                </label>
+              </div>
+              <div className="d-flex gap-3">
+                <div className="mb-3">
+                  <label className="form-label" htmlFor="night-mode-start-time">
+                    Dim window start (24-hour HH:MM)
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '8rem' }}
+                    id="night-mode-start-time"
+                    type="text"
+                    value={nightMode.start_time}
+                    onChange={(e) => setNightMode({ ...nightMode, start_time: e.target.value })}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label" htmlFor="night-mode-end-time">
+                    Dim window end (24-hour HH:MM)
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '8rem' }}
+                    id="night-mode-end-time"
+                    type="text"
+                    value={nightMode.end_time}
+                    onChange={(e) => setNightMode({ ...nightMode, end_time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="night-mode-dim-brightness">
+                  Dimmed brightness (0-100)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="night-mode-dim-brightness"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={nightMode.dim_brightness}
+                  onChange={(e) =>
+                    setNightMode({ ...nightMode, dim_brightness: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="night-mode-suppress-scope">
+                  Suppress scope
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="night-mode-suppress-scope"
+                  value={nightMode.suppress_scope}
+                  onChange={(e) => setNightMode({ ...nightMode, suppress_scope: e.target.value })}
+                >
+                  <option value="tracked">tracked (favourite's game only)</option>
+                  <option value="all">all (any live game)</option>
+                </select>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="night-mode-cooldown-minutes">
+                  Cooldown after game ends (minutes)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="night-mode-cooldown-minutes"
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={nightMode.cooldown_minutes}
+                  onChange={(e) =>
+                    setNightMode({ ...nightMode, cooldown_minutes: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={nightModeSaveStatus === 'saving'}
+                >
+                  Save Night mode
+                </button>
+                {saveFeedback(nightModeSaveStatus, nightModeSaveError)}
               </div>
             </form>
           ) : (

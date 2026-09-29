@@ -55,9 +55,9 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
-async def _skip_initial(client, n=7):
-    """Drain the version/audio/scoreboard/status/panel/rotation/update
-    messages every connection opens with."""
+async def _skip_initial(client, n=8):
+    """Drain the version/audio/scoreboard/status/panel/night_mode/rotation/
+    update messages every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -213,6 +213,7 @@ def test_sends_the_current_rotation_on_connect(app_dir, config_path):
         await client.recv()  # scoreboard
         await client.recv()  # status
         await client.recv()  # panel
+        await client.recv()  # night_mode
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -335,6 +336,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
         await client.recv()  # scoreboard
         await client.recv()  # status
         await client.recv()  # panel
+        await client.recv()  # night_mode
         await client.recv()  # rotation
         return await client.recv()
 
@@ -753,6 +755,104 @@ def test_panel_save_rejects_a_non_object_payload(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
         await client.send(json.dumps({"type": "save", "section": "panel", "data": [1, 2]}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received)["type"] == "error"
+
+
+# -- story 8: the Night mode section ---------------------------------------------
+
+
+_DEFAULT_NIGHT_MODE_DATA = {
+    "enabled": False,
+    "start_time": "22:30",
+    "end_time": "07:00",
+    "dim_brightness": 0,
+    "suppress_scope": "tracked",
+    "cooldown_minutes": 15.0,
+}
+
+
+def test_sends_the_current_night_mode_config_on_connect(app_dir, config_path):
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        await client.recv()  # scoreboard
+        await client.recv()  # status
+        await client.recv()  # panel
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "night_mode",
+        "data": _DEFAULT_NIGHT_MODE_DATA,
+    }
+
+
+def test_night_mode_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    new_values = {**_DEFAULT_NIGHT_MODE_DATA, "enabled": True, "suppress_scope": "all"}
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "night_mode", "data": new_values}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "night_mode"}
+    fresh_data = json.loads(fresh)["data"]
+    assert fresh_data["enabled"] is True
+    assert fresh_data["suppress_scope"] == "all"
+    assert "enabled = true" in config_path.read_text()
+
+
+def test_night_mode_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_NIGHT_MODE_DATA, "bogus": "x"}
+        await client.send(json.dumps({"type": "save", "section": "night_mode", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "bogus" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_night_mode_save_rejects_the_wrong_type(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_NIGHT_MODE_DATA, "dim_brightness": "not an int"}
+        await client.send(json.dumps({"type": "save", "section": "night_mode", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "dim_brightness" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_night_mode_save_rejects_an_invalid_suppress_scope(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_NIGHT_MODE_DATA, "suppress_scope": "bogus-scope"}
+        await client.send(json.dumps({"type": "save", "section": "night_mode", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "suppress_scope" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_night_mode_save_rejects_a_non_object_payload(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "night_mode", "data": [1, 2]}))
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))

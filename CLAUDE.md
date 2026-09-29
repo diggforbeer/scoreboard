@@ -996,6 +996,27 @@ slices, one story at a time.
   the live DOM reflected every change, and confirmed
   `scoreboard.local.toml` on disk matched exactly -- including that
   `pitch_mm`, never sent, was untouched.
+- **Story 8 (done): Night mode (#92) -- 6 fields, none
+  `restart_required`** (night mode is polled live, nothing here is baked
+  into a constructed object the way Panel's fields are). The first
+  section whose payload can't be a blind `dataclasses.asdict()` of the
+  settings dataclass: `NightModeConfig` carries derived `start`/`end`
+  fields (`datetime.time`, `field(init=False)`, parsed once from
+  `start_time`/`end_time` in `__post_init__` so the app never re-parses
+  the strings itself) that aren't JSON-serialisable and were never a
+  value a person sets directly -- `_night_mode_payload` builds the dict
+  by hand instead, naming only the 6 editable fields, rather than
+  extending `_coerce_scalar_fields`'s asdict-based send helpers to cope
+  with a non-serialisable field. Otherwise a plain `_coerce_scalar_fields`
+  section: `start_time`/`end_time` are validated only as strings, not
+  against the `HH:MM` format -- same as everywhere else in this project,
+  `_parse_hhmm` (config.py) already warns and falls back to a default on
+  a bad value rather than rejecting it, so there's nothing here for the
+  live editor to additionally enforce. Verified with a real
+  headless-browser interaction: toggled `enabled`, edited both times,
+  changed `dim_brightness`, switched `suppress_scope` to `all`, edited
+  `cooldown_minutes`, saved, confirmed the live DOM and
+  `scoreboard.local.toml` on disk matched exactly.
 - Not yet decided or built: every other section, the JSON-API-vs-
   WebSocket-for-everything question (every save/action so far has gone
   straight over the existing WebSocket connection rather than a separate

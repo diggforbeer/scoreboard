@@ -88,6 +88,16 @@ thing:
   ``restart_required`` -- it doesn't change validation. Also the second
   real use of the ``"select"`` kind (``hardware_mapping``,
   ``rgb_sequence``), after ``logo_variant`` in Scoreboard.
+* Story 8: Night mode (``[night_mode]``, #92) -- 6 fields, none
+  ``restart_required`` (night mode is polled live, nothing here is baked
+  into a constructed object the way Panel's fields are). The first
+  section whose payload can't be a blind ``dataclasses.asdict()`` of the
+  settings dataclass: ``NightModeConfig`` carries derived ``start``/
+  ``end`` fields (``datetime.time``, ``field(init=False)``, parsed once
+  from ``start_time``/``end_time`` in ``__post_init__`` so the app never
+  re-parses the strings itself) that aren't JSON-serialisable and were
+  never a value a person sets directly -- ``_night_mode_payload`` builds
+  the dict by hand instead, naming only the 6 editable fields.
 
 No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
 """
@@ -214,6 +224,25 @@ _PANEL_FIELDS: dict[str, _FieldSpec] = {
     "limit_refresh_rate_hz": _FieldSpec("int", restart_required=True),
 }
 
+#: Mirrors NightModeConfig's own *editable* fields (config.py) -- not all
+#: of them: `start`/`end` are derived `datetime.time` objects
+#: (`field(init=False)`), computed by `__post_init__` from `start_time`/
+#: `end_time` purely so the app never re-parses the strings itself. They
+#: aren't JSON-serialisable and aren't a config value a person sets
+#: directly, so unlike every other section here, this one can't just
+#: `dataclasses.asdict()` the whole dataclass for its payload (see
+#: _night_mode_payload). None of these are restart_required -- night mode
+#: is polled live, nothing here is baked into a constructed object the
+#: way panel's fields are.
+_NIGHT_MODE_FIELDS: dict[str, _FieldSpec] = {
+    "enabled": _FieldSpec("bool"),
+    "start_time": _FieldSpec("str"),
+    "end_time": _FieldSpec("str"),
+    "dim_brightness": _FieldSpec("int"),
+    "suppress_scope": _FieldSpec("select", choices=("tracked", "all")),
+    "cooldown_minutes": _FieldSpec("float"),
+}
+
 
 def _audio_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "audio", "data": dataclasses.asdict(settings.audio)}
@@ -233,6 +262,22 @@ def _status_payload(settings: Settings) -> dict[str, object]:
 
 def _panel_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "panel", "data": dataclasses.asdict(settings.panel)}
+
+
+def _night_mode_payload(settings: Settings) -> dict[str, object]:
+    nm = settings.night_mode
+    return {
+        "type": "config",
+        "section": "night_mode",
+        "data": {
+            "enabled": nm.enabled,
+            "start_time": nm.start_time,
+            "end_time": nm.end_time,
+            "dim_brightness": nm.dim_brightness,
+            "suppress_scope": nm.suppress_scope,
+            "cooldown_minutes": nm.cooldown_minutes,
+        },
+    }
 
 
 def _rotation_payload(settings: Settings) -> dict[str, object]:
@@ -299,6 +344,11 @@ async def _send_status_config(connection: ServerConnection) -> None:
 async def _send_panel_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_panel_payload(settings)))
+
+
+async def _send_night_mode_config(connection: ServerConnection) -> None:
+    settings = Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_night_mode_payload(settings)))
 
 
 async def _send_update_config(connection: ServerConnection) -> None:
@@ -426,6 +476,7 @@ _SEND_AFTER_SAVE = {
     "scoreboard": _send_scoreboard_config,
     "status": _send_status_config,
     "panel": _send_panel_config,
+    "night_mode": _send_night_mode_config,
     "rotation": _send_rotation_config,
 }
 
@@ -441,6 +492,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_scalar_fields(message.get("data"), _STATUS_FIELDS)
         elif section == "panel":
             values = _coerce_scalar_fields(message.get("data"), _PANEL_FIELDS)
+        elif section == "night_mode":
+            values = _coerce_scalar_fields(message.get("data"), _NIGHT_MODE_FIELDS)
         elif section == "rotation":
             values = _coerce_rotation(message.get("data"))
         else:
@@ -464,6 +517,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_scoreboard_config(connection)
         await _send_status_config(connection)
         await _send_panel_config(connection)
+        await _send_night_mode_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
         log.info("Sent initial state to %s", connection.remote_address)
