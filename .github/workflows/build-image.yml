@@ -182,9 +182,18 @@ jobs:
         working-directory: rpi-image-gen
         run: |
           set -o pipefail
+          # Only a real release tag stamps sb.version (see image/config/
+          # scoreboard.yaml's own comment) -- a PR or workflow_dispatch on
+          # a plain branch has no CalVer tag to claim and leaves it unset,
+          # matching "Compress image" below's own tag-vs-fallback split.
+          overrides=()
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            overrides=(-- "IGconf_sb_version=${GITHUB_REF_NAME}")
+          fi
           if ! ./rpi-image-gen build \
                 -S "${GITHUB_WORKSPACE}/scoreboard/image" \
                 -c scoreboard.yaml \
+                "${overrides[@]}" \
                 2>&1 | tee /tmp/build.log; then
             # Republish the tail as an ::error:: annotation. Unlike raw job
             # logs, annotations are readable through the public REST API, so

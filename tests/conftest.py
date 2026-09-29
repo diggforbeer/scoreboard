@@ -15,6 +15,24 @@ def score_payload() -> dict:
 
 
 @pytest.fixture
+def mock_pins():
+    """gpiozero's own MockFactory as the pin factory, for button tests (#50).
+
+    Every gpiozero device built while this is active claims a simulated pin
+    instead of real GPIO; ``mock_pins.pin(n).drive_low()``/``drive_high()``
+    press and release a button wired to pin ``n``.
+    """
+    from gpiozero import Device
+    from gpiozero.pins.mock import MockFactory
+
+    previous = Device.pin_factory
+    Device.pin_factory = MockFactory()
+    yield Device.pin_factory
+    Device.pin_factory.reset()
+    Device.pin_factory = previous
+
+
+@pytest.fixture
 def standings_payload() -> dict:
     """Synthetic but shape-accurate /standings response (#40).
 

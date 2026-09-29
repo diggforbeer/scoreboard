@@ -8,7 +8,7 @@
 //
 // Layout, left to right (looking at the back, inside the bay):
 //   ceiling:  L speaker                                   R speaker
-//   bay:      (sensor on L wall) | Pi | open | brick ▐ socket out R wall
+//   bay:  L wall socket ▌ brick | open | Pi | (sensor + button on R wall)
 //
 // Too wide for a 256mm bed in one piece, so it splits at the seam between
 // the two real panels (set `part` below), or cut the full STL in the
@@ -52,16 +52,28 @@ speaker_wall_margin = 2.5; // solid wall kept around the driver, front/back
 speaker_side_inset  = 3;   // gap from driver rim to the side wall
 
 // ---- ambient light sensor (#44/#45 -- auto-dimming) ---------------------
-// BH1750 over I2C, sized generically. Left side wall, vertically centred
-// (the top-left corner belongs to the left speaker), at bay depth.
+// BH1750 over I2C, sized generically. Right side wall (the left wall has
+// the power socket), vertically centred, at bay depth.
 sensor_hole_d = 6;
 
-// ---- power brick (listing: 125 x 55 x 31; sized up a little) -------------
+// ---- push button ------------------------------------------------------------
+// 7mm round panel-mount momentary button through the right wall, below
+// the sensor, at bay depth. Leaves room inside for the nut (~11mm).
+button_hole_d = 7;
+button_y      = 20;  // hole centre, from the outside bottom of the case
+
+// ---- speaker grilles ----------------------------------------------------------
+// Hex pattern of small round holes inside each speaker's port circle,
+// instead of one open hole -- protects the cone and looks finished.
+grille_hole_d = 3;
+grille_pitch  = 4.5; // centre-to-centre
+
+// ---- power brick (measured: 127 x 56 x 32) --------------------------------
 // Lies flat against the back wall, lengthwise, long edge on the case floor,
-// IEC C14 socket end hard against the right wall. The socket is exposed
-// through a cutout in the right wall so a straight C13 cord plugs straight
+// IEC C14 socket end hard against the LEFT wall. The socket is exposed
+// through a cutout in the left wall so a straight C13 cord plugs straight
 // in from outside. DC cable exits the other end, toward the middle.
-brick_l   = 128;
+brick_l   = 127;
 brick_w   = 56;   // height in the case (y)
 brick_t   = 32;   // thickness (z, off the back wall)
 brick_clr = 0.5;  // seat clearance per side
@@ -71,15 +83,15 @@ brick_clr = 0.5;  // seat clearance per side
 // Offsets are from the face centre; refine once the brick is in hand.
 socket_off_y = 0;  // + = toward the top of the case
 socket_off_z = 0;  // + = away from the back wall
-// Right-wall cutout around the socket -- sized to clear a straight C13
+// Left-wall cutout around the socket -- sized to clear a straight C13
 // plug body (~33 x 23mm) with a little room.
 power_open_h = 45; // along y (the brick's 55mm width)
 power_open_d = 26; // along z (the brick's 31mm thickness)
 power_open_r = 3;  // corner radius
 
-// Brick seat, all inside: the floor and right wall do most of the work.
+// Brick seat, all inside: the floor and left wall do most of the work.
 // At the DC end, an L-shaped corner stop at the bottom and top corners;
-// at the right-wall end, a short cap over the top edge. Together they
+// at the left-wall end, a short cap over the top edge. Together they
 // trap the brick in x and y; the panel in front keeps it off the ledge.
 seat_h     = 12;   // how far the stops stand off the back wall
 seat_t     = 2.4;
@@ -127,17 +139,19 @@ split_x = wall + panel_w;
 spk_xs = [wall + speaker_side_inset + speaker_d / 2,
           outer_w - wall - speaker_side_inset - speaker_d / 2];
 
-// Pi: just right of the left speaker (it hangs lower than the Pi's top
-// edge), vertically centred. Ports face right, toward open space.
-pi_x0 = wall + speaker_side_inset + speaker_d + 5;
+// Pi: just left of the right speaker (it hangs lower than the Pi's top
+// edge), vertically centred. Ports face LEFT, toward the open middle, so
+// the non-port edge (where the holes are inset) is the board's right edge.
+pi_x1 = outer_w - wall - speaker_side_inset - speaker_d - 5;  // right edge
+pi_x0 = pi_x1 - pi_w;
 pi_y0 = wall + (inner_h - pi_h) / 2;
-pi_hole_xs = [pi_x0 + pi_hole_inset_x, pi_x0 + pi_hole_inset_x + pi_hole_dx];
+pi_hole_xs = [pi_x1 - pi_hole_inset_x, pi_x1 - pi_hole_inset_x - pi_hole_dx];
 pi_holes = [for (x = pi_hole_xs) for (dy = [0, pi_hole_dy])
                 [x, pi_y0 + pi_hole_inset_y + dy]];
 
-// Brick: socket end against the right wall.
-brick_x1    = outer_w - wall - brick_clr;      // socket end face
-brick_x0    = brick_x1 - brick_l;              // DC end face
+// Brick: socket end against the left wall.
+brick_x0    = wall + brick_clr;                // socket end face
+brick_x1    = brick_x0 + brick_l;              // DC end face
 brick_y0    = wall;                            // on the floor
 brick_top_y = brick_y0 + brick_w + brick_clr;
 socket_y    = brick_y0 + brick_w / 2 + socket_off_y;
@@ -176,41 +190,55 @@ module pi_standoffs() {
 }
 
 module brick_seat() {
-    xd = brick_x0 - brick_clr;   // DC end (seat side)
+    xd = brick_x1 + brick_clr;   // DC end (seat side)
     translate([0, 0, wall]) {
         // DC end: upright stop at each corner...
         for (y = [brick_y0, brick_top_y - seat_tab_w])
-            translate([xd - seat_t, y, 0])
+            translate([xd, y, 0])
                 cube([seat_t, seat_tab_w, seat_h]);
         // ...plus a cap over the top edge, making an L at the top corner.
-        translate([xd - seat_t, brick_top_y, 0])
+        translate([xd - seat_tab_w, brick_top_y, 0])
             cube([seat_tab_w + seat_t, seat_t, seat_h]);
-        // Right-wall end: cap over the top edge, tied into the wall.
-        translate([outer_w - wall - seat_tab_w, brick_top_y, 0])
+        // Left-wall end: cap over the top edge, tied into the wall.
+        translate([wall, brick_top_y, 0])
             cube([seat_tab_w, seat_t, seat_h]);
     }
 }
 
-module sensor_hole() {
-    // Left wall, vertically centred, at bay depth.
-    // rotate([0,90,0]) maps local +z onto global +x.
-    translate([-1, outer_h / 2, bay_mid_z])
+// Through the right wall at bay depth; rotate([0,90,0]) maps local +z
+// onto global +x.
+module right_wall_hole(y, d) {
+    translate([outer_w - wall - 1, y, bay_mid_z])
         rotate([0, 90, 0])
-            cylinder(h = wall + 2, d = sensor_hole_d, $fn = 32);
+            cylinder(h = wall + 2, d = d, $fn = 32);
 }
 
-module speaker_holes() {
-    // Through the top wall; rotate([-90,0,0]) maps local +z onto global +y.
+module sensor_hole() { right_wall_hole(outer_h / 2, sensor_hole_d); }
+module button_hole() { right_wall_hole(button_y, button_hole_d); }
+
+module speaker_grilles() {
+    // Hex grid of holes clipped to the port circle, through the top wall.
+    // rotate([-90,0,0]) maps local +z onto global +y; local y -> global z.
+    r   = speaker_hole_d / 2 - grille_hole_d / 2;  // keep whole holes inside
+    n   = ceil(r / grille_pitch) + 1;
+    row = grille_pitch * sqrt(3) / 2;
     for (x = spk_xs)
         translate([x, outer_h - wall - 1, bay_mid_z])
             rotate([-90, 0, 0])
-                cylinder(h = wall + 2, d = speaker_hole_d, $fn = 64);
+                for (j = [-n * 2 : n * 2])
+                    for (i = [-n : n]) {
+                        px = i * grille_pitch + (j % 2 == 0 ? 0 : grille_pitch / 2);
+                        py = j * row;
+                        if (px * px + py * py <= r * r)
+                            translate([px, py, 0])
+                                cylinder(h = wall + 2, d = grille_hole_d, $fn = 16);
+                    }
 }
 
 module power_opening() {
-    // Right wall, centred on the brick's C14 socket. Rounded rectangle in
+    // Left wall, centred on the brick's C14 socket. Rounded rectangle in
     // the y-z plane, extruded along +x through the wall.
-    translate([outer_w - wall - 1, socket_y, socket_z])
+    translate([-1, socket_y, socket_z])
         rotate([0, 90, 0])            // local x -> -z, local y -> y, local z -> +x
             linear_extrude(height = wall + 2)
                 offset(r = power_open_r)
@@ -249,7 +277,8 @@ module body() {
             brick_seat();
         }
         sensor_hole();
-        speaker_holes();
+        button_hole();
+        speaker_grilles();
         vents();
         power_opening();
     }
