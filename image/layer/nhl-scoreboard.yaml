@@ -75,6 +75,10 @@ mmdebstrap:
     # over I2C via this. Harmless if no sensor is wired up -- LightSensor
     # .open() degrades to None the same as a missing /dev/i2c-* would.
     - python3-smbus
+    # For the physical push-button (#50): button.py wraps gpiozero.Button.
+    # Same story as python3-smbus above -- harmless with no button wired up,
+    # and Button.open() degrades to None if the pin can't be claimed.
+    - python3-gpiozero
     # For nhl-scoreboard-grow-rootfs: partition inspection (parted) and
     # filesystem growth (resize2fs). util-linux (findmnt, lsblk) is
     # essential and always present, but sfdisk is NOT -- confirmed live on
@@ -345,7 +349,10 @@ mmdebstrap:
     - |-
       set -eu
       chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
-        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server, nhl_scoreboard.setup_server, nhl_scoreboard.updater"
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.button, nhl_scoreboard.status_server, nhl_scoreboard.setup_server, nhl_scoreboard.updater"
         python3 -m nhl_scoreboard --help >/dev/null
+        # button.py imports gpiozero lazily, so the line above cannot
+        # catch a missing python3-gpiozero; import it directly instead.
+        python3 -c "import gpiozero"
       '
       echo "nhl_scoreboard app modules import correctly"
