@@ -29,7 +29,7 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, Situation, StandingsRow, Star
 from nhl_scoreboard.status_server import _FIELDS_BY_SECTION
 from nhl_scoreboard.wifi_join import WifiJoinAttempt
 
@@ -100,6 +100,8 @@ class FakeClient:
         self.situations: dict[int, Situation | None] = {}
         self.goal_scoring_calls: list[int] = []
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        self.three_stars_calls: list[int] = []
+        self.stars: dict[int, tuple[Star, ...]] = {}
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
         self.schedule_calls = 0
@@ -121,6 +123,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return self.goal_events.get(game_id, ())
+
+    def three_stars(self, game_id: int) -> tuple[Star, ...]:
+        self.three_stars_calls.append(game_id)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.stars.get(game_id, ())
 
     def schedule(self, team: str) -> list[Game]:
         self.schedule_calls += 1
