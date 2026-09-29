@@ -53,6 +53,22 @@ thing:
   first real use of a client set here, not just request/response on one
   connection. Reboot has no equivalent watch: the board going down *is*
   the confirmation, and there's nothing left running to report back.
+* Story 5: Scoreboard -- 16 scalar fields (bool/str/float, one select),
+  the biggest section yet. Every earlier docstring here said hardcoding
+  each section was deliberate because one or two sections wasn't enough
+  evidence for the right shared shape; Scoreboard is that third data
+  point, and it's the same bool/str/float/select shape Audio already
+  had, just five times the field count -- copy-pasting
+  ``_coerce_audio`` into a 16-field version would be exactly the
+  needless duplication that guidance was postponing, not avoiding.
+  ``_coerce_scalar_fields`` + the ``_AUDIO_FIELDS``/
+  ``_SCOREBOARD_FIELDS`` specs below replace ``_coerce_audio``, and are
+  what a third scalar-field section reaches for too -- ``[[rotation]]``
+  stays its own thing, since a variable-length list was never the same
+  shape to begin with. Also exposes ``goal_detail_seconds`` and
+  ``three_stars_seconds`` (#122, #156), which were never actually added
+  to ``status_server.py``'s own HTML form -- a real, small gap in the
+  page this is replacing, fixed in passing rather than carried forward.
 
 No auth, same trust model as ``status_server.py`` (a LAN-only admin tool).
 """
@@ -71,7 +87,7 @@ import websockets
 from websockets.asyncio.server import ServerConnection, serve
 
 from . import updater
-from .config import VALID_ROTATION_SCREENS, AudioConfig, ConfigWriteError, Settings
+from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
 from .updater import installed_version
 
 log = logging.getLogger(__name__)
@@ -100,8 +116,53 @@ UPDATE_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_WS_UPDATE_POLL", "1")
 _clients: set[ServerConnection] = set()
 
 
+@dataclasses.dataclass(frozen=True)
+class _FieldSpec:
+    kind: str  # "bool" | "str" | "float" | "select"
+    choices: tuple[str, ...] = ()
+
+
+#: Mirrors AudioConfig's own fields (config.py) -- kept as an explicit spec
+#: rather than introspected via dataclasses.fields() so a field's *type*
+#: (bool vs. float, say) is checked, not just its name; a dataclass field
+#: alone doesn't carry enough for that.
+_AUDIO_FIELDS: dict[str, _FieldSpec] = {
+    "enabled": _FieldSpec("bool"),
+    "device": _FieldSpec("str"),
+    "horn_dir": _FieldSpec("str"),
+}
+
+#: Mirrors ScoreboardConfig's own fields (config.py), same convention.
+_SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
+    "favourite_team": _FieldSpec("str"),
+    "timezone": _FieldSpec("str"),
+    "rotate_seconds": _FieldSpec("float"),
+    "poll_seconds": _FieldSpec("float"),
+    "live_poll_seconds": _FieldSpec("float"),
+    "show_clock_when_idle": _FieldSpec("bool"),
+    "prefer_favourite": _FieldSpec("bool"),
+    "show_logos": _FieldSpec("bool"),
+    "logo_variant": _FieldSpec("select", choices=("dark", "light")),
+    "goal_flash_seconds": _FieldSpec("float"),
+    "goal_detail_seconds": _FieldSpec("float"),
+    "three_stars_seconds": _FieldSpec("float"),
+    "countdown_hours": _FieldSpec("float"),
+    "final_hold_minutes": _FieldSpec("float"),
+    "show_standings": _FieldSpec("bool"),
+    "show_clock_between_games": _FieldSpec("bool"),
+}
+
+
 def _audio_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "audio", "data": dataclasses.asdict(settings.audio)}
+
+
+def _scoreboard_payload(settings: Settings) -> dict[str, object]:
+    return {
+        "type": "config",
+        "section": "scoreboard",
+        "data": dataclasses.asdict(settings.scoreboard),
+    }
 
 
 def _rotation_payload(settings: Settings) -> dict[str, object]:
@@ -153,6 +214,11 @@ async def _send_audio_config(connection: ServerConnection) -> None:
 async def _send_rotation_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_rotation_payload(settings)))
+
+
+async def _send_scoreboard_config(connection: ServerConnection) -> None:
+    settings = Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_scoreboard_payload(settings)))
 
 
 async def _send_update_config(connection: ServerConnection) -> None:
@@ -207,22 +273,34 @@ async def _watch_update_state() -> None:
         await asyncio.sleep(UPDATE_POLL_SECONDS)
 
 
-def _coerce_audio(data: dict[str, object]) -> dict[str, object]:
-    """Validate an incoming save's ``data`` against AudioConfig's own field
-    types. JSON already carries real types (unlike an HTML form's fields,
-    which are always strings) -- there's no `bool("false") == True` trap to
-    guard against here the way status_server.py's _coerce_section has to.
+def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[str, object]:
+    """Validate an incoming save's ``data`` against a section's field specs.
+    JSON already carries real types (unlike an HTML form's fields, which
+    are always strings) -- there's no `bool("false") == True` trap to guard
+    against here the way status_server.py's _coerce_section has to; this
+    only ever checks the type (or, for "select", the choice) actually
+    received is the right one.
     """
+    if not isinstance(data, dict):
+        raise ValueError(json.dumps({"data": "must be an object"}))
     errors: dict[str, str] = {}
-    known = {f.name for f in dataclasses.fields(AudioConfig)}
     for key in data:
-        if key not in known:
+        if key not in fields:
             errors[key] = f"unknown field {key!r}"
-    if "enabled" in data and not isinstance(data["enabled"], bool):
-        errors["enabled"] = "must be a boolean"
-    for key in ("device", "horn_dir"):
-        if key in data and not isinstance(data[key], str):
+    for key, spec in fields.items():
+        if key not in data:
+            continue
+        value = data[key]
+        if spec.kind == "bool" and not isinstance(value, bool):
+            errors[key] = "must be a boolean"
+        elif spec.kind == "str" and not isinstance(value, str):
             errors[key] = "must be a string"
+        elif spec.kind == "float" and (
+            not isinstance(value, (int, float)) or isinstance(value, bool)
+        ):
+            errors[key] = "must be a number"
+        elif spec.kind == "select" and value not in spec.choices:
+            errors[key] = f"must be one of {', '.join(spec.choices)}"
     if errors:
         raise ValueError(json.dumps(errors))
     return data
@@ -258,11 +336,23 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
     return entries
 
 
+#: Which _send_*_config to call after a save, keyed by section -- fresh
+#: from disk each time, same discipline as status_server.py: never assume
+#: the in-memory values just validated are exactly what landed.
+_SEND_AFTER_SAVE = {
+    "audio": _send_audio_config,
+    "scoreboard": _send_scoreboard_config,
+    "rotation": _send_rotation_config,
+}
+
+
 async def _handle_save(connection: ServerConnection, message: dict[str, object]) -> None:
     section = message.get("section")
     try:
         if section == "audio":
-            values: object = _coerce_audio(message.get("data") or {})
+            values: object = _coerce_scalar_fields(message.get("data"), _AUDIO_FIELDS)
+        elif section == "scoreboard":
+            values = _coerce_scalar_fields(message.get("data"), _SCOREBOARD_FIELDS)
         elif section == "rotation":
             values = _coerce_rotation(message.get("data"))
         else:
@@ -275,12 +365,7 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
         await connection.send(json.dumps(error))
         return
     await connection.send(json.dumps({"type": "saved", "section": section}))
-    # Fresh from disk, same discipline as status_server.py -- never assume
-    # the in-memory values we just validated are exactly what landed.
-    if section == "audio":
-        await _send_audio_config(connection)
-    else:
-        await _send_rotation_config(connection)
+    await _SEND_AFTER_SAVE[section](connection)
 
 
 async def _handle(connection: ServerConnection) -> None:
@@ -288,6 +373,7 @@ async def _handle(connection: ServerConnection) -> None:
     try:
         await _send_version(connection)
         await _send_audio_config(connection)
+        await _send_scoreboard_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
         log.info("Sent initial state to %s", connection.remote_address)

@@ -55,9 +55,9 @@ async def _serve_and_run(scenario):
             return await scenario(client)
 
 
-async def _skip_initial(client, n=4):
-    """Drain the version/audio/rotation/update messages every connection
-    opens with."""
+async def _skip_initial(client, n=5):
+    """Drain the version/audio/scoreboard/rotation/update messages every
+    connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -210,6 +210,7 @@ def test_sends_the_current_rotation_on_connect(app_dir, config_path):
     async def scenario(client):
         await client.recv()  # version
         await client.recv()  # audio
+        await client.recv()  # scoreboard
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -329,6 +330,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
     async def scenario(client):
         await client.recv()  # version
         await client.recv()  # audio
+        await client.recv()  # scoreboard
         await client.recv()  # rotation
         return await client.recv()
 
@@ -450,3 +452,108 @@ def test_watcher_broadcasts_to_every_connected_client(
 
     a, b = asyncio.run(scenario())
     assert a["data"]["installed"] == b["data"]["installed"] == "v1"
+
+
+# -- story 5: the Scoreboard section ------------------------------------------
+
+
+_DEFAULT_SCOREBOARD_DATA = {
+    "favourite_team": "NSH",
+    "timezone": "America/Chicago",
+    "rotate_seconds": 8.0,
+    "poll_seconds": 60.0,
+    "live_poll_seconds": 15.0,
+    "show_clock_when_idle": True,
+    "prefer_favourite": True,
+    "show_logos": True,
+    "logo_variant": "dark",
+    "goal_flash_seconds": 6.0,
+    "goal_detail_seconds": 8.0,
+    "three_stars_seconds": 8.0,
+    "countdown_hours": 2.0,
+    "final_hold_minutes": 30.0,
+    "show_standings": True,
+    "show_clock_between_games": False,
+}
+
+
+def test_sends_the_current_scoreboard_config_on_connect(app_dir, config_path):
+    async def scenario(client):
+        await client.recv()  # version
+        await client.recv()  # audio
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "config",
+        "section": "scoreboard",
+        "data": _DEFAULT_SCOREBOARD_DATA,
+    }
+
+
+def test_scoreboard_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    new_values = {**_DEFAULT_SCOREBOARD_DATA, "favourite_team": "TOR", "show_logos": False}
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": new_values}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "scoreboard"}
+    fresh_data = json.loads(fresh)["data"]
+    assert fresh_data["favourite_team"] == "TOR"
+    assert fresh_data["show_logos"] is False
+    assert 'favourite_team = "TOR"' in config_path.read_text()
+
+
+def test_scoreboard_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_SCOREBOARD_DATA, "bogus": "x"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "bogus" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_rejects_the_wrong_type(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_SCOREBOARD_DATA, "rotate_seconds": "not a number"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "rotate_seconds" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_DEFAULT_SCOREBOARD_DATA, "logo_variant": "purple"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error"
+    assert "logo_variant" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_rejects_a_non_object_payload(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": [1, 2]}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received)["type"] == "error"
