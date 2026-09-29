@@ -20,6 +20,25 @@ interface AudioConfig {
   horn_dir: string
 }
 
+interface ScoreboardConfig {
+  favourite_team: string
+  timezone: string
+  rotate_seconds: number
+  poll_seconds: number
+  live_poll_seconds: number
+  show_clock_when_idle: boolean
+  prefer_favourite: boolean
+  show_logos: boolean
+  logo_variant: string
+  goal_flash_seconds: number
+  goal_detail_seconds: number
+  three_stars_seconds: number
+  countdown_hours: number
+  final_hold_minutes: number
+  show_standings: boolean
+  show_clock_between_games: boolean
+}
+
 interface RotationRow {
   screen: string
   seconds: number
@@ -39,6 +58,7 @@ interface UpdateConfig {
 type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
+  | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'saved'; section: string }
@@ -65,6 +85,10 @@ function App() {
   const [audio, setAudio] = useState<AudioConfig | null>(null)
   const [audioSaveStatus, setAudioSaveStatus] = useState<SaveStatus>('idle')
   const [audioSaveError, setAudioSaveError] = useState<string | null>(null)
+
+  const [scoreboard, setScoreboard] = useState<ScoreboardConfig | null>(null)
+  const [scoreboardSaveStatus, setScoreboardSaveStatus] = useState<SaveStatus>('idle')
+  const [scoreboardSaveError, setScoreboardSaveError] = useState<string | null>(null)
 
   const [rotation, setRotation] = useState<RotationRow[] | null>(null)
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
@@ -93,6 +117,7 @@ function App() {
           break
         case 'config':
           if (message.section === 'audio') setAudio(message.data)
+          else if (message.section === 'scoreboard') setScoreboard(message.data)
           else if (message.section === 'rotation') setRotation(message.data)
           else if (message.section === 'update') {
             setUpdate(message.data)
@@ -101,12 +126,16 @@ function App() {
           break
         case 'saved':
           if (message.section === 'audio') setAudioSaveStatus('saved')
+          else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
           else if (message.section === 'rotation') setRotationSaveStatus('saved')
           break
         case 'error':
           if (message.section === 'audio') {
             setAudioSaveStatus('error')
             setAudioSaveError(message.message)
+          } else if (message.section === 'scoreboard') {
+            setScoreboardSaveStatus('error')
+            setScoreboardSaveError(message.message)
           } else if (message.section === 'rotation') {
             setRotationSaveStatus('error')
             setRotationSaveError(message.message)
@@ -138,6 +167,14 @@ function App() {
     setAudioSaveStatus('saving')
     setAudioSaveError(null)
     save('audio', audio)
+  }
+
+  function saveScoreboard(event: React.FormEvent) {
+    event.preventDefault()
+    if (!scoreboard) return
+    setScoreboardSaveStatus('saving')
+    setScoreboardSaveError(null)
+    save('scoreboard', scoreboard)
   }
 
   function saveRotation(event: React.FormEvent) {
@@ -197,6 +234,124 @@ function App() {
       <p className="text-body-secondary">
         Installed version: {version ?? 'waiting for server...'}
       </p>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Scoreboard</h2>
+          {scoreboard ? (
+            <form onSubmit={saveScoreboard}>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="sb-favourite-team">
+                  Favourite team (3-letter abbrev, blank for none)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="sb-favourite-team"
+                  type="text"
+                  value={scoreboard.favourite_team}
+                  onChange={(e) => setScoreboard({ ...scoreboard, favourite_team: e.target.value })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="sb-timezone">
+                  Timezone (IANA name, e.g. America/Chicago)
+                </label>
+                <input
+                  className="form-control"
+                  id="sb-timezone"
+                  type="text"
+                  value={scoreboard.timezone}
+                  onChange={(e) => setScoreboard({ ...scoreboard, timezone: e.target.value })}
+                />
+              </div>
+
+              <h3 className="h6 text-body-secondary mt-4">Timing</h3>
+              {(
+                [
+                  ['rotate_seconds', 'Seconds per game in rotation'],
+                  ['poll_seconds', 'Score poll interval (seconds)'],
+                  ['live_poll_seconds', 'Live score poll interval (seconds)'],
+                  ['countdown_hours', 'Countdown window before puck drop (hours)'],
+                  ['final_hold_minutes', 'Final score hold time (minutes)'],
+                  ['goal_flash_seconds', 'Goal celebration duration (seconds)'],
+                  ['goal_detail_seconds', 'Goal detail duration (seconds)'],
+                  ['three_stars_seconds', 'Three stars duration (seconds)'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`sb-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`sb-${key}`}
+                    type="number"
+                    step="any"
+                    value={scoreboard[key]}
+                    onChange={(e) =>
+                      setScoreboard({ ...scoreboard, [key]: Number(e.target.value) })
+                    }
+                  />
+                </div>
+              ))}
+
+              <h3 className="h6 text-body-secondary mt-4">Display</h3>
+              {(
+                [
+                  ['show_clock_when_idle', 'Show clock when there are no games'],
+                  ['show_clock_between_games', "Show clock between favourite's games"],
+                  ['show_logos', 'Show team logos'],
+                  ['show_standings', "Show favourite's playoff standings"],
+                  ['prefer_favourite', 'Prefer favourite when choosing a game'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="form-check mb-2" key={key}>
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id={`sb-${key}`}
+                    checked={scoreboard[key]}
+                    onChange={(e) => setScoreboard({ ...scoreboard, [key]: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor={`sb-${key}`}>
+                    {label}
+                  </label>
+                </div>
+              ))}
+              <div className="mb-3 mt-2">
+                <label className="form-label" htmlFor="sb-logo-variant">
+                  Logo variant
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="sb-logo-variant"
+                  value={scoreboard.logo_variant}
+                  onChange={(e) => setScoreboard({ ...scoreboard, logo_variant: e.target.value })}
+                >
+                  <option value="dark">dark</option>
+                  <option value="light">light</option>
+                </select>
+              </div>
+
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={scoreboardSaveStatus === 'saving'}
+                >
+                  Save Scoreboard
+                </button>
+                {saveFeedback(scoreboardSaveStatus, scoreboardSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
 
       <div className="card mb-4">
         <div className="card-body">

@@ -5,22 +5,26 @@ slices (#178). See `src/nhl_scoreboard/ws_server.py`'s own docstring for
 exactly what's been ported over so far and what hasn't -- local-dev only,
 not wired into the actual admin page or the device image yet.
 
-So far: the installed version (read-only), the Audio section
-(`enabled`/`device`/`horn_dir`), the idle rotation list (`[[rotation]]`),
-and Reboot / Software update -- all with no page reload, which was the
-actual point of moving off `status_server.py`'s HTML-form-POST model. The
-rotation editor does real add/remove/reorder in the browser (↑/↓ buttons,
-a row cap of 8) -- the old HTML version needed a numeric "order" field
-and a full-page round trip per click specifically because it had no JS to
-do this with; this one just does it. Software update is the first thing
-that actually *pushes*: a check/apply runs out of process on its own
-schedule, and the page updates itself the moment it finishes -- no click,
-no manual refresh, which is the literal problem the whole rebuild started
-from. Styled with plain Bootstrap CSS (the `bootstrap` npm package, not
-`react-bootstrap`) -- hand-applied classes on plain JSX, no component
-library, since nothing here needs JS-driven components (modals,
-dropdowns) yet. Dark by default (`data-bs-theme="dark"` on `<html>`,
-`index.html`), matching `status_server.py`'s existing theme.
+So far: the installed version (read-only), the Scoreboard section (16
+fields), the Audio section (`enabled`/`device`/`horn_dir`), the idle
+rotation list (`[[rotation]]`), and Reboot / Software update -- all with
+no page reload, which was the actual point of moving off
+`status_server.py`'s HTML-form-POST model. The rotation editor does real
+add/remove/reorder in the browser (↑/↓ buttons, a row cap of 8) -- the old
+HTML version needed a numeric "order" field and a full-page round trip
+per click specifically because it had no JS to do this with; this one
+just does it. Software update is the first thing that actually *pushes*:
+a check/apply runs out of process on its own schedule, and the page
+updates itself the moment it finishes -- no click, no manual refresh,
+which is the literal problem the whole rebuild started from. Scoreboard
+also exposes two fields (`goal_detail_seconds`, `three_stars_seconds`)
+that were never actually in `status_server.py`'s own HTML form -- fixed
+in passing, not carried forward. Styled with plain Bootstrap CSS (the
+`bootstrap` npm package, not `react-bootstrap`) -- hand-applied classes on
+plain JSX, no component library, since nothing here needs JS-driven
+components (modals, dropdowns) yet. Dark by default
+(`data-bs-theme="dark"` on `<html>`, `index.html`), matching
+`status_server.py`'s existing theme.
 
 **Reboot and Software update call real `systemctl` commands.** Harmless
 on the real board (the same commands `status_server.py` already runs),

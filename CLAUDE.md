@@ -947,6 +947,24 @@ slices, one story at a time.
   (installed/latest/checked-at, the Install button appearing) with no
   user action whatsoever, which is the literal thing this rebuild was
   for.
+- **Story 5 (done): Scoreboard, 16 fields -- the biggest section, and
+  the moment to actually generalise.** Every earlier entry here said
+  hardcoding each section was deliberate because one or two sections
+  wasn't enough evidence for the right shared shape; Scoreboard is that
+  third data point, and it's the same bool/str/float/select shape Audio
+  already had, just five times the field count. `_FieldSpec` +
+  `_AUDIO_FIELDS`/`_SCOREBOARD_FIELDS` replace the old one-off
+  `_coerce_audio` with a generic `_coerce_scalar_fields`, used by both
+  sections now (`[[rotation]]` stays its own thing -- a variable-length
+  list was never the same shape). Also exposes `goal_detail_seconds`
+  and `three_stars_seconds` (#122, #156), which were never actually
+  added to `status_server.py`'s own HTML form -- a real, small gap in
+  the page this is replacing, fixed in passing rather than carried
+  forward. Verified with a real headless-browser interaction: edited
+  `favourite_team`, unchecked `show_logos`, changed `logo_variant`,
+  edited a timing field, saved, and confirmed both the re-rendered form
+  (read back from the live DOM, not just component state) and the file
+  on disk matched exactly.
 - Not yet decided or built: every other section, the JSON-API-vs-
   WebSocket-for-everything question (every save/action so far has gone
   straight over the existing WebSocket connection rather than a separate
