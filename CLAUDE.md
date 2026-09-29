@@ -726,6 +726,18 @@ assumptions.
   and retry from the same phone -- treated as the *expected* retry path,
   not a rare edge case, which matters given the real-hardware finding
   below.
+- **The AP is only ever stopped/started via `systemctl {stop,start}
+  nhl-scoreboard-setup-ap.service`** (#173), never by running the
+  setup-ap script directly. `start` ends in `exec dnsmasq`, so dnsmasq is
+  the unit's Main PID; the original direct-script call tore the radio down
+  under it without systemd ever stopping the unit, orphaning dnsmasq behind
+  a unit that stayed "active" forever while `wlan0` was genuinely down
+  (diagnosed live on a Pi 3B+). `systemctl stop` kills the tracked process
+  and runs the unit's own `ExecStopPost` teardown. A non-zero `systemctl`
+  exit is logged as a warning, not ignored. The script itself also retries
+  each `iwctl ap ... start*` once before giving up on that mode -- a
+  defensive guard against this chip's known transient mode-switching
+  failures, not proven to eliminate them (#4).
 - **`[wifi] connect_timeout_seconds`** (default 90, matching
   `nhl_scoreboard.wifi`'s own `WIFI_CONNECT_TIMEOUT` default) is a real
   `WifiConfig` dataclass field now, exposed properly instead of left as the
