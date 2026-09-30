@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import http.client
 import importlib.util
 import io
 import json
@@ -14,7 +13,6 @@ import pytest
 
 from nhl_scoreboard import updater
 from nhl_scoreboard.config import Settings
-from nhl_scoreboard.status_server import StatusServer
 
 
 @pytest.fixture
@@ -229,66 +227,6 @@ def test_cli_check_force_ignores_disabled_setting(env, monkeypatch):
 def test_update_config_defaults_on():
     assert Settings().update.enabled is True
     assert Settings.from_dict({"update": {"enabled": False}}).update.enabled is False
-
-
-# -- admin page ---------------------------------------------------------
-
-
-def _request(port, method, path, origin=True):
-    headers = {"Origin": f"http://127.0.0.1:{port}"} if origin else {}
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    try:
-        conn.request(method, path, headers=headers)
-        resp = conn.getresponse()
-        return resp.status, dict(resp.getheaders()), resp.read().decode()
-    finally:
-        conn.close()
-
-
-def test_admin_page_buttons_trigger_units(env):
-    updater._write_state(
-        {
-            "latest": "v2026.09.29",
-            "available": True,
-            "applicable": True,
-            "checked_at": "now",
-        }
-    )
-    triggered: list[str] = []
-    server = StatusServer(
-        snapshot=dict,
-        port=0,
-        settings=Settings,
-        host="127.0.0.1",
-        update_trigger=triggered.append,
-    )
-    server.start()
-    try:
-        _, _, body = _request(server.port, "GET", "/")
-        assert "Check for updates now" in body
-        assert "Install v2026.09.29" in body
-
-        status, headers, _ = _request(server.port, "POST", "/update/check")
-        assert status == 303 and headers["Location"] == "/?update=check"
-        assert _request(server.port, "POST", "/update/apply")[0] == 303
-        assert triggered == ["check", "apply"]
-
-        assert _request(server.port, "POST", "/update/apply", origin=False)[0] == 403
-        assert triggered == ["check", "apply"]
-    finally:
-        server.stop()
-
-
-def test_admin_page_hides_install_when_not_applicable(env):
-    updater._write_state({"latest": "v2026.09.29", "available": True, "applicable": False})
-    server = StatusServer(snapshot=dict, port=0, settings=Settings, host="127.0.0.1")
-    server.start()
-    try:
-        _, _, body = _request(server.port, "GET", "/")
-        assert "Install v" not in body
-        assert "Check for updates now" in body
-    finally:
-        server.stop()
 
 
 # -- bundle builder -----------------------------------------------------

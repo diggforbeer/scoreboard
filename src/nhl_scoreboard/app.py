@@ -17,6 +17,7 @@ from types import FrameType
 
 import qrcode
 
+from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
 from .button import Button
@@ -38,7 +39,6 @@ from .nhl.models import (
     standings_window,
 )
 from .setup_server import SetupServer
-from .status_server import StatusServer
 from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
 
@@ -141,7 +141,7 @@ class ScoreboardApp:
         monotonic: Callable[[], float] | None = None,
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
-        status_server: StatusServer | None = None,
+        admin_server: AdminServer | None = None,
         button: Button | None = None,
         sleep: Callable[[float], None] | None = None,
         ap_setup_state_path: Path | None = None,
@@ -237,16 +237,16 @@ class ScoreboardApp:
         self.last_success_at: datetime | None = None
         self.last_error: str | None = None
         self.last_error_at: datetime | None = None
-        if status_server is not None:
-            self.status_server = status_server
+        if admin_server is not None:
+            self.admin_server = admin_server
         elif settings.status.enabled:
-            self.status_server = StatusServer(
-                snapshot=self.status_snapshot,
+            self.admin_server = AdminServer(
+                config_path=str(settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                 port=settings.status.port,
-                settings=lambda: self.settings,
+                snapshot=self.status_snapshot,
             )
         else:
-            self.status_server = None
+            self.admin_server = None
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
@@ -316,8 +316,8 @@ class ScoreboardApp:
 
     def run(self) -> None:
         self._running = True
-        if self.status_server is not None:
-            self.status_server.start()
+        if self.admin_server is not None:
+            self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
@@ -389,8 +389,8 @@ class ScoreboardApp:
 
     def shutdown(self) -> None:
         try:
-            if self.status_server is not None:
-                self.status_server.stop()
+            if self.admin_server is not None:
+                self.admin_server.stop()
             if self.setup_server is not None:
                 self.setup_server.stop()
             if self.button is not None:
@@ -490,10 +490,10 @@ class ScoreboardApp:
         editor (#48) -- and all three need to pick up a change the same way.
         Most settings are already read fresh from ``self.settings`` every
         loop iteration; ``[audio]``, the logo library, the ambient light
-        sensor (``panel.auto_brightness``), the status server
+        sensor (``panel.auto_brightness``), the admin server
         (``status.enabled``/``status.port``) and the physical button
         (``[button]``, #50) are built once from it instead, so those get
-        rebuilt explicitly here (#62). A rebuilt status server
+        rebuilt explicitly here (#62). A rebuilt admin server
         is only started if ``run()``'s loop is live (``self._running``):
         ``run()`` starts it exactly once before looping, so a reload outside
         that loop -- e.g. a test calling this directly -- builds it without
@@ -564,24 +564,24 @@ class ScoreboardApp:
             self.light_sensor = LightSensor.open() if new_settings.panel.auto_brightness else None
 
         if status_changed:
-            # StatusServer's port is fixed at construction, so any change
+            # AdminServer's port is fixed at construction, so any change
             # means stop-and-rebuild rather than reconfigure in place.
-            if self.status_server is not None:
-                self.status_server.stop()
+            if self.admin_server is not None:
+                self.admin_server.stop()
             if new_settings.status.enabled:
-                self.status_server = StatusServer(
-                    snapshot=self.status_snapshot,
+                self.admin_server = AdminServer(
+                    config_path=str(new_settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                     port=new_settings.status.port,
-                    settings=lambda: self.settings,
+                    snapshot=self.status_snapshot,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,
                 # construct only -- same as __init__ -- so it's run() that
                 # binds the socket, not whoever happened to reload.
                 if self._running:
-                    self.status_server.start()
+                    self.admin_server.start()
             else:
-                self.status_server = None
+                self.admin_server = None
 
         if button_changed:
             # gpiozero fixes pin and hold_time at construction; close first
@@ -597,7 +597,7 @@ class ScoreboardApp:
             )
 
         # wifi.connect_timeout_seconds: plain attribute update, no
-        # stop/rebuild needed the way StatusServer's fixed-at-construction
+        # stop/rebuild needed the way AdminServer's fixed-at-construction
         # port does -- WifiJoinAttempt reads it fresh on its next attempt,
         # and there's nothing live to restart if one isn't in progress.
         self.wifi_join.connect_timeout = new_settings.wifi.connect_timeout_seconds
@@ -1182,14 +1182,14 @@ class ScoreboardApp:
     def _sync_setup_server(self) -> None:
         """Start/stop the WiFi setup HTTP server in step with the AP state file.
 
-        Only called from run()'s own loop -- status_snapshot() (the status
-        page's own thread) only ever calls select_scene(allow_fetch=False),
+        Only called from run()'s own loop -- status_snapshot() (the admin
+        server's own thread) only ever calls select_scene(allow_fetch=False),
         never this, so there is no cross-thread race to start or stop the
         same socket. Only needs "is the AP state file there", the same
         signal _ap_setup_scene keys off of, not its contents. Also reacts to
         a live config reload (wifi_setup.enabled/port) even when the AP
         state file's presence hasn't changed, the same way _apply_reloaded_
-        settings handles the status server's own port change.
+        settings handles the admin server's own port change.
         """
         cfg = self.settings.wifi_setup
         wanted = cfg.enabled and self.ap_setup_state_path.exists()
@@ -1401,13 +1401,14 @@ class ScoreboardApp:
     # -- status page (#48) ------------------------------------------------
 
     def status_snapshot(self) -> dict[str, str]:
-        """Everything the status page shows -- state already sitting in memory.
+        """Everything the admin page's status box shows -- state already
+        sitting in memory.
 
-        Called from the status server's own request thread (#61): must
-        never trigger a network fetch or mutate shared state concurrently
-        with the main loop, hence ``allow_fetch=False`` -- a slow NHL
-        response must not block a "read-only" status page, and the two
-        threads must not race into duplicate fetches.
+        Called from the admin server's own thread (#61, #178 story 10):
+        must never trigger a network fetch or mutate shared state
+        concurrently with the main loop, hence ``allow_fetch=False`` -- a
+        slow NHL response must not block a "read-only" status view, and
+        the two threads must not race into duplicate fetches.
         """
         scene = self.select_scene(allow_fetch=False)
         cfg = self.settings.scoreboard

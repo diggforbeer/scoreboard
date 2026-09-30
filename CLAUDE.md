@@ -129,6 +129,19 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   as the real binding would.
 - `tests/test_app.py` `FakeCanvas`/`FakeMatrix`/`FakeClient` are shared by
   `test_flow.py`. `FakeClient` records `situation_calls` and `schedule_calls`.
+- **The one deliberate exception to "hermetic": `tests/e2e/`.** A real
+  Chromium browser (Playwright) against a real `admin_server.py`
+  subprocess serving a real `frontend/dist` build (#178 story 10's own
+  follow-up) -- excluded from the default `pytest` run by a `e2e` marker
+  (`pyproject.toml`'s `addopts = "-q -m 'not e2e'"`), run explicitly with
+  `pytest -m e2e` after `pip install -e '.[dev,e2e]'` +
+  `playwright install chromium` + building the frontend. Its own CI job
+  (`ci.yml`'s `e2e`) does exactly that on every PR. Every story of the
+  admin-page rebuild was verified this same way by hand, once, per story
+  -- this codifies the smallest useful slice (page loads, one save
+  round-trips) so a regression in the "static page + WebSocket on one
+  port" mechanism itself is caught automatically instead of relying on
+  that manual discipline continuing forever.
 
 ## Rendering rules
 
@@ -328,7 +341,7 @@ out of scope. Thread safety is the non-obvious part: gpiozero fires
 `when_held` from a separate hold-timer thread, so those callbacks only set
 plain bools, and `run()`'s own thread consumes them once per iteration
 (`handle_button()`) and does every actual mutation -- the same rule
-`status_server.py` follows for its request thread. A long press is told
+`admin_server.py` follows for its own thread. A long press is told
 apart from a short one by a per-press "hold already fired" bool that
 `when_pressed` resets and `when_released` checks, so a hold never also
 counts as a tap on release. Dependency follows the light sensor's pattern:
@@ -733,8 +746,11 @@ actually joining the chosen network is #133, not built yet.
   (`ssid_other`) wins over whatever radio button (`ssid_choice`) happens
   to still be selected.
 - **A new stdlib module, not a new systemd service.** `setup_server.py`
-  follows `status_server.py`'s own pattern (`http.server`, no
-  dependencies) and is started/stopped by `ScoreboardApp` itself
+  is `http.server`-based, no dependencies -- the pattern the original
+  `status_server.py` used too, before it was replaced by `admin_server.py`
+  (#178 story 10; unlike that page, `setup_server.py` genuinely must work
+  offline, so it stays stdlib-only on principle, not just by inheritance)
+  -- and is started/stopped by `ScoreboardApp` itself
   (`_sync_setup_server()`, called once per `run()` loop tick), gated on
   nothing but whether `nhl-scoreboard-setup-ap`'s own state file exists --
   the same signal `_ap_setup_scene` already keys off of for the panel's QR
@@ -853,6 +869,276 @@ assumptions.
   credentials, confirm the AP comes back, retry, repeat a few times) before
   trusting it, not just the happy path -- #4, same as everything else here
   that needs a Pi.
+
+## Admin page frontend (React, deployed to the device -- #178)
+
+The old status/config page (`status_server.py`, HTML-forms-with-full-page-
+POST) has been replaced with a real React frontend + WebSocket live
+updates, and as of Story 10 it's the page that actually ships and starts
+on boot -- `status_server.py` is deleted. Tracked issue #178 has the full
+design, phasing, and decisions (Vite, TypeScript, incremental rollout,
+WebSocket kept scoped to update-check/apply progress and save-without-
+reload, plus a read-only status snapshot -- not live game/score data,
+and not a channel for pushing scene changes to the panel itself). Built
+as vertical slices, one story at a time. **The server module was renamed
+`ws_server.py` -> `admin_server.py` in Story 10**, once it started serving
+the built static page too, not just a WebSocket -- every story below
+before Story 10 refers to it by its old name, describing what was true
+when it was written; that history is left as-is rather than rewritten.
+
+- **Story 1 (done): prove the pipeline end to end.** `frontend/` (a Vite +
+  React + TypeScript SPA, `frontend/README.md` has the exact run commands)
+  connects over a real WebSocket to `src/nhl_scoreboard/ws_server.py` (a
+  new, minimal `websockets`-based server) and displays one real piece of
+  app state -- the installed version, the same value
+  `updater.installed_version()` already provides the admin page's status
+  grid. Deliberately narrow: local-dev only, not started by
+  `ScoreboardApp`, not wired into the image build or any systemd unit, one
+  message on connect and nothing further. `websockets` lives in
+  `pyproject.toml`'s `dev` extras, not `[project]` dependencies, until a
+  later story actually deploys this -- confirmed live that
+  `python3-websockets` (15.0.1-1) is a real apt package on this image's
+  Debian release for when that day comes, so it'll follow the same
+  apt-not-pip pattern as everything else on the device.
+- **status_server.py's own "no client-side JS" framing was corrected
+  first (#177)**: it was never actually required to work offline the way
+  `setup_server.py`'s captive-portal page genuinely is (that page *is* the
+  mechanism for getting the board online at all; the admin page's whole
+  purpose only makes sense once the board already has real connectivity).
+  That correction is what cleared the way for this -- `setup_server.py`
+  itself is explicitly out of scope for any of this and stays exactly as
+  it is.
+- **Story 2 (done): the first real section, Audio.** Chosen deliberately
+  as the smallest section (`enabled`/`device`/`horn_dir`, 3 fields) to
+  prove the read/edit/save round trip before a bigger one. `ws_server.py`
+  now sends the current `[audio]` values on connect (via `Settings.load`,
+  same as `status_server.py`) and handles a `save` message the same way
+  `status_server.py`'s `/save` POST does -- write into a throwaway
+  `Settings` instance, reload fresh from disk afterward, never mutate
+  anything in memory (this process has no live `ScoreboardApp` to mutate
+  anyway). Validation is hardcoded to Audio's own 3 fields, not
+  generalised over `status_server.py`'s `_Field`/`_coerce_section` shape
+  -- one section isn't enough evidence yet for what the right shared
+  abstraction is; that's a later story's job once a second section shows
+  the actual pattern, not before. Verified with a real headless-browser
+  interaction (not just unit tests): unchecked the box, typed a device
+  string, clicked Save, watched "Saved." appear with zero page reload --
+  the actual thing this whole rebuild is for.
+- **Story 3 (done): the idle rotation list (`[[rotation]]`, #150/#151).**
+  Unlike Audio (fixed scalar fields), this is an ordered, variable-length
+  list -- `config.py`'s own `Settings.save()` already special-cases
+  `"rotation"` to replace the whole list rather than patch keys (see its
+  docstring), so `ws_server.py` just validates the incoming list the same
+  way `config.py`'s `_parse_rotation` does (unknown screen, non-positive
+  seconds) and passes it through -- except a live save rejects the whole
+  list on the first bad row instead of silently dropping it, since a
+  person editing this page should see exactly what's wrong, unlike a
+  hand-edited boot TOML where a typo must not stop the board booting.
+  Also enforces the same row cap `status_server.py`'s HTML version
+  recommended (`ROTATION_MAX_ROWS = 8`), server-side, not just via the
+  frontend disabling its own button. **The numeric "order" field and the
+  full-page-round-trip add/remove buttons in the HTML version existed
+  specifically to work around having no client-side JS (#151) -- gone
+  here.** Row order is just the list's own order now; the frontend does
+  real add/remove/reorder (↑/↓ swap-with-neighbour) in local state, one
+  Save sends the whole list. Verified with a real headless-browser
+  interaction: added three rows, edited two, removed one, reordered the
+  remaining two, saved, and confirmed the file on disk matched exactly
+  (right screens, right seconds, right order) -- not just that the UI
+  looked right.
+- **Story 4 (done): Reboot and Software update.** The first two things
+  that are actions on the real system rather than config file edits, and
+  the first real use of *push* rather than request/response --
+  `updater.check()`/`apply()` run out of process (the real
+  `nhl-scoreboard-update-{now,apply}.service` units `status_server.py`
+  already triggers via `systemctl start --no-block`, not reimplemented
+  here) and write `updater.STATE_FILE` on their own schedule, with no way
+  for this process to know when except by watching for it -- exactly the
+  "click Check, refresh manually to see if anything changed" gap this
+  whole rebuild started from. `_watch_update_state` polls that file's
+  mtime and broadcasts a fresh `config`/`update` message to *every*
+  connected client the moment it changes -- the first thing here that
+  isn't scoped to the one connection that asked. Reboot has no such
+  watch: the board going down *is* the confirmation, and nothing is left
+  running to report back once it does. Verified two ways: a real headless-
+  browser click-through with the real `systemctl` shadowed by a fake
+  binary on `PATH` (logging its args instead of running -- confirmed the
+  exact right unit names got called, and confirmed the real one was never
+  touched), and, separately, writing straight to the state file with zero
+  clicks at all to prove the actual point -- the page updated itself
+  (installed/latest/checked-at, the Install button appearing) with no
+  user action whatsoever, which is the literal thing this rebuild was
+  for.
+- **Story 5 (done): Scoreboard, 16 fields -- the biggest section, and
+  the moment to actually generalise.** Every earlier entry here said
+  hardcoding each section was deliberate because one or two sections
+  wasn't enough evidence for the right shared shape; Scoreboard is that
+  third data point, and it's the same bool/str/float/select shape Audio
+  already had, just five times the field count. `_FieldSpec` +
+  `_AUDIO_FIELDS`/`_SCOREBOARD_FIELDS` replace the old one-off
+  `_coerce_audio` with a generic `_coerce_scalar_fields`, used by both
+  sections now (`[[rotation]]` stays its own thing -- a variable-length
+  list was never the same shape). Also exposes `goal_detail_seconds`
+  and `three_stars_seconds` (#122, #156), which were never actually
+  added to `status_server.py`'s own HTML form -- a real, small gap in
+  the page this is replacing, fixed in passing rather than carried
+  forward. Verified with a real headless-browser interaction: edited
+  `favourite_team`, unchecked `show_logos`, changed `logo_variant`,
+  edited a timing field, saved, and confirmed both the re-rendered form
+  (read back from the live DOM, not just component state) and the file
+  on disk matched exactly.
+- **Story 6 (done): Status page, `enabled`/`port`.** The smallest
+  section after Audio, and the first `"int"` field -- `_FieldSpec`
+  gained that kind (`port` must be a whole number, not `8080.5`;
+  everything before this had been bool/str/float). Otherwise nothing
+  new: straight application of the `_coerce_scalar_fields` pattern
+  Scoreboard's story already proved out. Placed after Audio, matching
+  `status_server.py`'s own section order. Verified with a real
+  headless-browser interaction: changed the port, saved, confirmed
+  "Saved." with the new value both in the live DOM and on disk.
+- **Story 7 (done): Panel -- 17 fields, the biggest section yet** (every
+  `PanelConfig` field except `pitch_mm`, which `status_server.py`'s own
+  form has never exposed either -- informational only, the driver never
+  reads it, per the Rendering rules note above). First real use of a new
+  `_FieldSpec.restart_required` flag: 12 of the 17 fields are baked into
+  the constructed `RGBMatrix` and only take effect after
+  `nhl-scoreboard.service` restarts (see the "wrong hardware_mapping is a
+  silent failure" hardware note); only the five brightness-related fields
+  (`brightness`, `auto_brightness`, `min_brightness`, `max_brightness`,
+  `brightness_poll_seconds`) hot-apply. The flag is informational for the
+  frontend to badge -- it doesn't change validation, same idea as
+  `status_server.py`'s own per-field `restart_required`. Also the second
+  real use of the `"select"` kind (`hardware_mapping`, `rgb_sequence`),
+  after `logo_variant` in Scoreboard. The frontend groups the 17 fields
+  into three subheadings (Geometry, Driver/PWM, Brightness), badging the
+  two restart-required groups -- the natural tie-in to the Reboot card
+  two sections down, which is literally what those fields need after a
+  save. Verified with a real headless-browser interaction: edited one
+  field of each kind (int, select ×2, bool, str, float), saved, confirmed
+  the live DOM reflected every change, and confirmed
+  `scoreboard.local.toml` on disk matched exactly -- including that
+  `pitch_mm`, never sent, was untouched.
+- **Story 8 (done): Night mode (#92) -- 6 fields, none
+  `restart_required`** (night mode is polled live, nothing here is baked
+  into a constructed object the way Panel's fields are). The first
+  section whose payload can't be a blind `dataclasses.asdict()` of the
+  settings dataclass: `NightModeConfig` carries derived `start`/`end`
+  fields (`datetime.time`, `field(init=False)`, parsed once from
+  `start_time`/`end_time` in `__post_init__` so the app never re-parses
+  the strings itself) that aren't JSON-serialisable and were never a
+  value a person sets directly -- `_night_mode_payload` builds the dict
+  by hand instead, naming only the 6 editable fields, rather than
+  extending `_coerce_scalar_fields`'s asdict-based send helpers to cope
+  with a non-serialisable field. Otherwise a plain `_coerce_scalar_fields`
+  section: `start_time`/`end_time` are validated only as strings, not
+  against the `HH:MM` format -- same as everywhere else in this project,
+  `_parse_hhmm` (config.py) already warns and falls back to a default on
+  a bad value rather than rejecting it, so there's nothing here for the
+  live editor to additionally enforce. Verified with a real
+  headless-browser interaction: toggled `enabled`, edited both times,
+  changed `dim_brightness`, switched `suppress_scope` to `all`, edited
+  `cooldown_minutes`, saved, confirmed the live DOM and
+  `scoreboard.local.toml` on disk matched exactly.
+- **Story 9 (done): Wi-Fi -- the smallest section yet, one field**
+  (`connect_timeout_seconds`). `ssid`/`password`/`country` live in the
+  same `[wifi]` TOML table but are deliberately not modelled by
+  `WifiConfig` at all (`config.py`'s own `_wifi_config` filters them out
+  before `_build()` sees them) -- actually joining a network is
+  `setup_server.py`'s job, the offline-first captive-portal page, out of
+  scope for this whole rebuild (see the note right after Story 1). A
+  save here only ever patches `connect_timeout_seconds`, matching
+  `Settings.save()`'s own per-key patching -- verified with a real
+  headless-browser interaction against a dev config with no `[wifi]`
+  table at all yet (the boot-partition template ships without one):
+  changed the timeout, saved, confirmed the new table was created on
+  disk with exactly that one key, and confirmed with `ssid`/`password`
+  already present in the file (a real-world case, since scoreboard-
+  provision writes those from a completed setup flow) that a save
+  doesn't disturb them.
+- **Story 10 (done): deploy to the real device, retire `status_server.py`.**
+  The owner's own call, made live in conversation after trying Story 9's
+  build locally ("we can delete the old site, and make this the one that
+  starts on boot now"), with two follow-up decisions surfaced and
+  confirmed before touching anything: port the status snapshot into the
+  new page first (below), and continue on the same PR rather than filing
+  a new issue. Three things landed together:
+  1. **One port serves the built React page and the WebSocket.**
+     `websockets`' own `process_request` hook (confirmed present in the
+     pinned `websockets>=13`, tested directly against 17.1 before relying
+     on it) intercepts every request; a genuine WebSocket upgrade
+     (`Upgrade: websocket` -- what a real browser's `new WebSocket(...)`
+     always sends, checked directly rather than assumed) is let through
+     to the existing handler, anything else is served as a static file
+     out of `ADMIN_DIR` (`/usr/share/nhl-scoreboard/admin` on the device,
+     same directory-env-var pattern as fonts' `NHL_SCOREBOARD_FONT_DIR`),
+     falling back to `index.html` for this single-page app's one route.
+     No reverse proxy, no second port. `frontend/dist` is a CI build
+     product now (`build-image.yml`'s new "Build admin frontend" step,
+     `actions/setup-node` + `npm ci` + `npm run build`, right before the
+     image build itself) that the image layer's own `customize-hooks`
+     copies in exactly the way team logos already are -- Node never
+     touches the device.
+  2. **`AdminServer` wraps the server on a background thread**, exposing
+     the same `start()`/`stop()`/`port` shape `StatusServer` had, so
+     `app.py`'s integration is a small diff at the same three call sites
+     `StatusServer` was built/started/stopped/rebuilt from (`__init__`,
+     `run()`, `reload_config_if_changed()`), not a rewrite of
+     `ScoreboardApp` itself. `StatusServer` ran a blocking `http.server`
+     loop in a plain thread; `AdminServer` runs its own `asyncio` loop in
+     the thread instead, signalling `stop()` via
+     `asyncio.run_coroutine_threadsafe` rather than an OS-level shutdown
+     call. `[status]`'s `enabled`/`port` fields are reused as-is -- same
+     TOML section, same meaning, just a different implementation
+     underneath; an existing board's boot-partition config needed no
+     migration.
+  3. **The status snapshot moved over too, not just the config editor.**
+     `status_server.py` served two genuinely different things:
+     `ScoreboardApp.status_snapshot()` (scene, current game, last poll,
+     last error -- read-only "headless debugging" state, found during
+     this story's own investigation, not something #178's earlier stories
+     had touched) alongside the HTML-forms editor. Dropping the snapshot
+     too would have been a real regression for anyone debugging a board
+     with no HDMI output, so a new "Board status" section (rendered
+     generically, key by key, same as `status_server.py`'s old
+     `.stat-grid`) ships in the same story. `SNAPSHOT_PROVIDER` is the
+     same "handed to it as a callable" relationship `StatusServer`'s own
+     `snapshot` parameter had; broadcast on change (`_watch_snapshot`),
+     same proven shape as `_watch_update_state`.
+
+  **Wi-Fi `ssid`/`password`/`country` editing did *not* carry over** --
+  explicitly dropped, a real decision surfaced and confirmed before
+  deleting `status_server.py`, not an oversight: that page's Wi-Fi
+  section had raw-TOML fields (unrelated to `WifiConfig`) that restarted
+  `scoreboard-provision.service` on save, letting an already-online board
+  switch networks directly from the admin page. The AP/captive-portal
+  flow (#131-#133) is now the one way to (re)join a network -- it covers
+  the far more common "board has no network yet" case with a real retry/
+  rollback state machine that the old direct-edit path never had.
+  Changing an already-online board's Wi-Fi now means walking it through
+  that flow (e.g. by disconnecting it) rather than editing a field here.
+
+  Verified two ways, since this story has no #4-style real-hardware
+  check available: a full local production-mode run (`npm run build`,
+  then `admin_server.py` pointed at the built `dist/` with
+  `NHL_SCOREBOARD_ADMIN_DIR`, no Vite involved at all) -- confirmed the
+  built page loads, a save round-trips, and the WebSocket still works on
+  the same port a static GET does; and the normal Vite-dev-server pass
+  used for every earlier story. **Not verified on real hardware** (no Pi
+  in this session) -- flagged the same way every other real-hardware-only
+  gap in this project is (see `image/layer/nhl-scoreboard.yaml`'s own
+  `python3-websockets` addition and CLAUDE.md's Image build facts).
+- **Follow-up, same day: the manual verification above is now a real CI
+  job.** `tests/e2e/test_admin_page_smoke.py` + `ci.yml`'s `e2e` job do
+  the same "browser against a built page + a save round trip" check on
+  every PR -- see Testing conventions' own note on it. Doesn't replace
+  real-hardware verification (#4), just catches a regression in the
+  static-page-plus-WebSocket-on-one-port mechanism itself before it ships.
+- Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
+  question (every save/action so far has gone straight over the existing
+  WebSocket connection rather than a separate HTTP endpoint -- worth
+  confirming that's still the right call once something needs a shape
+  this doesn't fit as naturally), and real-hardware verification of
+  Story 10 itself (#4).
 
 ## Disk-destructive code (grow-rootfs)
 

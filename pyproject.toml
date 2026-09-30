@@ -20,6 +20,12 @@ dependencies = [
     # For the AP-mode setup scene's join QR code (#131 follow-up) -- just
     # the module-matrix computation, no image/PIL rendering path used.
     "qrcode>=7",
+    # admin_server.py's page + WebSocket (#178), deployed to the real
+    # device as of story 10 -- python3-websockets is a real apt package on
+    # this image's Debian release (confirmed live, trixie ships 15.0.1-1),
+    # added to image/layer/nhl-scoreboard.yaml's package list alongside
+    # this. Was dev-extras-only through story 9, before deployment.
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +42,13 @@ dev = [
     # on the board it comes from apt (python3-gpiozero), same as smbus above.
     "gpiozero>=1.6",
 ]
+# tests/e2e/ (#178 story 10's own follow-up): a real Chromium browser
+# against a real admin_server.py subprocess serving a real frontend/dist
+# build -- kept out of `dev` so the routine `pip install -e '.[dev]'`
+# every other CI job and dev machine runs doesn't pull down a browser
+# binary. `playwright install --with-deps chromium` is a separate,
+# explicit step only the e2e CI job runs.
+e2e = ["playwright>=1.40"]
 
 [project.scripts]
 nhl-scoreboard = "nhl_scoreboard.__main__:main"
@@ -58,7 +71,12 @@ ignore = ["B008"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q"
+# -m 'not e2e': the default `pytest` run stays the hermetic, offline,
+# sub-second suite CLAUDE.md documents -- tests/e2e/ spawns a real
+# subprocess and a real browser, explicitly opted into with `-m e2e`
+# (see tests/e2e/test_admin_page_smoke.py's own docstring).
+addopts = "-q -m 'not e2e'"
+markers = ["e2e: real end-to-end test against a live browser and subprocess, not hermetic"]
 
 [tool.coverage.run]
 branch = true

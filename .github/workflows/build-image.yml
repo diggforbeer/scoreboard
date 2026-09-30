@@ -161,6 +161,23 @@ jobs:
           python3 -m pip install --user --quiet cairosvg pillow requests
           python3 scripts/fetch-logos.py --size 32 --variant both
 
+      # Node never touches the image itself -- same "build tools are
+      # CI-only" stance as the rgbmatrix compiler toolchain purged post-
+      # build below. frontend/dist is a plain build product the layer's
+      # own customize-hook copies from this checkout's srcdir (#178 story
+      # 10); it doesn't exist until this step runs.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: scoreboard/frontend/package-lock.json
+      - name: Build admin frontend
+        working-directory: scoreboard/frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Lint the scoreboard layer
         working-directory: rpi-image-gen
         run: |
