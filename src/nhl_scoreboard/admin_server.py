@@ -178,6 +178,19 @@ thing:
   launched" from "audio disabled" or "no file found (including the
   shipped default missing)" -- surfaced in the UI rather than always
   showing a bare "done".
+* Follow-up: a volume field/slider on the Audio section (#187), applied to
+  the ALSA mixer via ``GoalHornPlayer.apply_volume()``. Applied from here
+  (``_apply_audio_volume``, ``_test_horn``) rather than from
+  ``ScoreboardApp``'s own settings-reload path in ``app.py``, because
+  ``apply_volume()`` blocks on a real ``amixer`` subprocess -- fine on this
+  module's own background thread (same precedent as the blocking
+  ``systemctl`` calls above), not fine on ``app.py``'s render-loop thread,
+  where a slow/hung ``amixer`` would stutter the panel. Applied on both an
+  Audio section save and a Test horn click, each gated on ``enabled`` the
+  same way playback itself already is. Known gap: a volume set only by
+  hand-editing the boot-partition TOML (never touched via this page) isn't
+  applied until the admin page does one of those two things at least once
+  -- there's no apply-on-boot path yet.
 
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
@@ -277,6 +290,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
     "enabled": _FieldSpec("bool"),
     "device": _FieldSpec("str"),
     "horn_dir": _FieldSpec("str"),
+    "volume": _FieldSpec("int"),
 }
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
@@ -533,6 +547,27 @@ def _reboot() -> None:
         log.warning("Could not reboot: %s", exc)
 
 
+def _current_horn(settings: Settings) -> GoalHornPlayer:
+    return GoalHornPlayer.default(
+        device=settings.audio.device,
+        horn_dir=settings.audio.horn_dir,
+        enabled=settings.audio.enabled,
+        volume=settings.audio.volume,
+    )
+
+
+def _apply_audio_volume() -> None:
+    """Push a freshly-saved [audio] volume to the ALSA mixer right away (#187),
+    so the slider takes effect without an extra "Test horn" click. Same
+    enabled-gating and background-thread reasoning as _test_horn() below;
+    called from _handle_save right after an "audio" section save succeeds.
+    """
+    settings = Settings.load(CONFIG_PATH)
+    horn = _current_horn(settings)
+    if horn.enabled:
+        horn.apply_volume()
+
+
 def _test_horn() -> bool:
     """Play the goal horn on demand, from the Audio section (#178).
 
@@ -549,13 +584,20 @@ def _test_horn() -> bool:
     would actually play; returns whether playback actually launched
     (False if audio is disabled or no horn file -- including the shipped
     default -- could be found).
+
+    Also applies the configured volume first, when enabled (#187) -- this
+    runs on AdminServer's own background thread, not ScoreboardApp's
+    render-loop thread, so apply_volume()'s blocking `amixer` call is safe
+    here the way it wouldn't be from app.py's own settings-reload path (see
+    the comment there). Gated on enabled the same way play() itself already
+    is, so a disabled board's Test horn still touches nothing (matching
+    test_horn_test_reports_not_played_when_audio_disabled's own "needs no
+    fake runner at all" invariant).
     """
     settings = Settings.load(CONFIG_PATH)
-    horn = GoalHornPlayer.default(
-        device=settings.audio.device,
-        horn_dir=settings.audio.horn_dir,
-        enabled=settings.audio.enabled,
-    )
+    horn = _current_horn(settings)
+    if horn.enabled:
+        horn.apply_volume()
     return horn.play(settings.scoreboard.favourite_team)
 
 
@@ -702,6 +744,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
         error = {"type": "error", "section": section, "message": str(exc)}
         await connection.send(json.dumps(error))
         return
+    if section == "audio":
+        _apply_audio_volume()
     await connection.send(json.dumps({"type": "saved", "section": section}))
     await _SEND_AFTER_SAVE[section](connection)
 

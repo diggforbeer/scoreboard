@@ -97,6 +97,7 @@ interface AudioConfig {
   enabled: boolean
   device: string
   horn_dir: string
+  volume: number
 }
 
 interface ScoreboardConfig {
@@ -1092,6 +1093,21 @@ function App() {
                   type="text"
                   value={audio.horn_dir}
                   onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-volume">
+                  Volume ({audio.volume}%)
+                </label>
+                <input
+                  className="form-range"
+                  id="audio-volume"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={audio.volume}
+                  onChange={(e) => setAudio({ ...audio, volume: Number(e.target.value) })}
                 />
               </div>
               <div className="d-flex align-items-center gap-3">
