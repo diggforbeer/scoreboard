@@ -17,7 +17,7 @@ only ever set plain ``bool`` flags (a single attribute store, atomic under
 the GIL); ``run()`` reads-and-clears them via ``consume_short_press()``/
 ``consume_long_press()`` on its own thread and does every actual state
 change there -- the same "background thread never touches live app state"
-rule status_server.py follows for its request thread.
+rule admin_server.py follows for its own thread.
 """
 
 from __future__ import annotations
