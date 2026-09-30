@@ -207,6 +207,7 @@ type ServerMessage =
   | { type: 'checking' }
   | { type: 'applying' }
   | { type: 'rebooting' }
+  | { type: 'horn_tested'; played: boolean }
 
 function connectionBadge(state: ConnectionState) {
   const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
@@ -243,6 +244,10 @@ function App() {
   const [audio, setAudio] = useState<AudioConfig | null>(null)
   const [audioSaveStatus, setAudioSaveStatus] = useState<SaveStatus>('idle')
   const [audioSaveError, setAudioSaveError] = useState<string | null>(null)
+  const [hornTesting, setHornTesting] = useState(false)
+  const [hornTestMessage, setHornTestMessage] = useState<{ text: string; ok: boolean } | null>(
+    null,
+  )
 
   const [scoreboard, setScoreboard] = useState<ScoreboardConfig | null>(null)
   const [scoreboardSaveStatus, setScoreboardSaveStatus] = useState<SaveStatus>('idle')
@@ -368,6 +373,17 @@ function App() {
           case 'rebooting':
             setRebooting(true)
             setRebootError(null)
+            break
+          case 'horn_tested':
+            setHornTesting(false)
+            if (message.played) {
+              setHornTestMessage({ text: 'Playing...', ok: true })
+            } else {
+              setHornTestMessage({
+                text: 'No horn available -- check Audio is enabled and a horn file exists.',
+                ok: false,
+              })
+            }
             break
         }
       }
@@ -528,6 +544,16 @@ function App() {
       return
     }
     socketRef.current.send(JSON.stringify({ type: 'reboot' }))
+  }
+
+  function testHorn() {
+    setHornTestMessage(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setHornTestMessage({ text: NOT_CONNECTED_ERROR, ok: false })
+      return
+    }
+    setHornTesting(true)
+    socketRef.current.send(JSON.stringify({ type: 'test_horn' }))
   }
 
   return (
@@ -1077,6 +1103,21 @@ function App() {
                   Save Audio
                 </button>
                 {saveFeedback(audioSaveStatus, audioSaveError)}
+              </div>
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={testHorn}
+                  disabled={hornTesting}
+                >
+                  Test horn
+                </button>
+                {hornTestMessage && (
+                  <span className={hornTestMessage.ok ? 'text-success' : 'text-danger'}>
+                    {hornTestMessage.text}
+                  </span>
+                )}
               </div>
             </form>
           ) : (

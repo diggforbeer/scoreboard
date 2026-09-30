@@ -162,6 +162,22 @@ thing:
   machine; changing an already-online board's Wi-Fi now means walking it
   through that flow (e.g. by disconnecting it) rather than editing a
   field here.
+* Story 11: a "test horn" button on the Audio section, so the actual goal
+  horn can be checked (right speaker, right volume, right file for the
+  favourite) without waiting for a real goal. ``_test_horn`` builds its
+  own ``GoalHornPlayer`` from a fresh disk read, the same way every other
+  section here loads ``Settings`` fresh -- deliberately *not* routed
+  through a live ``ScoreboardApp`` the way ``SNAPSHOT_PROVIDER`` is:
+  playback is a fire-and-forget subprocess call with no rendering state
+  to coordinate with, so there's nothing a live app connection would add,
+  and it means the button also works with no live app attached (local
+  dev), same as every config section already does. Plays whatever the
+  current favourite's own horn resolves to (falling back to the shipped
+  default), matching what a real goal would actually play. The
+  ``"horn_tested"`` response's ``played`` bool distinguishes "actually
+  launched" from "audio disabled" or "no file found (including the
+  shipped default missing)" -- surfaced in the UI rather than always
+  showing a bare "done".
 
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
@@ -187,6 +203,7 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from . import updater
+from .audio import GoalHornPlayer
 from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
 from .updater import installed_version
 
@@ -516,6 +533,32 @@ def _reboot() -> None:
         log.warning("Could not reboot: %s", exc)
 
 
+def _test_horn() -> bool:
+    """Play the goal horn on demand, from the Audio section (#178).
+
+    Builds its own GoalHornPlayer from a fresh disk read, same as every
+    other section here loads Settings fresh -- deliberately not routed
+    through a live ScoreboardApp (the way SNAPSHOT_PROVIDER is): playback
+    is a fire-and-forget subprocess call (GoalHornPlayer.play() launches
+    aplay via Popen, never waits on it), with no rendering state to
+    coordinate with, so there's nothing a live app connection would add
+    here -- and it means the test button also works with no live app
+    attached (local dev), the same as every config section already does.
+    Plays whatever's currently configured as the favourite's own horn
+    (falling back to the shipped default), matching what a real goal
+    would actually play; returns whether playback actually launched
+    (False if audio is disabled or no horn file -- including the shipped
+    default -- could be found).
+    """
+    settings = Settings.load(CONFIG_PATH)
+    horn = GoalHornPlayer.default(
+        device=settings.audio.device,
+        horn_dir=settings.audio.horn_dir,
+        enabled=settings.audio.enabled,
+    )
+    return horn.play(settings.scoreboard.favourite_team)
+
+
 async def _watch_update_state() -> None:
     """Broadcast a fresh update config to every client whenever
     updater.STATE_FILE changes -- the actual point of story 4. check()/
@@ -695,6 +738,9 @@ async def _handle(connection: ServerConnection) -> None:
             elif msg_type == "reboot":
                 await connection.send(json.dumps({"type": "rebooting"}))
                 _reboot()
+            elif msg_type == "test_horn":
+                played = _test_horn()
+                await connection.send(json.dumps({"type": "horn_tested", "played": played}))
             else:
                 error = {"type": "error", "message": "unknown message type"}
                 await connection.send(json.dumps(error))
