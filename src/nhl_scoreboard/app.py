@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import signal
+import threading
 import time
 import tomllib
 from collections.abc import Callable
@@ -315,8 +316,27 @@ class ScoreboardApp:
         log.info("Received signal %s; shutting down", signal.Signals(signum).name)
         self._running = False
 
+    def _apply_boot_volume(self) -> threading.Thread:
+        """Push the configured volume to the mixer once, off the render loop.
+
+        apply_volume() blocks on `amixer`, so it runs on a short-lived daemon
+        thread (#189). Without this a volume set only in the boot TOML was
+        never applied until the admin page saved Audio or ran Test horn.
+        """
+
+        def work() -> None:
+            try:
+                self.horn.apply_volume()
+            except Exception:
+                log.exception("Could not apply boot volume")
+
+        thread = threading.Thread(target=work, name="apply-volume", daemon=True)
+        thread.start()
+        return thread
+
     def run(self) -> None:
         self._running = True
+        self._apply_boot_volume()
         if self.admin_server is not None:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
