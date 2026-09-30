@@ -7,7 +7,7 @@ import requests
 import responses
 
 from nhl_scoreboard.nhl.api import BASE_URL, NHLApiError, NHLClient
-from nhl_scoreboard.nhl.models import SeasonSeriesRecord
+from nhl_scoreboard.nhl.models import ClubStats, GoalieLine, SeasonSeriesRecord, SkaterLine
 
 
 @pytest.fixture(autouse=True)
@@ -454,3 +454,65 @@ def test_get_does_not_retry_a_404():
     with NHLClient() as client, pytest.raises(NHLApiError):
         client.scores()
     assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_club_stats_url_and_parsed_payload():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/club-stats/NSH/now",
+        json={
+            "season": "20252026",
+            "gameType": 2,
+            "skaters": [
+                {
+                    "playerId": 1,
+                    "firstName": {"default": "Filip"},
+                    "lastName": {"default": "Forsberg"},
+                    "gamesPlayed": 70,
+                    "goals": 30,
+                    "assists": 20,
+                    "points": 50,
+                },
+                {"garbage": True, "playerId": "x"},
+            ],
+            "goalies": [
+                {
+                    "playerId": 3,
+                    "firstName": {"default": "Juuse"},
+                    "lastName": {"default": "Saros"},
+                    "gamesPlayed": 60,
+                    "wins": 30,
+                    "losses": 20,
+                    "overtimeLosses": 5,
+                    "savePercentage": 0.9151,
+                }
+            ],
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        stats = client.club_stats("nsh")
+    assert stats == ClubStats(
+        skaters=(SkaterLine(1, "F. Forsberg", 30, 20, 50),),
+        goalies=(GoalieLine(3, "J. Saros", 60, 30, 20, 5, 0.9151),),
+    )
+
+
+@responses.activate
+def test_club_stats_empty_preseason_arrays():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/club-stats/NSH/now",
+        json={"season": "20262027", "gameType": 2, "skaters": [], "goalies": []},
+        status=200,
+    )
+    with NHLClient() as client:
+        assert client.club_stats("NSH") == ClubStats((), ())
+
+
+@responses.activate
+def test_club_stats_wraps_http_errors():
+    responses.add(responses.GET, f"{BASE_URL}/club-stats/NSH/now", status=404)
+    with NHLClient() as client, pytest.raises(NHLApiError):
+        client.club_stats("NSH")

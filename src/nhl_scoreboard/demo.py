@@ -14,9 +14,12 @@ from typing import Any, NamedTuple
 from .app import Scene
 from .nhl.models import (
     Game,
+    GoalieLine,
     SeasonSeriesRecord,
     Situation,
+    SkaterLine,
     StandingsRow,
+    TeamLeaders,
     conference_standings,
     standings_window,
 )
@@ -44,6 +47,17 @@ _CONFERENCE = (
     "SEA",
     "CHI",
     "SJS",
+)
+
+
+#: Made-up players, shown whichever team is the favourite.
+_LEADERS = TeamLeaders(
+    goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
+    points=SkaterLine(2, "R. O'Reilly", 9, 17, 26),
+    goalies=(
+        GoalieLine(3, "J. Saros", 22, 13, 7, 2, 0.915),
+        GoalieLine(4, "J. Wright", 9, 4, 3, 1, 0.902),
+    ),
 )
 
 
@@ -107,6 +121,8 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("game", shootout)),
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
+        DemoStep(Scene("leaders", leaders=_LEADERS)),
+        DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
         DemoStep(Scene("clock")),
         DemoStep(Scene("no_games")),
         DemoStep(Scene("no_data")),

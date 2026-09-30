@@ -153,9 +153,10 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, leaders
 # seconds = 10
 # "matchup" (season series vs. the next opponent) only shows if listed here.
+# "leaders" (your team's top goal scorer, top point getter and top two goalies) too.
 
 [audio]
 enabled = true
