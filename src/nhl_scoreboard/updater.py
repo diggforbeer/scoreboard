@@ -64,6 +64,10 @@ RELEASE_URL = os.environ.get(
     "NHL_SCOREBOARD_RELEASE_URL",
     "https://api.github.com/repos/diggforbeer/scoreboard/releases/latest",
 )
+#: Where admin_server.py serves the built React page from; same env var, so
+#: the updater and the server can't disagree about it. The bundle's optional
+#: top-level ``admin/`` directory (frontend/dist) is swapped in here (#185).
+ADMIN_DIR = Path(os.environ.get("NHL_SCOREBOARD_ADMIN_DIR", "/usr/share/nhl-scoreboard/admin"))
 BUNDLE_ASSET = "nhl-scoreboard-app.tar.gz"
 MANIFEST_ASSET = "manifest.json"
 SERVICE = "nhl-scoreboard.service"
@@ -250,6 +254,8 @@ def apply() -> bool:
     _record(state, "in_progress", f"Installing {tag}")
     new_dir = APP_DIR.with_name(APP_DIR.name + ".new")
     prev_dir = APP_DIR.with_name(APP_DIR.name + ".prev")
+    new_admin = ADMIN_DIR.with_name(ADMIN_DIR.name + ".new")
+    prev_admin = ADMIN_DIR.with_name(ADMIN_DIR.name + ".prev")
     try:
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / BUNDLE_ASSET
@@ -258,11 +264,18 @@ def apply() -> bool:
             if digest != state.get("sha256"):
                 raise ValueError("checksum mismatch")
             shutil.rmtree(new_dir, ignore_errors=True)
+            shutil.rmtree(new_admin, ignore_errors=True)
             _extract(bundle, new_dir)
             (new_dir / "VERSION").write_text(f"{tag}\n")
+            # The frontend rides in the same (already checksummed) bundle so
+            # the page can't lag the backend it talks to. Staged next to the
+            # live directory now so the swap below is only renames.
+            if (new_dir / "admin").is_dir():
+                shutil.move(str(new_dir / "admin"), new_admin)
     except (OSError, ValueError, tarfile.TarError) as exc:
         log.error("Could not prepare %s: %s", tag, exc)
         shutil.rmtree(new_dir, ignore_errors=True)
+        shutil.rmtree(new_admin, ignore_errors=True)
         _record(state, "failed", f"Download failed, nothing changed: {exc}")
         return False
 
@@ -271,11 +284,18 @@ def apply() -> bool:
     shutil.rmtree(prev_dir, ignore_errors=True)
     APP_DIR.rename(prev_dir)
     new_dir.rename(APP_DIR)
+    swapped_admin = new_admin.is_dir()
+    if swapped_admin:
+        shutil.rmtree(prev_admin, ignore_errors=True)
+        if ADMIN_DIR.exists():
+            ADMIN_DIR.rename(prev_admin)
+        new_admin.rename(ADMIN_DIR)
     log.info("Installed %s alongside the previous tree; restarting %s", tag, SERVICE)
 
     if _systemctl("restart", SERVICE) and wait_until_healthy(HEALTH_SECONDS, HEALTH_POLL_SECONDS):
         log.info("%s is running %s", SERVICE, tag)
         shutil.rmtree(prev_dir, ignore_errors=True)
+        shutil.rmtree(prev_admin, ignore_errors=True)
         state.update(installed=tag, available=False, applicable=False, reason="Up to date")
         _record(state, "success", f"Updated to {tag}")
         return True
@@ -286,6 +306,10 @@ def apply() -> bool:
     APP_DIR.rename(failed_dir)
     prev_dir.rename(APP_DIR)
     shutil.rmtree(failed_dir, ignore_errors=True)
+    if swapped_admin:
+        shutil.rmtree(ADMIN_DIR, ignore_errors=True)
+        if prev_admin.exists():
+            prev_admin.rename(ADMIN_DIR)
     _systemctl("restart", SERVICE)
     _record(state, "rolled_back", f"{tag} did not start; restored the previous version")
     return False
