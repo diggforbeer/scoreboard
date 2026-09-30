@@ -186,6 +186,7 @@ class ScoreboardApp:
             device=settings.audio.device,
             horn_dir=settings.audio.horn_dir,
             enabled=settings.audio.enabled,
+            volume=settings.audio.volume,
         )
         # Only probe the I2C bus when the feature is actually on -- a board
         # without the sensor shouldn't get I2C log noise every startup.
@@ -586,10 +587,18 @@ class ScoreboardApp:
             self._schedule_retry_after = 0.0
 
         if audio_changed:
+            # volume is carried on the rebuilt object but deliberately not
+            # applied to the ALSA mixer here: GoalHornPlayer.apply_volume()
+            # blocks on a real `amixer` subprocess, and this method runs on
+            # the same thread as frame rendering -- a stalled/slow amixer
+            # call here would stutter the panel. admin_server.py applies it
+            # instead, from its own background thread, on an audio save and
+            # on Test horn (#187).
             self.horn = GoalHornPlayer.default(
                 device=new_settings.audio.device,
                 horn_dir=new_settings.audio.horn_dir,
                 enabled=new_settings.audio.enabled,
+                volume=new_settings.audio.volume,
             )
 
         if logos_changed:

@@ -148,11 +148,15 @@ def test_sends_the_current_audio_config_on_connect(app_dir, config_path):
     assert json.loads(received) == {
         "type": "config",
         "section": "audio",
-        "data": {"enabled": False, "device": "hw:1,0", "horn_dir": ""},
+        "data": {"enabled": False, "device": "hw:1,0", "horn_dir": "", "volume": 100},
     }
 
 
 def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    # enabled=False here, so _apply_audio_volume's own enabled-gate skips
+    # the mixer call -- this test needs no fake amixer runner at all, same
+    # "disabled short-circuits before any subprocess" invariant as
+    # test_horn_test_reports_not_played_when_audio_disabled below.
     async def scenario(client):
         await _skip_initial(client)
         await client.send(
@@ -160,7 +164,12 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
                 {
                     "type": "save",
                     "section": "audio",
-                    "data": {"enabled": False, "device": "hw:1,0", "horn_dir": ""},
+                    "data": {
+                        "enabled": False,
+                        "device": "hw:1,0",
+                        "horn_dir": "",
+                        "volume": 75,
+                    },
                 }
             )
         )
@@ -171,9 +180,32 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
     assert json.loads(fresh) == {
         "type": "config",
         "section": "audio",
-        "data": {"enabled": False, "device": "hw:1,0", "horn_dir": ""},
+        "data": {"enabled": False, "device": "hw:1,0", "horn_dir": "", "volume": 75},
     }
     assert 'device = "hw:1,0"' in config_path.read_text()
+
+
+def test_save_applies_volume_to_the_mixer_immediately_when_enabled(
+    app_dir, config_path, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer,
+        "_amixer",
+        staticmethod(lambda cmd: calls.append(cmd) or True),
+    )
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(
+            json.dumps(
+                {"type": "save", "section": "audio", "data": {"enabled": True, "volume": 65}}
+            )
+        )
+        return await client.recv(), await client.recv()
+
+    asyncio.run(_serve_and_run(scenario))
+    assert calls == [["amixer", "-q", "sset", "PCM", "65%"]]
 
 
 def test_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
@@ -466,11 +498,18 @@ def test_horn_test_plays_the_favourite_teams_horn_when_enabled(
     (horn_dir / "NSH.wav").write_bytes(b"fake wav")
     (horn_dir / "_default.wav").write_bytes(b"fake wav")
     config_path.write_text(
-        f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n[scoreboard]\nfavourite_team = "NSH"\n'
+        f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\nvolume = 33\n'
+        '[scoreboard]\nfavourite_team = "NSH"\n'
     )
     calls = []
+    mixer_calls = []
     monkeypatch.setattr(
         admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer,
+        "_amixer",
+        staticmethod(lambda cmd: mixer_calls.append(cmd) or True),
     )
 
     async def scenario(client):
@@ -483,6 +522,7 @@ def test_horn_test_plays_the_favourite_teams_horn_when_enabled(
     assert len(calls) == 1
     assert calls[0][0] == "aplay"
     assert calls[0][-1].endswith("NSH.wav")
+    assert mixer_calls == [["amixer", "-q", "sset", "PCM", "33%"]]
 
 
 def test_watcher_broadcasts_when_the_update_state_file_changes(
