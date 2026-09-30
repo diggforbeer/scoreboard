@@ -478,11 +478,13 @@ function App() {
     }
   }, [page, connection])
 
-  // Follow the tail, unless the reader has scrolled up to look at something.
+  // Newest line renders at the top (see the reverse() in the Logs card
+  // below), so "following the tail" means staying pinned to the top --
+  // unless the reader has scrolled down to look at older history.
   useEffect(() => {
     const box = logBoxRef.current
-    if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 60) {
-      box.scrollTop = box.scrollHeight
+    if (box && box.scrollTop < 60) {
+      box.scrollTop = 0
     }
   }, [logLines])
 
@@ -1630,7 +1632,7 @@ function App() {
               style={{ height: '28rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}
             >
               {logLines.length === 0 && <span className="text-body-secondary">No log lines yet.</span>}
-              {logLines.map((line, index) => (
+              {[...logLines].reverse().map((line, index) => (
                 <div
                   key={`${line.cursor}-${index}`}
                   className={
