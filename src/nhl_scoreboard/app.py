@@ -516,6 +516,25 @@ class ScoreboardApp:
         return True
 
     def _apply_reloaded_settings(self, new_settings: Settings) -> None:
+        """Apply a config reload's side effects, field by field.
+
+        Deliberately explicit/per-field rather than one generic "something
+        changed, re-fetch and rebuild everything" pass -- consistent with
+        this project's usual anti-premature-abstraction stance, and a
+        blanket invalidation would force unrelated work on every save
+        (e.g. a schedule refetch or horn rebuild triggered by editing
+        goal_flash_seconds). The real risk with this approach isn't that
+        it doesn't scale, it's that a *new* piece of state cached off a
+        setting (self._schedule/_standings/_season_series-shaped, or a
+        rebuilt object like self.horn/renderer.logos) can be added without
+        anyone remembering to hook its invalidation in here -- exactly how
+        favourite_team_changed's _schedule fix below was missing until a
+        live bug (#178's admin-page work) surfaced it. When adding a new
+        cache or rebuilt-from-settings object anywhere in this class,
+        check here first: does a relevant field change need to reset or
+        rebuild it, the same way audio_changed/logos_changed/
+        favourite_team_changed/etc. do below?
+        """
         old = self.settings
         audio_changed = dataclasses.astuple(old.audio) != dataclasses.astuple(new_settings.audio)
         logos_changed = (
