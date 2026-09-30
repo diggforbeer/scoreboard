@@ -452,8 +452,22 @@ def test_horn_test_reports_not_played_when_audio_disabled(app_dir, config_path):
     assert json.loads(received) == {"type": "horn_tested", "played": False}
 
 
-def test_horn_test_plays_the_favourite_teams_horn_when_enabled(app_dir, config_path, monkeypatch):
-    config_path.write_text('[audio]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+def test_horn_test_plays_the_favourite_teams_horn_when_enabled(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    # A synthetic horn_dir with both a team-specific and a default file --
+    # not the repo's own real assets/horns/ (NSH.wav there is a git-
+    # ignored local drop-in, never committed, so relying on it broke this
+    # test in CI's clean checkout). Both files present proves this uses
+    # the same team-specific-first lookup a real goal would, not just
+    # "some file got played".
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "NSH.wav").write_bytes(b"fake wav")
+    (horn_dir / "_default.wav").write_bytes(b"fake wav")
+    config_path.write_text(
+        f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n[scoreboard]\nfavourite_team = "NSH"\n'
+    )
     calls = []
     monkeypatch.setattr(
         admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
@@ -466,8 +480,6 @@ def test_horn_test_plays_the_favourite_teams_horn_when_enabled(app_dir, config_p
 
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received) == {"type": "horn_tested", "played": True}
-    # NSH.wav is a real shipped file (assets/horns/) -- proves this uses
-    # the same team-specific-first lookup a real goal would.
     assert len(calls) == 1
     assert calls[0][0] == "aplay"
     assert calls[0][-1].endswith("NSH.wav")
