@@ -115,6 +115,20 @@ def test_broken_runner_is_caught_not_raised(tmp_path):
     assert player.play("NSH") is False  # logged, not raised
 
 
+def test_uploaded_horns_beat_the_shipped_default_but_not_a_team_file(monkeypatch, tmp_path):
+    upload, shipped = tmp_path / "up", tmp_path / "shipped"
+    upload.mkdir()
+    shipped.mkdir()
+    monkeypatch.setenv("NHL_SCOREBOARD_UPLOAD_HORN_DIR", str(upload))
+    monkeypatch.delenv("NHL_SCOREBOARD_HORN_DIR", raising=False)
+    touch(upload / DEFAULT_NAME)
+    touch(shipped / DEFAULT_NAME)
+    touch(shipped / "NSH.wav")
+    player = GoalHornPlayer([default_directories()[0], shipped])
+    assert player.path_for("TOR") == upload / DEFAULT_NAME
+    assert player.path_for("NSH") == shipped / "NSH.wav"
+
+
 def test_default_directories_respects_override_and_env(monkeypatch, tmp_path):
     monkeypatch.delenv("NHL_SCOREBOARD_HORN_DIR", raising=False)
     dirs = default_directories()
