@@ -192,6 +192,19 @@ thing:
   applied until the admin page does one of those two things at least once
   -- there's no apply-on-boot path yet.
 
+* Logs tab (#197): a live tail of ``nhl-scoreboard.service``'s own journal.
+  Opt-in per connection (``logs_subscribe``/``logs_unsubscribe``, sent as the
+  tab opens/closes) because log volume dwarfs every other message here.
+  ONE shared ``journalctl -f`` follower serves all subscribers (started on
+  the first, killed when the last leaves or disconnects). A subscriber gets
+  a one-shot backlog (``LOG_BACKLOG_LINES``) then the live stream; the
+  follower is started *before* the backlog is read so nothing is lost in
+  between, at the cost of a possible duplicate, which the frontend drops by
+  journal cursor. ``-o json`` so the page can colour by level; the level is
+  read from the Python logging line itself when present, because systemd
+  files everything a service writes to stderr at one journal priority.
+  Scoped to this one unit -- never the whole system journal.
+
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
 """
@@ -207,6 +220,7 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import wave
@@ -265,6 +279,15 @@ SNAPSHOT_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_SNAPSHOT_POLL
 #: broadcast to all of them, unlike everything else here, which only ever
 #: replies to whoever sent the request.
 _clients: set[ServerConnection] = set()
+
+#: Logs tab (#197). Overridable so tests can substitute a fake journalctl.
+JOURNAL_COMMAND = ["journalctl"]
+LOG_UNIT = "nhl-scoreboard.service"
+LOG_BACKLOG_LINES = 200
+#: Connections that opted in to the log stream, and the single shared
+#: `journalctl -f` task feeding them.
+_log_subscribers: set[ServerConnection] = set()
+_log_task: asyncio.Task[None] | None = None
 
 #: ScoreboardApp.status_snapshot, injected by AdminServer.start() (#178
 #: story 10) -- None in every other context (local dev, tests, the plain
@@ -482,6 +505,113 @@ async def _broadcast(payload: dict[str, object]) -> None:
     for client in list(_clients):
         with contextlib.suppress(websockets.exceptions.ConnectionClosed):
             await client.send(raw)
+
+
+# -- logs tab (#197) -----------------------------------------------------------
+
+_LOG_LEVELS = {"DEBUG": 7, "INFO": 6, "WARNING": 4, "ERROR": 3, "CRITICAL": 2}
+#: "<date> <time> LEVEL   name: message" -- __main__.py's logging.basicConfig format.
+_LOG_LEVEL_RE = re.compile(r"^\S+ \S+ (DEBUG|INFO|WARNING|ERROR|CRITICAL)\b")
+
+
+def _parse_journal_line(raw: bytes | str) -> dict[str, object] | None:
+    """One `journalctl -o json` line -> {cursor, t (epoch ms), level (syslog
+    priority, lower = worse), msg}, or None for anything unparseable."""
+    try:
+        fields = json.loads(raw)
+        message = fields.get("MESSAGE", "")
+        if isinstance(message, list):  # journald encodes non-UTF-8 bodies as byte arrays
+            message = bytes(message).decode("utf-8", "replace")
+        message = str(message)
+        priority = int(fields.get("PRIORITY", 6))
+        millis = int(fields["__REALTIME_TIMESTAMP"]) // 1000
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return None
+    match = _LOG_LEVEL_RE.match(message)
+    return {
+        "cursor": str(fields.get("__CURSOR", "")),
+        "t": millis,
+        "level": _LOG_LEVELS[match.group(1)] if match else priority,
+        "msg": message,
+    }
+
+
+def _journal_argv(*extra: str) -> list[str]:
+    return [*JOURNAL_COMMAND, "-u", LOG_UNIT, "-o", "json", "--no-pager", *extra]
+
+
+async def _log_backlog() -> list[dict[str, object]]:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *_journal_argv("-n", str(LOG_BACKLOG_LINES)),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+    except (OSError, TimeoutError) as exc:
+        log.warning("Could not read the journal backlog: %s", exc)
+        return []
+    entries = (_parse_journal_line(line) for line in out.splitlines())
+    return [entry for entry in entries if entry is not None]
+
+
+async def _broadcast_to_log_subscribers(payload: dict[str, object]) -> None:
+    raw = json.dumps(payload)
+    for client in list(_log_subscribers):
+        with contextlib.suppress(websockets.exceptions.ConnectionClosed):
+            await client.send(raw)
+
+
+async def _follow_logs() -> None:
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *_journal_argv("-n", "0", "-f"),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            limit=1024 * 1024,
+        )
+        assert proc.stdout is not None
+        while line := await proc.stdout.readline():
+            entry = _parse_journal_line(line)
+            if entry is not None:
+                await _broadcast_to_log_subscribers({"type": "logs", "entries": [entry]})
+        error = {"type": "error", "section": "logs", "message": "the log stream ended"}
+        await _broadcast_to_log_subscribers(error)
+    except OSError as exc:
+        error = {"type": "error", "section": "logs", "message": f"cannot run journalctl: {exc}"}
+        await _broadcast_to_log_subscribers(error)
+    except ValueError as exc:  # a single line longer than the reader's limit
+        log.warning("Log follower stopped: %s", exc)
+    finally:
+        if proc is not None and proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            await proc.wait()
+
+
+async def _stop_log_follower() -> None:
+    global _log_task
+    task, _log_task = _log_task, None
+    if task is not None and not task.done():
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def _subscribe_logs(connection: ServerConnection) -> None:
+    global _log_task
+    _log_subscribers.add(connection)
+    if _log_task is None or _log_task.done():
+        _log_task = asyncio.create_task(_follow_logs())
+    backlog = await _log_backlog()
+    await connection.send(json.dumps({"type": "logs", "backlog": True, "entries": backlog}))
+
+
+async def _unsubscribe_logs(connection: ServerConnection) -> None:
+    _log_subscribers.discard(connection)
+    if not _log_subscribers:
+        await _stop_log_follower()
 
 
 async def _send_version(connection: ServerConnection) -> None:
@@ -846,6 +976,10 @@ async def _handle(connection: ServerConnection) -> None:
                     await connection.send(json.dumps(error))
                 else:
                     await connection.send(json.dumps({"type": "horn_uploaded", "name": name}))
+            elif msg_type == "logs_subscribe":
+                await _subscribe_logs(connection)
+            elif msg_type == "logs_unsubscribe":
+                await _unsubscribe_logs(connection)
             elif msg_type == "test_horn":
                 played = _test_horn()
                 await connection.send(json.dumps({"type": "horn_tested", "played": played}))
@@ -854,6 +988,7 @@ async def _handle(connection: ServerConnection) -> None:
                 await connection.send(json.dumps(error))
     finally:
         _clients.discard(connection)
+        await _unsubscribe_logs(connection)
 
 
 # -- static file serving (#178 story 10) -------------------------------------
@@ -926,6 +1061,7 @@ async def run(host: str = HOST, port: int = PORT) -> None:
             await watcher
         with contextlib.suppress(asyncio.CancelledError):
             await snapshot_watcher
+        await _stop_log_follower()
 
 
 def main() -> None:
@@ -1008,6 +1144,7 @@ class AdminServer:
                 await watcher
             with contextlib.suppress(asyncio.CancelledError):
                 await snapshot_watcher
+            await _stop_log_follower()
 
     def stop(self) -> None:
         if self._loop is not None and self._stop_event is not None:

@@ -194,6 +194,19 @@ interface UpdateConfig {
 // keys are rendered generically rather than modelled one field at a time.
 type SnapshotData = Record<string, string>
 
+// One journal line from admin_server.py's Logs tab (#197). `level` is a
+// syslog priority (lower = worse), `t` epoch milliseconds.
+interface LogEntry {
+  cursor: string
+  t: number
+  level: number
+  msg: string
+}
+
+// Keep the last N lines only, so a chatty DEBUG session can't grow a
+// long-open tab's memory without bound.
+const LOG_MAX_LINES = 1000
+
 type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
@@ -205,6 +218,7 @@ type ServerMessage =
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'snapshot'; data: SnapshotData }
+  | { type: 'logs'; backlog?: boolean; entries: LogEntry[] }
   | { type: 'saved'; section: string }
   | { type: 'error'; section?: string; message: string }
   | { type: 'checking' }
@@ -289,7 +303,10 @@ function App() {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
   // Two pages don't justify a router (#193): plain view state.
-  const [page, setPage] = useState<'home' | 'audio'>('home')
+  const [page, setPage] = useState<'home' | 'audio' | 'logs'>('home')
+  const [logLines, setLogLines] = useState<LogEntry[]>([])
+  const [logError, setLogError] = useState<string | null>(null)
+  const logBoxRef = useRef<HTMLPreElement | null>(null)
   const [hornUploadTeam, setHornUploadTeam] = useState('default')
   const [hornUploadFile, setHornUploadFile] = useState<File | null>(null)
   const [hornUploading, setHornUploading] = useState(false)
@@ -352,6 +369,18 @@ function App() {
           case 'snapshot':
             setSnapshot(message.data)
             break
+          case 'logs':
+            setLogError(null)
+            if (message.backlog) setLogLines(message.entries.slice(-LOG_MAX_LINES))
+            else
+              setLogLines((previous) => {
+                // The server starts following before it reads the backlog,
+                // so a line can arrive twice -- drop repeats by cursor.
+                const seen = new Set(previous.slice(-50).map((line) => line.cursor))
+                const fresh = message.entries.filter((line) => !seen.has(line.cursor))
+                return fresh.length ? [...previous, ...fresh].slice(-LOG_MAX_LINES) : previous
+              })
+            break
           case 'saved':
             if (message.section === 'audio') setAudioSaveStatus('saved')
             else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
@@ -366,7 +395,9 @@ function App() {
             setHornUploadMessage({ text: `Uploaded ${message.name}.`, ok: true })
             break
           case 'error':
-            if (message.section === 'horn_upload') {
+            if (message.section === 'logs') {
+              setLogError(message.message)
+            } else if (message.section === 'horn_upload') {
               setHornUploading(false)
               setHornUploadMessage({ text: message.message, ok: false })
             } else if (message.section === 'audio') {
@@ -433,6 +464,27 @@ function App() {
       socketRef.current?.close()
     }
   }, [])
+
+  // Logs are opt-in (#197): subscribe only while the tab is showing, and
+  // again after a reconnect (`connection` flips back to 'open').
+  useEffect(() => {
+    if (page !== 'logs' || connection !== 'open') return
+    const socket = socketRef.current
+    socket?.send(JSON.stringify({ type: 'logs_subscribe' }))
+    return () => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'logs_unsubscribe' }))
+      }
+    }
+  }, [page, connection])
+
+  // Follow the tail, unless the reader has scrolled up to look at something.
+  useEffect(() => {
+    const box = logBoxRef.current
+    if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 60) {
+      box.scrollTop = box.scrollHeight
+    }
+  }, [logLines])
 
   const NOT_CONNECTED_ERROR = 'Not connected to the board -- wait for reconnect and try again.'
 
@@ -664,14 +716,14 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'audio'] as const).map((name) => (
+        {(['home', 'audio', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
               className={`nav-link${page === name ? ' active' : ''}`}
               onClick={() => setPage(name)}
             >
-              {name === 'home' ? 'Home' : 'Audio'}
+              {name === 'home' ? 'Home' : name === 'audio' ? 'Audio' : 'Logs'}
             </button>
           </li>
         ))}
@@ -1562,6 +1614,35 @@ function App() {
       </div>
 
         </>
+      )}
+
+      {page === 'logs' && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Logs</h2>
+            <p className="text-body-secondary small">
+              Live output of nhl-scoreboard.service (last {LOG_MAX_LINES} lines kept).
+            </p>
+            {logError && <p className="text-danger">{logError}</p>}
+            <pre
+              ref={logBoxRef}
+              className="bg-body-tertiary border rounded p-2 mb-0 small"
+              style={{ height: '28rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}
+            >
+              {logLines.length === 0 && <span className="text-body-secondary">No log lines yet.</span>}
+              {logLines.map((line, index) => (
+                <div
+                  key={`${line.cursor}-${index}`}
+                  className={
+                    line.level <= 3 ? 'text-danger' : line.level === 4 ? 'text-warning-emphasis' : ''
+                  }
+                >
+                  {new Date(line.t).toLocaleTimeString()} {line.msg}
+                </div>
+              ))}
+            </pre>
+          </div>
+        </div>
       )}
     </div>
   )
