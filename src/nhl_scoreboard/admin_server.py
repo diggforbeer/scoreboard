@@ -199,13 +199,17 @@ had: a LAN-only admin tool, not something to port-forward.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import contextlib
 import dataclasses
+import io
 import json
 import logging
 import os
 import subprocess
 import threading
+import wave
 from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
@@ -216,8 +220,9 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from . import updater
-from .audio import GoalHornPlayer
+from .audio import DEFAULT_NAME, GoalHornPlayer, upload_directory
 from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
+from .display.teams import TEAM_COLORS
 from .updater import installed_version
 
 log = logging.getLogger(__name__)
@@ -268,6 +273,14 @@ _clients: set[ServerConnection] = set()
 #: snapshot parameter had -- this module still has no idea what a scene or
 #: a game is.
 SNAPSHOT_PROVIDER: Callable[[], dict[str, str]] | None = None
+#: A goal horn is a few seconds long; 2 MB is generous for that and still
+#: protects the SD card from an accidental multi-minute file (#193).
+HORN_MAX_BYTES = 2 * 1024 * 1024
+#: Uploads ride the WebSocket as base64 (~4/3 the raw size) plus a little
+#: JSON framing, so the library's default 1 MiB frame cap has to be raised
+#: to fit a HORN_MAX_BYTES file. Applies to every message on the socket;
+#: nothing else sent here comes close.
+WS_MAX_SIZE = HORN_MAX_BYTES * 4 // 3 + 4096
 
 
 @dataclasses.dataclass(frozen=True)
@@ -601,6 +614,49 @@ def _test_horn() -> bool:
     return horn.play(settings.scoreboard.favourite_team)
 
 
+def _save_horn(team: object, data_b64: object) -> str:
+    """Validate and store an uploaded horn WAV (#193); returns the file name.
+
+    ``team`` is a real abbreviation from TEAM_COLORS or ``"default"`` (the
+    shipped ``_default.wav``), which keeps the file name off the wire --
+    nothing client-supplied ever becomes part of a path. Written
+    atomically into the persistent upload directory that
+    ``audio.default_directories()`` already searches, so GoalHornPlayer
+    needs no new mechanism. Raises ValueError with a message fit to show.
+    """
+    if team == "default":
+        name = DEFAULT_NAME
+    elif isinstance(team, str) and team in TEAM_COLORS:
+        name = f"{team}.wav"
+    else:
+        raise ValueError(f"unknown team {team!r}")
+    if not isinstance(data_b64, str):
+        raise ValueError("missing file data")
+    try:
+        raw = base64.b64decode(data_b64, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("file data is not valid base64") from None
+    if not raw:
+        raise ValueError("file is empty")
+    if len(raw) > HORN_MAX_BYTES:
+        raise ValueError(f"file is too large (max {HORN_MAX_BYTES // (1024 * 1024)} MB)")
+    try:
+        with wave.open(io.BytesIO(raw)) as wav:
+            if wav.getnframes() <= 0:
+                raise ValueError("WAV file has no audio")
+    except (wave.Error, EOFError):
+        raise ValueError("not a valid WAV file") from None
+    directory = upload_directory()
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        tmp = directory / f".{name}.tmp"
+        tmp.write_bytes(raw)
+        tmp.replace(directory / name)
+    except OSError as exc:
+        raise ValueError(f"could not store the file: {exc.strerror or exc}") from None
+    return name
+
+
 async def _watch_update_state() -> None:
     """Broadcast a fresh update config to every client whenever
     updater.STATE_FILE changes -- the actual point of story 4. check()/
@@ -782,6 +838,14 @@ async def _handle(connection: ServerConnection) -> None:
             elif msg_type == "reboot":
                 await connection.send(json.dumps({"type": "rebooting"}))
                 _reboot()
+            elif msg_type == "upload_horn":
+                try:
+                    name = _save_horn(message.get("team"), message.get("data"))
+                except ValueError as exc:
+                    error = {"type": "error", "section": "horn_upload", "message": str(exc)}
+                    await connection.send(json.dumps(error))
+                else:
+                    await connection.send(json.dumps({"type": "horn_uploaded", "name": name}))
             elif msg_type == "test_horn":
                 played = _test_horn()
                 await connection.send(json.dumps({"type": "horn_tested", "played": played}))
@@ -850,7 +914,9 @@ async def run(host: str = HOST, port: int = PORT) -> None:
     watcher = asyncio.create_task(_watch_update_state())
     snapshot_watcher = asyncio.create_task(_watch_snapshot())
     try:
-        async with serve(_handle, host, port, process_request=_process_request) as server:
+        async with serve(
+            _handle, host, port, process_request=_process_request, max_size=WS_MAX_SIZE
+        ) as server:
             log.info("Admin server listening on http://%s:%d/ (page + WebSocket)", host, port)
             await server.serve_forever()
     finally:
@@ -921,7 +987,11 @@ class AdminServer:
         snapshot_watcher = asyncio.create_task(_watch_snapshot())
         try:
             async with serve(
-                _handle, self._host, self._port, process_request=_process_request
+                _handle,
+                self._host,
+                self._port,
+                process_request=_process_request,
+                max_size=WS_MAX_SIZE,
             ) as server:
                 self._bound_port = server.sockets[0].getsockname()[1]
                 log.info(

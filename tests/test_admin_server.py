@@ -1242,3 +1242,73 @@ def test_admin_server_class_port_resolves_a_requested_port_of_zero(app_dir, conf
     finally:
         server.stop()
     assert server.port == 0  # stop() clears the resolved port
+
+
+# -- goal horn upload (#193) ---------------------------------------------------
+
+
+def _wav_b64(frames=100):
+    import base64
+    import io
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(8000)
+        wav.writeframes(b"\x00\x00" * frames)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+@pytest.fixture
+def upload_dir(tmp_path, monkeypatch):
+    path = tmp_path / "uploaded-horns"
+    monkeypatch.setenv("NHL_SCOREBOARD_UPLOAD_HORN_DIR", str(path))
+    return path
+
+
+def _upload(team, data):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "upload_horn", "team": team, "data": data}))
+        return json.loads(await client.recv())
+
+    return asyncio.run(_serve_and_run(scenario))
+
+
+def test_upload_horn_stores_team_file(app_dir, config_path, upload_dir):
+    reply = _upload("NSH", _wav_b64())
+    assert reply == {"type": "horn_uploaded", "name": "NSH.wav"}
+    assert (upload_dir / "NSH.wav").is_file()
+
+
+def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upload_dir):
+    reply = _upload("default", _wav_b64())
+    assert reply == {"type": "horn_uploaded", "name": "_default.wav"}
+    from nhl_scoreboard.audio import GoalHornPlayer
+
+    assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
+
+
+@pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
+def test_upload_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team):
+    reply = _upload(team, _wav_b64())
+    assert reply["type"] == "error" and reply["section"] == "horn_upload"
+    assert not upload_dir.exists()
+
+
+def test_upload_horn_rejects_non_wav_and_bad_base64(app_dir, config_path, upload_dir):
+    import base64
+
+    not_wav = base64.b64encode(b"definitely not audio").decode()
+    assert "valid WAV" in _upload("NSH", not_wav)["message"]
+    assert "base64" in _upload("NSH", "!!!")["message"]
+    assert "no audio" in _upload("NSH", _wav_b64(frames=0))["message"]
+    assert not upload_dir.exists()
+
+
+def test_upload_horn_rejects_oversize(app_dir, config_path, upload_dir, monkeypatch):
+    monkeypatch.setattr(admin_server, "HORN_MAX_BYTES", 100)
+    assert "too large" in _upload("NSH", _wav_b64(frames=500))["message"]
+    assert not upload_dir.exists()
