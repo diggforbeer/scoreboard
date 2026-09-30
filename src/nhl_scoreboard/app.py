@@ -523,6 +523,9 @@ class ScoreboardApp:
             or old.scoreboard.logo_variant != new_settings.scoreboard.logo_variant
         )
         timezone_changed = old.scoreboard.timezone != new_settings.scoreboard.timezone
+        favourite_team_changed = (
+            old.scoreboard.favourite_team != new_settings.scoreboard.favourite_team
+        )
         auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
         status_changed = (old.status.enabled, old.status.port) != (
             new_settings.status.enabled,
@@ -540,6 +543,28 @@ class ScoreboardApp:
         if timezone_changed:
             self.tz = resolve_timezone(new_settings.scoreboard.timezone, fallback=self.tz)
             self.renderer.tz = self.tz
+
+        if favourite_team_changed:
+            # next_favourite_game()'s _schedule cache is a single season
+            # schedule for whichever team it was last fetched for, kept
+            # "fresh" purely by SCHEDULE_TTL_SECONDS elapsing -- nothing
+            # about that staleness check knows *which* team the cached
+            # games belong to. Left alone, a favourite-team switch keeps
+            # showing the *previous* team's next game (not a stale version
+            # of the new one -- a different matchup entirely) for up to an
+            # hour, until the TTL happens to expire on its own. Confirmed
+            # live (#178's admin-page work): this is exactly why the
+            # matchup/season-series screen (#157) kept showing the old
+            # opponent after a favourite switch -- it's fed straight from
+            # next_favourite_game()'s return value. Only relevant when
+            # today's game doesn't already answer it: favourite_game_
+            # today() reads self.games (today's full slate, already
+            # fetched for every team) fresh on every call, so an immediate
+            # favourite with a game today was never affected by this --
+            # only the countdown/preview/matchup fallback to the season
+            # schedule was.
+            self._schedule = None
+            self._schedule_retry_after = 0.0
 
         if audio_changed:
             self.horn = GoalHornPlayer.default(

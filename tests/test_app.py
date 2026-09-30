@@ -653,6 +653,73 @@ def test_reload_picks_up_a_changed_setting(fake_backend, games, tmp_path):
     assert app.settings.scoreboard.favourite_team == "TOR"
 
 
+def test_reload_invalidates_schedule_cache_on_favourite_team_change(fake_backend, games, tmp_path):
+    """next_favourite_game()'s _schedule cache is keyed purely by elapsed
+    time, not by which team it was fetched for -- a favourite switch must
+    force a fresh fetch, or the countdown/preview/matchup screens keep
+    showing the *previous* team's next game for up to an hour. Confirmed
+    live (#178's admin-page work): this is exactly why the matchup/
+    season-series screen (#157) kept showing the old opponent after a
+    favourite switch -- it's fed straight from next_favourite_game()."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    # Simulate an already-fetched, still-fresh schedule cache for the old favourite.
+    app._schedule = (app.monotonic(), games)
+    app._schedule_retry_after = app.monotonic() + 100
+
+    path.write_text('[scoreboard]\nfavourite_team = "TOR"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app._schedule is None
+    assert app._schedule_retry_after == 0.0
+
+
+def test_reload_keeps_schedule_cache_when_favourite_team_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "UTC"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app._schedule = (app.monotonic(), games)
+    app._schedule_retry_after = app.monotonic() + 100
+    cached = app._schedule
+
+    # Change something unrelated -- the schedule cache must survive.
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "America/Chicago"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app._schedule is cached
+
+
+def test_favourite_team_switch_triggers_a_fresh_schedule_fetch(fake_backend, games, tmp_path):
+    """End-to-end: neither EDM nor WPG has a game in the fixture (today's
+    slate), so favourite_game_today() answers None for both and
+    next_favourite_game() must consult the season schedule -- proving the
+    invalidation actually changes real fetch behaviour, not just internal
+    bookkeeping."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "EDM"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app.refresh()
+    assert app.favourite_game_today() is None
+
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 1
+
+    # Still within the 1-hour TTL -- a second call with no favourite
+    # change must not refetch.
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 1
+
+    path.write_text('[scoreboard]\nfavourite_team = "WPG"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 2, "switching favourite must force a fresh schedule fetch"
+
+
 def test_reload_keeps_previous_settings_on_parse_error(fake_backend, games, tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')

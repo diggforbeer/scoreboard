@@ -327,6 +327,22 @@ that precedent covers exactly this win tally and nothing broader
 tally ships -- individual past-meeting scores (#168) and team/player
 stat leaders (#169) are separate follow-ups.
 
+**A live favourite-team switch used to leave this (and the countdown/
+preview screen) stuck on the previous team's opponent for up to an
+hour**, found live via the admin page (#178): the upcoming game handed
+to `_matchup_scene` comes from `next_favourite_game()`, whose own
+`self._schedule` cache is a single season schedule for whichever team it
+was last fetched for, invalidated purely by `SCHEDULE_TTL_SECONDS`
+elapsing -- nothing in that check knows *which* team the cached games
+belong to. `_apply_reloaded_settings` (`app.py`) now explicitly resets
+`self._schedule`/`self._schedule_retry_after` whenever
+`scoreboard.favourite_team` changes, forcing a fresh fetch on the very
+next call rather than waiting out the stale TTL. Only ever mattered for
+the season-schedule fallback -- `favourite_game_today()` reads
+`self.games` (today's full slate, already fetched for every team, not
+favourite-scoped) fresh on every call, so a newly-favourited team with a
+game *today* was never affected by this.
+
 The physical button (#50, `button.py`, `[button]`, off by default) is one
 momentary switch between a GPIO pin and GND -- GPIO 26 by default, 16 the
 documented alternative, both from the verified free-pin table in Hardware
