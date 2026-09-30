@@ -1149,6 +1149,14 @@ when it was written; that history is left as-is rather than rewritten.
   every PR -- see Testing conventions' own note on it. Doesn't replace
   real-hardware verification (#4), just catches a regression in the
   static-page-plus-WebSocket-on-one-port mechanism itself before it ships.
+- **Follow-up (#185): the in-app updater redeploys the frontend too.**
+  `build-app-bundle.py` adds `frontend/dist` to the one release bundle as
+  a top-level `admin/` (when built -- `build-image.yml` builds it before
+  the bundle step), so the existing sha256 covers it and the page can't
+  lag the backend. `updater.apply()` stages it beside `ADMIN_DIR`, swaps
+  it in by rename with the app tree, and restores the old one on
+  rollback. A bundle with no `admin/` leaves the page untouched. One
+  version signal for both: they always ship together.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing
   WebSocket connection rather than a separate HTTP endpoint -- worth
