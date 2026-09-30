@@ -5,7 +5,31 @@ import { useEffect, useRef, useState } from 'react'
 // local dev, run it separately alongside the Vite dev server:
 // `python -m nhl_scoreboard.admin_server`. See its own docstring for the
 // message protocol and what's been ported over so far.
-const WS_URL = 'ws://localhost:8765/'
+//
+// A real, shipped bug (found live against the actual board, not caught by
+// any local verification): this used to be hardcoded to
+// 'ws://localhost:8765/' unconditionally. That's only ever correct when
+// the browser and the server happen to be the same machine -- true for
+// every local-dev check this project's own testing did (Vite on 5173,
+// admin_server.py on 8765, both on localhost), and also true, by pure
+// coincidence, whenever *this dev machine's own* leftover local
+// admin_server.py instance is still running -- which is exactly how this
+// slipped through every "verified against the real board" check: the
+// browser silently connected to that stray localhost:8765 process
+// instead of the board's own server, showing whatever *that* process's
+// state happened to be (whatever team was last set in local testing, an
+// empty "no live app" snapshot from dev mode) rather than erroring
+// loudly. On a real device, opened from a real remote browser with
+// nothing coincidentally listening on that port, this would just fail to
+// connect outright. In production (the built page served by
+// admin_server.py itself, story 10's whole "one port serves both" point)
+// the WebSocket must be derived from wherever the page was actually
+// loaded from. import.meta.env.DEV (true only under `npm run dev`) keeps
+// local dev's own two-port split (Vite on 5173, admin_server.py fixed at
+// 8765) working exactly as before.
+const WS_URL = import.meta.env.DEV
+  ? 'ws://localhost:8765/'
+  : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/`
 
 // Mirrors config.py's VALID_ROTATION_SCREENS -- hardcoded here rather than
 // asked of the server, same "one section's worth of evidence isn't enough
@@ -249,7 +273,9 @@ function App() {
   // watcher's broadcast landing once the real check/apply (out of process)
   // finishes -- this is the actual thing story 4 is for.
   const [updatePhase, setUpdatePhase] = useState<'idle' | 'checking' | 'applying'>('idle')
+  const [updateActionError, setUpdateActionError] = useState<string | null>(null)
   const [rebooting, setRebooting] = useState(false)
+  const [rebootError, setRebootError] = useState<string | null>(null)
 
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
@@ -333,12 +359,15 @@ function App() {
             break
           case 'checking':
             setUpdatePhase('checking')
+            setUpdateActionError(null)
             break
           case 'applying':
             setUpdatePhase('applying')
+            setUpdateActionError(null)
             break
           case 'rebooting':
             setRebooting(true)
+            setRebootError(null)
             break
         }
       }
@@ -475,17 +504,29 @@ function App() {
   }
 
   function checkForUpdate() {
-    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    setUpdateActionError(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setUpdateActionError(NOT_CONNECTED_ERROR)
+      return
+    }
     socketRef.current.send(JSON.stringify({ type: 'update_check' }))
   }
 
   function applyUpdate() {
-    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    setUpdateActionError(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setUpdateActionError(NOT_CONNECTED_ERROR)
+      return
+    }
     socketRef.current.send(JSON.stringify({ type: 'update_apply' }))
   }
 
   function rebootBoard() {
-    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    setRebootError(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setRebootError(NOT_CONNECTED_ERROR)
+      return
+    }
     socketRef.current.send(JSON.stringify({ type: 'reboot' }))
   }
 
@@ -1291,6 +1332,7 @@ function App() {
                     Installing. The board restarts and rolls back by itself if it doesn't come up.
                   </span>
                 )}
+                {updateActionError && <span className="text-danger">{updateActionError}</span>}
               </div>
             </>
           ) : (
@@ -1309,9 +1351,12 @@ function App() {
           {rebooting ? (
             <p className="text-warning mb-0">Rebooting the board now...</p>
           ) : (
-            <button type="button" className="btn btn-danger" onClick={rebootBoard}>
-              Reboot board
-            </button>
+            <div className="d-flex align-items-center gap-3">
+              <button type="button" className="btn btn-danger" onClick={rebootBoard}>
+                Reboot board
+              </button>
+              {rebootError && <span className="text-danger">{rebootError}</span>}
+            </div>
           )}
         </div>
       </div>
