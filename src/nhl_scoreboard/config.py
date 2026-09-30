@@ -284,6 +284,16 @@ class AudioConfig:
     #: Override the search directory for horn WAVs. Empty uses the built-in
     #: search path (NHL_SCOREBOARD_HORN_DIR env var, then the shipped assets).
     horn_dir: str = ""
+    #: 0-100, applied via the ALSA mixer (GoalHornPlayer.apply_volume) --
+    #: not a per-play gain on the WAV itself. 100 leaves the mixer at
+    #: whatever it already was rather than assuming a "correct" starting
+    #: level, matching every other 0-100 field in this project
+    #: (PanelConfig.max_brightness, NightModeConfig.dim_brightness's own
+    #: upper end).
+    volume: int = 100
+
+    def __post_init__(self) -> None:
+        self.volume = max(0, min(100, self.volume))
 
 
 @dataclass(slots=True)

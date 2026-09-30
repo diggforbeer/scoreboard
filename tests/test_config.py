@@ -287,6 +287,19 @@ def test_night_mode_dim_brightness_clamped_to_0_100(given, expected):
     assert NightModeConfig(dim_brightness=given).dim_brightness == expected
 
 
+@pytest.mark.parametrize(("given", "expected"), [(-10, 0), (0, 0), (40, 40), (250, 100)])
+def test_audio_volume_clamped_to_0_100(given, expected):
+    from nhl_scoreboard.config import AudioConfig
+
+    assert AudioConfig(volume=given).volume == expected
+
+
+def test_audio_volume_defaults_to_100():
+    from nhl_scoreboard.config import AudioConfig
+
+    assert AudioConfig().volume == 100
+
+
 def test_night_mode_bad_suppress_scope_falls_back_to_tracked(caplog):
     from nhl_scoreboard.config import NightModeConfig
 
