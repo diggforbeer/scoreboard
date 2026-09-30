@@ -368,6 +368,12 @@ its `MockFactory`, conftest's `mock_pins`), the image gets
 (#164, part of #4): notably, which gpiozero pin backend Debian's package picks on the
 Pi, and that it coexists with the HUB75 driver's own direct GPIO access.
 
+Boot volume (#189): `run()` starts a one-shot daemon thread
+(`_apply_boot_volume`) calling `GoalHornPlayer.apply_volume()`, so a
+`volume` set only in the boot TOML reaches the ALSA mixer without an admin
+page visit. Off the render thread because `amixer` blocks; failures are
+logged, never raised. Live reloads still apply via `admin_server.py`.
+
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
 (`renderer.py`) tries PP/EN first, then always falls through to

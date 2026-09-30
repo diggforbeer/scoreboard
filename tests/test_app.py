@@ -2137,3 +2137,27 @@ def test_config_reload_updates_wifi_join_connect_timeout_in_place(fake_backend, 
     app._apply_reloaded_settings(Settings.load(config_path))
     assert app.wifi_join is join, "reload updates the existing object, not a new one"
     assert app.wifi_join.connect_timeout == 20.0
+
+
+def test_boot_volume_is_applied_off_the_render_thread(fake_backend, games):
+    seen = []
+
+    class VolumeHorn(RecordingHorn):
+        def apply_volume(self) -> bool:
+            seen.append(threading.current_thread())
+            return True
+
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, horn=VolumeHorn()
+    )
+    app._apply_boot_volume().join(timeout=5)
+
+    assert len(seen) == 1
+    assert seen[0] is not threading.main_thread()
+
+
+def test_boot_volume_failure_does_not_raise(fake_backend, games):
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, horn=RecordingHorn()
+    )
+    app._apply_boot_volume().join(timeout=5)  # RecordingHorn has no apply_volume
