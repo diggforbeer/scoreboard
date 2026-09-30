@@ -36,6 +36,8 @@ const WS_URL = import.meta.env.DEV
 // to generalise yet" call the backend docstring makes.
 const ROTATION_SCREENS = ['countdown_preview', 'standings', 'clock', 'matchup'] as const
 const ROTATION_MAX_ROWS = 8
+// Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
+const HORN_MAX_BYTES = 2 * 1024 * 1024
 
 // Abbreviations match display/teams.py's TEAM_COLORS keys exactly -- the
 // only place this project otherwise enumerates every team. Full names are
@@ -209,6 +211,7 @@ type ServerMessage =
   | { type: 'applying' }
   | { type: 'rebooting' }
   | { type: 'horn_tested'; played: boolean }
+  | { type: 'horn_uploaded'; name: string }
 
 function connectionBadge(state: ConnectionState) {
   const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
@@ -285,6 +288,15 @@ function App() {
 
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
+  // Two pages don't justify a router (#193): plain view state.
+  const [page, setPage] = useState<'home' | 'audio'>('home')
+  const [hornUploadTeam, setHornUploadTeam] = useState('default')
+  const [hornUploadFile, setHornUploadFile] = useState<File | null>(null)
+  const [hornUploading, setHornUploading] = useState(false)
+  const [hornUploadMessage, setHornUploadMessage] = useState<{ text: string; ok: boolean } | null>(
+    null,
+  )
+
   const socketRef = useRef<WebSocket | null>(null)
   const hornTestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -349,8 +361,15 @@ function App() {
             else if (message.section === 'wifi') setWifiSaveStatus('saved')
             else if (message.section === 'rotation') setRotationSaveStatus('saved')
             break
+          case 'horn_uploaded':
+            setHornUploading(false)
+            setHornUploadMessage({ text: `Uploaded ${message.name}.`, ok: true })
+            break
           case 'error':
-            if (message.section === 'audio') {
+            if (message.section === 'horn_upload') {
+              setHornUploading(false)
+              setHornUploadMessage({ text: message.message, ok: false })
+            } else if (message.section === 'audio') {
               setAudioSaveStatus('error')
               setAudioSaveError(message.message)
             } else if (message.section === 'scoreboard') {
@@ -563,6 +582,33 @@ function App() {
     socketRef.current.send(JSON.stringify({ type: 'reboot' }))
   }
 
+  function uploadHorn() {
+    if (!hornUploadFile) return
+    setHornUploadMessage(null)
+    if (hornUploadFile.size > HORN_MAX_BYTES) {
+      setHornUploadMessage({ text: 'File is too large (max 2 MB).', ok: false })
+      return
+    }
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setHornUploadMessage({ text: NOT_CONNECTED_ERROR, ok: false })
+      return
+    }
+    const socket = socketRef.current
+    const team = hornUploadTeam
+    setHornUploading(true)
+    const reader = new FileReader()
+    reader.onerror = () => {
+      setHornUploading(false)
+      setHornUploadMessage({ text: 'Could not read the file.', ok: false })
+    }
+    reader.onload = () => {
+      // readAsDataURL yields "data:...;base64,<payload>"; the server wants just the payload.
+      const data = String(reader.result).split(',', 2)[1] ?? ''
+      socket.send(JSON.stringify({ type: 'upload_horn', team, data }))
+    }
+    reader.readAsDataURL(hornUploadFile)
+  }
+
   function testHorn() {
     if (hornTestTimerRef.current) clearTimeout(hornTestTimerRef.current)
     setHornTestMessage(null)
@@ -617,6 +663,22 @@ function App() {
         </div>
       </div>
 
+      <ul className="nav nav-tabs mb-4">
+        {(['home', 'audio'] as const).map((name) => (
+          <li className="nav-item" key={name}>
+            <button
+              type="button"
+              className={`nav-link${page === name ? ' active' : ''}`}
+              onClick={() => setPage(name)}
+            >
+              {name === 'home' ? 'Home' : 'Audio'}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {page === 'home' && (
+        <>
       <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Board status</h2>
@@ -1073,94 +1135,6 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Audio</h2>
-          {audio ? (
-            <form onSubmit={saveAudio}>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="audio-enabled"
-                  checked={audio.enabled}
-                  onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="audio-enabled">
-                  Goal horn enabled
-                </label>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="audio-device">
-                  ALSA device (blank for default)
-                </label>
-                <input
-                  className="form-control"
-                  id="audio-device"
-                  type="text"
-                  value={audio.device}
-                  onChange={(e) => setAudio({ ...audio, device: e.target.value })}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="audio-horn-dir">
-                  Horn directory override (blank for default)
-                </label>
-                <input
-                  className="form-control"
-                  id="audio-horn-dir"
-                  type="text"
-                  value={audio.horn_dir}
-                  onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="audio-volume">
-                  Volume ({audio.volume}%)
-                </label>
-                <input
-                  className="form-range"
-                  id="audio-volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={audio.volume}
-                  onChange={(e) => setAudio({ ...audio, volume: Number(e.target.value) })}
-                />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={audioSaveStatus === 'saving'}
-                >
-                  Save Audio
-                </button>
-                {saveFeedback(audioSaveStatus, audioSaveError)}
-              </div>
-              <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={testHorn}
-                  disabled={hornTesting}
-                >
-                  Test horn
-                </button>
-                {hornTestMessage && (
-                  <span className={hornTestMessage.ok ? 'text-success' : 'text-danger'}>
-                    {hornTestMessage.text}
-                  </span>
-                )}
-              </div>
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-body">
           <h2 className="card-title h5">Status page</h2>
           {status ? (
             <form onSubmit={saveStatus}>
@@ -1437,6 +1411,158 @@ function App() {
 
       </div>
       </div>
+        </>
+      )}
+
+      {page === 'audio' && (
+        <>
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Audio</h2>
+          {audio ? (
+            <form onSubmit={saveAudio}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-enabled"
+                  checked={audio.enabled}
+                  onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-enabled">
+                  Goal horn enabled
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-device">
+                  ALSA device (blank for default)
+                </label>
+                <input
+                  className="form-control"
+                  id="audio-device"
+                  type="text"
+                  value={audio.device}
+                  onChange={(e) => setAudio({ ...audio, device: e.target.value })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-horn-dir">
+                  Horn directory override (blank for default)
+                </label>
+                <input
+                  className="form-control"
+                  id="audio-horn-dir"
+                  type="text"
+                  value={audio.horn_dir}
+                  onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="audio-volume">
+                  Volume ({audio.volume}%)
+                </label>
+                <input
+                  className="form-range"
+                  id="audio-volume"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={audio.volume}
+                  onChange={(e) => setAudio({ ...audio, volume: Number(e.target.value) })}
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={audioSaveStatus === 'saving'}
+                >
+                  Save Audio
+                </button>
+                {saveFeedback(audioSaveStatus, audioSaveError)}
+              </div>
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={testHorn}
+                  disabled={hornTesting}
+                >
+                  Test horn
+                </button>
+                {hornTestMessage && (
+                  <span className={hornTestMessage.ok ? 'text-success' : 'text-danger'}>
+                    {hornTestMessage.text}
+                  </span>
+                )}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Custom goal horns</h2>
+          <p className="text-body-secondary small">
+            Upload a WAV (max 2 MB) to replace the default horn, or to give one team its own. A
+            team's own horn always wins over the default.
+          </p>
+          <div className="row g-3 align-items-end">
+            <div className="col-md-4">
+              <label className="form-label" htmlFor="horn-upload-team">
+                Horn for
+              </label>
+              <select
+                className="form-select"
+                id="horn-upload-team"
+                value={hornUploadTeam}
+                onChange={(e) => setHornUploadTeam(e.target.value)}
+              >
+                <option value="default">Default horn (all teams)</option>
+                {NHL_TEAMS.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name} ({code})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-5">
+              <label className="form-label" htmlFor="horn-upload-file">
+                WAV file
+              </label>
+              <input
+                className="form-control"
+                id="horn-upload-file"
+                type="file"
+                accept=".wav,audio/wav,audio/x-wav"
+                onChange={(e) => setHornUploadFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div className="col-md-3">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={uploadHorn}
+                disabled={!hornUploadFile || hornUploading}
+              >
+                Upload horn
+              </button>
+            </div>
+          </div>
+          {hornUploadMessage && (
+            <p className={`mt-3 mb-0 ${hornUploadMessage.ok ? 'text-success' : 'text-danger'}`}>
+              {hornUploadMessage.text}
+            </p>
+          )}
+        </div>
+      </div>
+
+        </>
+      )}
     </div>
   )
 }
