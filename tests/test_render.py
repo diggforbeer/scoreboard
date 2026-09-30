@@ -41,10 +41,13 @@ from nhl_scoreboard.nhl.models import (
     AssistDetail,
     Game,
     GoalEvent,
+    GoalieLine,
     SeasonSeriesRecord,
     Situation,
+    SkaterLine,
     StandingsRow,
     Star,
+    TeamLeaders,
 )
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
@@ -1406,3 +1409,61 @@ def test_three_stars_narrow_panel_stays_in_the_middle_column(games, synthetic_lo
         line = c.bbox(NARROW_LEFT, y0, NARROW_RIGHT - 1, y1)
         assert line is not None
         assert line.x0 >= NARROW_LEFT and line.x1 < NARROW_RIGHT
+
+
+# --------------------------------------------------------------------------
+# leaders: the favourite's top players (#201)
+# --------------------------------------------------------------------------
+
+LEADERS = TeamLeaders(
+    goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
+    points=SkaterLine(2, "R. Oreilly", 9, 17, 26),
+    goalies=(
+        GoalieLine(3, "J. Saros", 22, 13, 7, 2, 0.915),
+        GoalieLine(4, "J. Wright", 9, 4, 3, 1, 0.902),
+    ),
+)
+
+
+def assert_leaders_layout(c: AsciiCanvas, rows: int, *, logo_width: int = 0) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    if logo_width:
+        assert team_color("NSH") in c.colors(0, 0, logo_width - 1, H - 1), "favourite logo missing"
+    assert c.bbox(logo_width, 0, W - 1, 5) is not None, "title missing"
+    for i in range(1, rows + 1):
+        y0 = i * STANDINGS_ROW_HEIGHT
+        band = c.bbox(logo_width, y0, W - 1, y0 + STANDINGS_ROW_HEIGHT - 1)
+        assert band is not None, f"row {i} not drawn"
+    assert c.bbox(logo_width, (rows + 1) * STANDINGS_ROW_HEIGHT, W - 1, H - 1) is None
+
+
+def test_leaders_logo_layout(synthetic_logos):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_leaders(c, LEADERS, "NSH")
+    show("leaders w/ logo", c)
+    assert_leaders_layout(c, 4, logo_width=LOGO)
+
+
+def test_leaders_text_layout_no_logo_library():
+    c = canvas()
+    make_renderer().draw_leaders(c, LEADERS, "NSH")
+    show("leaders, no logo library", c)
+    assert_leaders_layout(c, 4)
+
+
+def test_leaders_missing_rows_close_up(synthetic_logos):
+    c = canvas()
+    only_goalie = TeamLeaders(goals=None, points=None, goalies=LEADERS.goalies[:1])
+    make_renderer(logos=synthetic_logos).draw_leaders(c, only_goalie, "NSH")
+    assert_leaders_layout(c, 1, logo_width=LOGO)
+
+
+def test_leaders_long_name_never_leaves_the_panel(synthetic_logos):
+    c = canvas()
+    long = TeamLeaders(
+        goals=SkaterLine(1, "A. Wolfeschlegelsteinhausen", 10, 0, 10),
+        points=None,
+        goalies=(),
+    )
+    make_renderer(logos=synthetic_logos).draw_leaders(c, long, "NSH")
+    assert not c.out_of_bounds
