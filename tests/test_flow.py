@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 from nhl_scoreboard.app import (
-    SCHEDULE_TTL_SECONDS,
     LEADERS_TTL_SECONDS,
+    SCHEDULE_TTL_SECONDS,
     SEASON_SERIES_TTL_SECONDS,
     STANDINGS_TTL_SECONDS,
     ScoreboardApp,
@@ -1230,7 +1230,7 @@ def test_leaders_pick_is_stable_between_frames(day):
 
 
 def test_leaders_skipped_before_the_season_has_any_players(day):
-    app, _, client = day
+    app, _, _client = day
     app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("leaders", 5)]
     assert scene(app)[0] == "preview"  # empty arrays: skipped, not drawn blank
     assert app._leaders_scene() is None
