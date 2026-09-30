@@ -286,6 +286,7 @@ function App() {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
   const socketRef = useRef<WebSocket | null>(null)
+  const hornTestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -295,7 +296,16 @@ function App() {
       const socket = new WebSocket(WS_URL)
       socketRef.current = socket
 
-      socket.onopen = () => setConnection('open')
+      socket.onopen = () => {
+        setConnection('open')
+        // A reconnect after a real reboot is the normal way this ever
+        // clears -- the board goes down (socket closes), comes back up,
+        // and the reconnect loop above lands here. Nothing else ever set
+        // this back to false, so without this the Reboot card stayed
+        // stuck on "Rebooting the board now..." forever, even once the
+        // board was demonstrably back and answering again.
+        setRebooting(false)
+      }
       // No reconnect loop here originally meant a dropped connection (a
       // backgrounded phone browser tab, a brief WiFi blip) stayed dead
       // until a manual page reload -- and worse, silently: the dropdown/
@@ -377,8 +387,14 @@ function App() {
             break
           case 'horn_tested':
             setHornTesting(false)
+            if (hornTestTimerRef.current) clearTimeout(hornTestTimerRef.current)
             if (message.played) {
               setHornTestMessage({ text: 'Playing...', ok: true })
+              // Playback is fire-and-forget server-side (admin_server.py
+              // has no way to report "finished"), so nothing else ever
+              // clears this -- left as-is it said "Playing..." forever.
+              // A few seconds is enough for any real horn WAV to finish.
+              hornTestTimerRef.current = setTimeout(() => setHornTestMessage(null), 4000)
             } else {
               setHornTestMessage({
                 text: 'No horn available -- check Audio is enabled and a horn file exists.',
@@ -548,6 +564,7 @@ function App() {
   }
 
   function testHorn() {
+    if (hornTestTimerRef.current) clearTimeout(hornTestTimerRef.current)
     setHornTestMessage(null)
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
       setHornTestMessage({ text: NOT_CONNECTED_ERROR, ok: false })
