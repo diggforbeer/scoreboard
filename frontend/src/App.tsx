@@ -256,84 +256,117 @@ function App() {
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-    const socket = new WebSocket(WS_URL)
-    socketRef.current = socket
+    let cancelled = false
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
-    socket.onopen = () => setConnection('open')
-    socket.onclose = () => setConnection('closed')
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data) as ServerMessage
-      switch (message.type) {
-        case 'version':
-          setVersion(message.value)
-          break
-        case 'config':
-          if (message.section === 'audio') setAudio(message.data)
-          else if (message.section === 'scoreboard') setScoreboard(message.data)
-          else if (message.section === 'status') setStatus(message.data)
-          else if (message.section === 'panel') setPanel(message.data)
-          else if (message.section === 'night_mode') setNightMode(message.data)
-          else if (message.section === 'wifi') setWifi(message.data)
-          else if (message.section === 'rotation') setRotation(message.data)
-          else if (message.section === 'update') {
-            setUpdate(message.data)
-            setUpdatePhase('idle') // real data just arrived -- whatever was in flight is done
-          }
-          break
-        case 'snapshot':
-          setSnapshot(message.data)
-          break
-        case 'saved':
-          if (message.section === 'audio') setAudioSaveStatus('saved')
-          else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
-          else if (message.section === 'status') setStatusSaveStatus('saved')
-          else if (message.section === 'panel') setPanelSaveStatus('saved')
-          else if (message.section === 'night_mode') setNightModeSaveStatus('saved')
-          else if (message.section === 'wifi') setWifiSaveStatus('saved')
-          else if (message.section === 'rotation') setRotationSaveStatus('saved')
-          break
-        case 'error':
-          if (message.section === 'audio') {
-            setAudioSaveStatus('error')
-            setAudioSaveError(message.message)
-          } else if (message.section === 'scoreboard') {
-            setScoreboardSaveStatus('error')
-            setScoreboardSaveError(message.message)
-          } else if (message.section === 'status') {
-            setStatusSaveStatus('error')
-            setStatusSaveError(message.message)
-          } else if (message.section === 'panel') {
-            setPanelSaveStatus('error')
-            setPanelSaveError(message.message)
-          } else if (message.section === 'night_mode') {
-            setNightModeSaveStatus('error')
-            setNightModeSaveError(message.message)
-          } else if (message.section === 'wifi') {
-            setWifiSaveStatus('error')
-            setWifiSaveError(message.message)
-          } else if (message.section === 'rotation') {
-            setRotationSaveStatus('error')
-            setRotationSaveError(message.message)
-          }
-          break
-        case 'checking':
-          setUpdatePhase('checking')
-          break
-        case 'applying':
-          setUpdatePhase('applying')
-          break
-        case 'rebooting':
-          setRebooting(true)
-          break
+    function connect() {
+      const socket = new WebSocket(WS_URL)
+      socketRef.current = socket
+
+      socket.onopen = () => setConnection('open')
+      // No reconnect loop here originally meant a dropped connection (a
+      // backgrounded phone browser tab, a brief WiFi blip) stayed dead
+      // until a manual page reload -- and worse, silently: the dropdown/
+      // form still shows whatever was last picked locally, since that's
+      // separate React state from whether a save actually reached the
+      // server, so a save clicked while disconnected looked like it
+      // worked when nothing was ever sent. Retry with a fixed short
+      // delay -- this is a LAN admin page, not worth exponential backoff.
+      socket.onclose = () => {
+        setConnection('closed')
+        if (!cancelled) reconnectTimer = setTimeout(connect, 2000)
+      }
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data) as ServerMessage
+        switch (message.type) {
+          case 'version':
+            setVersion(message.value)
+            break
+          case 'config':
+            if (message.section === 'audio') setAudio(message.data)
+            else if (message.section === 'scoreboard') setScoreboard(message.data)
+            else if (message.section === 'status') setStatus(message.data)
+            else if (message.section === 'panel') setPanel(message.data)
+            else if (message.section === 'night_mode') setNightMode(message.data)
+            else if (message.section === 'wifi') setWifi(message.data)
+            else if (message.section === 'rotation') setRotation(message.data)
+            else if (message.section === 'update') {
+              setUpdate(message.data)
+              setUpdatePhase('idle') // real data just arrived -- whatever was in flight is done
+            }
+            break
+          case 'snapshot':
+            setSnapshot(message.data)
+            break
+          case 'saved':
+            if (message.section === 'audio') setAudioSaveStatus('saved')
+            else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
+            else if (message.section === 'status') setStatusSaveStatus('saved')
+            else if (message.section === 'panel') setPanelSaveStatus('saved')
+            else if (message.section === 'night_mode') setNightModeSaveStatus('saved')
+            else if (message.section === 'wifi') setWifiSaveStatus('saved')
+            else if (message.section === 'rotation') setRotationSaveStatus('saved')
+            break
+          case 'error':
+            if (message.section === 'audio') {
+              setAudioSaveStatus('error')
+              setAudioSaveError(message.message)
+            } else if (message.section === 'scoreboard') {
+              setScoreboardSaveStatus('error')
+              setScoreboardSaveError(message.message)
+            } else if (message.section === 'status') {
+              setStatusSaveStatus('error')
+              setStatusSaveError(message.message)
+            } else if (message.section === 'panel') {
+              setPanelSaveStatus('error')
+              setPanelSaveError(message.message)
+            } else if (message.section === 'night_mode') {
+              setNightModeSaveStatus('error')
+              setNightModeSaveError(message.message)
+            } else if (message.section === 'wifi') {
+              setWifiSaveStatus('error')
+              setWifiSaveError(message.message)
+            } else if (message.section === 'rotation') {
+              setRotationSaveStatus('error')
+              setRotationSaveError(message.message)
+            }
+            break
+          case 'checking':
+            setUpdatePhase('checking')
+            break
+          case 'applying':
+            setUpdatePhase('applying')
+            break
+          case 'rebooting':
+            setRebooting(true)
+            break
+        }
       }
     }
 
-    return () => socket.close()
+    connect()
+
+    return () => {
+      cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      socketRef.current?.close()
+    }
   }, [])
 
-  function save(section: string, data: unknown) {
-    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+  const NOT_CONNECTED_ERROR = 'Not connected to the board -- wait for reconnect and try again.'
+
+  // Returns whether the message actually went out. A closed/reconnecting
+  // socket used to fail here silently (a plain `return`, no signal to the
+  // caller) -- every saveXxx handler below now surfaces that as a visible
+  // error instead of leaving the button's status stuck on "saving" forever
+  // with no feedback, which is exactly what made a save-while-disconnected
+  // look like it had worked: the form field itself is separate local state
+  // that already reflects whatever was picked, whether or not a save ever
+  // reached the server.
+  function save(section: string, data: unknown): boolean {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) return false
     socketRef.current.send(JSON.stringify({ type: 'save', section, data }))
+    return true
   }
 
   function saveAudio(event: React.FormEvent) {
@@ -341,7 +374,10 @@ function App() {
     if (!audio) return
     setAudioSaveStatus('saving')
     setAudioSaveError(null)
-    save('audio', audio)
+    if (!save('audio', audio)) {
+      setAudioSaveStatus('error')
+      setAudioSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function saveScoreboard(event: React.FormEvent) {
@@ -349,7 +385,10 @@ function App() {
     if (!scoreboard) return
     setScoreboardSaveStatus('saving')
     setScoreboardSaveError(null)
-    save('scoreboard', scoreboard)
+    if (!save('scoreboard', scoreboard)) {
+      setScoreboardSaveStatus('error')
+      setScoreboardSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function saveStatus(event: React.FormEvent) {
@@ -357,7 +396,10 @@ function App() {
     if (!status) return
     setStatusSaveStatus('saving')
     setStatusSaveError(null)
-    save('status', status)
+    if (!save('status', status)) {
+      setStatusSaveStatus('error')
+      setStatusSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function savePanel(event: React.FormEvent) {
@@ -369,7 +411,10 @@ function App() {
     // field) but not one it validates on save -- status_server.py's own
     // form never exposed it either, since it's informational only.
     const { pitch_mm: _pitchMm, ...data } = panel
-    save('panel', data)
+    if (!save('panel', data)) {
+      setPanelSaveStatus('error')
+      setPanelSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function saveNightMode(event: React.FormEvent) {
@@ -377,7 +422,10 @@ function App() {
     if (!nightMode) return
     setNightModeSaveStatus('saving')
     setNightModeSaveError(null)
-    save('night_mode', nightMode)
+    if (!save('night_mode', nightMode)) {
+      setNightModeSaveStatus('error')
+      setNightModeSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function saveWifi(event: React.FormEvent) {
@@ -385,7 +433,10 @@ function App() {
     if (!wifi) return
     setWifiSaveStatus('saving')
     setWifiSaveError(null)
-    save('wifi', wifi)
+    if (!save('wifi', wifi)) {
+      setWifiSaveStatus('error')
+      setWifiSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function saveRotation(event: React.FormEvent) {
@@ -393,7 +444,10 @@ function App() {
     if (!rotation) return
     setRotationSaveStatus('saving')
     setRotationSaveError(null)
-    save('rotation', rotation)
+    if (!save('rotation', rotation)) {
+      setRotationSaveStatus('error')
+      setRotationSaveError(NOT_CONNECTED_ERROR)
+    }
   }
 
   function updateRow(index: number, row: RotationRow) {
