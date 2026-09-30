@@ -134,7 +134,7 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   subprocess serving a real `frontend/dist` build (#178 story 10's own
   follow-up) -- excluded from the default `pytest` run by a `e2e` marker
   (`pyproject.toml`'s `addopts = "-q -m 'not e2e'"`), run explicitly with
-  `pytest -m e2e` after `pip install -e '.[e2e]'` +
+  `pytest -m e2e` after `pip install -e '.[dev,e2e]'` +
   `playwright install chromium` + building the frontend. Its own CI job
   (`ci.yml`'s `e2e`) does exactly that on every PR. Every story of the
   admin-page rebuild was verified this same way by hand, once, per story

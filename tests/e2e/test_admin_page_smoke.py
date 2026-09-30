@@ -10,7 +10,7 @@ Deliberately NOT part of the hermetic, offline, sub-second default
 `pytest` run CLAUDE.md documents: marked `e2e` and excluded by
 pyproject.toml's own `addopts` (`-m 'not e2e'`). Run explicitly:
 
-    pip install -e '.[e2e]'
+    pip install -e '.[dev,e2e]'
     playwright install chromium
     npm run build --prefix frontend        # frontend/dist must exist
     pytest -m e2e
