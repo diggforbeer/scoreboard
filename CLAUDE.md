@@ -525,6 +525,15 @@ exit; with `show_logos = false` every step is just text.
   step needed. Team-specific horns (`{ABBR}.wav`) are a user drop-in slot,
   same reasoning as logos not being redistributed -- but those, if a user
   supplies them, are never committed either.
+- **Horn uploads (#193)**: the admin page's Audio tab uploads a WAV for
+  `default` (`_default.wav`) or one `TEAM_COLORS` abbreviation, over the
+  existing WebSocket as base64 (`upload_horn`; `max_size` raised to fit the
+  2 MB `HORN_MAX_BYTES` cap) rather than a new HTTP POST path -- the file
+  name is never client-supplied, only a validated team key. Files land in
+  `/var/lib/nhl-scoreboard/horns` (`audio.upload_directory()`, persistent
+  across reflash/update, unlike `/usr/share`), which `default_directories()`
+  searches before the image-baked directory. Not verified on hardware (#4);
+  deleting an upload back to the shipped horn is not built.
 
 ## Image build facts (each cost a failed CI run)
 

@@ -29,6 +29,17 @@ DEFAULT_NAME = "_default.wav"
 VOLUME_CONTROLS: tuple[str, ...] = ("PCM", "Speaker", "Master", "Headphone")
 
 
+def upload_directory() -> Path:
+    """Where the admin page's horn uploads live (#193).
+
+    Persistent and writable, unlike the image-baked /usr/share directory,
+    which a reflash would wipe (same class of bug #185 fixed for the admin
+    frontend). Checked before that directory, so an upload overrides the
+    shipped horn.
+    """
+    return Path(os.environ.get("NHL_SCOREBOARD_UPLOAD_HORN_DIR", "/var/lib/nhl-scoreboard/horns"))
+
+
 def default_directories(override: str = "") -> list[Path]:
     """Where to look for horn files, most specific first."""
     dirs: list[Path] = []
@@ -37,6 +48,7 @@ def default_directories(override: str = "") -> list[Path]:
     env = os.environ.get("NHL_SCOREBOARD_HORN_DIR")
     if env:
         dirs.append(Path(env))
+    dirs.append(upload_directory())
     dirs.append(Path("/usr/share/nhl-scoreboard/horns"))
     dirs.append(Path(__file__).resolve().parents[2] / "assets" / "horns")
     return dirs
