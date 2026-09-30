@@ -4,8 +4,10 @@
     python scripts/build-app-bundle.py --version v2026.09.29 --out dist
     gh release upload v2026.09.29 dist/nhl-scoreboard-app.tar.gz dist/manifest.json
 
-The bundle is just the ``nhl_scoreboard`` package; nhl_scoreboard.updater
-unpacks it over /opt/nhl-scoreboard. The manifest carries the HUB75 driver
+The bundle is the ``nhl_scoreboard`` package plus, when ``frontend/dist`` has
+been built, the admin page as a top-level ``admin/``; nhl_scoreboard.updater
+unpacks the package over /opt/nhl-scoreboard and ``admin/`` into the admin
+page's directory (#185). The manifest carries the HUB75 driver
 pin (from fetch-vendor.sh) so a board can refuse a release that needs a
 rebuilt ``rgbmatrix``, plus the bundle's sha256.
 """
@@ -29,7 +31,7 @@ def driver_pin() -> str:
     return match.group(1)
 
 
-def build(version: str, out: Path) -> None:
+def build(version: str, out: Path, admin_dist: Path = ROOT / "frontend/dist") -> None:
     out.mkdir(parents=True, exist_ok=True)
     bundle = out / "nhl-scoreboard-app.tar.gz"
     with tarfile.open(bundle, "w:gz") as tar:
@@ -38,6 +40,8 @@ def build(version: str, out: Path) -> None:
             arcname="nhl_scoreboard",
             filter=lambda t: None if "__pycache__" in t.name else t,
         )
+        if (admin_dist / "index.html").is_file():
+            tar.add(admin_dist, arcname="admin")
     manifest = {
         "version": version,
         "driver_commit": driver_pin(),

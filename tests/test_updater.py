@@ -247,3 +247,61 @@ def test_build_app_bundle_matches_what_the_updater_expects(tmp_path):
     updater._extract(bundle, dest)
     assert (dest / "nhl_scoreboard" / "updater.py").is_file()
     assert not list(dest.rglob("__pycache__"))
+
+
+def test_build_app_bundle_includes_admin_dist_when_built(tmp_path):
+    path = Path(__file__).resolve().parent.parent / "scripts" / "build-app-bundle.py"
+    spec = importlib.util.spec_from_file_location("build_app_bundle", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>")
+    (dist / "assets" / "app.js").write_text("js")
+    module.build("v2026.09.29", tmp_path / "out", admin_dist=dist)
+    dest = tmp_path / "x"
+    updater._extract(tmp_path / "out" / updater.BUNDLE_ASSET, dest)
+    assert (dest / "admin" / "index.html").is_file()
+    assert (dest / "admin" / "assets" / "app.js").is_file()
+
+
+# -- admin frontend redeploy (#185) --------------------------------------
+
+
+@pytest.fixture
+def admin(tmp_path, monkeypatch):
+    directory = tmp_path / "share" / "admin"
+    directory.mkdir(parents=True)
+    (directory / "index.html").write_text("OLD-UI")
+    monkeypatch.setattr(updater, "ADMIN_DIR", directory)
+    return directory
+
+
+WITH_UI = {**GOOD, "admin/index.html": "NEW-UI"}
+
+
+def test_apply_redeploys_admin_frontend(env, admin, monkeypatch):
+    _prepared(env, monkeypatch, _bundle(WITH_UI), healthy=True)
+    assert updater.apply() is True
+    assert (admin / "index.html").read_text() == "NEW-UI"
+    assert not (env / "admin").exists()
+    assert not admin.with_name("admin.prev").exists()
+    assert not admin.with_name("admin.new").exists()
+
+
+def test_apply_rolls_back_admin_frontend_with_the_backend(env, admin, monkeypatch):
+    _prepared(env, monkeypatch, _bundle(WITH_UI), healthy=False)
+    monkeypatch.setattr(
+        updater,
+        "_service_active",
+        lambda: (env / "nhl_scoreboard" / "__init__.py").read_text() == "OLD",
+    )
+    assert updater.apply() is False
+    assert (admin / "index.html").read_text() == "OLD-UI"
+    assert not admin.with_name("admin.prev").exists()
+
+
+def test_apply_without_admin_in_bundle_leaves_frontend_alone(env, admin, monkeypatch):
+    _prepared(env, monkeypatch, _bundle(GOOD), healthy=True)
+    assert updater.apply() is True
+    assert (admin / "index.html").read_text() == "OLD-UI"
