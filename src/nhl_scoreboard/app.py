@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import random
 import re
 import signal
 import threading
@@ -36,8 +37,10 @@ from .nhl.models import (
     Situation,
     StandingsRow,
     Star,
+    TeamLeaders,
     conference_standings,
     standings_window,
+    team_leaders,
 )
 from .setup_server import SetupServer
 from .updater import installed_version
@@ -55,6 +58,8 @@ STANDINGS_TTL_SECONDS = 60 * 60
 #: The upcoming game's head-to-head tally (#157) only moves when another
 #: meeting between the same two teams finishes -- days or weeks apart.
 SEASON_SERIES_TTL_SECONDS = 60 * 60
+#: Season stat leaders (#201) move only when a game finishes.
+LEADERS_TTL_SECONDS = 60 * 60
 #: How much a new lux reading moves the smoothed value, 0-1. Low on purpose:
 #: this is what keeps a cloud passing over a window, or a hand briefly
 #: covering the sensor, from visibly flickering the panel.
@@ -99,8 +104,9 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``, ``leaders``,
-    ``matchup``, ``clock``, ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
+    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
+    ``conference_leaders``, ``matchup``, ``leaders``, ``clock``, ``no_games``,
+    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
     kind: str
@@ -109,6 +115,8 @@ class Scene:
     #: Set only for ``matchup`` (#157) -- oriented to ``game``'s own
     #: away/home sides, as the API returns it.
     season_series: SeasonSeriesRecord | None = None
+    #: Set only for ``leaders`` (#201) -- the favourite's own top players.
+    leaders: TeamLeaders | None = None
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
@@ -272,6 +280,12 @@ class ScoreboardApp:
         #: _standings_retry_after but per game, so a new upcoming game isn't
         #: stuck behind the previous one's failure.
         self._season_series_retry_after: dict[int, float] = {}
+        #: (team, fetched at, picked leaders) for the opt-in leaders screen (#201).
+        #: The random tie-break is made once per fetch, so it holds for a whole
+        #: TTL instead of flickering each frame.
+        self._leaders: tuple[str, float, TeamLeaders | None] | None = None
+        self._leaders_retry_after: float = 0.0
+        self._rng = random.Random()
         #: game id -> the favourite's own score last seen in that game, so a
         #: goal can be detected as an increase. Set on first sighting without
         #: firing, so a game already 3-1 at startup does not fire a goal.
@@ -605,6 +619,8 @@ class ScoreboardApp:
             # schedule was.
             self._schedule = None
             self._schedule_retry_after = 0.0
+            self._leaders = None
+            self._leaders_retry_after = 0.0
 
         if audio_changed:
             # volume is carried on the rebuilt object but deliberately not
@@ -1031,7 +1047,9 @@ class ScoreboardApp:
             return None
         return Scene("standings", standings=tuple(window))
 
-    def _leaders_scene(self, conference: str, *, allow_fetch: bool = True) -> Scene | None:
+    def _conference_leaders_scene(
+        self, conference: str, *, allow_fetch: bool = True
+    ) -> Scene | None:
         """Top five of one conference (#200), or None with no standings yet.
 
         Deliberately not gated on anyone's ``games_played``: the owner chose
@@ -1043,7 +1061,7 @@ class ScoreboardApp:
         top = conference_standings(rows, conference)[:5]
         if not top:
             return None
-        return Scene("leaders", standings=tuple(top))
+        return Scene("conference_leaders", standings=tuple(top))
 
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
@@ -1085,6 +1103,44 @@ class ScoreboardApp:
         if record is None:
             return None
         return Scene("matchup", upcoming, season_series=record)
+
+    def _refresh_leaders(self, team: str, *, allow_fetch: bool = True) -> TeamLeaders | None:
+        """The favourite's stat leaders, cached ``LEADERS_TTL_SECONDS`` like standings.
+
+        A cache for a different team counts as stale, so a live favourite
+        switch never shows the old team's players. A failed refresh keeps
+        serving what was cached for the same team.
+        """
+        now_mono = self.monotonic()
+        entry = self._leaders
+        if entry is not None and entry[0] != team:
+            entry = self._leaders = None
+        stale = entry is None or now_mono - entry[1] > LEADERS_TTL_SECONDS
+        if allow_fetch and stale and now_mono >= self._leaders_retry_after:
+            try:
+                picked = team_leaders(self.client.club_stats(team), self._rng)
+                entry = self._leaders = (team, now_mono, picked)
+            except NHLApiError as exc:
+                log.warning("Club stats fetch failed: %s", exc)
+                self._record_error(f"club stats fetch: {exc}")
+                self._leaders_retry_after = now_mono + LEADERS_TTL_SECONDS
+        return entry[2] if entry is not None else None
+
+    def _leaders_scene(self, *, allow_fetch: bool = True) -> Scene | None:
+        """The favourite's top players (#201), or None (skipped, never blank).
+
+        None with no favourite, before the first fetch lands, or while the
+        API's arrays are empty (pre-season). There's deliberately no minimum
+        games-played floor: early on everyone sits at zero and a random
+        leader is shown rather than hiding the screen.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        leaders = self._refresh_leaders(favourite, allow_fetch=allow_fetch)
+        if leaders is None:
+            return None
+        return Scene("leaders", leaders=leaders)
 
     def _countdown_or_preview(self, upcoming: Game) -> Scene:
         cfg = self.settings.scoreboard
@@ -1128,11 +1184,14 @@ class ScoreboardApp:
         if screen in ("top_west", "top_east"):
             # Resolved here so a board not listing them never needs the fetch.
             conference = "W" if screen == "top_west" else "E"
-            return self._leaders_scene(conference, allow_fetch=allow_fetch)
+            return self._conference_leaders_scene(conference, allow_fetch=allow_fetch)
         if screen == "matchup":
             # Resolved here, not up front like standings, so a board without
             # "matchup" in its rotation never calls right-rail at all.
             return self._matchup_scene(upcoming, allow_fetch=allow_fetch)
+        if screen == "leaders":
+            # Resolved lazily like matchup: club-stats is never called unless listed.
+            return self._leaders_scene(allow_fetch=allow_fetch)
         return None
 
     def _rotate_idle_scenes(
@@ -1548,12 +1607,16 @@ class ScoreboardApp:
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
-        elif scene.kind == "leaders":
-            r.draw_leaders(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
+        elif scene.kind == "conference_leaders":
+            r.draw_conference_leaders(
+                self.canvas, scene.standings, self.settings.scoreboard.favourite_team
+            )
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
         elif scene.kind == "matchup":
             r.draw_matchup(self.canvas, scene.game, scene.season_series)
+        elif scene.kind == "leaders":
+            r.draw_leaders(self.canvas, scene.leaders, self.settings.scoreboard.favourite_team)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":

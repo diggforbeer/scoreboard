@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from nhl_scoreboard.app import (
+    LEADERS_TTL_SECONDS,
     SCHEDULE_TTL_SECONDS,
     SEASON_SERIES_TTL_SECONDS,
     STANDINGS_TTL_SECONDS,
@@ -22,7 +23,15 @@ from nhl_scoreboard.app import (
 from nhl_scoreboard.config import RotationEntry, Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, SeasonSeriesRecord, StandingsRow, Star
+from nhl_scoreboard.nhl.models import (
+    ClubStats,
+    Game,
+    GoalEvent,
+    SeasonSeriesRecord,
+    SkaterLine,
+    StandingsRow,
+    Star,
+)
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -98,9 +107,18 @@ class FlowClient:
         self.series: dict[int, SeasonSeriesRecord | None] = {}
         self.season_series_calls: list[int] = []
         self.fail_season_series = False
+        self.club = ClubStats(skaters=(), goalies=())
+        self.club_stats_calls: list[str] = []
+        self.fail_club_stats = False
         self.stars: dict[int, tuple[Star, ...]] = {}
         self.three_stars_calls: list[int] = []
         self.fail_three_stars = False
+
+    def club_stats(self, team, date="now"):
+        self.club_stats_calls.append(team)
+        if self.fail_club_stats:
+            raise NHLApiError("boom")
+        return self.club
 
     def season_series(self, game_id):
         self.season_series_calls.append(game_id)
@@ -1171,3 +1189,81 @@ def test_draw_dispatches_standings_scene(fake_backend):
     assert scene(app)[0] == "standings"
     app.draw()  # must not raise; exercises Renderer.draw_standings via the real dispatch
     assert app.matrix.swaps == 1
+
+
+# -- leaders / favourite's top players (#201) ---------------------------------
+
+
+def _club() -> ClubStats:
+    return ClubStats(
+        skaters=(SkaterLine(1, "A. One", 0, 0, 0), SkaterLine(2, "B. Two", 0, 0, 0)),
+        goalies=(),
+    )
+
+
+def test_leaders_never_in_the_implicit_default_rotation(day):
+    app, clock, client = day
+    client.club = _club()
+    for _ in range(6):
+        tick(app, clock, seconds=7)
+        assert scene(app)[0] != "leaders"
+    assert client.club_stats_calls == []
+
+
+def test_leaders_shown_when_listed_even_with_everyone_at_zero(day):
+    app, _, client = day
+    client.club = _club()
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    s = app.select_scene()
+    assert s.kind == "leaders"
+    assert s.leaders.goals.name in {"A. One", "B. Two"}
+    assert client.club_stats_calls == [FAV]
+
+
+def test_leaders_pick_is_stable_between_frames(day):
+    app, _, client = day
+    client.club = ClubStats(tuple(SkaterLine(i, f"P. {i}", 0, 0, 0) for i in range(30)), ())
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    first = app.select_scene().leaders
+    assert all(app.select_scene().leaders == first for _ in range(5))
+    assert len(client.club_stats_calls) == 1
+
+
+def test_leaders_skipped_before_the_season_has_any_players(day):
+    app, _, _client = day
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("leaders", 5)]
+    assert scene(app)[0] == "preview"  # empty arrays: skipped, not drawn blank
+    assert app._leaders_scene() is None
+
+
+def test_leaders_cached_then_refetched_after_ttl(day):
+    app, clock, client = day
+    client.club = _club()
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    app.select_scene()
+    app.select_scene()
+    assert len(client.club_stats_calls) == 1
+    tick(app, clock, seconds=LEADERS_TTL_SECONDS + 1)
+    app.select_scene()
+    assert len(client.club_stats_calls) == 2
+
+
+def test_leaders_failure_backs_off_and_keeps_cached(day):
+    app, clock, client = day
+    client.club = _club()
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    first = app.select_scene().leaders
+    client.fail_club_stats = True
+    tick(app, clock, seconds=LEADERS_TTL_SECONDS + 1)
+    assert app.select_scene().leaders == first
+    app.select_scene()
+    assert len(client.club_stats_calls) == 2, "failure must not retry every frame"
+
+
+def test_leaders_skipped_with_no_favourite(day):
+    app, _, client = day
+    client.club = _club()
+    app.settings.scoreboard.favourite_team = ""
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    assert app._leaders_scene() is None
+    assert client.club_stats_calls == []

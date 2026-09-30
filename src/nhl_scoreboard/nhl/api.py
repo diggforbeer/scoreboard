@@ -17,6 +17,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .models import (
+    ClubStats,
     Game,
     GoalEvent,
     SeasonSeriesRecord,
@@ -136,6 +137,14 @@ class NHLClient:
         """
         payload = self._get(f"/standings/{date}")
         return _parse_items(payload.get("standings") or [], StandingsRow.from_api, "standings row")
+
+    def club_stats(self, team: str, date: str = "now") -> ClubStats:
+        """``team``'s season stats per player (#201); both lists empty pre-season.
+
+        ``now`` 307-redirects to ``/club-stats/{team}/{season}/{gameType}``.
+        """
+        payload = self._get(f"/club-stats/{team.strip().upper()}/{date}")
+        return ClubStats.from_api(payload)
 
     # -- plumbing --------------------------------------------------------
 

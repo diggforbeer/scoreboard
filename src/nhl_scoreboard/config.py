@@ -220,8 +220,8 @@ class ScoreboardConfig:
 #: "countdown_preview" auto-switches between countdown/preview based on
 #: countdown_hours, same as always -- which one shows isn't a user choice,
 #: so it isn't split into two separately configurable screens (#150).
-#: "matchup" (#157) and "top_west"/"top_east" (#200) are opt-in only: never part of the
-#: derived default list.
+#: "matchup" (#157), "top_west"/"top_east" (#200) and "leaders" (#201) are
+#: opt-in only: never part of the derived default list.
 VALID_ROTATION_SCREENS = (
     "countdown_preview",
     "standings",
@@ -229,6 +229,7 @@ VALID_ROTATION_SCREENS = (
     "matchup",
     "top_west",
     "top_east",
+    "leaders",
 )
 
 
