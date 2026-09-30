@@ -50,6 +50,39 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+  e2e:
+    name: Admin page end-to-end smoke test
+    runs-on: ubuntu-latest
+    # A real Chromium browser against a real admin_server.py subprocess
+    # serving a real frontend/dist build -- the same "static page + a
+    # WebSocket on one port" mechanism build-image.yml ships, exercised
+    # for real instead of trusting `npm run build`/`npm run lint` alone
+    # to catch a regression there (#178 story 10's own follow-up: every
+    # story before this was verified this way by hand, once, manually).
+    # Separate from the `frontend`/`test` jobs above since it needs both
+    # a built frontend and the Python package installed.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Python package
+        run: pip install -e '.[e2e]'
+      - name: Install Playwright's Chromium
+        run: playwright install --with-deps chromium
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Run the smoke test
+        run: pytest tests/e2e -m e2e -v
+
   test:
     runs-on: ubuntu-latest
     # Needed for the coverage-comment step below: pull-requests:write to

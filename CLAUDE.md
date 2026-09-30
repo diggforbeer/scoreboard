@@ -129,6 +129,19 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   as the real binding would.
 - `tests/test_app.py` `FakeCanvas`/`FakeMatrix`/`FakeClient` are shared by
   `test_flow.py`. `FakeClient` records `situation_calls` and `schedule_calls`.
+- **The one deliberate exception to "hermetic": `tests/e2e/`.** A real
+  Chromium browser (Playwright) against a real `admin_server.py`
+  subprocess serving a real `frontend/dist` build (#178 story 10's own
+  follow-up) -- excluded from the default `pytest` run by a `e2e` marker
+  (`pyproject.toml`'s `addopts = "-q -m 'not e2e'"`), run explicitly with
+  `pytest -m e2e` after `pip install -e '.[e2e]'` +
+  `playwright install chromium` + building the frontend. Its own CI job
+  (`ci.yml`'s `e2e`) does exactly that on every PR. Every story of the
+  admin-page rebuild was verified this same way by hand, once, per story
+  -- this codifies the smallest useful slice (page loads, one save
+  round-trips) so a regression in the "static page + WebSocket on one
+  port" mechanism itself is caught automatically instead of relying on
+  that manual discipline continuing forever.
 
 ## Rendering rules
 
@@ -1114,6 +1127,12 @@ when it was written; that history is left as-is rather than rewritten.
   in this session) -- flagged the same way every other real-hardware-only
   gap in this project is (see `image/layer/nhl-scoreboard.yaml`'s own
   `python3-websockets` addition and CLAUDE.md's Image build facts).
+- **Follow-up, same day: the manual verification above is now a real CI
+  job.** `tests/e2e/test_admin_page_smoke.py` + `ci.yml`'s `e2e` job do
+  the same "browser against a built page + a save round trip" check on
+  every PR -- see Testing conventions' own note on it. Doesn't replace
+  real-hardware verification (#4), just catches a regression in the
+  static-page-plus-WebSocket-on-one-port mechanism itself before it ships.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing
   WebSocket connection rather than a separate HTTP endpoint -- worth
