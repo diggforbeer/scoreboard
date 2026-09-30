@@ -90,7 +90,8 @@ show_clock_between_games = false
 # below; once any [[rotation]] table is present, rotate_seconds/
 # show_standings/show_clock_between_games above are no longer read for this
 # purpose. screen is one of "countdown_preview", "standings", "clock",
-# "matchup". "matchup" (your team's head-to-head record this season against
+# "matchup", "top_west", "top_east". "top_west"/"top_east" (top five of that
+# conference) are opt-in like "matchup". "matchup" (your team's head-to-head record this season against
 # its next opponent) is never in the default list -- it only shows if you
 # add it here. A screen with nothing to show right now (e.g. standings
 # before your team's season has started) is skipped for that pass, not

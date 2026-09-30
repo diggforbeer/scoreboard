@@ -18,6 +18,7 @@ to each renderer method below.
 | **Countdown** | `draw_countdown` | The favourite's next game, inside `countdown_hours` of puck drop -- day/date give way to a countdown once close enough. |
 | **Preview** | `draw_preview` | The favourite's next game, further out than `countdown_hours` -- day label and start time, no countdown yet. |
 | **Standings** | `draw_standings` | The favourite's conference playoff picture: favourite +/- a couple of spots by `conferenceSequence`, one screen, no pagination. Only in `rotation = "favourite"`, alternates with Countdown/Preview on `rotate_seconds`, suppressed until the favourite's season has actually started. |
+| **Top of the West / East** | `draw_leaders` | Top five of one conference (#200), "WEST"/"EAST" in the left block, favourite highlighted. Two opt-in `[[rotation]]` screens, `top_west` and `top_east`; not gated on the favourite's games played. |
 | **Clock** | `draw_clock` | Plain idle clock. Shown when there's nothing else to display and `show_clock_when_idle` is on, or interleaved between the favourite's games when `show_clock_between_games` is on. |
 | **No games** | `draw_message` ("NO GAMES") | Fallback when there's genuinely nothing to show and the idle clock is off. |
 | **Connecting** | `draw_message` ("NHL" / "CONNECTING") | Shown at startup before the first successful score fetch. |

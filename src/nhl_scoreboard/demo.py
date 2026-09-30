@@ -107,6 +107,7 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("game", shootout)),
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
+        DemoStep(Scene("leaders", standings=_standings("")[:5])),
         DemoStep(Scene("clock")),
         DemoStep(Scene("no_games")),
         DemoStep(Scene("no_data")),

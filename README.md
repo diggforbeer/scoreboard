@@ -153,9 +153,10 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east
 # seconds = 10
-# "matchup" (season series vs. the next opponent) only shows if listed here.
+# "matchup" (season series vs. the next opponent) and "top_west"/"top_east" (top five of
+# that conference) only show if listed here.
 
 [audio]
 enabled = true
