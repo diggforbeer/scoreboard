@@ -327,6 +327,20 @@ that precedent covers exactly this win tally and nothing broader
 tally ships -- individual past-meeting scores (#168) and team/player
 stat leaders (#169) are separate follow-ups.
 
+`leaders` (#201) is a fifth `[[rotation]]` screen, also opt-in (absent from
+`_default_rotation`): the favourite's top goal scorer, top point getter and
+top two goalies by `gamesPlayed`, from `club-stats/{TEAM}/now`
+(`NHLClient.club_stats()`, hourly TTL `LEADERS_TTL_SECONDS`, same backoff as
+standings, cache keyed by team and reset on a favourite switch). No
+minimum-games floor, by the owner's decision: ties -- everyone at zero early
+on -- are broken at random once per fetch (`team_leaders()`), so the pick
+holds for the TTL rather than flickering per frame. Verified live that the
+endpoint returns *empty* `skaters`/`goalies` pre-season instead of last
+season's table, so the screen is skipped only on empty arrays. Layout: logo
+left like `standings`, tiny-font title + up to four rows. Not yet seen
+against a real in-season payload; the layout snapshots (`leaders_logo`,
+`leaders_text`) still need generating with `pytest --update-snapshots`.
+
 **A live favourite-team switch used to leave this (and the countdown/
 preview screen) stuck on the previous team's opponent for up to an
 hour**, found live via the admin page (#178): the upcoming game handed

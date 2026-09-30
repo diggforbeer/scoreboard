@@ -13,7 +13,14 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game, GoalEvent, SeasonSeriesRecord, StandingsRow, Star
+from ..nhl.models import (
+    Game,
+    GoalEvent,
+    SeasonSeriesRecord,
+    StandingsRow,
+    Star,
+    TeamLeaders,
+)
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_secondary_color
@@ -592,6 +599,49 @@ class Renderer:
             self.text(canvas, font, record_x, y, color, row.record_label())
             self.text_right(canvas, font, gp_right, y, color, str(row.games_played))
             self.text_right(canvas, font, points_right, y, color, str(row.points))
+
+    def draw_leaders(self, canvas: Any, leaders: TeamLeaders, favourite: str) -> None:
+        """The favourite's own top players (#201): goals, points, then top two goalies.
+
+        The favourite's logo anchors the left edge, full height, exactly like
+        ``draw_standings`` (and is dropped the same way when the library has
+        none); everything else fills the rest of the width. Tiny face, five
+        rows at the standings scene's pitch: a title, then one row each of
+        ``G`` (goals leader), ``P`` (points leader), and up to two goalies
+        (``GK``: record and save %). A row with nobody to show is skipped and
+        the rest close up. Names are in the team's colour and truncated to fit.
+        """
+        canvas.Clear()
+        font = self.fonts.tiny
+        logo = self.logos.get(favourite) if self.logos is not None else None
+        if logo is not None:
+            self.draw_logo(canvas, logo, 0, (self.height - logo.height) // 2)
+            left = logo.width
+        else:
+            left = 0
+        right = self.width - 1
+        cx = (left + self.width) // 2
+        color = team_color(favourite)
+        rows: list[tuple[str, str, str]] = []
+        if leaders.goals is not None:
+            rows.append(("G", leaders.goals.name, f"{leaders.goals.goals}G"))
+        if leaders.points is not None:
+            p = leaders.points
+            rows.append(("P", p.name, f"{p.goals}G {p.assists}A"))
+        for g in leaders.goalies:
+            rows.append(("GK", g.name, f"{g.record_label()} {g.save_pct_label()}"))
+
+        row_height = 6
+        self.text_center(canvas, font, cx, row_height - 1, ACCENT, f"{favourite} LEADERS".strip())
+        label_x = left + 1
+        name_x = label_x + text_width(font, "GK") + 2
+        for i, (label, name, stat) in enumerate(rows, start=1):
+            y = 1 + i * row_height + (row_height - 2)
+            self.text(canvas, font, label_x, y, ACCENT, label)
+            stat_x = right - text_width(font, stat)
+            self.text(canvas, font, stat_x, y, WHITE, stat)
+            room = stat_x - 3 - name_x
+            self.text(canvas, font, name_x, y, color, self._fit_name(font, name, room))
 
     def draw_clock(self, canvas: Any, now: datetime, favourite: str | None = None) -> None:
         """Idle scene: the time, for when there is no hockey to show.
