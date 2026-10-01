@@ -1,25 +1,13 @@
 # Enclosure
 
 OpenSCAD models for a 3D-printed case holding the Raspberry Pi and the
-chained HUB75 panel(s). Each major version lives here side by side
-rather than one file overwriting the other, since they're genuinely
-different iterations (see below). **v3 is the current design**, in a
-Pi 4 and a Pi 3 Model B+ variant; v1 is kept for reference. (v2 was
-replaced by v3 -- it's still in git history.)
-
-## `scoreboard-case.scad` (v1)
-
-The original shell: outer walls, a ledge the panel(s) rest against from
-the front, standoffs matching the Pi 4's official mounting-hole spacing,
-a side-wall ambient-light-sensor hole (#44/#45), and a speaker port in
-each side wall (driver still unpicked, so these are generic round holes,
-not a grille cut for a specific model). No power-brick seat, no venting
-beyond the two speaker holes, and no print-bed splitting -- it's sized
-for whatever bed the full width happens to fit on.
+chained HUB75 panel(s). There is one design, **v3**, in a Pi 4 and a
+Pi 3 Model B+ variant. Earlier iterations (v1, v2) were removed; they
+remain in git history.
 
 ## `scoreboard-case-v3.scad` / `scoreboard-case-v3-pi3b.scad` (current)
 
-A rework after printing and fitting the earlier v2 design (#114). The two files are identical
+A rework after printing and fitting the earlier v2 design. The two files are identical
 except for `pi_model` (`4` or `3`), which only changes the port
 faceplate -- the Pi 3 Model B+ has its Ethernet and USB jacks in swapped
 positions. The board variant and `case_version` are printed as raised
@@ -63,13 +51,14 @@ Hardware: 5x M3x10 socket-head bolts + nuts (seam), 4x M2.5 screws (Pi),
 10x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
 (12mm thread), 7mm momentary button.
 
-Still open: the speaker driver (#114), and confirming the magnet
+Still open: the speaker grille's hole size/pitch (generic until a real
+driver is picked), and confirming the magnet
 positions and right-panel stability on a full print.
 
 ## Shared conventions
 
 All panel dimensions at the top of each file come from the spec sheet in
-`CLAUDE.md`'s Hardware facts section. v1's `panel_depth` was an
+`CLAUDE.md`'s Hardware facts section. earlier versions' `panel_depth` was an
 estimate; v3 uses the measured panel thickness (`panel_t`, 15mm) and the
 panel + magnet-screw depth (`mag_total_t`, 27mm). `wall` (2.4mm) assumes a 0.4mm nozzle at
 ~6 perimeters; adjust to your printer/slicer if different. Both print
