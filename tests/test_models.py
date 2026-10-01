@@ -327,29 +327,45 @@ from nhl_scoreboard.nhl.models import (  # noqa: E402
     AssistDetail,
     GoalEvent,
     goal_events_from_landing,
+    player_details_from_api,
 )
 
 
-def _goal_raw(team="NSH", scorer="F. Forsberg", goals=12, assists=(), strength="ev"):
+def _goal_raw(
+    team="NSH", scorer="F. Forsberg", goals=12, assists=(), strength="ev", player_id=8479999
+):
     return {
         "teamAbbrev": team,
         "name": {"default": scorer},
         "goalsToDate": goals,
-        "assists": [{"name": {"default": n}, "assistsToDate": a} for n, a in assists],
+        "playerId": player_id,
+        "assists": [
+            {"name": {"default": n}, "assistsToDate": a, "sweaterNumber": num}
+            for n, a, num in assists
+        ],
         "strength": strength,
     }
 
 
 def test_goal_event_parses_scorer_and_assists():
+    """sweaterNumber on an assist is confirmed free straight from this
+    payload (#124) -- unlike the scorer's own jersey number/points, which
+    need a second call this dataclass alone never makes (see
+    scorer_sweater_number/scorer_points's own default of None here)."""
     event = GoalEvent.from_api(
-        _goal_raw(assists=[("J. Smith", 5), ("B. Johnson", 9)], strength="pp")
+        _goal_raw(
+            assists=[("J. Smith", 5, 22), ("B. Johnson", 9, 53)], strength="pp", player_id=8481540
+        )
     )
     assert event.team_abbrev == "NSH"
     assert event.scorer_name == "F. Forsberg"
     assert event.scorer_goals_to_date == 12
+    assert event.scorer_player_id == 8481540
+    assert event.scorer_sweater_number is None
+    assert event.scorer_points is None
     assert event.assists == (
-        AssistDetail(name="J. Smith", assists_to_date=5),
-        AssistDetail(name="B. Johnson", assists_to_date=9),
+        AssistDetail(name="J. Smith", assists_to_date=5, sweater_number=22),
+        AssistDetail(name="B. Johnson", assists_to_date=9, sweater_number=53),
     )
     assert event.strength == "pp"
 
@@ -389,6 +405,33 @@ def test_goal_events_from_landing_skips_a_malformed_goal_without_losing_the_rest
     }
     events = goal_events_from_landing(raw)
     assert [e.scorer_name for e in events] == ["OK"]
+
+
+def test_player_details_combines_roster_and_club_stats():
+    roster = {
+        "forwards": [{"id": 1, "sweaterNumber": 9}],
+        "defensemen": [{"id": 2, "sweaterNumber": 55}],
+    }
+    club_stats = {"skaters": [{"playerId": 1, "points": 40}, {"playerId": 2, "points": 20}]}
+    details = player_details_from_api(roster, club_stats)
+    assert details[1].sweater_number == 9
+    assert details[1].points == 40
+    assert details[2].sweater_number == 55
+    assert details[2].points == 20
+
+
+def test_player_details_omits_a_player_missing_from_either_side():
+    roster = {"forwards": [{"id": 1, "sweaterNumber": 9}, {"id": 2, "sweaterNumber": 55}]}
+    club_stats = {"skaters": [{"playerId": 1, "points": 40}]}
+    assert set(player_details_from_api(roster, club_stats)) == {1}
+
+
+def test_player_details_skips_a_malformed_entry_without_losing_the_rest():
+    roster = {
+        "forwards": [{"id": "not-a-number", "sweaterNumber": 9}, {"id": 2, "sweaterNumber": 55}]
+    }
+    club_stats = {"skaters": [{"playerId": 1, "points": 40}, {"playerId": 2, "points": 20}]}
+    assert set(player_details_from_api(roster, club_stats)) == {2}
 
 
 # -- three stars (#156) -------------------------------------------------------

@@ -27,6 +27,7 @@ from nhl_scoreboard.nhl.models import (
     ClubStats,
     Game,
     GoalEvent,
+    PlayerSeasonDetail,
     SeasonSeriesRecord,
     SkaterLine,
     StandingsRow,
@@ -103,6 +104,7 @@ class FlowClient:
         self.standings_calls = 0
         self.fail_standings = False
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
         #: game id -> tally; a missing id answers None, like a malformed payload.
         self.series: dict[int, SeasonSeriesRecord | None] = {}
         self.season_series_calls: list[int] = []
@@ -134,6 +136,9 @@ class FlowClient:
 
     def goal_scoring(self, game_id):
         return self.goal_events.get(game_id, ())
+
+    def team_roster(self, team):
+        return self.team_rosters.get(team, {})
 
     def three_stars(self, game_id):
         self.three_stars_calls.append(game_id)
@@ -510,11 +515,14 @@ def test_draw_dispatches_goal_scene(day):
 # --------------------------------------------------------------------------
 
 
-def goal_event(team=FAV, scorer="F. FORSBERG", goals=1, strength="ev") -> GoalEvent:
+def goal_event(
+    team=FAV, scorer="F. FORSBERG", goals=1, strength="ev", player_id=8480000
+) -> GoalEvent:
     return GoalEvent(
         team_abbrev=team,
         scorer_name=scorer,
         scorer_goals_to_date=goals,
+        scorer_player_id=player_id,
         assists=(),
         strength=strength,
     )
