@@ -13,11 +13,26 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import SCHEDULE_TTL_SECONDS, STANDINGS_TTL_SECONDS, ScoreboardApp
-from nhl_scoreboard.config import Settings
+from nhl_scoreboard.app import (
+    LEADERS_TTL_SECONDS,
+    SCHEDULE_TTL_SECONDS,
+    SEASON_SERIES_TTL_SECONDS,
+    STANDINGS_TTL_SECONDS,
+    ScoreboardApp,
+)
+from nhl_scoreboard.config import RotationEntry, Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game, GoalEvent, PlayerSeasonDetail, StandingsRow
+from nhl_scoreboard.nhl.models import (
+    ClubStats,
+    Game,
+    GoalEvent,
+    PlayerSeasonDetail,
+    SeasonSeriesRecord,
+    SkaterLine,
+    StandingsRow,
+    Star,
+)
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -90,6 +105,28 @@ class FlowClient:
         self.fail_standings = False
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
         self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
+        #: game id -> tally; a missing id answers None, like a malformed payload.
+        self.series: dict[int, SeasonSeriesRecord | None] = {}
+        self.season_series_calls: list[int] = []
+        self.fail_season_series = False
+        self.club = ClubStats(skaters=(), goalies=())
+        self.club_stats_calls: list[str] = []
+        self.fail_club_stats = False
+        self.stars: dict[int, tuple[Star, ...]] = {}
+        self.three_stars_calls: list[int] = []
+        self.fail_three_stars = False
+
+    def club_stats(self, team, date="now"):
+        self.club_stats_calls.append(team)
+        if self.fail_club_stats:
+            raise NHLApiError("boom")
+        return self.club
+
+    def season_series(self, game_id):
+        self.season_series_calls.append(game_id)
+        if self.fail_season_series:
+            raise NHLApiError("boom")
+        return self.series.get(game_id)
 
     def scores(self, date="now"):
         return list(self.today)
@@ -102,6 +139,12 @@ class FlowClient:
 
     def team_roster(self, team):
         return self.team_rosters.get(team, {})
+
+    def three_stars(self, game_id):
+        self.three_stars_calls.append(game_id)
+        if self.fail_three_stars:
+            raise NHLApiError("boom")
+        return self.stars.get(game_id, ())
 
     def schedule(self, team):
         self.schedule_calls += 1
@@ -127,7 +170,6 @@ def fake_backend() -> Backend:
 def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -> ScoreboardApp:
     settings = Settings()
     settings.scoreboard.favourite_team = FAV
-    settings.scoreboard.rotation = "favourite"
     for k, v in cfg.items():
         setattr(settings.scoreboard, k, v)
     return ScoreboardApp(
@@ -320,22 +362,6 @@ def test_schedule_failure_backs_off_instead_of_polling_every_frame(day):
     assert client.schedule_calls == 2, "a retry is still expected once the backoff elapses"
 
 
-def test_all_rotation_ignores_favourite_flow(day):
-    app, _, _ = day
-    app.settings.scoreboard.rotation = "all"
-    assert scene(app)[0] == "game"
-
-
-def test_favourite_rotation_without_favourite_degrades_to_all():
-    settings = Settings.from_dict({"scoreboard": {"favourite_team": "", "rotation": "favourite"}})
-    assert settings.scoreboard.rotation == "all"
-
-
-def test_unknown_rotation_degrades_to_all():
-    settings = Settings.from_dict({"scoreboard": {"rotation": "sideways"}})
-    assert settings.scoreboard.rotation == "all"
-
-
 def test_draw_renders_every_scene_kind(day):
     """Each scene kind reaches the renderer without error."""
     app, clock, client = day
@@ -460,7 +486,7 @@ def test_no_favourite_team_never_detects_goals(fake_backend):
     client = FlowClient()
     client.today = [game(1, "TBL", "NSH", PUCK_DROP, "LIVE")]
     settings_app = ScoreboardApp(
-        Settings.from_dict({"scoreboard": {"favourite_team": "", "rotation": "all"}}),
+        Settings.from_dict({"scoreboard": {"favourite_team": ""}}),
         client=client,
         backend=fake_backend,
         clock=lambda: PUCK_DROP,
@@ -616,6 +642,199 @@ def test_draw_dispatches_goal_detail_scene(day):
 
 
 # --------------------------------------------------------------------------
+# three stars of the game -- #156
+# --------------------------------------------------------------------------
+
+
+def star(rank: int, team: str = FAV, name: str = "F. Forsberg", goals=1, assists=0) -> Star:
+    return Star(
+        star=rank,
+        player_id=8470000 + rank,
+        team_abbrev=team,
+        name=name,
+        sweater_no=9,
+        position="L",
+        goals=goals,
+        assists=assists,
+        points=goals + assists,
+    )
+
+
+STARS = (star(1), star(2, "TBL", "N. Kucherov", 0, 2), star(3, name="J. Saros", goals=0))
+
+
+def _watch_the_favourite_go_final(app, clock, client) -> None:
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=2)
+    tick(app, clock, hours=7)
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL", period=3)
+    tick(app, clock, hours=1, minutes=40)
+
+
+def test_three_stars_shows_once_landing_names_them(day):
+    """FINAL can land in score/now before landing's threeStars -- poll until it's there."""
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 15
+    _watch_the_favourite_go_final(app, clock, client)
+
+    app.refresh_three_stars()  # landing hasn't named them yet
+    assert client.three_stars_calls == [1]
+    assert scene(app) == ("game", 1)
+
+    client.stars[1] = STARS
+    app.refresh_three_stars()  # inside live_poll_seconds: no refetch yet
+    assert client.three_stars_calls == [1]
+
+    clock.advance(seconds=15)
+    app.refresh_three_stars()
+    assert client.three_stars_calls == [1, 1]
+    assert scene(app) == ("three_stars", 1)
+    assert app.select_scene().stars == STARS
+
+
+def test_three_stars_fetch_failure_is_retried(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    client.fail_three_stars = True
+    app.refresh_three_stars()
+    assert scene(app) == ("game", 1)
+
+    client.fail_three_stars = False
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+
+
+def test_three_stars_reverts_to_the_held_final_after_three_stars_seconds(day):
+    app, clock, client = day
+    app.settings.scoreboard.three_stars_seconds = 10
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+
+    clock.advance(seconds=9)
+    assert scene(app) == ("three_stars", 1), "still inside the three-stars window"
+
+    clock.advance(seconds=2)
+    assert scene(app) == ("game", 1), "window elapsed: the normal held final takes over"
+
+
+def test_three_stars_never_fires_twice_for_the_same_game(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert app._three_stars is not None
+
+    app._three_stars = None  # as if the on-screen window already elapsed
+    tick(app, clock, seconds=30)
+    app.refresh_three_stars()
+
+    assert app._three_stars is None
+    assert client.three_stars_calls == [1], "fetched once, never re-armed"
+
+
+def test_three_stars_not_shown_after_a_restart_mid_hold(fake_backend, day):
+    """Found already final at startup is a first sighting, not a transition -- a
+    restart after the screen already showed (or should have) must not show it again."""
+    _, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL", period=3)
+    client.stars[1] = STARS
+    clock.now = PUCK_DROP + timedelta(hours=2, minutes=40)  # inside the estimated hold
+    restarted = make_app(fake_backend, clock, client)
+    restarted.refresh()
+    restarted.refresh_three_stars()
+
+    assert scene(restarted) == ("game", 1)
+    assert client.three_stars_calls == []
+
+
+def test_three_stars_ignores_a_non_favourite_game_going_final(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    client.stars[9] = STARS
+    client.today[0] = dataclasses.replace(client.today[0], state="FINAL")  # SEA @ CGY, watched
+    tick(app, clock, minutes=5)
+    app.refresh_three_stars()
+
+    assert client.three_stars_calls == []
+    assert app._three_stars is None
+
+
+def test_three_stars_keeps_an_all_opponent_selection(day):
+    """Stars are whoever the NHL named -- nothing filters them to the favourite."""
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    opponents = tuple(star(i, "TBL", f"P. Opponent{i}") for i in (1, 2, 3))
+    client.stars[1] = opponents
+    app.refresh_three_stars()
+
+    assert app.select_scene().stars == opponents
+
+
+def test_three_stars_stops_polling_once_the_final_hold_is_over(day):
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    app.refresh_three_stars()  # never named
+    assert app._three_stars_pending
+
+    tick(app, clock, minutes=31)
+    app.refresh_three_stars()
+    assert app._three_stars_pending == {}
+    assert client.three_stars_calls == [1]
+
+
+def test_three_stars_state_pruned_once_the_game_leaves_the_slate(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert app._three_stars_shown == {1}
+
+    client.today = [g for g in client.today if g.id != 1]
+    tick(app, clock, minutes=1)
+    assert app._three_stars_shown == set()
+    assert app._three_stars_pending == {}
+
+
+def test_three_stars_pending_pruned_once_the_game_leaves_the_slate(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    assert 1 in app._three_stars_pending
+
+    client.today = [g for g in client.today if g.id != 1]
+    tick(app, clock, minutes=1)
+    app.refresh_three_stars()
+    assert app._three_stars_pending == {}
+    assert client.three_stars_calls == []
+
+
+def test_three_stars_does_not_override_a_different_game(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+
+    from nhl_scoreboard.app import Scene
+
+    unrelated = Scene("game", client.today[0])
+    assert app._apply_goal_override(unrelated) is unrelated
+
+
+def test_draw_dispatches_three_stars_scene(day):
+    app, clock, client = day
+    _watch_the_favourite_go_final(app, clock, client)
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+    app.draw()  # must not raise; exercises Renderer.draw_three_stars via the real dispatch
+    assert app.matrix.swaps >= 1
+
+
+# --------------------------------------------------------------------------
 # standings (playoff picture) scene -- #40
 # --------------------------------------------------------------------------
 
@@ -739,6 +958,38 @@ def test_clock_between_games_never_interrupts_a_live_or_final_held_game(day):
     assert scene(app) == ("game", 1)
 
 
+def test_explicit_rotation_overrides_derived_default_with_per_entry_seconds(day):
+    """An explicit [[rotation]] (#150) replaces the show_*/rotate_seconds-derived list entirely."""
+    from nhl_scoreboard.config import RotationEntry
+
+    app, clock, _client = day
+    app.settings.rotation = [RotationEntry("clock", 3), RotationEntry("countdown_preview", 7)]
+
+    assert scene(app)[0] == "clock"
+    tick(app, clock, seconds=3)
+    assert scene(app)[0] == "preview"
+    tick(app, clock, seconds=7)
+    assert scene(app)[0] == "clock"
+
+
+def test_explicit_rotation_skips_unavailable_entries_and_falls_back(day):
+    """An entry with nothing to show right now is skipped, not shown blank (#150 decision 2).
+
+    Only "standings" is configured here -- not "countdown_preview" -- so even
+    though there is an upcoming favourite game, it never appears; with
+    standings itself ineligible (no rows), nothing in the rotation can be
+    shown at all and the board falls back to cycling today's games by index.
+    """
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    client.standings_rows = []
+    app.settings.rotation = [RotationEntry("standings", 5)]
+
+    kind, gid = scene(app)
+    assert kind == "game" and gid in {9, 1}
+
+
 def test_standings_shown_when_no_more_games_are_scheduled(fake_backend):
     client = FlowClient()
     client.today = []
@@ -793,6 +1044,149 @@ def test_standings_failure_backs_off_instead_of_polling_every_frame(day):
     assert client.standings_calls == 2, "a retry is still expected once the backoff elapses"
 
 
+# -- matchup / season series (#157) -------------------------------------------
+
+
+def test_matchup_never_in_the_implicit_default_rotation(day):
+    """Opt-in only: a board with no [[rotation]] never shows it, or even fetches it."""
+    app, clock, client = day
+    app.settings.scoreboard.show_clock_between_games = True
+    app.settings.scoreboard.rotate_seconds = 10
+    client.standings_rows = west_standings()
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    for _ in range(8):
+        assert scene(app)[0] != "matchup"
+        tick(app, clock, seconds=10)
+    assert client.season_series_calls == []
+
+
+def test_matchup_shown_when_listed_in_rotation(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(away_wins=1, home_wins=2)
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+
+    assert scene(app) == ("preview", 1)
+    tick(app, clock, seconds=5)
+    s = app.select_scene()
+    assert (s.kind, s.game.id) == ("matchup", 1)
+    assert s.season_series == SeasonSeriesRecord(1, 2)
+    assert client.season_series_calls == [1], "keyed on the upcoming game's own id"
+    tick(app, clock, seconds=5)
+    assert scene(app) == ("preview", 1)
+
+
+def test_matchup_preseason_zero_zero_still_shows(day):
+    """0-0 is a real answer (preseason, or no meeting finished yet), not "nothing to show"."""
+    app, _clock, client = day
+    client.series[1] = SeasonSeriesRecord(0, 0)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    s = app.select_scene()
+    assert s.kind == "matchup"
+    assert s.season_series == SeasonSeriesRecord(0, 0)
+
+
+def test_matchup_skipped_when_api_has_no_usable_tally(day):
+    app, clock, client = day
+    client.series = {}  # season_series() -> None, as for a missing/malformed payload
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+    for _ in range(4):
+        assert scene(app) == ("preview", 1)
+        tick(app, clock, seconds=5)
+
+
+def test_matchup_skipped_with_no_upcoming_game(fake_backend):
+    client = FlowClient()
+    client.today = []
+    client.season = []
+    app = make_app(fake_backend, Clock(PUCK_DROP), client)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    app.refresh()
+    assert scene(app)[0] == "clock"  # show_clock_when_idle's fallback, not a blank matchup
+    assert client.season_series_calls == []
+    assert app._matchup_scene(None) is None
+
+
+def test_matchup_not_shown_before_fetch_has_completed(day):
+    """The status page (allow_fetch=False) with nothing cached: skipped, and no fetch."""
+    app, _clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+    for _ in range(3):
+        assert app.select_scene(allow_fetch=False).kind == "preview"
+    assert client.season_series_calls == []
+
+
+def test_matchup_cached_for_its_ttl(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    for _ in range(20):
+        app.select_scene()
+    assert client.season_series_calls == [1]
+
+    client.series[1] = SeasonSeriesRecord(3, 1)
+    tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 1)
+    assert app.select_scene().season_series == SeasonSeriesRecord(3, 1)
+    assert client.season_series_calls == [1, 1]
+
+
+def test_matchup_failure_backs_off_instead_of_polling_every_frame(day):
+    app, clock, client = day
+    client.fail_season_series = True
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("matchup", 5)]
+
+    for _ in range(20):
+        assert scene(app)[0] == "preview"
+    assert client.season_series_calls == [1]
+
+    client.fail_season_series = False
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 5)  # past backoff, on the matchup slot
+    assert scene(app) == ("matchup", 1)
+    assert client.season_series_calls == [1, 1]
+
+
+def test_matchup_failed_refresh_keeps_serving_the_cached_tally(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    assert app.select_scene().season_series == SeasonSeriesRecord(2, 1)
+
+    client.fail_season_series = True
+    tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 1)
+    assert app.select_scene().season_series == SeasonSeriesRecord(2, 1)
+    assert len(client.season_series_calls) == 2
+
+
+def test_matchup_cache_follows_the_upcoming_game(day):
+    """A new upcoming matchup fetches its own tally; the old one isn't kept around."""
+    app, _clock, client = day
+    client.series = {1: SeasonSeriesRecord(2, 1), 2: SeasonSeriesRecord(0, 1)}
+    tonight, next_game = client.season[1], client.season[2]
+    assert app._matchup_scene(tonight).season_series == SeasonSeriesRecord(2, 1)
+    assert app._matchup_scene(next_game).season_series == SeasonSeriesRecord(0, 1)
+    assert client.season_series_calls == [1, 2]
+    assert set(app._season_series) == {2}
+
+
+def test_matchup_never_interrupts_a_live_game(day):
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert scene(app) == ("game", 1)
+
+
+def test_draw_dispatches_matchup_scene(day):
+    app, _clock, client = day
+    client.series[1] = SeasonSeriesRecord(2, 1)
+    app.settings.rotation = [RotationEntry("matchup", 5)]
+    assert scene(app)[0] == "matchup"
+    app.draw()  # must not raise; exercises Renderer.draw_matchup via the real dispatch
+    assert app.matrix.swaps == 1
+
+
 def test_draw_dispatches_standings_scene(fake_backend):
     client = FlowClient()
     client.today = []
@@ -803,3 +1197,81 @@ def test_draw_dispatches_standings_scene(fake_backend):
     assert scene(app)[0] == "standings"
     app.draw()  # must not raise; exercises Renderer.draw_standings via the real dispatch
     assert app.matrix.swaps == 1
+
+
+# -- leaders / favourite's top players (#201) ---------------------------------
+
+
+def _club() -> ClubStats:
+    return ClubStats(
+        skaters=(SkaterLine(1, "A. One", 0, 0, 0), SkaterLine(2, "B. Two", 0, 0, 0)),
+        goalies=(),
+    )
+
+
+def test_leaders_never_in_the_implicit_default_rotation(day):
+    app, clock, client = day
+    client.club = _club()
+    for _ in range(6):
+        tick(app, clock, seconds=7)
+        assert scene(app)[0] != "leaders"
+    assert client.club_stats_calls == []
+
+
+def test_leaders_shown_when_listed_even_with_everyone_at_zero(day):
+    app, _, client = day
+    client.club = _club()
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    s = app.select_scene()
+    assert s.kind == "leaders"
+    assert s.leaders.goals.name in {"A. One", "B. Two"}
+    assert client.club_stats_calls == [FAV]
+
+
+def test_leaders_pick_is_stable_between_frames(day):
+    app, _, client = day
+    client.club = ClubStats(tuple(SkaterLine(i, f"P. {i}", 0, 0, 0) for i in range(30)), ())
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    first = app.select_scene().leaders
+    assert all(app.select_scene().leaders == first for _ in range(5))
+    assert len(client.club_stats_calls) == 1
+
+
+def test_leaders_skipped_before_the_season_has_any_players(day):
+    app, _, _client = day
+    app.settings.rotation = [RotationEntry("countdown_preview", 5), RotationEntry("leaders", 5)]
+    assert scene(app)[0] == "preview"  # empty arrays: skipped, not drawn blank
+    assert app._leaders_scene() is None
+
+
+def test_leaders_cached_then_refetched_after_ttl(day):
+    app, clock, client = day
+    client.club = _club()
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    app.select_scene()
+    app.select_scene()
+    assert len(client.club_stats_calls) == 1
+    tick(app, clock, seconds=LEADERS_TTL_SECONDS + 1)
+    app.select_scene()
+    assert len(client.club_stats_calls) == 2
+
+
+def test_leaders_failure_backs_off_and_keeps_cached(day):
+    app, clock, client = day
+    client.club = _club()
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    first = app.select_scene().leaders
+    client.fail_club_stats = True
+    tick(app, clock, seconds=LEADERS_TTL_SECONDS + 1)
+    assert app.select_scene().leaders == first
+    app.select_scene()
+    assert len(client.club_stats_calls) == 2, "failure must not retry every frame"
+
+
+def test_leaders_skipped_with_no_favourite(day):
+    app, _, client = day
+    client.club = _club()
+    app.settings.scoreboard.favourite_team = ""
+    app.settings.rotation = [RotationEntry("leaders", 5)]
+    assert app._leaders_scene() is None
+    assert client.club_stats_calls == []

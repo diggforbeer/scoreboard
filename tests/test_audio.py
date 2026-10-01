@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.audio import DEFAULT_NAME, GoalHornPlayer, default_directories
+from nhl_scoreboard.audio import DEFAULT_NAME, VOLUME_CONTROLS, GoalHornPlayer, default_directories
 
 
 class RecordingRunner:
@@ -22,6 +22,21 @@ class RecordingRunner:
         self.calls.append(cmd)
         if self.raises:
             raise self.raises
+
+
+class RecordingMixerRunner:
+    """Fakes amixer: succeeds only for `succeeds_on` (or every call if None)."""
+
+    def __init__(self, succeeds_on: str | None = None, raises: Exception | None = None) -> None:
+        self.calls: list[list[str]] = []
+        self.succeeds_on = succeeds_on
+        self.raises = raises
+
+    def __call__(self, cmd: list[str]) -> bool:
+        self.calls.append(cmd)
+        if self.raises:
+            raise self.raises
+        return self.succeeds_on is None or self.succeeds_on in cmd
 
 
 def touch(path: Path) -> Path:
@@ -100,6 +115,20 @@ def test_broken_runner_is_caught_not_raised(tmp_path):
     assert player.play("NSH") is False  # logged, not raised
 
 
+def test_uploaded_horns_beat_the_shipped_default_but_not_a_team_file(monkeypatch, tmp_path):
+    upload, shipped = tmp_path / "up", tmp_path / "shipped"
+    upload.mkdir()
+    shipped.mkdir()
+    monkeypatch.setenv("NHL_SCOREBOARD_UPLOAD_HORN_DIR", str(upload))
+    monkeypatch.delenv("NHL_SCOREBOARD_HORN_DIR", raising=False)
+    touch(upload / DEFAULT_NAME)
+    touch(shipped / DEFAULT_NAME)
+    touch(shipped / "NSH.wav")
+    player = GoalHornPlayer([default_directories()[0], shipped])
+    assert player.path_for("TOR") == upload / DEFAULT_NAME
+    assert player.path_for("NSH") == shipped / "NSH.wav"
+
+
 def test_default_directories_respects_override_and_env(monkeypatch, tmp_path):
     monkeypatch.delenv("NHL_SCOREBOARD_HORN_DIR", raising=False)
     dirs = default_directories()
@@ -130,3 +159,35 @@ def test_default_horn_ships_and_is_a_valid_wav():
 def test_default_constructor_wires_enabled_through(enabled):
     player = GoalHornPlayer.default(enabled=enabled)
     assert player.enabled is enabled
+
+
+def test_apply_volume_uses_first_control_that_succeeds(tmp_path):
+    runner = RecordingMixerRunner(succeeds_on="Speaker")
+    player = GoalHornPlayer([tmp_path], volume=42, mixer_runner=runner)
+    assert player.apply_volume() is True
+    # PCM (tried first) fails, Speaker succeeds -- stops there, never tries
+    # Master/Headphone.
+    assert [cmd[3] for cmd in runner.calls] == ["PCM", "Speaker"]
+    assert runner.calls[-1] == ["amixer", "-q", "sset", "Speaker", "42%"]
+
+
+def test_apply_volume_tries_every_control_before_giving_up(tmp_path, caplog):
+    runner = RecordingMixerRunner(succeeds_on="nonexistent-control")
+    player = GoalHornPlayer([tmp_path], volume=50, mixer_runner=runner)
+    assert player.apply_volume() is False
+    assert [cmd[3] for cmd in runner.calls] == list(VOLUME_CONTROLS)
+    assert "Could not set volume" in caplog.text
+
+
+def test_apply_volume_passes_device_through(tmp_path):
+    runner = RecordingMixerRunner(succeeds_on="PCM")
+    player = GoalHornPlayer([tmp_path], device="plughw:1,0", volume=80, mixer_runner=runner)
+    player.apply_volume()
+    assert runner.calls[0] == ["amixer", "-q", "-D", "plughw:1,0", "sset", "PCM", "80%"]
+
+
+def test_apply_volume_broken_runner_is_caught_not_raised(tmp_path):
+    runner = RecordingMixerRunner(raises=OSError("no such device"))
+    player = GoalHornPlayer([tmp_path], volume=50, mixer_runner=runner)
+    assert player.apply_volume() is False  # logged, not raised
+    assert len(runner.calls) == len(VOLUME_CONTROLS)  # every control attempted

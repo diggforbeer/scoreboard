@@ -188,9 +188,10 @@ class ScoreboardConfig:
     #: meaningfully more to read (name, season totals, assist(s)) than the
     #: "GOAL" + score flash.
     goal_detail_seconds: float = 8.0
-    #: "favourite": follow the favourite's game -- countdown, live, final,
-    #: then a preview of the next one. "all": rotate every game today.
-    rotation: str = "favourite"
+    #: How long the three-stars screen (#156) stays up once the favourite's
+    #: game is final and the NHL has named its stars, before the normal
+    #: held-final scoreboard takes over for the rest of final_hold_minutes.
+    three_stars_seconds: float = 8.0
     #: Inside this many hours of puck drop the preview becomes a countdown.
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.
@@ -213,13 +214,73 @@ class ScoreboardConfig:
             "scoreboard", "live_poll_seconds", self.live_poll_seconds
         )
         self.rotate_seconds = _clamp_interval("scoreboard", "rotate_seconds", self.rotate_seconds)
-        self.rotation = self.rotation.strip().lower() or "favourite"
-        if self.rotation not in ("favourite", "all"):
-            log.warning("Unknown rotation %r; using 'all'", self.rotation)
-            self.rotation = "all"
-        if self.rotation == "favourite" and not self.favourite_team:
-            log.warning("rotation = 'favourite' needs a favourite_team; using 'all'")
-            self.rotation = "all"
+
+
+#: The only screens ``_rotate_idle_scenes`` (app.py) knows how to show.
+#: "countdown_preview" auto-switches between countdown/preview based on
+#: countdown_hours, same as always -- which one shows isn't a user choice,
+#: so it isn't split into two separately configurable screens (#150).
+#: "matchup" (#157), "top_west"/"top_east" (#200) and "leaders" (#201) are
+#: opt-in only: never part of the derived default list.
+VALID_ROTATION_SCREENS = (
+    "countdown_preview",
+    "standings",
+    "clock",
+    "matchup",
+    "top_west",
+    "top_east",
+    "leaders",
+)
+
+
+@dataclass(slots=True)
+class RotationEntry:
+    """One slot in the configurable idle rotation (#150), parsed from a ``[[rotation]]`` table.
+
+    Only ever constructed by ``_parse_rotation`` with an already-validated
+    ``screen``/``seconds`` pair -- invalid entries (unknown screen,
+    non-positive seconds) are dropped there and never reach this type.
+    """
+
+    screen: str
+    seconds: float
+
+
+def _parse_rotation(raw: list[Any]) -> list[RotationEntry]:
+    """Parse ``[[rotation]]`` (an array of tables), dropping invalid entries.
+
+    Per #150's decision 3, an invalid entry is never displayed on the panel
+    but is not fatal either -- logged as a warning and skipped, same
+    typo-tolerant convention as every other config value in this module.
+    """
+    entries: list[RotationEntry] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            log.warning("Ignoring [[rotation]] entry that isn't a table: %r", item)
+            continue
+        screen = str(item.get("screen", "")).strip().lower()
+        if screen not in VALID_ROTATION_SCREENS:
+            log.warning(
+                "Ignoring [[rotation]] entry with unknown screen %r (must be one of %s)",
+                item.get("screen"),
+                ", ".join(VALID_ROTATION_SCREENS),
+            )
+            continue
+        seconds = item.get("seconds")
+        try:
+            seconds_value = float(seconds)
+        except (TypeError, ValueError):
+            log.warning(
+                "Ignoring [[rotation]] entry %r with non-numeric seconds %r", screen, seconds
+            )
+            continue
+        if seconds_value <= 0:
+            log.warning(
+                "Ignoring [[rotation]] entry %r with non-positive seconds %r", screen, seconds_value
+            )
+            continue
+        entries.append(RotationEntry(screen=screen, seconds=seconds_value))
+    return entries
 
 
 @dataclass(slots=True)
@@ -232,6 +293,16 @@ class AudioConfig:
     #: Override the search directory for horn WAVs. Empty uses the built-in
     #: search path (NHL_SCOREBOARD_HORN_DIR env var, then the shipped assets).
     horn_dir: str = ""
+    #: 0-100, applied via the ALSA mixer (GoalHornPlayer.apply_volume) --
+    #: not a per-play gain on the WAV itself. 100 leaves the mixer at
+    #: whatever it already was rather than assuming a "correct" starting
+    #: level, matching every other 0-100 field in this project
+    #: (PanelConfig.max_brightness, NightModeConfig.dim_brightness's own
+    #: upper end).
+    volume: int = 100
+
+    def __post_init__(self) -> None:
+        self.volume = max(0, min(100, self.volume))
 
 
 @dataclass(slots=True)
@@ -265,6 +336,44 @@ class WifiSetupConfig:
 
     enabled: bool = True
     port: int = 80
+
+
+@dataclass(slots=True)
+class UpdateConfig:
+    """Daily check for a newer release (#32).
+
+    On by default, but only ever *checks* -- applying is always the admin
+    page's button. This is the one thing that has the board contact anything
+    besides the NHL API on its own (GitHub Releases), hence the switch.
+    """
+
+    enabled: bool = True
+
+
+@dataclass(slots=True)
+class WifiConfig:
+    """How long a WiFi join attempt waits before deciding it failed (#133).
+
+    Shared by boot-time provisioning (scoreboard-provision) and the AP setup
+    page's live join flow -- nhl_scoreboard.wifi's own module-level default
+    (WIFI_CONNECT_TIMEOUT, 90s) is the fallback when this isn't set. 90s is
+    the number that default already used; exposed here as a real setting
+    rather than left as the env var (NHL_SCOREBOARD_WIFI_TIMEOUT) that
+    default is overridden by today, which is meant for tests/low-level
+    overrides, not something a real user would find.
+
+    ``ssid``/``password``/``country`` are deliberately NOT modelled here --
+    scoreboard-provision reads those directly out of the raw TOML dict
+    itself (predates this Settings dataclass) and nothing else needs typed
+    access to them.
+    """
+
+    connect_timeout_seconds: float = 90.0
+
+    def __post_init__(self) -> None:
+        self.connect_timeout_seconds = _clamp_interval(
+            "wifi", "connect_timeout_seconds", self.connect_timeout_seconds
+        )
 
 
 @dataclass(slots=True)
@@ -308,6 +417,42 @@ class NightModeConfig:
         self.cooldown_minutes = max(0.0, float(self.cooldown_minutes))
 
 
+#: Floor for button.hold_seconds. An ordinary tap on a momentary switch
+#: lasts roughly 100-300ms; a hold threshold inside that range would turn
+#: plain taps into holds and erase the short/long distinction entirely.
+MIN_HOLD_SECONDS = 0.5
+
+
+@dataclass(slots=True)
+class ButtonConfig:
+    """Physical push-button on a spare GPIO pin (#50). See ``button.Button``.
+
+    Off by default: not every board has one wired up, and there's no point
+    claiming a GPIO pin nobody pressed anything into.
+    """
+
+    enabled: bool = False
+    #: BCM numbering. 26 (or 16) are free at this project's parallel=1
+    #: panel config -- see CLAUDE.md's Hardware facts pin table.
+    pin: int = 26
+    #: How long a short press silences the goal horn. 0 is valid: a press
+    #: then mutes for no time at all.
+    mute_minutes: float = 60.0
+    #: Held at least this long, a press forces the next rotation instead.
+    hold_seconds: float = 1.0
+
+    def __post_init__(self) -> None:
+        self.mute_minutes = max(0.0, float(self.mute_minutes))
+        if self.hold_seconds < MIN_HOLD_SECONDS:
+            log.warning(
+                "button.hold_seconds (%s) is below the floor of %s seconds; using %s",
+                self.hold_seconds,
+                MIN_HOLD_SECONDS,
+                MIN_HOLD_SECONDS,
+            )
+            self.hold_seconds = MIN_HOLD_SECONDS
+
+
 def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
     """Parse a 24-hour "HH:MM", warning and falling back to ``default`` if it isn't one."""
     try:
@@ -321,10 +466,20 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
+    #: The idle rotation (#150), explicit ``[[rotation]]`` entries in file
+    #: order. Empty when absent from the file -- app.py derives the old
+    #: implicit default list (countdown/preview, standings, clock) from
+    #: ScoreboardConfig's own rotate_seconds/show_standings/
+    #: show_clock_between_games in that case, so an upgraded board changes
+    #: nothing until the owner opts in.
+    rotation: list[RotationEntry] = field(default_factory=list)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
     wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
+    wifi: WifiConfig = field(default_factory=WifiConfig)
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
+    update: UpdateConfig = field(default_factory=UpdateConfig)
+    button: ButtonConfig = field(default_factory=ButtonConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -351,20 +506,34 @@ class Settings:
         return cls(
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
+            rotation=_parse_rotation(raw.get("rotation", [])),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
             wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
+            wifi=_wifi_config(raw.get("wifi", {})),
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
+            update=_build(UpdateConfig, raw.get("update", {})),
+            button=_build(ButtonConfig, raw.get("button", {})),
         )
 
-    def save(self, updates: Mapping[str, Mapping[str, Any]]) -> None:
+    def save(self, updates: Mapping[str, Any]) -> None:
         """Write ``updates`` into the source file, in place, keeping everything else.
 
-        ``updates`` is ``{section: {key: value}}``, e.g.
-        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``.
-        Only those keys are touched -- parsed and re-emitted with ``tomlkit``
-        rather than ``tomllib`` + a plain writer, so every comment in the
-        heavily-annotated boot-partition template survives untouched (#51).
+        ``updates`` is normally ``{section: {key: value}}``, e.g.
+        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``
+        -- only those keys are touched, parsed and re-emitted with
+        ``tomlkit`` rather than ``tomllib`` + a plain writer, so every
+        comment in the heavily-annotated boot-partition template survives
+        untouched (#51).
+
+        The one exception is the ``"rotation"`` key (#150): ``[[rotation]]``
+        is an array of tables, not a flat section of scalars, so its value
+        is the *whole new list* of ``{"screen": ..., "seconds": ...}``
+        dicts to write, not a ``{key: value}`` patch -- there is no
+        per-field update for an ordered, variable-length list, only
+        "replace it". Built with ``tomlkit.aot()`` rather than assigning a
+        plain list, which would round-trip as an inline array rather than
+        a sequence of ``[[rotation]]`` tables.
 
         Updates this object's in-memory settings from the same file afterwards,
         via the normal load path, so the caller sees the merged result without
@@ -378,6 +547,15 @@ class Settings:
             raise ConfigWriteError(f"could not read {self.source_path}: {exc}") from exc
 
         for section, values in updates.items():
+            if section == "rotation":
+                aot = tomlkit.aot()
+                for entry in values:
+                    table = tomlkit.table()
+                    table["screen"] = entry["screen"]
+                    table["seconds"] = entry["seconds"]
+                    aot.append(table)
+                doc["rotation"] = aot
+                continue
             table = doc.get(section)
             if table is None:
                 table = tomlkit.table()
@@ -395,10 +573,14 @@ class Settings:
         reloaded = Settings.from_toml(self.source_path)
         self.panel = reloaded.panel
         self.scoreboard = reloaded.scoreboard
+        self.rotation = reloaded.rotation
         self.audio = reloaded.audio
         self.status = reloaded.status
         self.wifi_setup = reloaded.wifi_setup
+        self.wifi = reloaded.wifi
         self.night_mode = reloaded.night_mode
+        self.update = reloaded.update
+        self.button = reloaded.button
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:
@@ -417,3 +599,16 @@ def _build(cls: type, raw: dict[str, Any]) -> Any:
         else:
             log.warning("Ignoring unknown config key %r in [%s]", key, cls.__name__)
     return cls(**kwargs)
+
+
+def _wifi_config(raw: dict[str, Any]) -> WifiConfig:
+    """WifiConfig only models ``connect_timeout_seconds``.
+
+    ``ssid``/``password``/``country`` live in the same ``[wifi]`` TOML
+    section but are read directly out of the raw dict by
+    scoreboard-provision (predates this dataclass), not through here.
+    Filtered before ``_build()`` sees them so those three don't trip its
+    "unknown key" warning on every single load.
+    """
+    filtered = {k: v for k, v in raw.items() if k == "connect_timeout_seconds"}
+    return _build(WifiConfig, filtered)

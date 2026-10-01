@@ -51,6 +51,12 @@ mmdebstrap:
     # code -- just the module-matrix computation (pyproject.toml's `qrcode`
     # dep), same apt-not-pip reasoning as python3-tomlkit above.
     - python3-qrcode
+    # admin_server.py (#178 story 10) serves the admin page's WebSocket --
+    # pyproject.toml's `websockets` dep, same apt-not-pip reasoning as
+    # python3-tomlkit/python3-qrcode above. Confirmed a real apt package on
+    # this image's Debian release (15.0.1-1) before relying on it (#178
+    # story 1's own investigation).
+    - python3-websockets
     - iw
     # WiFi AP + captive-portal DHCP/DNS for first-boot setup mode (#131),
     # when neither ethernet nor a configured Wi-Fi profile leaves the board
@@ -75,9 +81,18 @@ mmdebstrap:
     # over I2C via this. Harmless if no sensor is wired up -- LightSensor
     # .open() degrades to None the same as a missing /dev/i2c-* would.
     - python3-smbus
+    # For the physical push-button (#50): button.py wraps gpiozero.Button.
+    # Same story as python3-smbus above -- harmless with no button wired up,
+    # and Button.open() degrades to None if the pin can't be claimed.
+    - python3-gpiozero
     # For nhl-scoreboard-grow-rootfs: partition inspection (parted) and
-    # filesystem growth (resize2fs). util-linux (findmnt, lsblk, sfdisk)
-    # is essential and always present, so not listed explicitly.
+    # filesystem growth (resize2fs). util-linux (findmnt, lsblk) is
+    # essential and always present, but sfdisk is NOT -- confirmed live on
+    # real hardware (#129): Debian split fdisk/sfdisk/cfdisk out of
+    # util-linux into their own `fdisk` package a while back, and nothing
+    # else here pulls it in transitively. Without it, grow-rootfs's stage 1
+    # fails outright (sfdisk: command not found) on every boot, forever.
+    - fdisk
     - parted
     - e2fsprogs
     # Build-time, for the HUB75 bindings. Upstream builds through
@@ -136,6 +151,23 @@ mmdebstrap:
       cp -a "$LOGOS"/. "$1/usr/share/nhl-scoreboard/logos/"
       find "$1/usr/share/nhl-scoreboard/logos" -type f -exec chmod 0644 {} +
       echo "Installed $(find "$1/usr/share/nhl-scoreboard/logos" -name '*.png' | wc -l) logo files"
+
+    # ---- admin page (React build) ---------------------------------------
+    # frontend/dist is a CI build product (build-image.yml's own "Build
+    # admin frontend" step, `npm run build`), not a repo file -- Node never
+    # touches the image itself, same "build tools are CI-only" stance as
+    # the rgbmatrix compiler toolchain purged below. admin_server.py
+    # (#178 story 10) serves this directory for any plain HTTP GET.
+    - |-
+      set -eu
+      DIST="$IGconf_sb_srcdir/frontend/dist"
+      if [ ! -f "$DIST/index.html" ]; then
+        echo "ERROR: $DIST/index.html missing. Run 'npm run build' in frontend/ first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/share/nhl-scoreboard/admin"
+      cp -a "$DIST"/. "$1/usr/share/nhl-scoreboard/admin/"
+      find "$1/usr/share/nhl-scoreboard/admin" -type f -exec chmod 0644 {} +
 
     # ---- goal horns ----------------------------------------------------
     # The default siren is synthesized and committed to the repo (not
@@ -200,6 +232,31 @@ mmdebstrap:
       install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard-setup-ap.service" \
         "$1/etc/systemd/system/"
       ln -sf /dev/null "$1/etc/systemd/system/dnsmasq.service"
+
+    # ---- app self-update (#32) -----------------------------------------
+    # The timer only *checks*; installing is the admin page's button, via
+    # nhl-scoreboard-update-apply.service. The driver commit is recorded so
+    # the updater can refuse a release that needs a rebuilt rgbmatrix. The
+    # timer is enabled by the symlink `systemctl enable` itself makes.
+    - |-
+      set -eu
+      for unit in nhl-scoreboard-update.service nhl-scoreboard-update-now.service \
+          nhl-scoreboard-update-apply.service nhl-scoreboard-update.timer; do
+        install -m 0644 "$IGconf_sb_assetdir/systemd/$unit" "$1/etc/systemd/system/"
+      done
+      install -d -m 0755 "$1/etc/systemd/system/timers.target.wants" "$1/var/lib/nhl-scoreboard"
+      ln -sf /etc/systemd/system/nhl-scoreboard-update.timer \
+        "$1/etc/systemd/system/timers.target.wants/nhl-scoreboard-update.timer"
+      git -C "$IGconf_sb_vendordir/rpi-rgb-led-matrix" rev-parse HEAD \
+        > "$1/usr/share/nhl-scoreboard/driver-commit"
+      # Only a real release build sets sb.version (build-image.yml, --
+      # IGconf_sb_version=<tag>, refs/tags/v* only) -- a PR/dev build
+      # leaves it empty, and installed_version() already treats a missing
+      # VERSION file as "unknown (factory image)", so nothing is written
+      # rather than stamping a fake/blank version.
+      if [ -n "${IGconf_sb_version:-}" ]; then
+        printf '%s\n' "$IGconf_sb_version" > "$1/opt/nhl-scoreboard/VERSION"
+      fi
 
     # ---- boot partition settings file --------------------------------
     - |-
@@ -315,7 +372,10 @@ mmdebstrap:
     - |-
       set -eu
       chroot "$1" env PYTHONPATH=/opt/nhl-scoreboard sh -eu -c '
-        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.status_server, nhl_scoreboard.setup_server"
+        python3 -c "import nhl_scoreboard.app, nhl_scoreboard.config, nhl_scoreboard.light_sensor, nhl_scoreboard.button, nhl_scoreboard.admin_server, nhl_scoreboard.setup_server, nhl_scoreboard.updater"
         python3 -m nhl_scoreboard --help >/dev/null
+        # button.py imports gpiozero lazily, so the line above cannot
+        # catch a missing python3-gpiozero; import it directly instead.
+        python3 -c "import gpiozero"
       '
       echo "nhl_scoreboard app modules import correctly"

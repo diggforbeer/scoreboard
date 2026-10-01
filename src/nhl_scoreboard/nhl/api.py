@@ -17,13 +17,17 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .models import (
+    ClubStats,
     Game,
     GoalEvent,
     PlayerSeasonDetail,
+    SeasonSeriesRecord,
     Situation,
     StandingsRow,
+    Star,
     goal_events_from_landing,
     player_details_from_api,
+    three_stars_from_landing,
 )
 
 log = logging.getLogger(__name__)
@@ -109,6 +113,35 @@ class NHLClient:
         club_stats = self._get(f"/club-stats/{team}/now")
         return player_details_from_api(roster, club_stats)
 
+    def season_series(self, game_id: int) -> SeasonSeriesRecord | None:
+        """Head-to-head wins this season between ``game_id``'s two teams (#157).
+
+        A different endpoint from ``landing``: ``right-rail`` carries
+        ``seasonSeriesWins``, oriented to this game's own away/home sides.
+        ``0-0`` (not None) before any regular-season meeting has finished,
+        including all through the preseason. None only when the key is
+        missing or malformed.
+        """
+        payload = self._get(f"/gamecenter/{game_id}/right-rail")
+        record = SeasonSeriesRecord.from_api(payload.get("seasonSeriesWins"))
+        if record is None:
+            log.warning("No usable seasonSeriesWins for game %s", game_id)
+        return record
+
+    def three_stars(self, game_id: int) -> tuple[Star, ...]:
+        """The three stars of a finished game (#156), or ``()`` until they're named.
+
+        A third request to the same landing URL ``situation()`` and
+        ``goal_scoring()`` already fetch, for the same reason those two are
+        separate: each feature polls on its own schedule.
+        """
+        payload = self._get(f"/gamecenter/{game_id}/landing")
+        try:
+            return three_stars_from_landing(payload)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Skipping malformed three stars for game %s: %s", game_id, exc)
+            return ()
+
     def standings(self, date: str = "now") -> list[StandingsRow]:
         """Every team's current standings line, unsorted across conferences.
 
@@ -120,6 +153,14 @@ class NHLClient:
         """
         payload = self._get(f"/standings/{date}")
         return _parse_items(payload.get("standings") or [], StandingsRow.from_api, "standings row")
+
+    def club_stats(self, team: str, date: str = "now") -> ClubStats:
+        """``team``'s season stats per player (#201); both lists empty pre-season.
+
+        ``now`` 307-redirects to ``/club-stats/{team}/{season}/{gameType}``.
+        """
+        payload = self._get(f"/club-stats/{team.strip().upper()}/{date}")
+        return ClubStats.from_api(payload)
 
     # -- plumbing --------------------------------------------------------
 

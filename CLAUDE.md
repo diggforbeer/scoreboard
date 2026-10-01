@@ -49,11 +49,46 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   PR rather than just a link before trusting it. Either way, review what
   it produces the same as any other PR — a real test run doesn't make the
   *change* correct, only that it doesn't fail the suite as written.
+- **What a cloud run can actually execute, concretely.** The current
+  full `--allowedTools` list lives in exactly one place --
+  `claude.yml`'s own `claude_args` -- and is intentionally not
+  duplicated here verbatim, since the two would drift the moment either
+  changes; read that file for the exact string. In broad strokes, as of
+  this writing it covers: venv setup and test/lint (`python3 -m venv`,
+  `source`/`. path/to/activate`, `pip install`, `pytest`, `ruff check`,
+  `ruff format`), `python3` and `nhl-scoreboard` generally plus
+  `playwright install` (for rendering/screenshotting the admin page or
+  demo-mode panel scenes, #153), `git fetch`/`git merge`/`gh pr view`
+  (resolving a merge conflict against `main`), and
+  `gh pr create`/`gh issue create`/`gh issue list`/`gh issue close`/
+  `gh issue view`/`gh label list`. Deliberately **not** `Bash(gh:*)` or
+  general Bash -- see `claude.yml`'s own comments for why, and extend
+  the list there (one confirmed-blocked command at a time, with the
+  real evidence for why) rather than assuming a tool exists because it
+  would be convenient.
+- **To actually reproduce CI locally or in a cloud run**, this is what
+  each `ci.yml` job runs, in order -- the same commands work either
+  place:
+  ```bash
+  python3 -m venv .venv && source .venv/bin/activate   # skip if .venv already exists
+  pip install -e '.[dev]'
+  pytest --cov --cov-report=term-missing   # plain `pytest` (no --cov) is fine too, just less CI-faithful
+  ruff check .
+  ruff format --check .
+  ```
+  `ci.yml` also runs a `shell` job (`shellcheck` on `scripts/*.sh` and
+  the two grow-rootfs/setup-ap scripts) and a `layer-lint` job
+  (`python -m py_compile image/files/scripts/scoreboard-provision` plus
+  parsing the image layer YAML) -- neither is in the cloud run's
+  allowlist today (no `Bash(shellcheck:*)` or general Bash), so a cloud
+  run can't reproduce those two locally; they're still checked by CI
+  itself on the PR regardless.
 
 ## Commands
 
 ```bash
-source .venv/bin/activate            # python3 -m venv .venv && pip install -e '.[dev]' first time
+./scripts/setup-dev.sh               # first time: .venv, dev extras, scoreboard.local.toml, logos
+source .venv/bin/activate
 pytest                               # 199 tests, ~1s, fully offline
 pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
@@ -94,6 +129,19 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   as the real binding would.
 - `tests/test_app.py` `FakeCanvas`/`FakeMatrix`/`FakeClient` are shared by
   `test_flow.py`. `FakeClient` records `situation_calls` and `schedule_calls`.
+- **The one deliberate exception to "hermetic": `tests/e2e/`.** A real
+  Chromium browser (Playwright) against a real `admin_server.py`
+  subprocess serving a real `frontend/dist` build (#178 story 10's own
+  follow-up) -- excluded from the default `pytest` run by a `e2e` marker
+  (`pyproject.toml`'s `addopts = "-q -m 'not e2e'"`), run explicitly with
+  `pytest -m e2e` after `pip install -e '.[dev,e2e]'` +
+  `playwright install chromium` + building the frontend. Its own CI job
+  (`ci.yml`'s `e2e`) does exactly that on every PR. Every story of the
+  admin-page rebuild was verified this same way by hand, once, per story
+  -- this codifies the smallest useful slice (page loads, one save
+  round-trips) so a regression in the "static page + WebSocket on one
+  port" mechanism itself is caught automatically instead of relying on
+  that manual discipline continuing forever.
 
 ## Rendering rules
 
@@ -146,14 +194,20 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
 
 ## App flow
 
-`rotation = "favourite"` (default, `NSH`): `select_scene()` picks live →
-final (held `final_hold_minutes` from when the game *ended*, not from when
-we first saw it final -- exact if we watched it finish, estimated from the
-start time otherwise; see `Game.estimated_end`) → today's game if pregame
-else next from the season schedule → countdown inside `countdown_hours`,
-preview beyond. Falls back to `all` rotation if there is no favourite game
-or the schedule fetch fails. `rotation = "all"` cycles every game today,
-`rotate_seconds` each.
+`_select_base_scene` always tries the favourite first (`_favourite_scene`,
+default favourite `NSH`): `select_scene()` picks live → final (held
+`final_hold_minutes` from when the game *ended*, not from when we first
+saw it final -- exact if we watched it finish, estimated from the start
+time otherwise; see `Game.estimated_end`) → today's game if pregame else
+next from the season schedule → countdown inside `countdown_hours`,
+preview beyond. `_favourite_scene` returns `None` immediately with no
+`favourite_team` configured, or falls through to the idle rotation (below)
+having nothing to show -- either way the board then cycles every game
+today by index, `rotate_seconds` each (#150 removed the old two-value
+`rotation` ("favourite"/"all") setting that used to gate this: a future
+multi-favourite "red-zone" feature needs "which game(s) currently preempt
+the rotation" to be a richer question than that toggle could express, so
+it was deleted rather than built on top of).
 
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
 **only** for the favourite's game and the on-screen game, at
@@ -171,6 +225,35 @@ preview, or a different game mid-rotation. The baseline score for a game is
 recorded on first sighting *without* firing, so a game already 3-1 at
 startup does not celebrate.
 
+The `three_stars` scene (#156) is the NHL's three stars of the favourite's
+game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
+present on a real final game; `NHLClient.three_stars()`, a third separate
+fetch of the same URL `situation()`/`goal_scoring()` already hit). The
+trigger is **not** a detector of its own: it's `refresh()`'s existing
+first-time-final branch (the one that records `ended_at`), filtered to the
+favourite's game and to one we actually watched go live -- a game already
+final at startup is a first sighting, same "baseline without firing"
+precedent as goal detection, so a restart mid-hold doesn't re-show it.
+Fetching is decoupled from that transition (`refresh_three_stars()`, every
+loop tick, throttled to `live_poll_seconds`) for the same reason
+`refresh_goal_details()` is: `score/now` may flip to FINAL/OFF before
+`landing` has named the stars (not verified either way -- the only real
+payload checked was days old), so an empty result is retried until the
+stars arrive, the game leaves `self.games`, or its `final_hold_minutes`
+is over. Fire-once is a separate guarantee (`_three_stars_shown`, pruned
+with the other per-game state, #64). It's the last layer of
+`_apply_goal_override`'s chain, over the held-final `game` scene only,
+for `three_stars_seconds`, then the normal final takes over. Stars are
+whoever the NHL named -- either team, never filtered to the favourite.
+`Star.goals`/`assists`/`points` are **per-game** totals, not
+season-to-date like `GoalEvent`'s `goalsToDate`/`assistsToDate`; a
+goalie's entry carries goalie stats instead (unmodelled), so it reads 0
+and draws no stat. Layout: one static frame, "3 STARS" plus one tiny-font
+line per star (rank, name in team colour, one stat token `2G`/`1A`/`3P`),
+between the two logos like `goal_detail`; a name that doesn't fit drops
+to the surname, then truncates. The one-star-per-frame alternative wasn't
+needed at 128px -- only 12+ letter surnames truncate between logos.
+
 The `standings` scene (#40) is the favourite's conference playoff picture:
 `conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
 favourite's conference by `conferenceSequence` and trim it to the
@@ -183,11 +266,10 @@ chosen. Suppressed entirely until the favourite's own `games_played > 0`:
 `standings/now` keeps serving the just-finished season's *final* table
 all through the off-season rather than an empty result (verified with a
 live call while filing #40), and `games_played` is the only signal on
-hand for "is this actually the current season." Only scoped to
-`rotation = "favourite"`, same precedent as the power-play indicator and
-goal detection above -- shown interleaved with the preview/countdown
-scene, alternating on `rotate_seconds`' own cadence, never in place of a
-live game or a held final. Standings are polled on an hourly TTL
+hand for "is this actually the current season." Only ever shown as part
+of the favourite's idle rotation (below), same precedent as the
+power-play indicator and goal detection above -- never in place of a live
+game or a held final. Standings are polled on an hourly TTL
 (`STANDINGS_TTL_SECONDS`), the same idea as `SCHEDULE_TTL_SECONDS` for the
 season schedule. `clinchIndicator` values are parsed onto `StandingsRow`
 but not rendered or colour-coded -- they're confirmed from only one real,
@@ -201,14 +283,134 @@ in_playoff_position` already computes the real rule from `division_sequence`/
 correction wouldn't need a new API call, just wiring it in; flagged, not
 yet decided on.
 
-`_favourite_scene`'s non-live branch (`_rotate_idle_scenes`) cycles
-countdown/preview, standings (when shown) and, opt-in via
-`show_clock_between_games` (default `false`), the idle clock -- same
-`rotate_seconds` cadence as the standings alternation, now generalised
-over a list instead of a single `% 2`. Off by default so existing
-installs see no change; distinct from `show_clock_when_idle`, which only
-covers the unrelated "no games left to preview at all" case (`_select_
-base_scene`'s fallback when `_favourite_scene` returns `None` entirely).
+`_favourite_scene`'s non-live branch (`_rotate_idle_scenes`, #150) cycles
+a config-driven list of screens -- `countdown_preview` (auto-switches
+between countdown/preview based on `countdown_hours`, same as before;
+which one shows isn't a user choice, so it isn't split into two entries),
+`standings`, `clock` -- each with its own dwell time, read from an
+explicit `[[rotation]]` array of tables in `scoreboard.toml`
+(`config.py`'s `RotationEntry`/`_parse_rotation`). No `[[rotation]]` in
+the file (`Settings.rotation == []`) falls back to `_default_rotation`,
+which derives the pre-#150 list from `rotate_seconds` +
+`show_standings` + `show_clock_between_games` (`show_clock_between_games`
+still defaults `false`, so an upgraded board's rotation is unchanged
+until the owner opts in) -- those three settings are only read for that
+derivation and are ignored the moment an explicit `[[rotation]]` exists.
+An entry with nothing to show for the current pass (`standings` before
+`games_played > 0`, or `countdown_preview` with no upcoming game at all)
+is skipped rather than shown blank; the remaining entries keep cycling.
+`_rotate_idle_scenes` returns `None` only when every configured entry is
+currently unavailable, at which point `_favourite_scene` returns `None`
+too and `_select_base_scene` falls through to cycling today's games by
+index. Unknown `screen` values and non-positive `seconds` are dropped by
+`_parse_rotation` at load time (logged, never fatal, never rendered --
+this repo's usual config-typo convention) so `_rotate_idle_scenes` never
+has to handle an invalid entry itself. Distinct from `show_clock_when_idle`,
+which only covers the unrelated "no games left to preview at all" case
+(`_select_base_scene`'s fallback when `_favourite_scene` returns `None`
+entirely). Admin-UI support for editing `[[rotation]]` itself is #151, not
+built yet -- today it's boot-partition-TOML-only.
+
+`matchup` (#157) is a fourth `[[rotation]]` screen and the first
+**opt-in** one (`top_west`/`top_east`, #200, and `leaders`, #201, below are
+opt-in too): deliberately absent from `_default_rotation`, so a board
+never shows it (or calls `right-rail` at all) unless the owner lists
+`{screen = "matchup", seconds = N}` explicitly. It shows the favourite's
+head-to-head wins this season against the upcoming game's opponent
+(`SeasonSeriesRecord`, drawn away-home like the game scene), fetched per
+upcoming game id on an hourly TTL (`SEASON_SERIES_TTL_SECONDS`) with the
+same backoff-on-failure as standings -- never live-polled. Skipped for
+the pass (not shown blank) with no upcoming game, before the first fetch
+lands, or when the API had no usable tally; `0-0` is a real answer and
+does render. This is the first scene showing opponent-specific data;
+that precedent covers exactly this win tally and nothing broader
+(opponent leaders, injuries, etc. each need their own decision). Only the
+tally ships -- individual past-meeting scores (#168) and team/player
+stat leaders (#169) are separate follow-ups.
+
+`top_west`/`top_east` (#200) are two more opt-in `[[rotation]]` screens
+(also absent from `_default_rotation`): the top five teams of one
+conference by `conferenceSequence`, reusing `conference_standings()`/
+`_refresh_standings()` from the existing `standings` scene (#40) with no
+favourite-window trimming and, by the owner's choice, no `games_played`
+gate -- unlike `standings`, it just shows whatever the latest table says.
+Layout (`Renderer.draw_conference_leaders`) reuses `_draw_standings_rows`
+with a `"WEST"`/`"EAST"` label drawn in the logo's slot instead of the
+favourite's crest, so the conference is named without costing one of the
+five rows that fit; the favourite is still highlighted if it appears in
+the list. **Independently built alongside `leaders` (#201) below, and
+both features happened to reuse the exact same Scene kind and method name
+(`"leaders"` / `_leaders_scene`)** -- merging the two PRs together is what
+surfaced it: Python let the second definition silently shadow the first
+with no error, and `git merge` didn't flag it as a conflict either, since
+the two method bodies sat in different enough surrounding context to
+auto-merge cleanly as sequential, not overlapping, hunks. Renamed this
+one's Scene kind to `conference_leaders` and its method to
+`_conference_leaders_scene`/`draw_conference_leaders` to resolve it --
+worth remembering that a clean `git merge` (no `<<<<<<<` markers) is not
+proof two independently-built features didn't collide on a name; grep for
+duplicate `def`s after merging two features that touch the same area.
+
+`leaders` (#201) is another `[[rotation]]` screen, also opt-in (absent from
+`_default_rotation`): the favourite's top goal scorer, top point getter and
+top two goalies by `gamesPlayed`, from `club-stats/{TEAM}/now`
+(`NHLClient.club_stats()`, hourly TTL `LEADERS_TTL_SECONDS`, same backoff as
+standings, cache keyed by team and reset on a favourite switch). No
+minimum-games floor, by the owner's decision: ties -- everyone at zero early
+on -- are broken at random once per fetch (`team_leaders()`), so the pick
+holds for the TTL rather than flickering per frame. Verified live that the
+endpoint returns *empty* `skaters`/`goalies` pre-season instead of last
+season's table, so the screen is skipped only on empty arrays. Layout: logo
+left like `standings`, tiny-font title + up to four rows. Not yet seen
+against a real in-season payload; the layout snapshots (`leaders_logo`,
+`leaders_text`) still need generating with `pytest --update-snapshots`.
+
+**A live favourite-team switch used to leave this (and the countdown/
+preview screen) stuck on the previous team's opponent for up to an
+hour**, found live via the admin page (#178): the upcoming game handed
+to `_matchup_scene` comes from `next_favourite_game()`, whose own
+`self._schedule` cache is a single season schedule for whichever team it
+was last fetched for, invalidated purely by `SCHEDULE_TTL_SECONDS`
+elapsing -- nothing in that check knows *which* team the cached games
+belong to. `_apply_reloaded_settings` (`app.py`) now explicitly resets
+`self._schedule`/`self._schedule_retry_after` whenever
+`scoreboard.favourite_team` changes, forcing a fresh fetch on the very
+next call rather than waiting out the stale TTL. Only ever mattered for
+the season-schedule fallback -- `favourite_game_today()` reads
+`self.games` (today's full slate, already fetched for every team, not
+favourite-scoped) fresh on every call, so a newly-favourited team with a
+game *today* was never affected by this.
+
+The physical button (#50, `button.py`, `[button]`, off by default) is one
+momentary switch between a GPIO pin and GND -- GPIO 26 by default, 16 the
+documented alternative, both from the verified free-pin table in Hardware
+facts; don't pick another pin without re-checking that table. A short
+press mutes the goal horn for `mute_minutes` (`_on_goal()` still records
+the goal and shows the goal scene, it just skips `horn.play()`); a hold of
+`hold_seconds` calls `advance()`. That long press is a no-op whenever the
+favourite's own scene is up, since that flow never reads `self.index` --
+expected, not a bug; stepping `_rotate_idle_scenes`'s time-based slots is
+out of scope. Thread safety is the non-obvious part: gpiozero fires
+`when_pressed`/`when_released` from its pin-monitoring thread and
+`when_held` from a separate hold-timer thread, so those callbacks only set
+plain bools, and `run()`'s own thread consumes them once per iteration
+(`handle_button()`) and does every actual mutation -- the same rule
+`admin_server.py` follows for its own thread. A long press is told
+apart from a short one by a per-press "hold already fired" bool that
+`when_pressed` resets and `when_released` checks, so a hold never also
+counts as a tap on release. Dependency follows the light sensor's pattern:
+`gpiozero` is a dev extra (tests drive the real `gpiozero.Button` through
+its `MockFactory`, conftest's `mock_pins`), the image gets
+`python3-gpiozero` from apt, and a missing library or unclaimable pin makes
+`Button.open()` return `None`, never raise. Not yet verified on hardware
+(#164, part of #4): notably, which gpiozero pin backend Debian's package picks on the
+Pi, and that it coexists with the HUB75 driver's own direct GPIO access.
+
+Boot volume (#189): `run()` starts a one-shot daemon thread
+(`_apply_boot_volume`) calling `GoalHornPlayer.apply_volume()`, so a
+`volume` set only in the boot TOML reaches the ALSA mixer without an admin
+page visit. Off the render thread because `amixer` blocks; failures are
+logged, never raised. Live reloads still apply via `admin_server.py`.
 
 Shots on goal (#70) render in the same indicator band as the PP/EN
 indicator, as a fallback when neither is active -- `_draw_situation`
@@ -220,7 +422,8 @@ building anything -- an earlier draft of this fetched it from
 check turned up that the score feed already had it for free), so SOG
 has none of situation's scoping/caching (`situation_targets`,
 `live_poll_seconds`) -- it's available for every game the app already
-knows about, live or final, in either rotation mode. `TeamSide.sog`
+knows about, live or final, whether or not it's the favourite's.
+`TeamSide.sog`
 defaults to `0`, never `None`, so the indicator band's old "nothing to
 show, draw a plain rule" case no longer exists -- `_draw_situation`
 always draws something now, and the plain-rule fallback was removed
@@ -240,8 +443,8 @@ panel once the window ends. `suppress_scope` is `tracked` (favourite's
 game only) or `all` (any live game) -- same favourite-vs-all scoping
 precedent as the power-play indicator, goal detection and standings.
 `tracked` with no `favourite_team` silently behaves as `all`; that's a
-valid combination (`rotation = "all"` with night mode on), not a
-misconfiguration, so no warning. `dim_brightness = 0` is zero-power
+valid combination (no `favourite_team` configured, with night mode on),
+not a misconfiguration, so no warning. `dim_brightness = 0` is zero-power
 blanking: `draw()` clears and swaps the canvas and skips scene selection
 and rendering entirely, rather than trusting brightness 0 alone to be dark
 on every backend. Transitions are instant; eased steps were considered and
@@ -273,6 +476,20 @@ exit; with `show_logos = false` every step is just text.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
+- `gamecenter/{id}/right-rail` (#157, a different endpoint from
+  `landing`) has `seasonSeriesWins: {awayTeamWins, homeTeamWins}` --
+  oriented to *that game's own* away/home (verified: the same NSH-CGY
+  series reads `0-3` from a game NSH hosted, `3-0` from one it played
+  away), season-to-date across completed regular-season meetings only
+  (every meeting's right-rail shows the same total, not a running count),
+  OT/SO wins counted as wins, `0-0` all through the preseason. No team
+  abbreviations on that object; pair it with the `Game` it was fetched
+  for. `seasonSeries[]` lists every meeting: completed ones carry
+  `awayTeam.score`/`homeTeam.score` and `gameOutcome.lastPeriodType`
+  (`REG`/`OT`, plus `otPeriods`), future ones have no scores -- verified
+  against real 2025-26 responses but not parsed or shown yet (#168). No stat
+  leaders here: `teamGameStats` is per-game aggregates (shots, PP,
+  penalties), not leaders.
 - `clock.inIntermission` lags the period actually ending -- confirmed
   against a real live game (NSH @ CAR, 2026-09-24) sitting at
   `timeRemaining: "00:00"`, `running: false`, `inIntermission: false` for
@@ -294,9 +511,43 @@ exit; with `show_logos = false` every step is just text.
   `regular` mapping, pin for pin. OE on GPIO 18 = hardware PWM without the
   Adafruit solder mod. It back-powers the Pi: **one** supply, into the
   board's barrel jack; nothing into the Pi's USB-C.
+- **A wrong `hardware_mapping` is a silent failure, not an error** --
+  verified on real hardware (an Adafruit RGB Matrix Bonnet left on the
+  shipped `"regular"` default): `nhl-scoreboard.service` starts, stays
+  active, keeps polling the NHL API, logs nothing wrong -- it is just
+  driving the wrong physical GPIO pins for that adapter, so the panel
+  stays completely dark with zero diagnostic signal anywhere
+  (`systemctl status`/`journalctl` both look completely healthy).
+  Switching to `"adafruit-hat"` (no other change) fixed it immediately.
+  `[panel]` settings including `hardware_mapping` don't hot-reload
+  (baked into the constructed `RGBMatrix`) -- a restart is required
+  after changing it, not just a config save. First thing to check on a
+  dark panel with an otherwise-healthy service.
 - `dtparam=audio=off` and `isolcpus=3` are required; the HUB75 driver and
   onboard audio share the PWM peripheral. Audio → USB. Not the 3.5mm jack,
-  not I2S (GPIO 21 is LAT).
+  not I2S -- **the actual conflict is GPIO 18** (OE, hardware PWM per the
+  bullet above), which is also the Pi's native I2S PCM clock pin. A
+  previous version of this note said "GPIO 21 is LAT" -- that was wrong
+  (see the pin table below) and has been corrected; the practical advice
+  (don't enable I2S) was right regardless.
+- **Full `regular`-mapping GPIO pin table, confirmed against the exact
+  vendored commit** (`scripts/fetch-vendor.sh`'s pinned `MATRIX_REF`),
+  not the library's docs/wiki, which can drift from what's actually
+  pinned -- read the pinned commit's `lib/hardware-mapping.c` struct
+  literally rather than trust prose:
+  OE=18, CLK=17, Strobe/LAT=4, address A-E=22/23/24/25/15,
+  chain-0 RGB (both sub-panel rows)=R1:11 G1:27 B1:7 R2:8 G2:9 B2:10.
+  That's every pin this driver claims at `parallel=1` (this project's
+  config) -- also confirmed by reading `lib/framebuffer.cc`'s
+  `InitGPIO`, which only ORs chain-1/chain-2 pins into the claimed-pins
+  bitmask when `parallel >= 2`/`>= 3` respectively, so those pins are
+  never touched at `parallel=1` regardless of what the mapping struct
+  lists for them. Genuinely free GPIOs on the 40-pin header at this
+  project's config: 5, 6, 12, 13, 14, 16, 19, 20, 21, 26 (2/3 are taken
+  by the BH1750 sensor's I2C bus, #44) -- 14/15 are the UART pair (15
+  already claimed above), so prefer 26 or 16 for anything new (e.g.
+  #50's button) over 14, same "pick an unremarkable pin" reasoning that
+  put the sensor on 2/3.
 - Pixel pitch (`pitch_mm`) is informational; the driver never sees it.
 - Panel spec sheet (the actual purchased hardware): 64×32 / 2048 dots,
   160×80mm at P2.5, 1R1G1B, ≥140° viewing angle, 1/16 scan, HUB75 header,
@@ -312,6 +563,15 @@ exit; with `show_logos = false` every step is just text.
   step needed. Team-specific horns (`{ABBR}.wav`) are a user drop-in slot,
   same reasoning as logos not being redistributed -- but those, if a user
   supplies them, are never committed either.
+- **Horn uploads (#193)**: the admin page's Audio tab uploads a WAV for
+  `default` (`_default.wav`) or one `TEAM_COLORS` abbreviation, over the
+  existing WebSocket as base64 (`upload_horn`; `max_size` raised to fit the
+  2 MB `HORN_MAX_BYTES` cap) rather than a new HTTP POST path -- the file
+  name is never client-supplied, only a validated team key. Files land in
+  `/var/lib/nhl-scoreboard/horns` (`audio.upload_directory()`, persistent
+  across reflash/update, unlike `/usr/share`), which `default_directories()`
+  searches before the image-baked directory. Not verified on hardware (#4);
+  deleting an upload back to the shipped horn is not built.
 
 ## Image build facts (each cost a failed CI run)
 
@@ -555,8 +815,11 @@ actually joining the chosen network is #133, not built yet.
   (`ssid_other`) wins over whatever radio button (`ssid_choice`) happens
   to still be selected.
 - **A new stdlib module, not a new systemd service.** `setup_server.py`
-  follows `status_server.py`'s own pattern (`http.server`, no
-  dependencies) and is started/stopped by `ScoreboardApp` itself
+  is `http.server`-based, no dependencies -- the pattern the original
+  `status_server.py` used too, before it was replaced by `admin_server.py`
+  (#178 story 10; unlike that page, `setup_server.py` genuinely must work
+  offline, so it stays stdlib-only on principle, not just by inheritance)
+  -- and is started/stopped by `ScoreboardApp` itself
   (`_sync_setup_server()`, called once per `run()` loop tick), gated on
   nothing but whether `nhl-scoreboard-setup-ap`'s own state file exists --
   the same signal `_ap_setup_scene` already keys off of for the panel's QR
@@ -596,6 +859,364 @@ actually joining the chosen network is #133, not built yet.
   at all, and this page is reachable by typing its fixed address manually
   regardless of whether the "Sign in to network" prompt ever appears.
 
+## Wiring the setup page's submission into a real join (#133)
+
+Closes the loop #131/#132 leave open: turning a submitted SSID/password
+into an actual network join, safely, with the AP setup flow's own
+first-time-user constraints -- not #51's original boot-time-only
+assumptions.
+
+- **`apply_wifi()` moved from `scoreboard-provision` into
+  `nhl_scoreboard/wifi.py`**, an importable module, so both the boot-time
+  caller and this live join flow call the exact same tested join/rollback
+  path instead of two implementations of "try new credentials, roll back
+  on failure." `scoreboard-provision` itself now just parses `[wifi]` out
+  of the TOML and hands it off -- the 26 existing subprocess-level tests in
+  `tests/test_scoreboard_provision.py` needed zero changes after this
+  move, since they exercise behaviour through the script's own CLI
+  boundary, not where the code physically lives.
+- **`apply_wifi()` now returns `bool`** (`True` for an already-current
+  profile or a genuine new success, `False` only when a real attempt was
+  made and the network never came up) -- the boot-time caller still
+  ignores it, but the live join flow needs to know which panel message and
+  which of "drop the AP" / "bring it back" to do next.
+- **The panel is the feedback channel, not the HTTP response** (decided
+  directly in #133's own issue discussion, not assumed): attempting the
+  join means switching the radio out of `Mode ap`, which tears down the AP
+  the phone's setup-page request arrived over -- killing that connection
+  before any response describing success/failure could reach it.
+  `wifi_join.py`'s `WifiJoinAttempt` writes a state file
+  (`/run/nhl-scoreboard-wifi-join-state.json`) with `attempting`/
+  `connected`/`failed`, read by `_wifi_join_scene()` the same way #141's
+  `_ap_setup_scene()` already reads its own -- and given **top** priority
+  in `select_scene()`, even over `ap_setup`: a failed attempt restarts
+  `nhl-scoreboard-setup-ap`, which recreates its own state file underneath
+  the still-counting-down "Failed..." message, and that message has to win
+  until its own display window (`OUTCOME_DISPLAY_SECONDS`, 15s) elapses.
+- **The join runs on a background thread**, off `ScoreboardApp.run()`'s own
+  loop -- `WifiJoinAttempt.poll()` is called every frame and must never
+  block; a real attempt can take up to `connect_timeout_seconds` (90s by
+  default), and freezing score polling/rendering for that long would
+  defeat the point of a scoreboard that's still trying to show something
+  during setup.
+- **A failed join restarts AP mode** (also decided directly, not a
+  judgment call left to whoever built this) so the person can reconnect
+  and retry from the same phone -- treated as the *expected* retry path,
+  not a rare edge case, which matters given the real-hardware finding
+  below.
+- **The AP is only ever stopped/started via `systemctl {stop,start}
+  nhl-scoreboard-setup-ap.service`** (#173), never by running the
+  setup-ap script directly. `start` ends in `exec dnsmasq`, so dnsmasq is
+  the unit's Main PID; the original direct-script call tore the radio down
+  under it without systemd ever stopping the unit, orphaning dnsmasq behind
+  a unit that stayed "active" forever while `wlan0` was genuinely down
+  (diagnosed live on a Pi 3B+). `systemctl stop` kills the tracked process
+  and runs the unit's own `ExecStopPost` teardown. A non-zero `systemctl`
+  exit is logged as a warning, not ignored. The script itself also retries
+  each `iwctl ap ... start*` once before giving up on that mode -- a
+  defensive guard against this chip's known transient mode-switching
+  failures, not proven to eliminate them (#4).
+- **`[wifi] connect_timeout_seconds`** (default 90, matching
+  `nhl_scoreboard.wifi`'s own `WIFI_CONNECT_TIMEOUT` default) is a real
+  `WifiConfig` dataclass field now, exposed properly instead of left as the
+  `NHL_SCOREBOARD_WIFI_TIMEOUT` env var (still there, still the underlying
+  default, but that one's for tests/low-level overrides, not something a
+  real user would find). `ssid`/`password`/`country` stay deliberately
+  unmodelled in `WifiConfig` -- `scoreboard-provision` reads those straight
+  out of raw TOML (predates this dataclass) and nothing else needs typed
+  access to them; `Settings.from_dict` filters the raw `[wifi]` dict down
+  to just `connect_timeout_seconds` before handing it to `_build()`, so
+  those three don't trip its "unknown key" warning on every single load.
+- **Real-hardware risk, not yet re-verified after this landed**: repeated
+  rapid AP start/stop/mode-switch cycling (manual testing during #132's own
+  investigation) put this board's radio into a bad state once --
+  `iwctl ap <dev> start` failing with `START_AP failed: -22` and
+  `Could not register frame watch type ...: -114` in `iwd`'s own log,
+  recovered only by backing off / a clean boot. Given the decision above
+  that failure-then-retry is the expected path, not an edge case, this
+  needs real-hardware testing of *that specific path* (submit bad
+  credentials, confirm the AP comes back, retry, repeat a few times) before
+  trusting it, not just the happy path -- #4, same as everything else here
+  that needs a Pi.
+
+## Admin page frontend (React, deployed to the device -- #178)
+
+The old status/config page (`status_server.py`, HTML-forms-with-full-page-
+POST) has been replaced with a real React frontend + WebSocket live
+updates, and as of Story 10 it's the page that actually ships and starts
+on boot -- `status_server.py` is deleted. Tracked issue #178 has the full
+design, phasing, and decisions (Vite, TypeScript, incremental rollout,
+WebSocket kept scoped to update-check/apply progress and save-without-
+reload, plus a read-only status snapshot -- not live game/score data,
+and not a channel for pushing scene changes to the panel itself). Built
+as vertical slices, one story at a time. **The server module was renamed
+`ws_server.py` -> `admin_server.py` in Story 10**, once it started serving
+the built static page too, not just a WebSocket -- every story below
+before Story 10 refers to it by its old name, describing what was true
+when it was written; that history is left as-is rather than rewritten.
+
+- **Story 1 (done): prove the pipeline end to end.** `frontend/` (a Vite +
+  React + TypeScript SPA, `frontend/README.md` has the exact run commands)
+  connects over a real WebSocket to `src/nhl_scoreboard/ws_server.py` (a
+  new, minimal `websockets`-based server) and displays one real piece of
+  app state -- the installed version, the same value
+  `updater.installed_version()` already provides the admin page's status
+  grid. Deliberately narrow: local-dev only, not started by
+  `ScoreboardApp`, not wired into the image build or any systemd unit, one
+  message on connect and nothing further. `websockets` lives in
+  `pyproject.toml`'s `dev` extras, not `[project]` dependencies, until a
+  later story actually deploys this -- confirmed live that
+  `python3-websockets` (15.0.1-1) is a real apt package on this image's
+  Debian release for when that day comes, so it'll follow the same
+  apt-not-pip pattern as everything else on the device.
+- **status_server.py's own "no client-side JS" framing was corrected
+  first (#177)**: it was never actually required to work offline the way
+  `setup_server.py`'s captive-portal page genuinely is (that page *is* the
+  mechanism for getting the board online at all; the admin page's whole
+  purpose only makes sense once the board already has real connectivity).
+  That correction is what cleared the way for this -- `setup_server.py`
+  itself is explicitly out of scope for any of this and stays exactly as
+  it is.
+- **Story 2 (done): the first real section, Audio.** Chosen deliberately
+  as the smallest section (`enabled`/`device`/`horn_dir`, 3 fields) to
+  prove the read/edit/save round trip before a bigger one. `ws_server.py`
+  now sends the current `[audio]` values on connect (via `Settings.load`,
+  same as `status_server.py`) and handles a `save` message the same way
+  `status_server.py`'s `/save` POST does -- write into a throwaway
+  `Settings` instance, reload fresh from disk afterward, never mutate
+  anything in memory (this process has no live `ScoreboardApp` to mutate
+  anyway). Validation is hardcoded to Audio's own 3 fields, not
+  generalised over `status_server.py`'s `_Field`/`_coerce_section` shape
+  -- one section isn't enough evidence yet for what the right shared
+  abstraction is; that's a later story's job once a second section shows
+  the actual pattern, not before. Verified with a real headless-browser
+  interaction (not just unit tests): unchecked the box, typed a device
+  string, clicked Save, watched "Saved." appear with zero page reload --
+  the actual thing this whole rebuild is for.
+- **Story 3 (done): the idle rotation list (`[[rotation]]`, #150/#151).**
+  Unlike Audio (fixed scalar fields), this is an ordered, variable-length
+  list -- `config.py`'s own `Settings.save()` already special-cases
+  `"rotation"` to replace the whole list rather than patch keys (see its
+  docstring), so `ws_server.py` just validates the incoming list the same
+  way `config.py`'s `_parse_rotation` does (unknown screen, non-positive
+  seconds) and passes it through -- except a live save rejects the whole
+  list on the first bad row instead of silently dropping it, since a
+  person editing this page should see exactly what's wrong, unlike a
+  hand-edited boot TOML where a typo must not stop the board booting.
+  Also enforces the same row cap `status_server.py`'s HTML version
+  recommended (`ROTATION_MAX_ROWS = 8`), server-side, not just via the
+  frontend disabling its own button. **The numeric "order" field and the
+  full-page-round-trip add/remove buttons in the HTML version existed
+  specifically to work around having no client-side JS (#151) -- gone
+  here.** Row order is just the list's own order now; the frontend does
+  real add/remove/reorder (↑/↓ swap-with-neighbour) in local state, one
+  Save sends the whole list. Verified with a real headless-browser
+  interaction: added three rows, edited two, removed one, reordered the
+  remaining two, saved, and confirmed the file on disk matched exactly
+  (right screens, right seconds, right order) -- not just that the UI
+  looked right.
+- **Story 4 (done): Reboot and Software update.** The first two things
+  that are actions on the real system rather than config file edits, and
+  the first real use of *push* rather than request/response --
+  `updater.check()`/`apply()` run out of process (the real
+  `nhl-scoreboard-update-{now,apply}.service` units `status_server.py`
+  already triggers via `systemctl start --no-block`, not reimplemented
+  here) and write `updater.STATE_FILE` on their own schedule, with no way
+  for this process to know when except by watching for it -- exactly the
+  "click Check, refresh manually to see if anything changed" gap this
+  whole rebuild started from. `_watch_update_state` polls that file's
+  mtime and broadcasts a fresh `config`/`update` message to *every*
+  connected client the moment it changes -- the first thing here that
+  isn't scoped to the one connection that asked. Reboot has no such
+  watch: the board going down *is* the confirmation, and nothing is left
+  running to report back once it does. Verified two ways: a real headless-
+  browser click-through with the real `systemctl` shadowed by a fake
+  binary on `PATH` (logging its args instead of running -- confirmed the
+  exact right unit names got called, and confirmed the real one was never
+  touched), and, separately, writing straight to the state file with zero
+  clicks at all to prove the actual point -- the page updated itself
+  (installed/latest/checked-at, the Install button appearing) with no
+  user action whatsoever, which is the literal thing this rebuild was
+  for.
+- **Story 5 (done): Scoreboard, 16 fields -- the biggest section, and
+  the moment to actually generalise.** Every earlier entry here said
+  hardcoding each section was deliberate because one or two sections
+  wasn't enough evidence for the right shared shape; Scoreboard is that
+  third data point, and it's the same bool/str/float/select shape Audio
+  already had, just five times the field count. `_FieldSpec` +
+  `_AUDIO_FIELDS`/`_SCOREBOARD_FIELDS` replace the old one-off
+  `_coerce_audio` with a generic `_coerce_scalar_fields`, used by both
+  sections now (`[[rotation]]` stays its own thing -- a variable-length
+  list was never the same shape). Also exposes `goal_detail_seconds`
+  and `three_stars_seconds` (#122, #156), which were never actually
+  added to `status_server.py`'s own HTML form -- a real, small gap in
+  the page this is replacing, fixed in passing rather than carried
+  forward. Verified with a real headless-browser interaction: edited
+  `favourite_team`, unchecked `show_logos`, changed `logo_variant`,
+  edited a timing field, saved, and confirmed both the re-rendered form
+  (read back from the live DOM, not just component state) and the file
+  on disk matched exactly.
+- **Story 6 (done): Status page, `enabled`/`port`.** The smallest
+  section after Audio, and the first `"int"` field -- `_FieldSpec`
+  gained that kind (`port` must be a whole number, not `8080.5`;
+  everything before this had been bool/str/float). Otherwise nothing
+  new: straight application of the `_coerce_scalar_fields` pattern
+  Scoreboard's story already proved out. Placed after Audio, matching
+  `status_server.py`'s own section order. Verified with a real
+  headless-browser interaction: changed the port, saved, confirmed
+  "Saved." with the new value both in the live DOM and on disk.
+- **Story 7 (done): Panel -- 17 fields, the biggest section yet** (every
+  `PanelConfig` field except `pitch_mm`, which `status_server.py`'s own
+  form has never exposed either -- informational only, the driver never
+  reads it, per the Rendering rules note above). First real use of a new
+  `_FieldSpec.restart_required` flag: 12 of the 17 fields are baked into
+  the constructed `RGBMatrix` and only take effect after
+  `nhl-scoreboard.service` restarts (see the "wrong hardware_mapping is a
+  silent failure" hardware note); only the five brightness-related fields
+  (`brightness`, `auto_brightness`, `min_brightness`, `max_brightness`,
+  `brightness_poll_seconds`) hot-apply. The flag is informational for the
+  frontend to badge -- it doesn't change validation, same idea as
+  `status_server.py`'s own per-field `restart_required`. Also the second
+  real use of the `"select"` kind (`hardware_mapping`, `rgb_sequence`),
+  after `logo_variant` in Scoreboard. The frontend groups the 17 fields
+  into three subheadings (Geometry, Driver/PWM, Brightness), badging the
+  two restart-required groups -- the natural tie-in to the Reboot card
+  two sections down, which is literally what those fields need after a
+  save. Verified with a real headless-browser interaction: edited one
+  field of each kind (int, select ×2, bool, str, float), saved, confirmed
+  the live DOM reflected every change, and confirmed
+  `scoreboard.local.toml` on disk matched exactly -- including that
+  `pitch_mm`, never sent, was untouched.
+- **Story 8 (done): Night mode (#92) -- 6 fields, none
+  `restart_required`** (night mode is polled live, nothing here is baked
+  into a constructed object the way Panel's fields are). The first
+  section whose payload can't be a blind `dataclasses.asdict()` of the
+  settings dataclass: `NightModeConfig` carries derived `start`/`end`
+  fields (`datetime.time`, `field(init=False)`, parsed once from
+  `start_time`/`end_time` in `__post_init__` so the app never re-parses
+  the strings itself) that aren't JSON-serialisable and were never a
+  value a person sets directly -- `_night_mode_payload` builds the dict
+  by hand instead, naming only the 6 editable fields, rather than
+  extending `_coerce_scalar_fields`'s asdict-based send helpers to cope
+  with a non-serialisable field. Otherwise a plain `_coerce_scalar_fields`
+  section: `start_time`/`end_time` are validated only as strings, not
+  against the `HH:MM` format -- same as everywhere else in this project,
+  `_parse_hhmm` (config.py) already warns and falls back to a default on
+  a bad value rather than rejecting it, so there's nothing here for the
+  live editor to additionally enforce. Verified with a real
+  headless-browser interaction: toggled `enabled`, edited both times,
+  changed `dim_brightness`, switched `suppress_scope` to `all`, edited
+  `cooldown_minutes`, saved, confirmed the live DOM and
+  `scoreboard.local.toml` on disk matched exactly.
+- **Story 9 (done): Wi-Fi -- the smallest section yet, one field**
+  (`connect_timeout_seconds`). `ssid`/`password`/`country` live in the
+  same `[wifi]` TOML table but are deliberately not modelled by
+  `WifiConfig` at all (`config.py`'s own `_wifi_config` filters them out
+  before `_build()` sees them) -- actually joining a network is
+  `setup_server.py`'s job, the offline-first captive-portal page, out of
+  scope for this whole rebuild (see the note right after Story 1). A
+  save here only ever patches `connect_timeout_seconds`, matching
+  `Settings.save()`'s own per-key patching -- verified with a real
+  headless-browser interaction against a dev config with no `[wifi]`
+  table at all yet (the boot-partition template ships without one):
+  changed the timeout, saved, confirmed the new table was created on
+  disk with exactly that one key, and confirmed with `ssid`/`password`
+  already present in the file (a real-world case, since scoreboard-
+  provision writes those from a completed setup flow) that a save
+  doesn't disturb them.
+- **Story 10 (done): deploy to the real device, retire `status_server.py`.**
+  The owner's own call, made live in conversation after trying Story 9's
+  build locally ("we can delete the old site, and make this the one that
+  starts on boot now"), with two follow-up decisions surfaced and
+  confirmed before touching anything: port the status snapshot into the
+  new page first (below), and continue on the same PR rather than filing
+  a new issue. Three things landed together:
+  1. **One port serves the built React page and the WebSocket.**
+     `websockets`' own `process_request` hook (confirmed present in the
+     pinned `websockets>=13`, tested directly against 17.1 before relying
+     on it) intercepts every request; a genuine WebSocket upgrade
+     (`Upgrade: websocket` -- what a real browser's `new WebSocket(...)`
+     always sends, checked directly rather than assumed) is let through
+     to the existing handler, anything else is served as a static file
+     out of `ADMIN_DIR` (`/usr/share/nhl-scoreboard/admin` on the device,
+     same directory-env-var pattern as fonts' `NHL_SCOREBOARD_FONT_DIR`),
+     falling back to `index.html` for this single-page app's one route.
+     No reverse proxy, no second port. `frontend/dist` is a CI build
+     product now (`build-image.yml`'s new "Build admin frontend" step,
+     `actions/setup-node` + `npm ci` + `npm run build`, right before the
+     image build itself) that the image layer's own `customize-hooks`
+     copies in exactly the way team logos already are -- Node never
+     touches the device.
+  2. **`AdminServer` wraps the server on a background thread**, exposing
+     the same `start()`/`stop()`/`port` shape `StatusServer` had, so
+     `app.py`'s integration is a small diff at the same three call sites
+     `StatusServer` was built/started/stopped/rebuilt from (`__init__`,
+     `run()`, `reload_config_if_changed()`), not a rewrite of
+     `ScoreboardApp` itself. `StatusServer` ran a blocking `http.server`
+     loop in a plain thread; `AdminServer` runs its own `asyncio` loop in
+     the thread instead, signalling `stop()` via
+     `asyncio.run_coroutine_threadsafe` rather than an OS-level shutdown
+     call. `[status]`'s `enabled`/`port` fields are reused as-is -- same
+     TOML section, same meaning, just a different implementation
+     underneath; an existing board's boot-partition config needed no
+     migration.
+  3. **The status snapshot moved over too, not just the config editor.**
+     `status_server.py` served two genuinely different things:
+     `ScoreboardApp.status_snapshot()` (scene, current game, last poll,
+     last error -- read-only "headless debugging" state, found during
+     this story's own investigation, not something #178's earlier stories
+     had touched) alongside the HTML-forms editor. Dropping the snapshot
+     too would have been a real regression for anyone debugging a board
+     with no HDMI output, so a new "Board status" section (rendered
+     generically, key by key, same as `status_server.py`'s old
+     `.stat-grid`) ships in the same story. `SNAPSHOT_PROVIDER` is the
+     same "handed to it as a callable" relationship `StatusServer`'s own
+     `snapshot` parameter had; broadcast on change (`_watch_snapshot`),
+     same proven shape as `_watch_update_state`.
+
+  **Wi-Fi `ssid`/`password`/`country` editing did *not* carry over** --
+  explicitly dropped, a real decision surfaced and confirmed before
+  deleting `status_server.py`, not an oversight: that page's Wi-Fi
+  section had raw-TOML fields (unrelated to `WifiConfig`) that restarted
+  `scoreboard-provision.service` on save, letting an already-online board
+  switch networks directly from the admin page. The AP/captive-portal
+  flow (#131-#133) is now the one way to (re)join a network -- it covers
+  the far more common "board has no network yet" case with a real retry/
+  rollback state machine that the old direct-edit path never had.
+  Changing an already-online board's Wi-Fi now means walking it through
+  that flow (e.g. by disconnecting it) rather than editing a field here.
+
+  Verified two ways, since this story has no #4-style real-hardware
+  check available: a full local production-mode run (`npm run build`,
+  then `admin_server.py` pointed at the built `dist/` with
+  `NHL_SCOREBOARD_ADMIN_DIR`, no Vite involved at all) -- confirmed the
+  built page loads, a save round-trips, and the WebSocket still works on
+  the same port a static GET does; and the normal Vite-dev-server pass
+  used for every earlier story. **Not verified on real hardware** (no Pi
+  in this session) -- flagged the same way every other real-hardware-only
+  gap in this project is (see `image/layer/nhl-scoreboard.yaml`'s own
+  `python3-websockets` addition and CLAUDE.md's Image build facts).
+- **Follow-up, same day: the manual verification above is now a real CI
+  job.** `tests/e2e/test_admin_page_smoke.py` + `ci.yml`'s `e2e` job do
+  the same "browser against a built page + a save round trip" check on
+  every PR -- see Testing conventions' own note on it. Doesn't replace
+  real-hardware verification (#4), just catches a regression in the
+  static-page-plus-WebSocket-on-one-port mechanism itself before it ships.
+- **Follow-up (#185): the in-app updater redeploys the frontend too.**
+  `build-app-bundle.py` adds `frontend/dist` to the one release bundle as
+  a top-level `admin/` (when built -- `build-image.yml` builds it before
+  the bundle step), so the existing sha256 covers it and the page can't
+  lag the backend. `updater.apply()` stages it beside `ADMIN_DIR`, swaps
+  it in by rename with the app tree, and restores the old one on
+  rollback. A bundle with no `admin/` leaves the page untouched. One
+  version signal for both: they always ship together.
+- Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
+  question (every save/action so far has gone straight over the existing
+  WebSocket connection rather than a separate HTTP endpoint -- worth
+  confirming that's still the right call once something needs a shape
+  this doesn't fit as naturally), and real-hardware verification of
+  Story 10 itself (#4).
+
 ## Disk-destructive code (grow-rootfs)
 
 `image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
@@ -621,16 +1242,13 @@ same bar as everything else in this repo.
 - MBR only. GPT has a backup header at the end of the disk that would
   also need relocating; this script does not attempt that, and this
   image's layout (`image/mbr/simple_dual`) is MBR, so it doesn't need to.
-- **Cannot be verified without real hardware** (tracked in #4, same as
-  everything else that needs a Pi). What *is* tested,
-  `tests/test_grow_rootfs.py`: the actual script, run for real against a
+- `tests/test_grow_rootfs.py`: the actual script, run for real against a
   faked toolchain (every external command it touches is a recording
-  fake) -- this catches shell logic bugs and confirms the safety checks
-  actually refuse when they should, but cannot confirm `sfdisk`/
-  `resize2fs` behave as expected against a real disk. When touching this
-  script, mutation-test the change the way the start-sector assertion
-  was verified: deliberately break the thing the test is supposed to
-  catch and confirm it fails before trusting it passes.
+  fake) -- catches shell logic bugs and confirms the safety checks
+  actually refuse when they should. When touching this script,
+  mutation-test the change the way the start-sector assertion was
+  verified: deliberately break the thing the test is supposed to catch
+  and confirm it fails before trusting it passes.
 - **Was disabled #121-#129, re-enabled by #129.** A real Pi 4 first boot
   once never came up at all (no DHCP lease on wifi *or* ethernet, LED
   matrix never showed anything, `sudo fdisk`/Disk Management from another
@@ -646,23 +1264,48 @@ same bar as everything else in this repo.
   EEPROM issue; #4's hardware-verification checklist having this box
   checked with zero corroborating detail (no `journalctl` excerpt,
   nothing) was never real evidence either way. #129 re-enabled the
-  `enable-units` line on that basis, once a board existed that booted
-  reliably (post EEPROM reflash, post #126's audio/panel fix) -- but that
-  re-enable has **not itself** been confirmed against a real
-  resize-and-reboot cycle on hardware yet (root partition actually grows,
-  board comes back up). Don't treat the line being present as equivalent
-  to that having happened; if a real board ever hangs on first boot again
-  with this enabled, that's the first real evidence of an actual
-  grow-rootfs bug (as opposed to the EEPROM red herring) -- capture it
+  `enable-units` line on that basis.
+- **Confirmed against a real resize-and-reboot cycle on hardware,
+  2026-09-28 (#129)** -- and it did NOT work out of the box, catching two
+  real bugs neither `tests/test_grow_rootfs.py`'s faked toolchain nor CI
+  could have caught:
+  1. `findmnt / -o source -n` reported `/dev/disk/by-slot/system` on this
+     board's OS, not a `/dev/mmcblk0pN`-style path. The script's
+     `PART_NUM=$(echo "$ROOT_PART" | grep -o '[0-9]*$')` silently produced
+     an empty string against that alias, which never matched
+     `LAST_PART_NUM`, tripping the "not the last partition" safety refusal
+     -- even though the partition genuinely was last -- and permanently
+     marking the done-marker on exit 0 with the table never touched.
+     Fixed by canonicalising with `readlink -f` before extracting the
+     partition number, whatever alias `findmnt` hands back.
+  2. **`sfdisk` genuinely was not installed on the image at all.** Debian
+     split `fdisk`/`sfdisk`/`cfdisk` out of `util-linux` into their own
+     `fdisk` package a while back (confirmed live: `dpkg -S sfdisk` found
+     nothing, `apt-cache policy fdisk` showed `Installed: (none)`); the
+     apt package list's own comment wrongly assumed util-linux always
+     carries it. Fixed by adding `fdisk` to `image/layer/nhl-scoreboard.
+     yaml`'s packages. Without it, stage 1 would fail every single boot
+     forever (`sfdisk: command not found`, exit 127, the *retryable*
+     failure path -- never a hang, just a partition that never grows).
+  With both fixed, verified live: `nhl-scoreboard-grow-rootfs.service`
+  ran stage 1 (`sfdisk`, reboot), then stage 2 automatically on the next
+  boot (`resize2fs`), root partition went from 2.5G to 29.5G on a 29.7G
+  card, and `nhl-scoreboard.service` came back up fine afterward. If a
+  real board ever hangs or fails to grow again with this enabled, that's
+  new evidence of a *different* bug, not this one -- capture it
   (HDMI console, `journalctl`) before changing anything, per #129.
 
 ## Config conventions
 
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
-  a typo must not stop the board booting.
-- Defaults are the Predators, favourite rotation, `regular` mapping,
-  128×32, Central time (America/Chicago). Anything can be overridden in the toml.
-- `rotation = "favourite"` with no `favourite_team` degrades to `all`.
+  a typo must not stop the board booting. Invalid `[[rotation]]` entries
+  (#150) follow the same convention: dropped with a warning, never fatal,
+  never rendered on the panel.
+- Defaults are the Predators, `regular` mapping, 128×32, Central time
+  (America/Chicago). Anything can be overridden in the toml.
+- With no `favourite_team` configured, the board falls through to cycling
+  every game today by index -- there is no longer a separate `rotation`
+  setting to degrade (removed by #150).
 
 ## Style
 

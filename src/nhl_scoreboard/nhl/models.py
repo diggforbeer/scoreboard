@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -236,6 +237,60 @@ def player_details_from_api(
 
 
 @dataclass(frozen=True, slots=True)
+class Star:
+    """One entry from ``gamecenter/{id}/landing``'s top-level ``threeStars`` (#156).
+
+    Present once a game is final (verified against a real completed game's
+    landing payload). ``goals``/``assists``/``points`` are this game's own
+    totals, *not* season-to-date -- the opposite convention from
+    ``GoalEvent``'s ``goalsToDate``/``assistsToDate``, hence the plain names.
+    A goalie's entry carries goalie stats instead of these three, so they
+    read as zero for one.
+    """
+
+    star: int
+    player_id: int
+    team_abbrev: str
+    name: str
+    sweater_no: int
+    position: str
+    goals: int
+    assists: int
+    points: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> Star:
+        return cls(
+            star=int(raw["star"]),
+            player_id=int(raw.get("playerId") or 0),
+            team_abbrev=_default_str(raw.get("teamAbbrev")).upper(),
+            name=_default_str(raw.get("name")),
+            sweater_no=int(raw.get("sweaterNo") or 0),
+            position=str(raw.get("position") or "").upper(),
+            goals=int(raw.get("goals") or 0),
+            assists=int(raw.get("assists") or 0),
+            points=int(raw.get("points") or 0),
+        )
+
+
+def three_stars_from_landing(raw: dict[str, Any] | None) -> tuple[Star, ...]:
+    """``threeStars``, ordered by rank; empty until the NHL has named them.
+
+    One malformed entry is skipped rather than losing the rest -- same
+    precedent as ``goal_events_from_landing``.
+    """
+    if not raw:
+        return ()
+    stars = []
+    for entry in raw.get("threeStars") or []:
+        try:
+            stars.append(Star.from_api(entry))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    return tuple(sorted(stars, key=lambda s: s.star))
+
+
+@dataclass(frozen=True, slots=True)
 class Game:
     id: int
     state: str
@@ -424,6 +479,155 @@ class StandingsRow:
 
     def record_label(self) -> str:
         return f"{self.wins}-{self.losses}-{self.ot_losses}"
+
+
+@dataclass(frozen=True, slots=True)
+class SeasonSeriesRecord:
+    """``seasonSeriesWins`` from ``gamecenter/{id}/right-rail`` (#157).
+
+    Verified against real responses: the tally is oriented to *the
+    requested game's own* away/home sides (the same NSH-CGY series read
+    ``0-3`` from a game NSH hosted and ``3-0`` from one it played away), and
+    it is the season-to-date total of completed regular-season meetings,
+    not a running count up to that game -- every meeting's right-rail
+    reported the same ``2-2`` for a finished four-game series. OT/SO wins
+    count as wins. The object carries no team abbreviations of its own, so
+    callers pair it with the ``Game`` it was fetched for.
+    """
+
+    away_wins: int
+    home_wins: int
+
+    @classmethod
+    def from_api(cls, raw: Any) -> SeasonSeriesRecord | None:
+        """None for a missing or malformed ``seasonSeriesWins``, never raises."""
+        if not isinstance(raw, dict):
+            return None
+        away, home = raw.get("awayTeamWins"), raw.get("homeTeamWins")
+        # bool is an int subclass; a True/False here is malformed, not 1/0.
+        if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (away, home)):
+            return None
+        return cls(away_wins=away, home_wins=home)
+
+
+@dataclass(frozen=True, slots=True)
+class SkaterLine:
+    """One skater's season line from ``club-stats/{TEAM}/now`` (#201)."""
+
+    player_id: int
+    name: str
+    goals: int
+    assists: int
+    points: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> SkaterLine:
+        return cls(
+            player_id=int(raw.get("playerId") or 0),
+            name=_initial_surname(raw),
+            goals=int(raw.get("goals") or 0),
+            assists=int(raw.get("assists") or 0),
+            points=int(raw.get("points") or 0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalieLine:
+    """One goalie's season line from ``club-stats/{TEAM}/now`` (#201)."""
+
+    player_id: int
+    name: str
+    games_played: int
+    wins: int
+    losses: int
+    ot_losses: int
+    save_pct: float
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> GoalieLine:
+        return cls(
+            player_id=int(raw.get("playerId") or 0),
+            name=_initial_surname(raw),
+            games_played=int(raw.get("gamesPlayed") or 0),
+            wins=int(raw.get("wins") or 0),
+            losses=int(raw.get("losses") or 0),
+            ot_losses=int(raw.get("overtimeLosses") or 0),
+            save_pct=float(raw.get("savePercentage") or 0.0),
+        )
+
+    def record_label(self) -> str:
+        return f"{self.wins}-{self.losses}-{self.ot_losses}"
+
+    def save_pct_label(self) -> str:
+        """``.915``; ``1.000`` for a perfect one."""
+        return f"{self.save_pct:.3f}".removeprefix("0")
+
+
+@dataclass(frozen=True, slots=True)
+class ClubStats:
+    """The favourite's whole roster's season stats. Both empty before the season starts.
+
+    Verified live (#201): unlike ``standings/now``, ``club-stats/{TEAM}/now``
+    does *not* keep serving last season through the off-season -- it
+    resolves to the new season with empty ``skaters``/``goalies``.
+    """
+
+    skaters: tuple[SkaterLine, ...]
+    goalies: tuple[GoalieLine, ...]
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> ClubStats:
+        return cls(
+            skaters=tuple(_parse_lines(raw.get("skaters"), SkaterLine.from_api)),
+            goalies=tuple(_parse_lines(raw.get("goalies"), GoalieLine.from_api)),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TeamLeaders:
+    """What the ``leaders`` rotation screen draws: any part may be absent."""
+
+    goals: SkaterLine | None
+    points: SkaterLine | None
+    goalies: tuple[GoalieLine, ...]
+
+
+def team_leaders(stats: ClubStats, rng: random.Random | None = None) -> TeamLeaders | None:
+    """Pick the goals leader, points leader and top two goalies by games played.
+
+    Ties are broken at random (#201: early on everyone is at zero, and the
+    screen should still show someone rather than hide). Callers pick once per
+    fetch and cache the result, so the choice doesn't flicker frame to frame.
+    None when there is nothing at all to show.
+    """
+    rng = rng or random.Random()
+    skaters = list(stats.skaters)
+    goalies = list(stats.goalies)
+    rng.shuffle(skaters)
+    rng.shuffle(goalies)
+    goals = max(skaters, key=lambda s: s.goals, default=None)
+    points = max(skaters, key=lambda s: s.points, default=None)
+    top_goalies = tuple(sorted(goalies, key=lambda g: g.games_played, reverse=True)[:2])
+    if goals is None and not top_goalies:
+        return None
+    return TeamLeaders(goals=goals, points=points, goalies=top_goalies)
+
+
+def _parse_lines(raw: Any, parse: Any) -> list[Any]:
+    lines = []
+    for entry in raw if isinstance(raw, list) else []:
+        try:
+            lines.append(parse(entry))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    return lines
+
+
+def _initial_surname(raw: dict[str, Any]) -> str:
+    """``F. Lastname`` from the split ``firstName``/``lastName`` objects."""
+    first = _default_str(raw.get("firstName"))
+    last = _default_str(raw.get("lastName"))
+    return f"{first[:1]}. {last}" if first and last else last or first
 
 
 def conference_standings(rows: list[StandingsRow], conference: str) -> list[StandingsRow]:

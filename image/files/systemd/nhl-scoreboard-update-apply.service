@@ -1,0 +1,12 @@
+[Unit]
+Description=Install the scoreboard update the last check found
+Documentation=https://github.com/diggforbeer/scoreboard
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/
+Environment=PYTHONPATH=/opt/nhl-scoreboard
+# A separate unit, not a thread of the app: applying restarts
+# nhl-scoreboard.service, which would kill an in-process apply.
+ExecStart=/usr/bin/python3 -m nhl_scoreboard.updater apply

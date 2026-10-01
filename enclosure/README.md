@@ -19,16 +19,29 @@ for whatever bed the full width happens to fit on.
 ## `scoreboard-case-v2.scad`
 
 A larger redesign: adds a power-brick bay with an IEC C14 socket cutout
-through the right wall (so a straight C13 cord plugs in from outside),
-moves the speakers to the ceiling firing upward instead of through the
-side walls, relocates the sensor to the left wall, and adds tilted vent
-slits through the back wall behind the Pi -- the first real attempt at
-the airflow question #49 raises, not just component-clearance holes.
-Also supports the Pi 3 Model B+'s mounting pattern in addition to the
-Pi 4's (they share the same hole spacing). Too wide for a typical 256mm
-print bed in one piece, so it splits into left/right halves at the seam
-between the two chained panels -- set the `part` variable near the top
-of the file to `"all"` (preview), `"left"`, or `"right"`.
+(a straight C13 cord plugs in from outside), moves the speakers to the
+ceiling firing upward instead of through the side walls, adds a
+push-button cutout, and adds tilted vent slits through the back wall
+behind the Pi -- the first real attempt at the airflow question #49
+raises, not just component-clearance holes. Also supports the Pi 3
+Model B+'s mounting pattern in addition to the Pi 4's (they share the
+same hole spacing). Too wide for a typical 256mm print bed in one
+piece, so it splits into left/right halves at the seam between the two
+chained panels -- set the `part` variable near the top of the file to
+`"all"` (preview), `"left"`, or `"right"`.
+
+Updated once already after real-world fit testing (#114): the Pi moved
+next to the *right* speaker with its ports facing the open middle
+(originally next to the left speaker facing the other way), the power
+brick's socket end flipped to the *left* wall (originally the right),
+and the ambient-light sensor moved to the right wall to make room. The
+speaker ports are now a hex grille (`speaker_grilles()`) instead of one
+open hole -- protects the driver cone and looks finished, sized
+generically (`grille_hole_d`/`grille_pitch`) since no driver is picked
+yet (#114's grille item is otherwise still open -- the *pattern* exists,
+but its sizing should be revisited once a real driver is in hand). A
+7mm round panel-mount momentary button cutout (`button_hole()`, #50)
+sits on the right wall below the sensor.
 
 Several dimensions are still placeholders pending real parts in hand:
 `speaker_d`/`speaker_depth` (no driver picked), and the power brick's

@@ -37,7 +37,18 @@ from nhl_scoreboard.display.renderer import (
     Renderer,
 )
 from nhl_scoreboard.display.teams import team_color, team_secondary_color
-from nhl_scoreboard.nhl.models import AssistDetail, Game, GoalEvent, Situation, StandingsRow
+from nhl_scoreboard.nhl.models import (
+    AssistDetail,
+    Game,
+    GoalEvent,
+    GoalieLine,
+    SeasonSeriesRecord,
+    Situation,
+    SkaterLine,
+    StandingsRow,
+    Star,
+    TeamLeaders,
+)
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
 
@@ -448,6 +459,56 @@ def test_ap_setup_scene_long_ssid_never_overflows_its_half(update_snapshots):
 
 
 # --------------------------------------------------------------------------
+# WiFi join outcome (#133)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "status", "ssid", "expect_color"),
+    [
+        ("wifi_join_attempting", "attempting", "HomeNetwork", WHITE),
+        ("wifi_join_connected", "connected", "HomeNetwork", LIVE),
+        ("wifi_join_failed", "failed", "HomeNetwork", ACCENT),
+    ],
+)
+def test_wifi_join_scene(name, status, ssid, expect_color, update_snapshots):
+    c = canvas()
+    make_renderer().draw_wifi_join(c, status, ssid)
+    art = show(name, c)
+
+    assert not c.out_of_bounds
+    # tolerance=2: text_center's integer division of an odd pixel width can
+    # land a wider string like "CONNECTED!" up to ~1.5px off perfect centre
+    # -- same font-glyph-width allowance CLAUDE.md documents elsewhere, not
+    # a real layout bug.
+    assert_centered(c, 0, 16, "title", tolerance=2.0)
+    assert_centered(c, 20, H - 1, "subtitle", tolerance=2.0)
+    assert expect_color in c.colors(0, 0, W - 1, 16)
+    check_snapshot(name, art, update_snapshots)
+
+
+def test_wifi_join_failed_rendering_does_not_depend_on_ssid():
+    """The AP's real name might not be the default -- ap_setup's own scene
+    (about to show next once this one's display window ends) is the one
+    place that names it, from its own state file. Naming it here too would
+    just be a second place it could go stale, so the "failed" message is
+    fixed text regardless of which ssid is passed -- proven here by two
+    wildly different ssids rendering identically."""
+    renderer = make_renderer()
+    first = canvas()
+    renderer.draw_wifi_join(first, "failed", "SomeSpecificNetworkName")
+    second = canvas()
+    renderer.draw_wifi_join(second, "failed", "AnEntirelyDifferentNetwork")
+    assert first.pixels == second.pixels
+
+
+def test_wifi_join_long_ssid_never_overflows_the_panel():
+    c = canvas()
+    make_renderer().draw_wifi_join(c, "attempting", "A" * 60)
+    assert not c.out_of_bounds
+
+
+# --------------------------------------------------------------------------
 # special teams
 # --------------------------------------------------------------------------
 
@@ -697,6 +758,64 @@ def test_upcoming_text_layout(name, method, now, bottom_color, update_snapshots)
 
 
 # --------------------------------------------------------------------------
+# matchup: season-series tally for the upcoming game (#157)
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "record", "tally"),
+    [
+        ("matchup", SeasonSeriesRecord(away_wins=2, home_wins=1), "2-1"),
+        ("matchup_preseason", SeasonSeriesRecord(away_wins=0, home_wins=0), "0-0"),
+    ],
+)
+def test_matchup_logo_layout(synthetic_logos, name, record, tally, update_snapshots):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_matchup(c, UPCOMING, record)
+    art = show(f"logos, {name}: {tally} / SEASON SERIES", c)
+
+    assert not c.out_of_bounds
+    for x0, side in ((0, UPCOMING.away), (MID_RIGHT, UPCOMING.home)):
+        assert team_color(side.abbrev) in c.colors(x0, 0, x0 + LOGO - 1, H - 1), (
+            f"{side.abbrev} logo"
+        )
+    tally_box = c.bbox(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1)
+    assert tally_box and abs(tally_box.center_x - (W - 1) / 2) <= 1, "tally not centred"
+    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1) == {WHITE}
+    assert c.lit(MID_LEFT + 3, RULE_Y, MID_RIGHT - 4, RULE_Y), "rule missing"
+    assert_centered(c, STATUS_TOP, H - 1, "caption")
+    assert status_color(c, MID_LEFT, MID_RIGHT - 1) == {SUBDUED}
+    check_snapshot(f"logo_{name}", art, update_snapshots)
+
+
+def test_matchup_text_layout(update_snapshots):
+    c = canvas()
+    make_renderer().draw_matchup(c, UPCOMING, SeasonSeriesRecord(2, 1))
+    art = show("text, matchup: TOR 2-1 MTL / SEASON SERIES", c)
+
+    assert not c.out_of_bounds
+    top = c.colors(0, 0, W - 1, RULE_Y - 1)
+    assert top == {team_color("TOR"), team_color("MTL"), WHITE}, "abbrevs in colour, tally white"
+    assert_centered(c, 0, RULE_Y - 1, "tally line")
+    assert c.row_is_solid(RULE_Y)
+    assert_centered(c, STATUS_TOP, H - 1, "caption")
+    assert status_color(c) == {SUBDUED}
+    # Away on the left, like every other scene: TOR's colour sits left of MTL's.
+    tor_x = [x for (x, _y), rgb in c.pixels.items() if rgb == team_color("TOR")]
+    mtl_x = [x for (x, _y), rgb in c.pixels.items() if rgb == team_color("MTL")]
+    assert max(tor_x) < min(mtl_x)
+    check_snapshot("text_matchup", art, update_snapshots)
+
+
+def test_matchup_missing_logo_falls_back_to_text(synthetic_logos):
+    game = dataclasses.replace(UPCOMING, home=dataclasses.replace(UPCOMING.home, abbrev="ZZZ"))
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_matchup(c, game, SeasonSeriesRecord(1, 1))
+    assert not c.out_of_bounds
+    assert c.row_is_solid(RULE_Y), "text layout's full-width rule"
+
+
+# --------------------------------------------------------------------------
 # goal celebration
 # --------------------------------------------------------------------------
 
@@ -801,6 +920,24 @@ def assert_standings_layout(
             f"row {i} ({row.abbrev}) has unexpected colours: {colors}"
         )
         assert team_color(row.abbrev) in colors, f"row {i} ({row.abbrev}) not in its team colour"
+
+
+def test_leaders_layout_labels_conference_and_fits_five_rows(update_snapshots):
+    names = ["COL", "DAL", "NSH", "STL", "WPG"]
+    rows = [standings_row(a, i, 60 - i) for i, a in enumerate(names, 1)]
+    c = canvas()
+    make_renderer().draw_conference_leaders(c, rows, "NSH")
+    art = show("leaders, west, favourite present", c)
+    assert not c.out_of_bounds
+    label = c.lit(0, 0, 31, H - 1)
+    assert label, "conference label missing"
+    assert set(label.values()) == {WHITE}
+    for i, row in enumerate(rows):
+        y0 = i * STANDINGS_ROW_HEIGHT
+        colors = c.colors(32, y0, W - 1, y0 + STANDINGS_ROW_HEIGHT - 1)
+        assert team_color(row.abbrev) in colors
+        assert colors <= {ACCENT if row.abbrev == "NSH" else WHITE, team_color(row.abbrev)}
+    check_snapshot("leaders_west", art, update_snapshots)
 
 
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
@@ -1012,6 +1149,134 @@ def test_goal_detail_reflects_the_actual_event(games, synthetic_logos):
 
 
 # --------------------------------------------------------------------------
+# three stars (#156): title + one line per star, all on one frame
+# --------------------------------------------------------------------------
+
+# Rows each part of the frame owns: title, then star 1/2/3 (tiny face,
+# baselines 6/14/22/30 in the renderer).
+THREE_STARS_TITLE_ROWS = (0, 7)
+THREE_STARS_LINE_ROWS = ((8, 15), (16, 23), (24, 31))
+
+
+def a_star(rank: int, team: str, name: str, goals: int = 0, assists: int = 0, pos="C") -> Star:
+    return Star(
+        star=rank,
+        player_id=8470000 + rank,
+        team_abbrev=team,
+        name=name,
+        sweater_no=rank,
+        position=pos,
+        goals=goals,
+        assists=assists,
+        points=goals + assists,
+    )
+
+
+def three_stars_for(game: Game) -> tuple[Star, ...]:
+    """Both teams represented, a multi-point skater, and a goalie with no skater stat."""
+    return (
+        a_star(1, game.home.abbrev, "N. Kadri", goals=2, assists=1),
+        a_star(2, game.away.abbrev, "J. Eberle", goals=1),
+        a_star(3, game.home.abbrev, "D. Vladar", pos="G"),
+    )
+
+
+def assert_three_stars_layout(c: AsciiCanvas, stars, left: int, right: int) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    cx = (left + right) // 2
+    top, bottom = THREE_STARS_TITLE_ROWS
+    title = c.bbox(left, top, right - 1, bottom)
+    assert title is not None, "title missing"
+    assert abs(title.center_x - cx) <= 2, f"title not centred: {title.center_x}"
+    assert c.colors(left, top, right - 1, bottom) == {ACCENT}
+
+    for (y0, y1), s in zip(THREE_STARS_LINE_ROWS, stars, strict=False):
+        line = c.bbox(left, y0, right - 1, y1)
+        assert line is not None, f"star {s.star} line missing"
+        assert line.x0 >= left and line.x1 < right, f"star {s.star} spills out of its column"
+        # Rank leads the line, in amber.
+        assert c.colors(left, y0, left + 4, y1) == {ACCENT}, f"star {s.star} rank"
+        colors = c.colors(left, y0, right - 1, y1)
+        assert team_color(s.team_abbrev) in colors, f"star {s.star} name not in team colour"
+        has_stat = bool(s.goals or s.assists)
+        assert (WHITE in colors) == has_stat, f"star {s.star} stat shown iff it has points"
+
+
+@pytest.mark.parametrize("layout", ["logo", "text"])
+def test_three_stars(games, synthetic_logos, layout, update_snapshots):
+    game = games["live"]  # SEA @ CGY
+    stars = three_stars_for(game)
+    c = canvas()
+    make_renderer(logos=synthetic_logos if layout == "logo" else None).draw_three_stars(
+        c, game, stars
+    )
+    art = show(f"{layout}, three stars: {', '.join(s.name for s in stars)}", c)
+
+    if layout == "logo":
+        assert_three_stars_layout(c, stars, MID_LEFT, MID_RIGHT)
+        for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
+            assert team_color(side.abbrev) in c.colors(x0, 0, x0 + LOGO - 1, H - 1)
+    else:
+        assert_three_stars_layout(c, stars, 0, W)
+    check_snapshot(f"{layout}_three_stars", art, update_snapshots)
+
+
+def test_three_stars_all_from_one_team_are_all_drawn(games):
+    """Whoever the NHL named -- nothing filters stars to the favourite's side."""
+    game = games["live"]
+    stars = tuple(a_star(i, game.away.abbrev, f"P. Away{i}", goals=1) for i in (1, 2, 3))
+    c = canvas()
+    make_renderer().draw_three_stars(c, game, stars)
+    assert_three_stars_layout(c, stars, 0, W)
+    for y0, y1 in THREE_STARS_LINE_ROWS:
+        assert team_color(game.home.abbrev) not in c.colors(0, y0, W - 1, y1)
+
+
+def test_three_stars_long_name_falls_back_to_the_surname_between_logos(games, synthetic_logos):
+    game = games["live"]
+    long = a_star(1, game.home.abbrev, "R. Nugent-Hopkins", goals=1)
+    r = make_renderer(logos=synthetic_logos)
+
+    c = canvas()
+    r.draw_three_stars(c, game, (long,))
+    assert_three_stars_layout(c, (long,), MID_LEFT, MID_RIGHT)
+    # The stat (white) keeps its own slot at the column's right edge: the
+    # rank and name (everything else on the line) never run into it.
+    y0, y1 = THREE_STARS_LINE_ROWS[0]
+    line = {x: rgb for (x, y), rgb in c.lit(MID_LEFT, y0, MID_RIGHT - 1, y1).items()}
+    others = [x for x, rgb in line.items() if rgb != WHITE]
+    stat = [x for x, rgb in line.items() if rgb == WHITE]
+    assert stat and max(others) < min(stat), "name overlaps the stat"
+
+    tiny = r.fonts.tiny
+    assert Renderer._fit_name(tiny, "N. Kadri", 40) == "N. Kadri", "fits: kept whole"
+    assert Renderer._fit_name(tiny, "R. Nugent-Hopkins", 56) == "Nugent-Hopkins"
+    assert Renderer._fit_name(tiny, "R. Nugent-Hopkins", 44) == "Nugent-H..."
+
+
+def test_three_stars_stat_is_one_token():
+    assert Renderer._star_stat(a_star(1, "NSH", "A", goals=2)) == "2G"
+    assert Renderer._star_stat(a_star(1, "NSH", "A", assists=1)) == "1A"
+    assert Renderer._star_stat(a_star(1, "NSH", "A", goals=2, assists=1)) == "3P"
+    assert Renderer._star_stat(a_star(1, "NSH", "A", pos="G")) == ""
+
+
+def test_three_stars_falls_back_to_text_when_a_logo_is_missing(games, synthetic_logos, tmp_path):
+    from PIL import Image
+
+    game = games["live"]
+    stars = three_stars_for(game)
+    without_home = tmp_path / "partial"
+    without_home.mkdir()
+    Image.open(synthetic_logos.path_for(game.away.abbrev)).save(
+        without_home / f"{game.away.abbrev}.png"
+    )
+    c = canvas()
+    make_renderer(logos=LogoLibrary([without_home])).draw_three_stars(c, game, stars)
+    assert_three_stars_layout(c, stars, 0, W)  # full width: the text layout's signature
+
+
+# --------------------------------------------------------------------------
 # narrow panel: a single 64x32 (chain_length=1), not the default 128x32
 # chain -- #38. Two full 32px logos would meet with zero room left for the
 # score column, so each logo crops its centre-facing edge (Renderer.
@@ -1108,6 +1373,38 @@ def test_upcoming_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
     check_snapshot("logo_narrow_preview", art, update_snapshots)
 
 
+def test_matchup_logo_layout_narrow_panel(synthetic_logos, update_snapshots):
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_matchup(c, UPCOMING, SeasonSeriesRecord(2, 1))
+    art = show("narrow logos, matchup: 2-1 / SERIES", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.away.abbrev)}
+    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.home.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    tally_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
+    assert tally_box is not None, "tally missing"
+    caption = c.bbox(NARROW_LEFT, STATUS_TOP, NARROW_RIGHT - 1, H - 1)
+    assert caption is not None, "caption missing"
+    assert c.colors(NARROW_LEFT, STATUS_TOP, NARROW_RIGHT - 1, H - 1) == {SUBDUED}
+    check_snapshot("logo_narrow_matchup", art, update_snapshots)
+
+
+def test_matchup_text_layout_narrow_panel(update_snapshots):
+    """The large face doesn't fit "TOR 2-1 MTL" in 64px; the small one does."""
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer().draw_matchup(c, UPCOMING, SeasonSeriesRecord(2, 1))
+    art = show("narrow text, matchup: TOR 2-1 MTL / SEASON SERIES", c)
+
+    assert not c.out_of_bounds
+    top = c.colors(0, 0, NARROW_W - 1, RULE_Y - 1)
+    assert {team_color("TOR"), team_color("MTL"), WHITE} <= top
+    caption = c.bbox(0, STATUS_TOP, NARROW_W - 1, H - 1)
+    assert caption is not None and abs(caption.center_x - (NARROW_W - 1) / 2) <= 1
+    check_snapshot("text_narrow_matchup", art, update_snapshots)
+
+
 def test_goal_detail_narrow_panel_stays_on_panel(games, synthetic_logos):
     """No dedicated crop guarantee for this scene's text the way _logo_span
     gives game/goal/preview (#38): a scorer/assister name has no fixed max
@@ -1120,4 +1417,76 @@ def test_goal_detail_narrow_panel_stays_on_panel(games, synthetic_logos):
     )
     c = AsciiCanvas(NARROW_W, H)
     make_narrow_renderer(synthetic_logos).draw_goal_detail(c, game, event)
+    assert not c.out_of_bounds
+
+
+def test_three_stars_narrow_panel_stays_in_the_middle_column(games, synthetic_logos):
+    """At 64px the column between cropped logos is 32px: names shrink to a
+    truncated surname, but nothing leaves the column or the panel (#38)."""
+    game = games["live"]
+    stars = three_stars_for(game)
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_three_stars(c, game, stars)
+    assert not c.out_of_bounds
+    for y0, y1 in THREE_STARS_LINE_ROWS:
+        line = c.bbox(NARROW_LEFT, y0, NARROW_RIGHT - 1, y1)
+        assert line is not None
+        assert line.x0 >= NARROW_LEFT and line.x1 < NARROW_RIGHT
+
+
+# --------------------------------------------------------------------------
+# leaders: the favourite's top players (#201)
+# --------------------------------------------------------------------------
+
+LEADERS = TeamLeaders(
+    goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
+    points=SkaterLine(2, "R. Oreilly", 9, 17, 26),
+    goalies=(
+        GoalieLine(3, "J. Saros", 22, 13, 7, 2, 0.915),
+        GoalieLine(4, "J. Wright", 9, 4, 3, 1, 0.902),
+    ),
+)
+
+
+def assert_leaders_layout(c: AsciiCanvas, rows: int, *, logo_width: int = 0) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    if logo_width:
+        assert team_color("NSH") in c.colors(0, 0, logo_width - 1, H - 1), "favourite logo missing"
+    assert c.bbox(logo_width, 0, W - 1, 5) is not None, "title missing"
+    for i in range(1, rows + 1):
+        y0 = i * STANDINGS_ROW_HEIGHT
+        band = c.bbox(logo_width, y0, W - 1, y0 + STANDINGS_ROW_HEIGHT - 1)
+        assert band is not None, f"row {i} not drawn"
+    assert c.bbox(logo_width, (rows + 1) * STANDINGS_ROW_HEIGHT, W - 1, H - 1) is None
+
+
+def test_leaders_logo_layout(synthetic_logos):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_leaders(c, LEADERS, "NSH")
+    show("leaders w/ logo", c)
+    assert_leaders_layout(c, 4, logo_width=LOGO)
+
+
+def test_leaders_text_layout_no_logo_library():
+    c = canvas()
+    make_renderer().draw_leaders(c, LEADERS, "NSH")
+    show("leaders, no logo library", c)
+    assert_leaders_layout(c, 4)
+
+
+def test_leaders_missing_rows_close_up(synthetic_logos):
+    c = canvas()
+    only_goalie = TeamLeaders(goals=None, points=None, goalies=LEADERS.goalies[:1])
+    make_renderer(logos=synthetic_logos).draw_leaders(c, only_goalie, "NSH")
+    assert_leaders_layout(c, 1, logo_width=LOGO)
+
+
+def test_leaders_long_name_never_leaves_the_panel(synthetic_logos):
+    c = canvas()
+    long = TeamLeaders(
+        goals=SkaterLine(1, "A. Wolfeschlegelsteinhausen", 10, 0, 10),
+        points=None,
+        goalies=(),
+    )
+    make_renderer(logos=synthetic_logos).draw_leaders(c, long, "NSH")
     assert not c.out_of_bounds

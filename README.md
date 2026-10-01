@@ -4,12 +4,39 @@ An NHL scoreboard for a HUB75 LED matrix, delivered as a ready-to-flash
 Raspberry Pi image.
 
 Flash the image with the official [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
-("Use custom"), drop your Wi-Fi details and favourite team into a text file on
-the boot partition, and the board comes up showing live scores.
+("Use custom") and power it on — if it has no ethernet and no WiFi details
+yet, it walks you through joining a network from your phone (see
+[First-time WiFi setup](#first-time-wifi-setup) below). Set a favourite
+team by editing a text file on the boot partition, and the board comes up
+showing live scores.
 
 On first boot the board grows its root filesystem to fill the rest of the SD
 card and reboots itself once to finish — this is expected, not a fault; give
 it a couple of minutes on the very first power-up.
+
+## First-time WiFi setup
+
+If the board has no ethernet connection and no `[wifi]` details in
+`scoreboard.toml` yet, it broadcasts its own WiFi network
+(`NHL-Scoreboard-Setup` by default) and shows the network name, password,
+and a join QR code right on the panel — scan it, or join that network
+manually from your phone's WiFi settings.
+
+- Your phone should pop up a "Sign in to network" page on its own — pick
+  your real WiFi network from the list (or type its name if it's not
+  there) and its password, and submit.
+- If that page doesn't appear automatically — common; captive-portal
+  detection isn't fully reliable across every phone and OS — open a
+  browser and go to `http://10.42.0.1` directly.
+
+The panel shows "Connected!" once the board joins your network, or
+restarts its own setup network so you can try again if something (usually
+the password) didn't work.
+
+**No phone handy, or would rather not use it?** You can skip all of this
+by editing `[wifi]` in `scoreboard.toml` directly on the boot partition
+before ever powering the board on — the same way every other setting here
+works, and still fully supported, not replaced by the flow above.
 
 ## Hardware
 
@@ -21,6 +48,7 @@ it a couple of minutes on the very first power-up.
 | Power | One 5 V supply into the adapter's DC barrel jack; it feeds the panels and back-powers the Pi |
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
 | Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
+| Button (optional) | Momentary push-button between GPIO 26 and GND, for `[button]` (#50) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -54,12 +82,15 @@ Early development. Working today:
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [x] Shots on goal, live, for every game; favourite's power play/empty net indicator
 - [x] Favourite's conference standings, interleaved with the idle rotation
+- [x] Opt-in season-series screen: the favourite's head-to-head record against their next opponent
 - [x] Goal horn and GOAL celebration screen
+- [x] Three stars of the game, once the favourite's game goes final
 - [x] Auto-dim from an optional BH1750 ambient light sensor
 - [x] Scheduled night mode that stays bright while a game is live
 - [x] Root filesystem grows to fill the SD card on first boot
-- [x] Optional read-only web status page for headless debugging
+- [x] Optional web status page for headless debugging, with a config editor
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
+- [x] Optional push-button on GPIO 26: tap to mute the goal horn, hold to skip to the next game
 - [ ] Verified on real hardware
 
 ## Development
@@ -69,17 +100,17 @@ No LED panel required — the app falls back to
 renders to a browser window.
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
-
-# Team logos are not committed; fetch and rasterise them once (needs libcairo2)
-python scripts/fetch-logos.py
+# One-shot setup: creates .venv, installs the dev extras, copies
+# scoreboard.local.toml from the boot-partition template if it doesn't
+# already exist, and fetches logos. Safe to re-run any time.
+./scripts/setup-dev.sh
+source .venv/bin/activate
 
 # Print today's scores; needs no display at all
 nhl-scoreboard --dump
 
 # Run the board in the emulator, then open http://localhost:8888
-cp image/files/boot/scoreboard.toml scoreboard.local.toml   # edit favourite_team etc.
+# (edit scoreboard.local.toml first for favourite_team etc.)
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
@@ -102,29 +133,45 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 
 ```toml
 [scoreboard]
-favourite_team = "NSH"      # "" for none
-rotation = "favourite"      # follow the favourite's day; "all" rotates every game
-prefer_favourite = true     # in "all" rotation, still show the favourite's game first
+favourite_team = "NSH"      # "" rotates every game in the league instead
+prefer_favourite = true     # with no live/held favourite game, still show it first when rotating
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
 timezone = "America/Chicago"
-rotate_seconds = 8          # dwell per game in "all" rotation, and per idle scene below
+rotate_seconds = 8          # dwell per game with no favourite, and per idle scene below
 poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
+three_stars_seconds = 8     # how long the 3 STARS screen stays up once your team's game is final
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
+
+# Optional: override the idle rotation's order and per-screen timing (see
+# "What it shows" below). With no [[rotation]] tables, the list above
+# (rotate_seconds/show_standings/show_clock_between_games) still applies.
+# [[rotation]]
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders
+# seconds = 10
+# "matchup" (season series vs. the next opponent), "top_west"/"top_east" (top five of
+# that conference) and "leaders" (your team's top goal scorer, top point getter and
+# top two goalies) only show if listed here.
 
 [audio]
 enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
 
+[wifi]
+ssid = ""                    # leave empty if you're using wired ethernet instead
+password = ""
+country = "CA"               # two-letter regulatory domain code, e.g. CA, US, GB
+connect_timeout_seconds = 90 # how long a new SSID/password gets to connect before rolling back
+
 [status]
-enabled = true                # a read-only web status page, for headless debugging; set false to turn off
+enabled = true                # a web status page + config editor, for headless debugging; set false to turn off
 port = 8080
 
 [night_mode]
@@ -171,7 +218,7 @@ same way a router's printed default password is. The account can `sudo`
 
 ## What it shows
 
-In the default `rotation = "favourite"`, the board follows your team's day:
+With a `favourite_team` set (the default, `NSH`), the board follows your team's day:
 
 | When | Board shows |
 |---|---|
@@ -179,18 +226,23 @@ In the default `rotation = "favourite"`, the board follows your team's day:
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
 | Your team scores | **GOAL** — a celebration screen, for `goal_flash_seconds`, then back to live |
+| Game just went final | **3 STARS** — the NHL's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |
 
 The next game comes from the team's season schedule, fetched once an hour.
-While there's no favourite game to show live, the board alternates the
-preview/countdown with two more scenes on `rotate_seconds`' cadence: your
+While there's no favourite game to show live, the board cycles an **idle
+rotation** of up to three screens: the preview/countdown above, your
 **conference standings** (`show_standings`, once your team's season has
-actually started) and, if `show_clock_between_games` is on, the **idle
-clock**. With `rotation = "all"` the board instead rotates through every
-game in the league today, `rotate_seconds` each, favourite first
-(`prefer_favourite`). The GOAL screen and the horn both still only ever fire
-for your favourite team's own goal, regardless of rotation mode.
+actually started), and, if `show_clock_between_games` is on, the **idle
+clock**. By default each stays up for `rotate_seconds`; add `[[rotation]]`
+entries to `scoreboard.toml` to reorder them, drop one, or give each its
+own duration instead (see [Configuration](#configuration)) -- a screen with
+nothing to show right now is skipped, not shown blank. With no
+`favourite_team` set (or nothing left for it to show), the board instead
+rotates through every game in the league today, `rotate_seconds` each,
+favourite first (`prefer_favourite`). The GOAL screen and the horn both
+still only ever fire for your favourite team's own goal.
 
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
 a tracked game is live or was held recently, so a late finish stays
@@ -214,14 +266,28 @@ whenever a team-specific file isn't found. See `[audio]` in
 
 The board is headless by design, so diagnosing "why is it stuck" would
 otherwise mean SSH-ing in and reading `journalctl -u nhl-scoreboard`. On by
-default, the board instead serves a tiny read-only HTML page at
+default, the board instead serves a small HTML page at
 `http://<board's-ip>:8080/` showing the current scene, the last successful
-API poll, the last error (if any), the favourite team and the rotation mode
--- enough to check on the board from a phone on the same network. It's
+API poll, the last error (if any) and the favourite team -- enough to check
+on the board from a phone on the same network. It's
 stdlib `http.server`, no framework, and has no login: it binds the local
 network the board is already trusted on, not the internet, so don't
 port-forward it. Set `[status] enabled = false` in the config to turn it
 off.
+
+Below that is a form per config section (scoreboard, audio, status,
+night mode, panel, Wi-Fi) that edits `scoreboard.toml` directly -- no
+SSH or SD card needed. Saving writes the file with `tomlkit` (comments in
+the file survive) and the running board picks the change up within a
+second, the same way it already does for a hand-edited file over SSH.
+`[panel]` fields that need a process restart to take effect (geometry,
+GPIO mapping, ...) are still editable here, just labelled as such. Saving
+Wi-Fi settings restarts the board's network connection live -- briefly
+interrupting it -- and rolls back automatically if the new network
+doesn't come up, the same rollback `scoreboard-provision` already does at
+boot. A submitted form is checked against the request's own `Host`
+header to reject cross-site submissions, but there's still no login: as
+with the rest of the page, this assumes the LAN itself is trusted.
 
 ## Layout
 

@@ -7,6 +7,7 @@ import requests
 import responses
 
 from nhl_scoreboard.nhl.api import BASE_URL, NHLApiError, NHLClient
+from nhl_scoreboard.nhl.models import ClubStats, GoalieLine, SeasonSeriesRecord, SkaterLine
 
 
 @pytest.fixture(autouse=True)
@@ -306,6 +307,109 @@ def test_team_roster_omits_a_player_missing_from_either_side():
 
 
 @responses.activate
+def test_three_stars_url_and_parsed_payload():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/42/landing",
+        json={
+            "threeStars": [
+                {
+                    "star": 1,
+                    "playerId": 8484392,
+                    "teamAbbrev": "CAR",
+                    "name": {"default": "F. Unger Sorum"},
+                    "sweaterNo": 36,
+                    "position": "R",
+                    "goals": 1,
+                    "assists": 0,
+                    "points": 1,
+                }
+            ]
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        stars = client.three_stars(42)
+    assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/landing"
+    assert [(s.star, s.name, s.team_abbrev, s.goals) for s in stars] == [
+        (1, "F. Unger Sorum", "CAR", 1)
+    ]
+
+
+@responses.activate
+def test_three_stars_empty_until_named():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
+    with NHLClient() as client:
+        assert client.three_stars(1) == ()
+
+
+@responses.activate
+def test_season_series_url_and_parsed_payload():
+    """Trimmed from a real right-rail response (CGY @ NSH, 2025-10-18): NSH 3-0 at home."""
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/2025020183/right-rail",
+        json={
+            "seasonSeriesWins": {"awayTeamWins": 0, "homeTeamWins": 3},
+            "seasonSeries": [
+                {
+                    "id": 2025020183,
+                    "gameType": 2,
+                    "gameState": "OFF",
+                    "awayTeam": {"abbrev": "CGY", "score": 1},
+                    "homeTeam": {"abbrev": "NSH", "score": 4},
+                    "gameOutcome": {"lastPeriodType": "REG"},
+                }
+            ],
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        record = client.season_series(2025020183)
+    assert record == SeasonSeriesRecord(away_wins=0, home_wins=3)
+    assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/2025020183/right-rail"
+
+
+@responses.activate
+def test_season_series_preseason_zero_zero_is_a_real_answer():
+    """Verified live: before any regular-season meeting finishes, 0-0, not absent."""
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/1/right-rail",
+        json={"seasonSeriesWins": {"awayTeamWins": 0, "homeTeamWins": 0}, "seasonSeries": []},
+        status=200,
+    )
+    with NHLClient() as client:
+        assert client.season_series(1) == SeasonSeriesRecord(0, 0)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"seasonSeriesWins": None},
+        {"seasonSeriesWins": "2-1"},
+        {"seasonSeriesWins": {"awayTeamWins": 2}},
+        {"seasonSeriesWins": {"awayTeamWins": "2", "homeTeamWins": 1}},
+        {"seasonSeriesWins": {"awayTeamWins": True, "homeTeamWins": 1}},
+        {"seasonSeriesWins": {"awayTeamWins": -1, "homeTeamWins": 1}},
+    ],
+)
+@responses.activate
+def test_season_series_returns_none_for_missing_or_malformed_wins(payload):
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/right-rail", json=payload, status=200)
+    with NHLClient() as client:
+        assert client.season_series(1) is None
+
+
+@responses.activate
+def test_season_series_wraps_http_errors():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/right-rail", status=404)
+    with NHLClient() as client, pytest.raises(NHLApiError):
+        client.season_series(1)
+
+
+@responses.activate
 def test_standings_hits_standings_date():
     responses.add(responses.GET, f"{BASE_URL}/standings/now", json={"standings": []}, status=200)
     with NHLClient() as client:
@@ -405,3 +509,65 @@ def test_get_does_not_retry_a_404():
     with NHLClient() as client, pytest.raises(NHLApiError):
         client.scores()
     assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_club_stats_url_and_parsed_payload():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/club-stats/NSH/now",
+        json={
+            "season": "20252026",
+            "gameType": 2,
+            "skaters": [
+                {
+                    "playerId": 1,
+                    "firstName": {"default": "Filip"},
+                    "lastName": {"default": "Forsberg"},
+                    "gamesPlayed": 70,
+                    "goals": 30,
+                    "assists": 20,
+                    "points": 50,
+                },
+                {"garbage": True, "playerId": "x"},
+            ],
+            "goalies": [
+                {
+                    "playerId": 3,
+                    "firstName": {"default": "Juuse"},
+                    "lastName": {"default": "Saros"},
+                    "gamesPlayed": 60,
+                    "wins": 30,
+                    "losses": 20,
+                    "overtimeLosses": 5,
+                    "savePercentage": 0.9151,
+                }
+            ],
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        stats = client.club_stats("nsh")
+    assert stats == ClubStats(
+        skaters=(SkaterLine(1, "F. Forsberg", 30, 20, 50),),
+        goalies=(GoalieLine(3, "J. Saros", 60, 30, 20, 5, 0.9151),),
+    )
+
+
+@responses.activate
+def test_club_stats_empty_preseason_arrays():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/club-stats/NSH/now",
+        json={"season": "20262027", "gameType": 2, "skaters": [], "goalies": []},
+        status=200,
+    )
+    with NHLClient() as client:
+        assert client.club_stats("NSH") == ClubStats((), ())
+
+
+@responses.activate
+def test_club_stats_wraps_http_errors():
+    responses.add(responses.GET, f"{BASE_URL}/club-stats/NSH/now", status=404)
+    with NHLClient() as client, pytest.raises(NHLApiError):
+        client.club_stats("NSH")

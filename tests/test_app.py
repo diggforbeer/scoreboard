@@ -6,15 +6,20 @@ scheduling and selection logic against a stand-in that records draw calls.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import signal
+import threading
+import time
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from websockets.sync.client import connect
 
+from nhl_scoreboard import updater
 from nhl_scoreboard.app import (
     DEMO_SCENE_SECONDS,
     FRAME_INTERVAL,
@@ -22,6 +27,7 @@ from nhl_scoreboard.app import (
     Scene,
     ScoreboardApp,
 )
+from nhl_scoreboard.button import Button
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.demo import demo_steps
 from nhl_scoreboard.display.matrix import Backend
@@ -30,9 +36,12 @@ from nhl_scoreboard.nhl.models import (
     Game,
     GoalEvent,
     PlayerSeasonDetail,
+    SeasonSeriesRecord,
     Situation,
     StandingsRow,
+    Star,
 )
+from nhl_scoreboard.wifi_join import WifiJoinAttempt
 
 
 class FakeCanvas:
@@ -103,9 +112,13 @@ class FakeClient:
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
         self.team_roster_calls: list[str] = []
         self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
+        self.three_stars_calls: list[int] = []
+        self.stars: dict[int, tuple[Star, ...]] = {}
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
         self.schedule_calls = 0
+        self.series: dict[int, SeasonSeriesRecord | None] = {}
+        self.season_series_calls: list[int] = []
 
     def scores(self, date: str = "now") -> list[Game]:
         self.calls += 1
@@ -131,6 +144,12 @@ class FakeClient:
             raise NHLApiError("boom")
         return self.team_rosters.get(team, {})
 
+    def three_stars(self, game_id: int) -> tuple[Star, ...]:
+        self.three_stars_calls.append(game_id)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.stars.get(game_id, ())
+
     def schedule(self, team: str) -> list[Game]:
         self.schedule_calls += 1
         if self.fail:
@@ -142,6 +161,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return list(self.standings_rows)
+
+    def season_series(self, game_id: int) -> SeasonSeriesRecord | None:
+        self.season_series_calls.append(game_id)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.series.get(game_id)
 
     def close(self) -> None:
         self.closed = True
@@ -183,7 +208,7 @@ class FakeClockSource:
         self.now += seconds
 
 
-class FakeStatusServer:
+class FakeAdminServer:
     def __init__(self) -> None:
         self.started = False
         self.stopped = False
@@ -319,9 +344,9 @@ def in_play(games: list[Game]) -> list[Game]:
 
 
 def test_situations_fetched_only_for_favourite_and_on_screen(fake_backend, games):
-    """In 'all' rotation the on-screen game is a second target; nothing else is."""
+    """The on-screen game is always a second situation target; nothing else is."""
     games = in_play(games)  # three live games: SEA@CGY, CAR@FLA, UTA@COL
-    app = build_app(fake_backend, games, favourite_team="CGY", rotation="all")
+    app = build_app(fake_backend, games, favourite_team="CGY")
     app.refresh()
     favourite_game = next(g for g in app.games if g.involves("CGY"))
     assert app.games[app.index] == favourite_game, "favourite is pinned first: targets coincide"
@@ -530,17 +555,17 @@ def test_goal_detail_state_pruned_with_the_rest(fake_backend, games):
     assert app._shown_goal_events == {}
 
 
-def test_status_server_built_by_default(fake_backend, games):
+def test_admin_server_built_by_default(fake_backend, games):
     app = build_app(fake_backend, games)
-    assert app.status_server is not None
-    assert app.status_server.port == 8080
+    assert app.admin_server is not None
+    assert app.admin_server.port == 8080
 
 
-def test_status_server_not_built_when_disabled(fake_backend, games):
+def test_admin_server_not_built_when_disabled(fake_backend, games):
     settings = Settings()
     settings.status.enabled = False
     app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is None
+    assert app.admin_server is None
 
 
 def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
@@ -551,7 +576,6 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     app.refresh()
     snapshot = app.status_snapshot()
     assert snapshot["favourite team"] == "TOR"
-    assert snapshot["rotation"] == "favourite"
     assert snapshot["last successful poll"] != "never"
     assert snapshot["scene"]
 
@@ -560,6 +584,18 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     snapshot = app.status_snapshot()
     assert "score refresh" in snapshot["last error"]
     assert snapshot["last error at"] != ""
+
+
+def test_status_snapshot_shows_the_installed_version(fake_backend, games, tmp_path, monkeypatch):
+    """A factory image (never hot-updated) has no VERSION file at all --
+    installed_version() reads it fresh every call, so this must never go
+    stale even if [update]'s own daily check hasn't run yet (#32)."""
+    monkeypatch.setattr(updater, "APP_DIR", tmp_path)
+    app = build_app(fake_backend, games, favourite_team="TOR")
+    assert app.status_snapshot()["version"] == "unknown (factory image)"
+
+    (tmp_path / "VERSION").write_text("v2026.09.29.4\n")
+    assert app.status_snapshot()["version"] == "v2026.09.29.4"
 
 
 def test_status_snapshot_never_fetches_or_mutates_shared_state(fake_backend, games):
@@ -627,6 +663,73 @@ def test_reload_picks_up_a_changed_setting(fake_backend, games, tmp_path):
 
     assert app.reload_config_if_changed() is True
     assert app.settings.scoreboard.favourite_team == "TOR"
+
+
+def test_reload_invalidates_schedule_cache_on_favourite_team_change(fake_backend, games, tmp_path):
+    """next_favourite_game()'s _schedule cache is keyed purely by elapsed
+    time, not by which team it was fetched for -- a favourite switch must
+    force a fresh fetch, or the countdown/preview/matchup screens keep
+    showing the *previous* team's next game for up to an hour. Confirmed
+    live (#178's admin-page work): this is exactly why the matchup/
+    season-series screen (#157) kept showing the old opponent after a
+    favourite switch -- it's fed straight from next_favourite_game()."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    # Simulate an already-fetched, still-fresh schedule cache for the old favourite.
+    app._schedule = (app.monotonic(), games)
+    app._schedule_retry_after = app.monotonic() + 100
+
+    path.write_text('[scoreboard]\nfavourite_team = "TOR"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app._schedule is None
+    assert app._schedule_retry_after == 0.0
+
+
+def test_reload_keeps_schedule_cache_when_favourite_team_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "UTC"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app._schedule = (app.monotonic(), games)
+    app._schedule_retry_after = app.monotonic() + 100
+    cached = app._schedule
+
+    # Change something unrelated -- the schedule cache must survive.
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "America/Chicago"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app._schedule is cached
+
+
+def test_favourite_team_switch_triggers_a_fresh_schedule_fetch(fake_backend, games, tmp_path):
+    """End-to-end: neither EDM nor WPG has a game in the fixture (today's
+    slate), so favourite_game_today() answers None for both and
+    next_favourite_game() must consult the season schedule -- proving the
+    invalidation actually changes real fetch behaviour, not just internal
+    bookkeeping."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "EDM"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app.refresh()
+    assert app.favourite_game_today() is None
+
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 1
+
+    # Still within the 1-hour TTL -- a second call with no favourite
+    # change must not refetch.
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 1
+
+    path.write_text('[scoreboard]\nfavourite_team = "WPG"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 2, "switching favourite must force a fresh schedule fetch"
 
 
 def test_reload_keeps_previous_settings_on_parse_error(fake_backend, games, tmp_path, caplog):
@@ -845,14 +948,14 @@ def test_run_stops_on_sigterm_and_shuts_down(fake_backend, games):
     settings.scoreboard.rotate_seconds = 1_000_000
     settings.panel.brightness_poll_seconds = 1_000_000
     src = FakeClockSource()
-    status = FakeStatusServer()
+    status = FakeAdminServer()
     app = ScoreboardApp(
         settings,
         client=FakeClient(_non_live_games(games)),
         backend=fake_backend,
         monotonic=src.monotonic,
         sleep=src.sleep,
-        status_server=status,
+        admin_server=status,
     )
     frame_count = 0
 
@@ -885,7 +988,7 @@ def test_draw_dispatches_no_data_when_stale(fake_backend, games):
 
 
 def test_draw_dispatches_clock_when_idle(fake_backend, games):
-    app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=True)
+    app = build_app(fake_backend, games, show_clock_when_idle=True)
     app.last_success = app.monotonic()
     calls = []
     app.renderer.draw_clock = lambda canvas, now, favourite=None: calls.append(now)
@@ -894,7 +997,7 @@ def test_draw_dispatches_clock_when_idle(fake_backend, games):
 
 
 def test_draw_dispatches_no_games_when_idle_clock_disabled(fake_backend, games):
-    app = build_app(fake_backend, games, rotation="all", show_clock_when_idle=False)
+    app = build_app(fake_backend, games, show_clock_when_idle=False)
     app.last_success = app.monotonic()
     calls = []
     app.renderer.draw_message = lambda canvas, *args: calls.append(args)
@@ -1133,63 +1236,63 @@ def test_reload_keeps_light_sensor_when_auto_brightness_unchanged(fake_backend, 
     assert app.light_sensor is old_sensor
 
 
-def test_reload_builds_status_server_when_enabled(fake_backend, games, tmp_path):
+def test_reload_builds_admin_server_when_enabled(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = false\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is None
+    assert app.admin_server is None
 
     path.write_text("[status]\nenabled = true\nport = 9191\n")
     _touch_later(path, app)
     app.reload_config_if_changed()
 
     # Built but not started: run() never ran, so nothing should bind a socket.
-    assert app.status_server is not None
-    assert app.status_server.port == 9191
+    assert app.admin_server is not None
+    assert app.admin_server.port == 9191
 
 
-def test_reload_drops_status_server_when_disabled(fake_backend, games, tmp_path):
+def test_reload_drops_admin_server_when_disabled(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = true\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is not None
+    assert app.admin_server is not None
 
     path.write_text("[status]\nenabled = false\n")
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is None
+    assert app.admin_server is None
 
 
-def test_reload_rebuilds_status_server_on_port_change(fake_backend, games, tmp_path):
+def test_reload_rebuilds_admin_server_on_port_change(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = true\nport = 9191\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    old_server = app.status_server
+    old_server = app.admin_server
 
     path.write_text("[status]\nenabled = true\nport = 9292\n")
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is not old_server
-    assert app.status_server is not None
-    assert app.status_server.port == 9292
+    assert app.admin_server is not old_server
+    assert app.admin_server is not None
+    assert app.admin_server.port == 9292
 
 
-def test_reload_keeps_status_server_when_status_unchanged(fake_backend, games, tmp_path):
+def test_reload_keeps_admin_server_when_status_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    old_server = app.status_server
+    old_server = app.admin_server
 
     path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "TOR"\n')
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is old_server
+    assert app.admin_server is old_server
 
 
-def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, tmp_path):
+def test_reload_starts_admin_server_when_inside_run_loop(fake_backend, games, tmp_path):
     """run() only starts the server once, before looping; a live rebuild must start itself."""
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = false\n")
@@ -1200,14 +1303,343 @@ def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, t
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is not None
+    assert app.admin_server is not None
     try:
-        url = f"http://127.0.0.1:{app.status_server.port}/"
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            assert resp.status == 200
-            assert "NHL Scoreboard status" in resp.read().decode("utf-8")
+        # A real WebSocket round trip, not just "did something bind the
+        # port" -- proves the server rebuilt inside the live loop is
+        # actually serving admin_server.py's real protocol, not merely
+        # listening. No frontend/dist on disk in this test environment, so
+        # a plain HTTP GET (the other half of what this server does, #178
+        # story 10) isn't checked here -- test_admin_server.py covers that.
+        with connect(f"ws://127.0.0.1:{app.admin_server.port}/", open_timeout=5) as ws:
+            message = json.loads(ws.recv(timeout=5))
+            assert message["type"] == "version"
     finally:
-        app.status_server.stop()
+        app.admin_server.stop()
+
+
+# -- physical button (#50) -------------------------------------------------
+#
+# Presses go through the real button.Button + gpiozero.Button on gpiozero's
+# MockFactory (conftest's mock_pins), so what reaches the app is exactly what
+# gpiozero's own press/hold/release logic produced. The reload tests only
+# care whether the button was rebuilt or closed, so they use a spy instead.
+
+BUTTON_PIN = 26
+BUTTON_HOLD = 0.1
+
+
+class SpyButton:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def consume_short_press(self) -> bool:
+        return False
+
+    def consume_long_press(self) -> bool:
+        return False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def button_app(fake_backend, games, mock_pins, **button_kwargs):
+    src = FakeClockSource()
+    settings = Settings()
+    for key, value in button_kwargs.items():
+        setattr(settings.button, key, value)
+    button = Button.open(BUTTON_PIN, hold_seconds=BUTTON_HOLD)
+    assert button is not None
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        monotonic=src.monotonic,
+        sleep=src.sleep,
+        horn=RecordingHorn(),
+        button=button,
+    )
+    return app, src, mock_pins.pin(BUTTON_PIN)
+
+
+def tap(pin) -> None:
+    pin.drive_low()
+    pin.drive_high()
+
+
+def hold(app: ScoreboardApp, pin) -> None:
+    pin.drive_low()
+    deadline = time.monotonic() + 2
+    while not app.button._long_press and time.monotonic() < deadline:
+        time.sleep(0.01)
+    pin.drive_high()
+
+
+def test_button_is_not_opened_when_disabled(fake_backend, games):
+    app = build_app(fake_backend, games)
+    assert app.settings.button.enabled is False
+    assert app.button is None
+    app.handle_button()  # no button: a no-op, not an AttributeError
+
+
+def test_button_is_opened_from_settings_when_enabled(fake_backend, games, mock_pins):
+    settings = Settings()
+    settings.button.enabled = True
+    app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
+    assert app.button is not None
+
+
+def test_short_press_mutes_the_next_goal_horn(fake_backend, games, mock_pins):
+    app, _src, pin = button_app(fake_backend, games, mock_pins)
+    app.refresh()
+    game = app.games[0]
+
+    tap(pin)
+    app.handle_button()
+    app._on_goal(game)
+
+    assert app.horn.calls == []
+    assert app.last_goal is not None, "muting the horn must not suppress the goal scene"
+
+
+def test_horn_plays_again_once_mute_minutes_pass(fake_backend, games, mock_pins):
+    app, src, pin = button_app(fake_backend, games, mock_pins, mute_minutes=30)
+    app.refresh()
+    game = app.games[0]
+
+    tap(pin)
+    app.handle_button()
+    src.now += 30 * 60 - 1
+    app._on_goal(game)
+    assert app.horn.calls == []
+
+    src.now += 1
+    app._on_goal(game)
+    assert app.horn.calls == [app.settings.scoreboard.favourite_team]
+
+
+def test_mute_minutes_zero_never_mutes(fake_backend, games, mock_pins):
+    app, _src, pin = button_app(fake_backend, games, mock_pins, mute_minutes=0)
+    app.refresh()
+
+    tap(pin)
+    app.handle_button()
+    app._on_goal(app.games[0])
+
+    assert len(app.horn.calls) == 1
+
+
+def test_long_press_advances_the_rotation_exactly_once(fake_backend, games, mock_pins):
+    app, _src, pin = button_app(fake_backend, games, mock_pins)
+    app.refresh()
+    assert len(app.games) > 1
+    assert app.index == 0
+
+    hold(app, pin)
+    app.handle_button()
+    assert app.index == 1
+    assert app._horn_muted_until is None, "a long press is not also a mute"
+
+    app.handle_button()  # the same press, consumed already
+    assert app.index == 1
+
+
+def test_short_press_is_consumed_once(fake_backend, games, mock_pins):
+    app, src, pin = button_app(fake_backend, games, mock_pins)
+
+    tap(pin)
+    app.handle_button()
+    first = app._horn_muted_until
+    assert first is not None
+
+    src.now += 10
+    app.handle_button()  # nothing new pressed: the mute window isn't pushed out
+    assert app._horn_muted_until == first
+
+
+def test_run_loop_handles_button_presses(fake_backend, games, mock_pins):
+    app, src, pin = button_app(fake_backend, games, mock_pins, mute_minutes=5)
+    tap(pin)
+
+    run_for_frames(app, src, 1)
+
+    assert app._horn_muted_until == 5 * 60
+
+
+def test_shutdown_releases_the_button(fake_backend, games):
+    spy = SpyButton()
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, button=spy)
+    app.shutdown()
+    assert spy.closed
+
+
+def test_reload_opens_button_when_enabled(fake_backend, games, tmp_path, mock_pins):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = false\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.button is None
+
+    path.write_text("[button]\nenabled = true\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.button is not None
+
+
+def test_reload_closes_button_when_disabled(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = true\n")
+    spy = SpyButton()
+    app = ScoreboardApp(
+        Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
+    )
+
+    path.write_text("[button]\nenabled = false\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert spy.closed
+    assert app.button is None
+
+
+@pytest.mark.parametrize("change", ["pin = 16", "hold_seconds = 2.0"])
+def test_reload_rebuilds_button_on_pin_or_hold_change(
+    fake_backend, games, tmp_path, mock_pins, change
+):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = true\n")
+    spy = SpyButton()
+    app = ScoreboardApp(
+        Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
+    )
+
+    path.write_text(f"[button]\nenabled = true\n{change}\n")
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert spy.closed
+    assert app.button is not spy
+    assert app.button is not None
+
+
+def test_reload_keeps_button_when_button_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[button]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    spy = SpyButton()
+    app = ScoreboardApp(
+        Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
+    )
+
+    # mute_minutes is read per press, so changing it alone needs no rebuild either.
+    path.write_text(
+        '[button]\nenabled = true\nmute_minutes = 5\n[scoreboard]\nfavourite_team = "TOR"\n'
+    )
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app.button is spy
+    assert not spy.closed
+
+
+# -- admin page config editor (#110, #178 story 10) -------------------------
+
+
+def _save_data_for(settings: Settings, section: str, **overrides: object) -> dict[str, object]:
+    """A full save payload for ``section``, same helper role _form_for had
+    for status_server.py's HTML forms -- JSON keeps real types, so unlike
+    that helper there's no bool->string encoding to do."""
+    data = dataclasses.asdict(getattr(settings, section))
+    data.update(overrides)
+    return data
+
+
+def _ws_save(port: int, section: str, data: dict[str, object]) -> dict[str, object]:
+    """Connect, send one save, and return the saved/error ack -- draining
+    and discarding every message ahead of it (the initial per-section config
+    dump; see admin_server.py's _handle), since this only cares about the
+    one save's own outcome, not the connect-time payload."""
+    with connect(f"ws://127.0.0.1:{port}/", open_timeout=5) as ws:
+        ws.send(json.dumps({"type": "save", "section": section, "data": data}))
+        while True:
+            message = json.loads(ws.recv(timeout=5))
+            if message["type"] in ("saved", "error"):
+                return message
+
+
+def test_admin_page_save_writes_file_and_reload_picks_it_up(fake_backend, games, tmp_path):
+    """A save (#110, #178 story 10) only ever writes the file;
+    reload_config_if_changed() (#51) -- polled every main-loop tick -- is
+    what actually applies the change to the running app."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.admin_server is not None
+    app.admin_server.start()
+    try:
+        data = _save_data_for(app.settings, "scoreboard", favourite_team="TOR")
+        ack = _ws_save(app.admin_server.port, "scoreboard", data)
+        assert ack["type"] == "saved"
+    finally:
+        app.admin_server.stop()
+
+    # Not applied yet -- the admin server's own thread never touches the
+    # live Settings.
+    assert app.settings.scoreboard.favourite_team == "NSH"
+    _touch_later(path, app)
+    assert app.reload_config_if_changed() is True
+    assert app.settings.scoreboard.favourite_team == "TOR"
+
+
+def test_admin_page_save_disabling_status_does_not_crash_in_flight_request(
+    fake_backend, games, tmp_path
+):
+    """The admin page can disable itself (#110 SS4); the in-flight response must still
+    complete normally -- the teardown only happens on the next reload tick."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[status]\nenabled = true\nport = 0\n")
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    assert app.admin_server is not None
+    app.admin_server.start()
+    try:
+        data = _save_data_for(app.settings, "status", enabled=False)
+        ack = _ws_save(app.admin_server.port, "status", data)
+        assert ack["type"] == "saved"
+    finally:
+        app.admin_server.stop()
+
+    _touch_later(path, app)
+    assert app.reload_config_if_changed() is True
+    assert app.admin_server is None
+
+
+def test_admin_page_save_concurrent_with_reload_does_not_raise(fake_backend, games, tmp_path):
+    """A save from the admin server's own thread and reload_config_if_changed() on the
+    main thread running at the same time must not raise or deadlock (#110 SS1)."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app.admin_server.start()
+    errors: list[Exception] = []
+
+    def hammer_reload() -> None:
+        for _ in range(20):
+            try:
+                app.reload_config_if_changed()
+            except Exception as exc:
+                errors.append(exc)
+
+    try:
+        thread = threading.Thread(target=hammer_reload)
+        thread.start()
+        for i in range(20):
+            team = "TOR" if i % 2 else "NSH"
+            data = _save_data_for(app.settings, "scoreboard", favourite_team=team)
+            _ws_save(app.admin_server.port, "scoreboard", data)
+        thread.join(timeout=5)
+    finally:
+        app.admin_server.stop()
+
+    assert errors == []
 
 
 # -- demo mode (#47) ----------------------------------------------------------
@@ -1263,6 +1695,9 @@ def stub_renderer(app: ScoreboardApp) -> None:
         "draw_countdown",
         "draw_preview",
         "draw_standings",
+        "draw_matchup",
+        "draw_conference_leaders",
+        "draw_leaders",
         "draw_message",
         "draw_clock",
     ):
@@ -1347,8 +1782,8 @@ def test_demo_goal_scenes_never_play_the_horn(fake_backend, games):
 def test_demo_stops_within_one_frame_of_a_signal(fake_backend, games):
     app, src = demo_app(fake_backend, games)
     stub_renderer(app)
-    status = FakeStatusServer()
-    app.status_server = status
+    status = FakeAdminServer()
+    app.admin_server = status
     frames = 0
 
     def sleep(seconds: float) -> None:
@@ -1635,3 +2070,108 @@ def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
 
     assert _qr_escape('a;b,c:d"e\\f') == 'a\\;b\\,c\\:d\\"e\\\\f'
     assert _qr_escape("plain") == "plain"
+
+
+# --------------------------------------------------------------------------
+# WiFi join outcome scene (#133)
+# --------------------------------------------------------------------------
+
+
+def _wifi_join(tmp_path, **kwargs) -> WifiJoinAttempt:
+    return WifiJoinAttempt(
+        config_path=tmp_path / "scoreboard.toml",
+        connect_timeout=1.0,
+        submission_path=tmp_path / "submission.json",
+        outcome_path=tmp_path / "outcome.json",
+        **kwargs,
+    )
+
+
+def test_no_outcome_file_leaves_normal_scene_selection_untouched(fake_backend, games, tmp_path):
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=_wifi_join(tmp_path)
+    )
+    app.refresh()
+    assert app.select_scene().kind != "wifi_join"
+
+
+def test_wifi_join_outcome_overrides_even_a_live_game(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text(json.dumps({"status": "attempting", "ssid": "HomeNet"}))
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    app.refresh()
+    assert any(g.is_live for g in app.games), "fixture should have a live game"
+
+    scene = app.select_scene()
+    assert scene.kind == "wifi_join"
+    assert scene.wifi_join_status == "attempting"
+    assert scene.wifi_join_ssid == "HomeNet"
+
+
+def test_wifi_join_outcome_wins_over_ap_setup_scene(fake_backend, games, tmp_path):
+    """A failed attempt restarts the AP, recreating the ap_setup state file
+    underneath the still-showing "Failed..." message -- wifi_join must win
+    for as long as its own outcome file exists."""
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text(json.dumps({"status": "failed", "ssid": "HomeNet"}))
+    ap_setup_path = tmp_path / "ap-setup.json"
+    ap_setup_path.write_text(json.dumps({"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard"}))
+    app = ScoreboardApp(
+        Settings(),
+        client=FakeClient(games),
+        backend=fake_backend,
+        wifi_join=join,
+        ap_setup_state_path=ap_setup_path,
+    )
+    assert app.select_scene().kind == "wifi_join"
+
+
+def test_malformed_outcome_file_degrades_to_normal_scene_selection(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    join.outcome_path.write_text("not valid json{{{")
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    app.refresh()
+    assert app.select_scene().kind != "wifi_join"
+
+
+def test_wifi_join_built_from_settings_picks_up_connect_timeout(fake_backend, games, tmp_path):
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("[wifi]\nconnect_timeout_seconds = 45\n")
+    app = ScoreboardApp(Settings.load(config_path), client=FakeClient(games), backend=fake_backend)
+    assert app.wifi_join.connect_timeout == 45.0
+
+
+def test_config_reload_updates_wifi_join_connect_timeout_in_place(fake_backend, games, tmp_path):
+    join = _wifi_join(tmp_path)
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend, wifi_join=join)
+    assert app.wifi_join.connect_timeout == 1.0
+
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("[wifi]\nconnect_timeout_seconds = 20\n")
+    app._apply_reloaded_settings(Settings.load(config_path))
+    assert app.wifi_join is join, "reload updates the existing object, not a new one"
+    assert app.wifi_join.connect_timeout == 20.0
+
+
+def test_boot_volume_is_applied_off_the_render_thread(fake_backend, games):
+    seen = []
+
+    class VolumeHorn(RecordingHorn):
+        def apply_volume(self) -> bool:
+            seen.append(threading.current_thread())
+            return True
+
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, horn=VolumeHorn()
+    )
+    app._apply_boot_volume().join(timeout=5)
+
+    assert len(seen) == 1
+    assert seen[0] is not threading.main_thread()
+
+
+def test_boot_volume_failure_does_not_raise(fake_backend, games):
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, horn=RecordingHorn()
+    )
+    app._apply_boot_volume().join(timeout=5)  # RecordingHorn has no apply_volume

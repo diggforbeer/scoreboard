@@ -13,7 +13,14 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from ..nhl.models import Game, GoalEvent, StandingsRow
+from ..nhl.models import (
+    Game,
+    GoalEvent,
+    SeasonSeriesRecord,
+    StandingsRow,
+    Star,
+    TeamLeaders,
+)
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_secondary_color
@@ -361,6 +368,84 @@ class Renderer:
             return ("UNASSISTED",)
         return tuple(f"#{a.sweater_number} {a.name} {a.assists_to_date}" for a in event.assists)
 
+    def draw_three_stars(self, canvas: Any, game: Game, stars: Sequence[Star]) -> None:
+        """The three stars of a finished favourite game (#156), all on one frame.
+
+        Same two-logo layout and narrow-panel crop (_logo_span, #38) as
+        draw_goal_detail, text-only when either logo is missing. One line
+        per star in the tiny face: rank, name in that player's team colour
+        (a star can come from either side -- nothing here filters by the
+        favourite), and this game's own G/A, not a season total. Unlike
+        goal_detail there are three names to fit, not one, so a name that
+        doesn't fit its slot falls back to the surname alone, then to a
+        truncated one, rather than running into the stat or the logo.
+        """
+        canvas.Clear()
+        if self.logos is not None:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                left, right = self._draw_logos(canvas, away, home)
+                self._draw_three_stars_content(canvas, stars, left, right)
+                return
+        self._draw_three_stars_content(canvas, stars, 0, self.width)
+
+    #: Baselines of the title and the (up to) three star lines, tiny face.
+    _THREE_STARS_TITLE_BASELINE = 6
+    _THREE_STARS_BASELINES = (14, 22, 30)
+
+    def _draw_three_stars_content(
+        self, canvas: Any, stars: Sequence[Star], left: int, right: int
+    ) -> None:
+        font = self.fonts.tiny
+        cx = (left + right) // 2
+        self.text_center(canvas, font, cx, self._THREE_STARS_TITLE_BASELINE, ACCENT, "3 STARS")
+        rank_x = left + 1
+        name_x = rank_x + text_width(font, "0") + 2
+        for baseline, star in zip(self._THREE_STARS_BASELINES, stars, strict=False):
+            self.text(canvas, font, rank_x, baseline, ACCENT, str(star.star))
+            stat = self._star_stat(star)
+            stat_x = right - 1 - text_width(font, stat)
+            if stat:
+                self.text(canvas, font, stat_x, baseline, WHITE, stat)
+            name_room = (stat_x - 3 if stat else right - 1) - name_x
+            self.text(
+                canvas,
+                font,
+                name_x,
+                baseline,
+                team_color(star.team_abbrev),
+                self._fit_name(font, star.name, name_room),
+            )
+
+    @staticmethod
+    def _star_stat(star: Star) -> str:
+        """One short stat: ``2G``, ``1A``, or ``3P`` when it's both goals and assists.
+
+        Deliberately one token, not ``2G 1A``: between two logos the name
+        only gets what the stat leaves over, and the long form cost a
+        typical multi-point star's surname its last few letters. Empty for
+        a goalie or a pointless skater -- a goalie's star carries goalie
+        stats instead, which aren't modelled.
+        """
+        if star.goals and star.assists:
+            return f"{star.points or star.goals + star.assists}P"
+        if star.goals:
+            return f"{star.goals}G"
+        if star.assists:
+            return f"{star.assists}A"
+        return ""
+
+    @classmethod
+    def _fit_name(cls, font: Any, name: str, max_width: int) -> str:
+        """``F. Lastname`` if it fits, else ``Lastname``, else a truncated surname."""
+        if text_width(font, name) <= max_width:
+            return name
+        _, sep, surname = name.partition(". ")
+        if sep and surname:
+            name = surname
+        return cls._fit_text(font, name, max_width)
+
     def draw_preview(self, canvas: Any, game: Game, now: datetime) -> None:
         """The favourite's next game: who, which day, what time."""
         self._draw_upcoming(
@@ -431,6 +516,61 @@ class Renderer:
         for text, color in parts:
             x += self.text(canvas, font, x, y, color, text)
 
+    def draw_matchup(self, canvas: Any, game: Game, record: SeasonSeriesRecord) -> None:
+        """Head-to-head wins this season for the upcoming game (#157).
+
+        Same frame as ``_draw_upcoming`` -- the big line above the rule, a
+        caption below it -- so it reads as a sibling of the preview it
+        rotates with. The tally is away-home, matching the game scene's own
+        left/right order. Only the win tally: individual past meetings'
+        scores are a deferred follow-up, not drawn here.
+        """
+        canvas.Clear()
+        rule_y = 19
+        tally = f"{record.away_wins}-{record.home_wins}"
+        bottom_baseline = self.height - 2
+
+        away = home = None
+        if self.logos is not None:
+            away, home = self.logos.get(game.away.abbrev), self.logos.get(game.home.abbrev)
+
+        if away is not None and home is not None:
+            left, right = self._draw_logos(canvas, away, home)
+            centre = (left + right) // 2
+            self.text_center(canvas, self.fonts.large, centre, 13, WHITE, tally)
+            self.hline(canvas, left + 3, right - 4, rule_y, DIM)
+            font, caption = self._series_caption(right - left - 2)
+            self.text_center(canvas, font, centre, bottom_baseline, SUBDUED, caption)
+            return
+
+        # No artwork: the abbreviations flank the tally instead, in the large
+        # face when it fits (always at 128px) and the small one otherwise.
+        parts = (
+            (f"{game.away.abbrev} ", team_color(game.away.abbrev)),
+            (tally, WHITE),
+            (f" {game.home.abbrev}", team_color(game.home.abbrev)),
+        )
+        max_w = self.width - 4
+        font = self.fonts.large
+        if sum(text_width(font, t) for t, _ in parts) > max_w:
+            font = self.fonts.small
+        x = self.width // 2 - sum(text_width(font, t) for t, _ in parts) // 2
+        for text, color in parts:
+            x += self.text(canvas, font, x, 13, color, text)
+        self.hline(canvas, 0, self.width - 1, rule_y, DIM)
+        font, caption = self._series_caption(max_w)
+        self.text_center(canvas, font, self.width // 2, bottom_baseline, SUBDUED, caption)
+
+    def _series_caption(self, max_width: int) -> tuple[Any, str]:
+        """The widest "season series" label that fits: small face, then tiny, then short."""
+        for font, caption in (
+            (self.fonts.small, "SEASON SERIES"),
+            (self.fonts.tiny, "SEASON SERIES"),
+        ):
+            if text_width(font, caption) <= max_width:
+                return font, caption
+        return self.fonts.small, "SERIES"
+
     #: Column offsets relative to the content area's left edge (past the
     #: favourite's logo, when there is one), so values of different widths
     #: (a 1- vs 2-digit rank, a 5- vs 7-char W-L-OT record) still line up
@@ -455,16 +595,48 @@ class Renderer:
         fit the panel height.
         """
         canvas.Clear()
-        font = self.fonts.tiny
-        row_height = 6
-
         logo = self.logos.get(favourite) if self.logos is not None else None
         if logo is not None:
             self.draw_logo(canvas, logo, 0, (self.height - logo.height) // 2)
             left = logo.width
         else:
             left = 0
+        self._draw_standings_rows(canvas, rows, favourite, left)
 
+    #: Below this, the fixed rank/abbrev/record/GP/points column offsets
+    #: _draw_standings_rows uses have nowhere to put a 32px label column
+    #: without overflowing (confirmed empirically: 190 out-of-bounds pixels
+    #: at 64px, 55 at 80px, 0 at 96px and up) -- a single 64x32 panel
+    #: (chain_length=1) skips the label rather than draw off-panel.
+    _CONFERENCE_LABEL_MIN_WIDTH = 96
+
+    def draw_conference_leaders(
+        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str
+    ) -> None:
+        """Top of one conference (#200): "WEST"/"EAST" label in the logo's slot, then the rows.
+
+        Same columns as ``draw_standings``; the label stands where the
+        favourite's logo would, so the conference is named without costing a
+        row of the five that fit. The favourite is highlighted if present.
+        Too narrow for that label column (see _CONFERENCE_LABEL_MIN_WIDTH):
+        drop it and draw the rows flush left, same graceful-degradation
+        precedent as a missing team logo elsewhere in this file.
+        """
+        canvas.Clear()
+        left = 32 if self.width >= self._CONFERENCE_LABEL_MIN_WIDTH else 0
+        if left:
+            conference = rows[0].conference if rows else ""
+            label = {"W": "WEST", "E": "EAST"}.get(conference, conference)
+            self.text_center(
+                canvas, self.fonts.small, left // 2, self.height // 2 + 3, WHITE, label
+            )
+        self._draw_standings_rows(canvas, rows, favourite, left)
+
+    def _draw_standings_rows(
+        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, left: int
+    ) -> None:
+        font = self.fonts.tiny
+        row_height = 6
         rank_x = left + self._STANDINGS_RANK_DX
         abbrev_x = left + self._STANDINGS_ABBREV_DX
         record_x = left + self._STANDINGS_RECORD_DX
@@ -479,6 +651,49 @@ class Renderer:
             self.text(canvas, font, record_x, y, color, row.record_label())
             self.text_right(canvas, font, gp_right, y, color, str(row.games_played))
             self.text_right(canvas, font, points_right, y, color, str(row.points))
+
+    def draw_leaders(self, canvas: Any, leaders: TeamLeaders, favourite: str) -> None:
+        """The favourite's own top players (#201): goals, points, then top two goalies.
+
+        The favourite's logo anchors the left edge, full height, exactly like
+        ``draw_standings`` (and is dropped the same way when the library has
+        none); everything else fills the rest of the width. Tiny face, five
+        rows at the standings scene's pitch: a title, then one row each of
+        ``G`` (goals leader), ``P`` (points leader), and up to two goalies
+        (``GK``: record and save %). A row with nobody to show is skipped and
+        the rest close up. Names are in the team's colour and truncated to fit.
+        """
+        canvas.Clear()
+        font = self.fonts.tiny
+        logo = self.logos.get(favourite) if self.logos is not None else None
+        if logo is not None:
+            self.draw_logo(canvas, logo, 0, (self.height - logo.height) // 2)
+            left = logo.width
+        else:
+            left = 0
+        right = self.width - 1
+        cx = (left + self.width) // 2
+        color = team_color(favourite)
+        rows: list[tuple[str, str, str]] = []
+        if leaders.goals is not None:
+            rows.append(("G", leaders.goals.name, f"{leaders.goals.goals}G"))
+        if leaders.points is not None:
+            p = leaders.points
+            rows.append(("P", p.name, f"{p.goals}G {p.assists}A"))
+        for g in leaders.goalies:
+            rows.append(("GK", g.name, f"{g.record_label()} {g.save_pct_label()}"))
+
+        row_height = 6
+        self.text_center(canvas, font, cx, row_height - 1, ACCENT, f"{favourite} LEADERS".strip())
+        label_x = left + 1
+        name_x = label_x + text_width(font, "GK") + 2
+        for i, (label, name, stat) in enumerate(rows, start=1):
+            y = 1 + i * row_height + (row_height - 2)
+            self.text(canvas, font, label_x, y, ACCENT, label)
+            stat_x = right - text_width(font, stat)
+            self.text(canvas, font, stat_x, y, WHITE, stat)
+            room = stat_x - 3 - name_x
+            self.text(canvas, font, name_x, y, color, self._fit_name(font, name, room))
 
     def draw_clock(self, canvas: Any, now: datetime, favourite: str | None = None) -> None:
         """Idle scene: the time, for when there is no hockey to show.
@@ -610,6 +825,45 @@ class Renderer:
                 WHITE,
                 self._fit_text(self.fonts.tiny, password, max_w - 15),
             )
+
+    def draw_wifi_join(self, canvas: Any, status: str | None, ssid: str | None) -> None:
+        """WiFi join outcome (#133): shown while nhl_scoreboard.wifi_join is
+        attempting a network submitted via the setup page, or briefly after,
+        before falling through to whatever's next (normal game data if
+        actually online, or the ap_setup SSID/QR scene again if a failed
+        attempt brought the AP back).
+
+        No SSID named in the "failed" case deliberately: the AP's real name
+        might not be the default, and ap_setup's own scene (about to show
+        next, once this one's display window ends) already names it
+        correctly from its own state file -- duplicating that name here
+        would just be a second place it could go stale.
+        """
+        canvas.Clear()
+        cx = self.width // 2
+        max_w = self.width - 4
+        if status == "connected":
+            title, color, subtitle = "CONNECTED!", LIVE, ssid or ""
+        elif status == "failed":
+            title, color, subtitle = "COULD NOT CONNECT", ACCENT, "REJOINING SETUP MODE..."
+        else:
+            title, color, subtitle = "JOINING...", WHITE, ssid or ""
+        self.text_center(
+            canvas,
+            self.fonts.medium,
+            cx,
+            13,
+            color,
+            self._fit_text(self.fonts.medium, title, max_w),
+        )
+        self.text_center(
+            canvas,
+            self.fonts.small,
+            cx,
+            self.height - 3,
+            SUBDUED,
+            self._fit_text(self.fonts.small, subtitle, max_w),
+        )
 
     # -- helpers ---------------------------------------------------------
 

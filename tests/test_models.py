@@ -432,3 +432,129 @@ def test_player_details_skips_a_malformed_entry_without_losing_the_rest():
     }
     club_stats = {"skaters": [{"playerId": 1, "points": 40}, {"playerId": 2, "points": 20}]}
     assert set(player_details_from_api(roster, club_stats)) == {2}
+
+
+# -- three stars (#156) -------------------------------------------------------
+
+from nhl_scoreboard.nhl.models import Star, three_stars_from_landing  # noqa: E402
+
+
+def _star_raw(star=1, team="CAR", name="F. Unger Sorum", goals=1, assists=0, points=1):
+    """Shaped like a real final game's landing ``threeStars`` entry."""
+    return {
+        "star": star,
+        "playerId": 8484392,
+        "teamAbbrev": team,
+        "name": {"default": name},
+        "sweaterNo": 36,
+        "position": "R",
+        "goals": goals,
+        "assists": assists,
+        "points": points,
+    }
+
+
+def test_star_parses_a_real_shaped_entry():
+    star = Star.from_api(_star_raw())
+    assert star == Star(
+        star=1,
+        player_id=8484392,
+        team_abbrev="CAR",
+        name="F. Unger Sorum",
+        sweater_no=36,
+        position="R",
+        goals=1,
+        assists=0,
+        points=1,
+    )
+
+
+def test_star_goalie_entry_without_skater_stats_reads_as_zero():
+    raw = _star_raw(star=3)
+    for key in ("goals", "assists", "points"):
+        del raw[key]
+    raw["position"] = "G"
+    star = Star.from_api(raw)
+    assert (star.goals, star.assists, star.points, star.position) == (0, 0, 0, "G")
+
+
+def test_three_stars_from_landing_orders_by_rank():
+    raw = {"threeStars": [_star_raw(star=3), _star_raw(star=1), _star_raw(star=2)]}
+    assert [s.star for s in three_stars_from_landing(raw)] == [1, 2, 3]
+
+
+def test_three_stars_from_landing_absent_is_empty():
+    assert three_stars_from_landing(None) == ()
+    assert three_stars_from_landing({}) == ()
+    assert three_stars_from_landing({"threeStars": None}) == ()
+    assert three_stars_from_landing({"threeStars": []}) == ()
+
+
+def test_three_stars_from_landing_skips_a_malformed_entry_without_losing_the_rest():
+    raw = {"threeStars": [{"name": {"default": "NO RANK"}}, _star_raw(star=2, name="OK")]}
+    assert [s.name for s in three_stars_from_landing(raw)] == ["OK"]
+
+
+import random  # noqa: E402
+
+from nhl_scoreboard.nhl.models import (  # noqa: E402
+    ClubStats,
+    GoalieLine,
+    SkaterLine,
+    team_leaders,
+)
+
+
+def _goalie(pid: int, gp: int) -> GoalieLine:
+    return GoalieLine(pid, f"G. {pid}", gp, 1, 2, 3, 0.9)
+
+
+def test_team_leaders_picks_max_goals_points_and_top_two_goalies_by_games():
+    stats = ClubStats(
+        skaters=(
+            SkaterLine(1, "A. A", 10, 1, 11),
+            SkaterLine(2, "B. B", 4, 20, 24),
+            SkaterLine(3, "C. C", 2, 2, 4),
+        ),
+        goalies=(_goalie(1, 5), _goalie(2, 50), _goalie(3, 30)),
+    )
+    leaders = team_leaders(stats, random.Random(0))
+    assert leaders.goals.player_id == 1
+    assert leaders.points.player_id == 2
+    assert [g.player_id for g in leaders.goalies] == [2, 3]
+
+
+def test_team_leaders_ties_are_random_but_always_a_tied_player():
+    stats = ClubStats(tuple(SkaterLine(i, f"P. {i}", 0, 0, 0) for i in range(20)), ())
+    picks = {team_leaders(stats, random.Random(seed)).goals.player_id for seed in range(30)}
+    assert len(picks) > 1
+    assert picks <= set(range(20))
+
+
+def test_team_leaders_tie_only_among_the_actual_leaders():
+    stats = ClubStats(
+        (
+            SkaterLine(1, "A. A", 5, 0, 5),
+            SkaterLine(2, "B. B", 5, 0, 5),
+            SkaterLine(3, "C. C", 1, 0, 1),
+        ),
+        (),
+    )
+    for seed in range(20):
+        assert team_leaders(stats, random.Random(seed)).goals.player_id in {1, 2}
+
+
+def test_team_leaders_none_when_nothing_to_show():
+    assert team_leaders(ClubStats((), ())) is None
+
+
+def test_team_leaders_goalies_only_still_shows():
+    leaders = team_leaders(ClubStats((), (_goalie(1, 3),)))
+    assert leaders.goals is None and leaders.points is None
+    assert len(leaders.goalies) == 1
+
+
+def test_goalie_save_pct_label():
+    assert GoalieLine(1, "G", 1, 0, 0, 0, 0.915).save_pct_label() == ".915"
+    assert GoalieLine(1, "G", 1, 0, 0, 0, 1.0).save_pct_label() == "1.000"
+    assert GoalieLine(1, "G", 0, 0, 0, 0, 0.0).save_pct_label() == ".000"

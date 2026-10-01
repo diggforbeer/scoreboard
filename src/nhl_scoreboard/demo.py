@@ -12,7 +12,17 @@ from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
 from .app import Scene
-from .nhl.models import Game, Situation, StandingsRow, conference_standings, standings_window
+from .nhl.models import (
+    Game,
+    GoalieLine,
+    SeasonSeriesRecord,
+    Situation,
+    SkaterLine,
+    StandingsRow,
+    TeamLeaders,
+    conference_standings,
+    standings_window,
+)
 
 #: Stand-ins for the favourite's opponents; any of them is skipped if it
 #: happens to be the favourite itself, so a matchup never plays itself.
@@ -37,6 +47,17 @@ _CONFERENCE = (
     "SEA",
     "CHI",
     "SJS",
+)
+
+
+#: Made-up players, shown whichever team is the favourite.
+_LEADERS = TeamLeaders(
+    goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
+    points=SkaterLine(2, "R. O'Reilly", 9, 17, 26),
+    goalies=(
+        GoalieLine(3, "J. Saros", 22, 13, 7, 2, 0.915),
+        GoalieLine(4, "J. Wright", 9, 4, 3, 1, 0.902),
+    ),
 )
 
 
@@ -81,6 +102,10 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
     return [
         DemoStep(Scene("connecting")),
         DemoStep(Scene("preview", upcoming)),
+        DemoStep(Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1))),
+        DemoStep(
+            Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1)), use_logos=False
+        ),
         DemoStep(Scene("countdown", soon)),
         DemoStep(Scene("game", soon)),
         DemoStep(Scene("game", live)),
@@ -96,6 +121,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("game", shootout)),
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
+        DemoStep(Scene("conference_leaders", standings=_standings("")[:5])),
+        DemoStep(Scene("leaders", leaders=_LEADERS)),
+        DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
         DemoStep(Scene("clock")),
         DemoStep(Scene("no_games")),
         DemoStep(Scene("no_data")),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from nhl_scoreboard.config import ConfigWriteError, Settings, resolve_timezone
@@ -84,6 +86,27 @@ def test_wifi_setup_server_defaults_on_port_80(tmp_path):
     wifi_setup = Settings.load(path).wifi_setup
     assert wifi_setup.enabled is False
     assert wifi_setup.port == 8000
+
+
+def test_wifi_connect_timeout_defaults_to_90_and_is_overridable(tmp_path):
+    assert Settings().wifi.connect_timeout_seconds == 90.0
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[wifi]\nssid = "MyNetwork"\nconnect_timeout_seconds = 30\n')
+    settings = Settings.load(path)
+    assert settings.wifi.connect_timeout_seconds == 30.0
+
+
+def test_wifi_ssid_password_country_are_not_modelled_and_do_not_warn(tmp_path, caplog):
+    """ssid/password/country live in the same [wifi] section but are read
+    directly out of raw TOML by scoreboard-provision, not through WifiConfig
+    -- this pins down that loading a normal [wifi] section never trips
+    _build()'s "unknown key" warning for any of them."""
+    caplog.set_level(logging.WARNING)
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[wifi]\nssid = "MyNetwork"\npassword = "hunter2"\ncountry = "US"\n')
+    Settings.load(path)
+    assert "unknown config key" not in caplog.text.lower()
 
 
 def test_brightness_clamp_is_kept_within_0_100():
@@ -264,6 +287,19 @@ def test_night_mode_dim_brightness_clamped_to_0_100(given, expected):
     assert NightModeConfig(dim_brightness=given).dim_brightness == expected
 
 
+@pytest.mark.parametrize(("given", "expected"), [(-10, 0), (0, 0), (40, 40), (250, 100)])
+def test_audio_volume_clamped_to_0_100(given, expected):
+    from nhl_scoreboard.config import AudioConfig
+
+    assert AudioConfig(volume=given).volume == expected
+
+
+def test_audio_volume_defaults_to_100():
+    from nhl_scoreboard.config import AudioConfig
+
+    assert AudioConfig().volume == 100
+
+
 def test_night_mode_bad_suppress_scope_falls_back_to_tracked(caplog):
     from nhl_scoreboard.config import NightModeConfig
 
@@ -286,9 +322,160 @@ def test_night_mode_cooldown_clamped_to_zero():
     assert NightModeConfig(cooldown_minutes=0).cooldown_minutes == 0
 
 
+def test_button_defaults_off_without_a_section(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    button = Settings.load(path).button
+    assert button.enabled is False
+    assert button.pin == 26
+    assert button.mute_minutes == 60.0
+    assert button.hold_seconds == 1.0
+
+
+def test_button_parses_its_section(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[button]\nenabled = true\npin = 16\nmute_minutes = 15\nhold_seconds = 2\n")
+    button = Settings.load(path).button
+    assert (button.enabled, button.pin, button.mute_minutes, button.hold_seconds) == (
+        True,
+        16,
+        15.0,
+        2,
+    )
+
+
+def test_button_mute_minutes_clamped_to_zero(caplog):
+    from nhl_scoreboard.config import ButtonConfig
+
+    assert ButtonConfig(mute_minutes=-5).mute_minutes == 0
+    assert ButtonConfig(mute_minutes=0).mute_minutes == 0
+    assert "mute_minutes" not in caplog.text, "0 is valid; clamping it isn't worth a warning"
+
+
+@pytest.mark.parametrize("given", [0, 0.1, -1])
+def test_button_hold_seconds_floored_with_a_warning(given, caplog):
+    from nhl_scoreboard.config import MIN_HOLD_SECONDS, ButtonConfig
+
+    with caplog.at_level(logging.WARNING):
+        assert ButtonConfig(hold_seconds=given).hold_seconds == MIN_HOLD_SECONDS
+    assert "hold_seconds" in caplog.text
+
+
+def test_button_reasonable_hold_seconds_left_alone(caplog):
+    from nhl_scoreboard.config import ButtonConfig
+
+    assert ButtonConfig(hold_seconds=0.5).hold_seconds == 0.5
+    assert ButtonConfig(hold_seconds=3).hold_seconds == 3
+    assert "hold_seconds" not in caplog.text
+
+
 def test_night_mode_derived_times_are_not_settable_from_toml(tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[night_mode]\nstart = "01:00"\n')
     night = Settings.load(path).night_mode  # must not raise
     assert night.start_time == "22:30"
     assert "start" in caplog.text
+
+
+# -- configurable idle rotation (#150) ---------------------------------------
+
+
+def test_rotation_absent_from_file_defaults_to_an_empty_list():
+    """app.py derives the old implicit default list itself when this is empty."""
+    assert Settings().rotation == []
+
+
+def test_rotation_parses_screen_and_seconds_in_file_order(tmp_path):
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        """
+        [[rotation]]
+        screen = "countdown_preview"
+        seconds = 10
+
+        [[rotation]]
+        screen = "standings"
+        seconds = 15
+
+        [[rotation]]
+        screen = "clock"
+        seconds = 8
+        """
+    )
+    assert Settings.load(path).rotation == [
+        RotationEntry("countdown_preview", 10.0),
+        RotationEntry("standings", 15.0),
+        RotationEntry("clock", 8.0),
+    ]
+
+
+def test_rotation_accepts_the_opt_in_matchup_screen(tmp_path):
+    """#157: only reachable by listing it explicitly -- see test_flow's default-rotation test."""
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[[rotation]]\nscreen = "matchup"\nseconds = 6\n')
+    assert Settings.load(path).rotation == [RotationEntry("matchup", 6.0)]
+
+
+def test_rotation_entry_with_unknown_screen_is_dropped_with_a_warning(tmp_path, caplog):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[[rotation]]\nscreen = "weather"\nseconds = 10\n')
+    assert Settings.load(path).rotation == []
+    assert "weather" in caplog.text
+
+
+@pytest.mark.parametrize("bad_seconds", [0, -5, "soon"])
+def test_rotation_entry_with_non_positive_or_non_numeric_seconds_is_dropped(bad_seconds, caplog):
+    from nhl_scoreboard.config import _parse_rotation
+
+    entries = _parse_rotation([{"screen": "clock", "seconds": bad_seconds}])
+    assert entries == []
+    assert "clock" in caplog.text
+
+
+def test_rotation_valid_entries_kept_alongside_dropped_invalid_ones(tmp_path):
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        """
+        [[rotation]]
+        screen = "clock"
+        seconds = 5
+
+        [[rotation]]
+        screen = "bogus"
+        seconds = 5
+        """
+    )
+    assert Settings.load(path).rotation == [RotationEntry("clock", 5.0)]
+
+
+def test_save_writes_rotation_as_an_array_of_tables(tmp_path):
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    settings = Settings.load(path)
+    settings.save(
+        {
+            "rotation": [
+                {"screen": "countdown_preview", "seconds": 10},
+                {"screen": "clock", "seconds": 8},
+            ]
+        }
+    )
+
+    assert settings.rotation == [
+        RotationEntry("countdown_preview", 10.0),
+        RotationEntry("clock", 8.0),
+    ]
+    reloaded = Settings.load(path)
+    assert reloaded.rotation == settings.rotation
+    text = path.read_text()
+    assert "[[rotation]]" in text
+    # The untouched [scoreboard] section survives the write.
+    assert 'favourite_team = "NSH"' in text

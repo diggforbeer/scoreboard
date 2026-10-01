@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for a newer scoreboard release (daily)
+Documentation=https://github.com/diggforbeer/scoreboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/
+Environment=PYTHONPATH=/opt/nhl-scoreboard
+# Honours [update] enabled; only ever records "update available".
+ExecStart=/usr/bin/python3 -m nhl_scoreboard.updater check --config /boot/firmware/scoreboard.toml
