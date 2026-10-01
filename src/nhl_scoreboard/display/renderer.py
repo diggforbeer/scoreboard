@@ -575,16 +575,48 @@ class Renderer:
         fit the panel height.
         """
         canvas.Clear()
-        font = self.fonts.tiny
-        row_height = 6
-
         logo = self.logos.get(favourite) if self.logos is not None else None
         if logo is not None:
             self.draw_logo(canvas, logo, 0, (self.height - logo.height) // 2)
             left = logo.width
         else:
             left = 0
+        self._draw_standings_rows(canvas, rows, favourite, left)
 
+    #: Below this, the fixed rank/abbrev/record/GP/points column offsets
+    #: _draw_standings_rows uses have nowhere to put a 32px label column
+    #: without overflowing (confirmed empirically: 190 out-of-bounds pixels
+    #: at 64px, 55 at 80px, 0 at 96px and up) -- a single 64x32 panel
+    #: (chain_length=1) skips the label rather than draw off-panel.
+    _CONFERENCE_LABEL_MIN_WIDTH = 96
+
+    def draw_conference_leaders(
+        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str
+    ) -> None:
+        """Top of one conference (#200): "WEST"/"EAST" label in the logo's slot, then the rows.
+
+        Same columns as ``draw_standings``; the label stands where the
+        favourite's logo would, so the conference is named without costing a
+        row of the five that fit. The favourite is highlighted if present.
+        Too narrow for that label column (see _CONFERENCE_LABEL_MIN_WIDTH):
+        drop it and draw the rows flush left, same graceful-degradation
+        precedent as a missing team logo elsewhere in this file.
+        """
+        canvas.Clear()
+        left = 32 if self.width >= self._CONFERENCE_LABEL_MIN_WIDTH else 0
+        if left:
+            conference = rows[0].conference if rows else ""
+            label = {"W": "WEST", "E": "EAST"}.get(conference, conference)
+            self.text_center(
+                canvas, self.fonts.small, left // 2, self.height // 2 + 3, WHITE, label
+            )
+        self._draw_standings_rows(canvas, rows, favourite, left)
+
+    def _draw_standings_rows(
+        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, left: int
+    ) -> None:
+        font = self.fonts.tiny
+        row_height = 6
         rank_x = left + self._STANDINGS_RANK_DX
         abbrev_x = left + self._STANDINGS_ABBREV_DX
         record_x = left + self._STANDINGS_RECORD_DX

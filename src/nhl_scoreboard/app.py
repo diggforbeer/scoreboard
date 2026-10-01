@@ -104,8 +104,9 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``, ``matchup``,
-    ``leaders``, ``clock``, ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
+    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
+    ``conference_leaders``, ``matchup``, ``leaders``, ``clock``, ``no_games``,
+    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
     kind: str
@@ -1046,6 +1047,22 @@ class ScoreboardApp:
             return None
         return Scene("standings", standings=tuple(window))
 
+    def _conference_leaders_scene(
+        self, conference: str, *, allow_fetch: bool = True
+    ) -> Scene | None:
+        """Top five of one conference (#200), or None with no standings yet.
+
+        Deliberately not gated on anyone's ``games_played``: the owner chose
+        to just show whatever the latest table says.
+        """
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
+        if not rows:
+            return None
+        top = conference_standings(rows, conference)[:5]
+        if not top:
+            return None
+        return Scene("conference_leaders", standings=tuple(top))
+
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
     ) -> SeasonSeriesRecord | None:
@@ -1164,6 +1181,10 @@ class ScoreboardApp:
             return standings
         if screen == "clock":
             return Scene("clock")
+        if screen in ("top_west", "top_east"):
+            # Resolved here so a board not listing them never needs the fetch.
+            conference = "W" if screen == "top_west" else "E"
+            return self._conference_leaders_scene(conference, allow_fetch=allow_fetch)
         if screen == "matchup":
             # Resolved here, not up front like standings, so a board without
             # "matchup" in its rotation never calls right-rail at all.
@@ -1586,6 +1607,10 @@ class ScoreboardApp:
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
+        elif scene.kind == "conference_leaders":
+            r.draw_conference_leaders(
+                self.canvas, scene.standings, self.settings.scoreboard.favourite_team
+            )
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
         elif scene.kind == "matchup":
