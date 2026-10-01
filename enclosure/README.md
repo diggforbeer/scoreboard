@@ -1,74 +1,80 @@
 # Enclosure
 
 OpenSCAD models for a 3D-printed case holding the Raspberry Pi and the
-chained HUB75 panel(s) behind a shared front frame. Two versions live
-here side by side rather than one file overwriting the other, since
-they're genuinely different iterations (see below) and the second one
-hasn't fully superseded the first in-repo yet.
+chained HUB75 panel(s). There is one design, **v3**, in a Pi 4 and a
+Pi 3 Model B+ variant. Earlier iterations (v1, v2) were removed; they
+remain in git history.
 
-## `scoreboard-case.scad` (v1)
+## `scoreboard-case-v3.scad` / `scoreboard-case-v3-pi3b.scad` (current)
 
-The original shell: outer walls, a ledge the panel(s) rest against from
-the front, standoffs matching the Pi 4's official mounting-hole spacing,
-a side-wall ambient-light-sensor hole (#44/#45), and a speaker port in
-each side wall (driver still unpicked, so these are generic round holes,
-not a grille cut for a specific model). No power-brick seat, no venting
-beyond the two speaker holes, and no print-bed splitting -- it's sized
-for whatever bed the full width happens to fit on.
+A rework after printing and fitting the earlier v2 design. The two files are identical
+except for `pi_model` (`4` or `3`), which only changes the port
+faceplate -- the Pi 3 Model B+ has its Ethernet and USB jacks in swapped
+positions. The board variant and `case_version` are printed as raised
+text on the inside of the back wall, along with the repo URL, so a
+printed case can be matched to its source; bump `case_version` with
+every design change.
 
-## `scoreboard-case-v2.scad`
+What changed from v2:
 
-A larger redesign: adds a power-brick bay with an IEC C14 socket cutout
-(a straight C13 cord plugs in from outside), moves the speakers to the
-ceiling firing upward instead of through the side walls, adds a
-push-button cutout, and adds tilted vent slits through the back wall
-behind the Pi -- the first real attempt at the airflow question #49
-raises, not just component-clearance holes. Also supports the Pi 3
-Model B+'s mounting pattern in addition to the Pi 4's (they share the
-same hole spacing). Too wide for a typical 256mm print bed in one
-piece, so it splits into left/right halves at the seam between the two
-chained panels -- set the `part` variable near the top of the file to
-`"all"` (preview), `"left"`, or `"right"`.
+- **Power brick moves outside.** Having it inside blocked access to the
+  Pi. A 12mm hole low on the left wall takes a panel-mount 5.5mm barrel
+  jack (nut inside, flange outside) that feeds the matrix hat.
+- **Pi against the right wall**, USB/Ethernet end out through a port
+  faceplate -- one rounded opening per jack with solid columns between,
+  so an external USB speaker can plug straight in. The board sits 5mm
+  off the floor (the 3.5mm audio jack overhangs its bottom edge ~3mm).
+  Standoffs are cones (10mm base, 6mm top) so they don't snap off.
+  Tilted vent slits through the back wall behind it (#49).
+- **Magnetic panel mounting.** The panels' own magnetic screws land on
+  16mm steel washers glued into pads on the top and bottom walls; the old
+  ledge is gone and the panel fronts sit flush with the case. Magnet
+  positions were read from a photo of the panel backs -- the washers are
+  oversized to absorb a couple of mm of error. The two bottom magnets of
+  the right panel that would sit over the Pi/hat have no pad (unscrew the
+  bottom-middle one). A half-circle finger notch in each side wall's
+  front edge helps pull the panels off.
+- **Light sensor (#44/#45)** on the left wall: the GY-302/BH1750 board
+  slides into rails from the open front, chip facing a 6mm window, until
+  it hits a stop. The chip-side step is trimmed to 0.8mm (`bh_step_ov`)
+  so a part near the board edge doesn't catch.
+- **Push button (#50)**, 7mm, on the right wall above the faceplate.
+- **Speaker grilles (#114)** in the ceiling, now between the magnet pads.
+  Still sized for a placeholder 40mm driver (`speaker_d`/`speaker_depth`).
+- **Bolted seam.** Still two halves split at the panel seam (`part` =
+  `"left"` / `"right"`), now joined by a 5mm internal U-flange on each
+  half (back, top and bottom walls) with five M3 bolts -- heads on the
+  left half, nuts captured in hex pockets on the right. Nothing crosses
+  the cut, so each half is one clean solid for the slicer.
 
-Updated once already after real-world fit testing (#114): the Pi moved
-next to the *right* speaker with its ports facing the open middle
-(originally next to the left speaker facing the other way), the power
-brick's socket end flipped to the *left* wall (originally the right),
-and the ambient-light sensor moved to the right wall to make room. The
-speaker ports are now a hex grille (`speaker_grilles()`) instead of one
-open hole -- protects the driver cone and looks finished, sized
-generically (`grille_hole_d`/`grille_pitch`) since no driver is picked
-yet (#114's grille item is otherwise still open -- the *pattern* exists,
-but its sizing should be revisited once a real driver is in hand). A
-7mm round panel-mount momentary button cutout (`button_hole()`, #50)
-sits on the right wall below the sensor.
+Hardware: 5x M3x10 socket-head bolts + nuts (seam), 4x M2.5 screws (Pi),
+10x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
+(12mm thread), 7mm momentary button.
 
-Several dimensions are still placeholders pending real parts in hand:
-`speaker_d`/`speaker_depth` (no driver picked), and the power brick's
-socket position (`socket_off_y`/`socket_off_z`, a measured guess from a
-product photo) -- refine both once the actual parts are available to
-measure.
+Still open: the speaker grille's hole size/pitch (generic until a real
+driver is picked), and confirming the magnet
+positions and right-panel stability on a full print.
 
 ## Shared conventions
 
 All panel dimensions at the top of each file come from the spec sheet in
-`CLAUDE.md`'s Hardware facts section, except `panel_depth`, which is an
-estimate -- measure the real panel (PCB + connectors) and correct it
-before printing a final version. `wall` (2.4mm) assumes a 0.4mm nozzle at
+`CLAUDE.md`'s Hardware facts section. earlier versions' `panel_depth` was an
+estimate; v3 uses the measured panel thickness (`panel_t`, 15mm) and the
+panel + magnet-screw depth (`mag_total_t`, 27mm). `wall` (2.4mm) assumes a 0.4mm nozzle at
 ~6 perimeters; adjust to your printer/slicer if different. Both print
 without supports: flat base (the back wall), no overhangs beyond 45°,
 open front face.
 
 ```bash
 # Preview
-openscad enclosure/scoreboard-case-v2.scad
+openscad enclosure/scoreboard-case-v3.scad
 
 # Render a still, e.g. for a quick visual check
 openscad -o case.png --imgsize=1600,500 \
   --camera=162,42,300,0,0,0,600 --projection=ortho \
-  enclosure/scoreboard-case-v2.scad
+  enclosure/scoreboard-case-v3.scad
 
-# Export for printing (v2: repeat with part = "left" / "right" if your
-# bed can't take the full width in one piece)
-openscad -o case.stl enclosure/scoreboard-case-v2.scad
+# Export the two printable halves
+openscad -D 'part="left"'  -o case-left.stl  enclosure/scoreboard-case-v3.scad
+openscad -D 'part="right"' -o case-right.stl enclosure/scoreboard-case-v3.scad
 ```
