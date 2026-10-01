@@ -296,6 +296,8 @@ _log_task: asyncio.Task[None] | None = None
 #: snapshot parameter had -- this module still has no idea what a scene or
 #: a game is.
 SNAPSHOT_PROVIDER: Callable[[], dict[str, str]] | None = None
+#: Turns the live demo (#204) on/off on the running ScoreboardApp; None with no live app.
+DEMO_SETTER: Callable[[bool], None] | None = None
 #: A goal horn is a few seconds long; 2 MB is generous for that and still
 #: protects the SD card from an accidental multi-minute file (#193).
 HORN_MAX_BYTES = 2 * 1024 * 1024
@@ -980,6 +982,18 @@ async def _handle(connection: ServerConnection) -> None:
                 await _subscribe_logs(connection)
             elif msg_type == "logs_unsubscribe":
                 await _unsubscribe_logs(connection)
+            elif msg_type == "demo_mode":
+                enabled = message.get("enabled")
+                if not isinstance(enabled, bool):
+                    error = {"type": "error", "message": "demo_mode needs a boolean 'enabled'"}
+                    await connection.send(json.dumps(error))
+                elif DEMO_SETTER is None:
+                    error = {"type": "error", "message": "no live scoreboard to run demo mode on"}
+                    await connection.send(json.dumps(error))
+                else:
+                    DEMO_SETTER(enabled)
+                    # Every tab learns at once, not just the one that clicked.
+                    await _broadcast(_snapshot_payload())
             elif msg_type == "test_horn":
                 played = _test_horn()
                 await connection.send(json.dumps({"type": "horn_tested", "played": played}))
@@ -1088,11 +1102,13 @@ class AdminServer:
         config_path: str,
         port: int,
         snapshot: Callable[[], dict[str, str]] | None = None,
+        demo_setter: Callable[[bool], None] | None = None,
         host: str = "0.0.0.0",  # intentional: a LAN admin page, see module docstring
     ) -> None:
         self._config_path = config_path
         self._port = port
         self._snapshot = snapshot
+        self._demo_setter = demo_setter
         self._host = host
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -1105,9 +1121,10 @@ class AdminServer:
         return self._bound_port if self._bound_port is not None else self._port
 
     def start(self) -> None:
-        global CONFIG_PATH, SNAPSHOT_PROVIDER
+        global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER
         CONFIG_PATH = self._config_path
         SNAPSHOT_PROVIDER = self._snapshot
+        DEMO_SETTER = self._demo_setter
         ready = threading.Event()
         self._thread = threading.Thread(
             target=lambda: asyncio.run(self._serve(ready)), name="admin-server", daemon=True

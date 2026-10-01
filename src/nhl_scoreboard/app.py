@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import FrameType
+from typing import TYPE_CHECKING
 
 import qrcode
 
@@ -46,6 +47,9 @@ from .nhl.models import (
 from .setup_server import SetupServer
 from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
+
+if TYPE_CHECKING:
+    from .demo import DemoStep
 
 log = logging.getLogger(__name__)
 
@@ -258,6 +262,7 @@ class ScoreboardApp:
                 config_path=str(settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                 port=settings.status.port,
                 snapshot=self.status_snapshot,
+                demo_setter=self.set_demo_mode,
             )
         else:
             self.admin_server = None
@@ -328,6 +333,16 @@ class ScoreboardApp:
         #: The configured logo library, held by run_demo() while it toggles
         #: renderer.logos between it and None for the text layout.
         self._demo_real_logos: LogoLibrary | None = logos
+        #: Live demo toggle (#204). Set from admin_server's thread, a plain
+        #: bool read once per draw() on run()'s thread -- same cross-thread
+        #: rule as the physical button's flags. Everything else the main
+        #: loop does (polling, goal horn, config reload) keeps running.
+        self._demo_mode = False
+        self._demo_steps: list[DemoStep] = []
+        self._demo_step_index = 0
+        self._demo_next_step_at = 0.0
+        self._demo_scene: Scene | None = None
+        self._demo_was_on = False
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -423,6 +438,27 @@ class ScoreboardApp:
                     self.sleep(FRAME_INTERVAL)
         self.renderer.logos = self._demo_real_logos
         self.shutdown()
+
+    def set_demo_mode(self, enabled: bool) -> None:
+        """Turn the live demo on or off (#204); safe from any thread."""
+        self._demo_mode = bool(enabled)
+
+    def _draw_demo_step(self) -> None:
+        """Advance the live demo on ``DEMO_SCENE_SECONDS`` and draw its current step."""
+        from .demo import demo_steps
+
+        now = self.monotonic()
+        if now >= self._demo_next_step_at:
+            if self._demo_step_index >= len(self._demo_steps):
+                # Rebuilt each pass so preview/countdown stay relative to now.
+                self._demo_steps = demo_steps(self.settings.scoreboard.favourite_team, self.clock())
+                self._demo_step_index = 0
+            step = self._demo_steps[self._demo_step_index]
+            self._demo_step_index += 1
+            self._demo_next_step_at = now + DEMO_SCENE_SECONDS
+            self._set_demo_logos(step.use_logos)
+            self._demo_scene = step.scene
+        self.draw_scene(self._demo_scene)
 
     def _set_demo_logos(self, use_logos: bool) -> None:
         """Show the text fallback layout on demand, whatever the board has configured.
@@ -672,6 +708,7 @@ class ScoreboardApp:
                     config_path=str(new_settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                     port=new_settings.status.port,
                     snapshot=self.status_snapshot,
+                demo_setter=self.set_demo_mode,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,
@@ -1613,7 +1650,8 @@ class ScoreboardApp:
         cfg = self.settings.scoreboard
         return {
             "version": installed_version() or "unknown (factory image)",
-            "scene": scene.kind,
+            "demo mode": "on" if self._demo_mode else "off",
+            "scene": "demo" if self._demo_mode else scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",
             "last successful poll": self._format_time(self.last_success_at),
@@ -1640,6 +1678,16 @@ class ScoreboardApp:
             self.canvas.Clear()
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
             return
+        if self._demo_mode:
+            if not self._demo_was_on:
+                self._demo_was_on = True
+                self._demo_real_logos = self.renderer.logos
+                self._demo_steps, self._demo_step_index, self._demo_next_step_at = [], 0, 0.0
+            self._draw_demo_step()
+            return
+        if self._demo_was_on:
+            self._demo_was_on = False
+            self.renderer.logos = self._demo_real_logos
         self.draw_scene(self.select_scene())
 
     def draw_scene(self, scene: Scene) -> None:

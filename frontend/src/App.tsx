@@ -671,6 +671,14 @@ function App() {
     reader.readAsDataURL(hornUploadFile)
   }
 
+  function setDemoMode(enabled: boolean) {
+    if (socketRef.current?.readyState !== WebSocket.OPEN) return
+    socketRef.current.send(JSON.stringify({ type: 'demo_mode', enabled }))
+  }
+
+  const demoOn = snapshot?.['demo mode'] === 'on'
+  const demoAvailable = snapshot !== null && 'demo mode' in snapshot
+
   function testHorn() {
     if (hornTestTimerRef.current) clearTimeout(hornTestTimerRef.current)
     setHornTestMessage(null)
@@ -761,6 +769,24 @@ function App() {
             )
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+          {demoAvailable && (
+            <div className="mt-3 d-flex align-items-center gap-2">
+              {demoOn ? (
+                <button type="button" className="btn btn-warning" onClick={() => setDemoMode(false)}>
+                  End demo
+                </button>
+              ) : (
+                <button type="button" className="btn btn-outline-primary" onClick={() => setDemoMode(true)}>
+                  Start demo
+                </button>
+              )}
+              {demoOn && (
+                <span className="text-warning-emphasis small">
+                  Demo mode is on: the panel shows synthetic scores, not real games.
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>
