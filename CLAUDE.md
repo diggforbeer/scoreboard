@@ -311,8 +311,9 @@ which only covers the unrelated "no games left to preview at all" case
 entirely). Admin-UI support for editing `[[rotation]]` itself is #151, not
 built yet -- today it's boot-partition-TOML-only.
 
-`matchup` (#157) is a fourth `[[rotation]]` screen and the only
-**opt-in** one: deliberately absent from `_default_rotation`, so a board
+`matchup` (#157) is a fourth `[[rotation]]` screen and the first
+**opt-in** one (`top_west`/`top_east`, #200, and `leaders`, #201, below are
+opt-in too): deliberately absent from `_default_rotation`, so a board
 never shows it (or calls `right-rail` at all) unless the owner lists
 `{screen = "matchup", seconds = N}` explicitly. It shows the favourite's
 head-to-head wins this season against the upcoming game's opponent
@@ -327,7 +328,30 @@ that precedent covers exactly this win tally and nothing broader
 tally ships -- individual past-meeting scores (#168) and team/player
 stat leaders (#169) are separate follow-ups.
 
-`leaders` (#201) is a fifth `[[rotation]]` screen, also opt-in (absent from
+`top_west`/`top_east` (#200) are two more opt-in `[[rotation]]` screens
+(also absent from `_default_rotation`): the top five teams of one
+conference by `conferenceSequence`, reusing `conference_standings()`/
+`_refresh_standings()` from the existing `standings` scene (#40) with no
+favourite-window trimming and, by the owner's choice, no `games_played`
+gate -- unlike `standings`, it just shows whatever the latest table says.
+Layout (`Renderer.draw_conference_leaders`) reuses `_draw_standings_rows`
+with a `"WEST"`/`"EAST"` label drawn in the logo's slot instead of the
+favourite's crest, so the conference is named without costing one of the
+five rows that fit; the favourite is still highlighted if it appears in
+the list. **Independently built alongside `leaders` (#201) below, and
+both features happened to reuse the exact same Scene kind and method name
+(`"leaders"` / `_leaders_scene`)** -- merging the two PRs together is what
+surfaced it: Python let the second definition silently shadow the first
+with no error, and `git merge` didn't flag it as a conflict either, since
+the two method bodies sat in different enough surrounding context to
+auto-merge cleanly as sequential, not overlapping, hunks. Renamed this
+one's Scene kind to `conference_leaders` and its method to
+`_conference_leaders_scene`/`draw_conference_leaders` to resolve it --
+worth remembering that a clean `git merge` (no `<<<<<<<` markers) is not
+proof two independently-built features didn't collide on a name; grep for
+duplicate `def`s after merging two features that touch the same area.
+
+`leaders` (#201) is another `[[rotation]]` screen, also opt-in (absent from
 `_default_rotation`): the favourite's top goal scorer, top point getter and
 top two goalies by `gamesPlayed`, from `club-stats/{TEAM}/now`
 (`NHLClient.club_stats()`, hourly TTL `LEADERS_TTL_SECONDS`, same backoff as

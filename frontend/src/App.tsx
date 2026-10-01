@@ -34,7 +34,15 @@ const WS_URL = import.meta.env.DEV
 // Mirrors config.py's VALID_ROTATION_SCREENS -- hardcoded here rather than
 // asked of the server, same "one section's worth of evidence isn't enough
 // to generalise yet" call the backend docstring makes.
-const ROTATION_SCREENS = ['countdown_preview', 'standings', 'clock', 'matchup', 'leaders'] as const
+const ROTATION_SCREENS = [
+  'countdown_preview',
+  'standings',
+  'clock',
+  'matchup',
+  'top_west',
+  'top_east',
+  'leaders',
+] as const
 const ROTATION_MAX_ROWS = 8
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
 const HORN_MAX_BYTES = 2 * 1024 * 1024

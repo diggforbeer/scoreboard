@@ -922,6 +922,24 @@ def assert_standings_layout(
         assert team_color(row.abbrev) in colors, f"row {i} ({row.abbrev}) not in its team colour"
 
 
+def test_leaders_layout_labels_conference_and_fits_five_rows(update_snapshots):
+    names = ["COL", "DAL", "NSH", "STL", "WPG"]
+    rows = [standings_row(a, i, 60 - i) for i, a in enumerate(names, 1)]
+    c = canvas()
+    make_renderer().draw_conference_leaders(c, rows, "NSH")
+    art = show("leaders, west, favourite present", c)
+    assert not c.out_of_bounds
+    label = c.lit(0, 0, 31, H - 1)
+    assert label, "conference label missing"
+    assert set(label.values()) == {WHITE}
+    for i, row in enumerate(rows):
+        y0 = i * STANDINGS_ROW_HEIGHT
+        colors = c.colors(32, y0, W - 1, y0 + STANDINGS_ROW_HEIGHT - 1)
+        assert team_color(row.abbrev) in colors
+        assert colors <= {ACCENT if row.abbrev == "NSH" else WHITE, team_color(row.abbrev)}
+    check_snapshot("leaders_west", art, update_snapshots)
+
+
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
     c = canvas()
     make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")
