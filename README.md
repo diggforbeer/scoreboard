@@ -91,7 +91,7 @@ Early development. Working today:
 - [x] Optional web status page for headless debugging, with a config editor
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
 - [x] Optional push-button on GPIO 26: tap to mute the goal horn, hold to skip to the next game
-- [ ] Verified on real hardware
+- [x] Verified on real hardware
 
 ## Development
 
