@@ -609,6 +609,17 @@ _DEFAULT_SCOREBOARD_DATA = {
     "show_clock_between_games": False,
 }
 
+#: show_standings is a real ScoreboardConfig field (and so is in the
+#: asdict payload the server sends on connect, above), but is no longer
+#: one this section's own save message validates -- the Rotation
+#: section's [[rotation]] list is the authoritative control for whether
+#: "standings" appears in the idle rotation now (#150/#151); show_standings
+#: only still feeds the *derived default* rotation for a board with no
+#: explicit [[rotation]]. Every save-message test below sends this, not
+#: _DEFAULT_SCOREBOARD_DATA directly, the same way the frontend's
+#: saveScoreboard strips it before calling save().
+_SCOREBOARD_SAVE_DATA = {k: v for k, v in _DEFAULT_SCOREBOARD_DATA.items() if k != "show_standings"}
+
 
 def test_sends_the_current_scoreboard_config_on_connect(app_dir, config_path):
     async def scenario(client):
@@ -625,7 +636,7 @@ def test_sends_the_current_scoreboard_config_on_connect(app_dir, config_path):
 
 
 def test_scoreboard_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
-    new_values = {**_DEFAULT_SCOREBOARD_DATA, "favourite_team": "TOR", "show_logos": False}
+    new_values = {**_SCOREBOARD_SAVE_DATA, "favourite_team": "TOR", "show_logos": False}
 
     async def scenario(client):
         await _skip_initial(client)
@@ -643,7 +654,7 @@ def test_scoreboard_save_writes_the_file_and_confirms_with_fresh_config(app_dir,
 def test_scoreboard_save_rejects_an_unknown_field_without_writing_the_file(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
-        data = {**_DEFAULT_SCOREBOARD_DATA, "bogus": "x"}
+        data = {**_SCOREBOARD_SAVE_DATA, "bogus": "x"}
         await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
         return await client.recv()
 
@@ -657,7 +668,7 @@ def test_scoreboard_save_rejects_an_unknown_field_without_writing_the_file(app_d
 def test_scoreboard_save_rejects_the_wrong_type(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
-        data = {**_DEFAULT_SCOREBOARD_DATA, "rotate_seconds": "not a number"}
+        data = {**_SCOREBOARD_SAVE_DATA, "rotate_seconds": "not a number"}
         await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
         return await client.recv()
 
@@ -671,7 +682,7 @@ def test_scoreboard_save_rejects_the_wrong_type(app_dir, config_path):
 def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
-        data = {**_DEFAULT_SCOREBOARD_DATA, "logo_variant": "purple"}
+        data = {**_SCOREBOARD_SAVE_DATA, "logo_variant": "purple"}
         await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
         return await client.recv()
 
