@@ -110,6 +110,14 @@ interface AudioConfig {
   volume: number
 }
 
+// One row per horn actually sitting in the admin page's writable upload
+// directory (admin_server.py's _list_uploaded_horns) -- team is "default"
+// for the shipped-default override slot, or a real TEAM_COLORS code.
+interface HornEntry {
+  team: string
+  filename: string
+}
+
 interface ScoreboardConfig {
   favourite_team: string
   timezone: string
@@ -234,6 +242,9 @@ type ServerMessage =
   | { type: 'rebooting' }
   | { type: 'horn_tested'; played: boolean }
   | { type: 'horn_uploaded'; name: string }
+  | { type: 'horn_list'; horns: HornEntry[] }
+  | { type: 'horn_played'; team: string; played: boolean }
+  | { type: 'horn_deleted'; team: string }
 
 function connectionBadge(state: ConnectionState) {
   const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
@@ -274,6 +285,15 @@ function App() {
   const [hornTestMessage, setHornTestMessage] = useState<{ text: string; ok: boolean } | null>(
     null,
   )
+  const [hornList, setHornList] = useState<HornEntry[]>([])
+  // Which row's Play/Delete is in flight, so only that row's buttons
+  // disable -- a slow Delete on one team shouldn't block playing another.
+  const [hornActionBusy, setHornActionBusy] = useState<string | null>(null)
+  const [hornActionMessage, setHornActionMessage] = useState<{
+    team: string
+    text: string
+    ok: boolean
+  } | null>(null)
 
   const [scoreboard, setScoreboard] = useState<ScoreboardConfig | null>(null)
   const [scoreboardSaveStatus, setScoreboardSaveStatus] = useState<SaveStatus>('idle')
@@ -324,6 +344,13 @@ function App() {
 
   const socketRef = useRef<WebSocket | null>(null)
   const hornTestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hornActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The websocket's onmessage closure is created once (empty effect deps
+  // below) and never sees later renders' state, so it can't read
+  // hornActionBusy directly without going stale -- a ref tracks "which
+  // team's action is in flight" for the one case that needs it (the
+  // generic horn_action error, which carries no team of its own).
+  const hornActionTeamRef = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -402,12 +429,37 @@ function App() {
             setHornUploading(false)
             setHornUploadMessage({ text: `Uploaded ${message.name}.`, ok: true })
             break
+          case 'horn_list':
+            setHornList(message.horns)
+            break
+          case 'horn_played':
+            setHornActionBusy(null)
+            if (hornActionTimerRef.current) clearTimeout(hornActionTimerRef.current)
+            setHornActionMessage({
+              team: message.team,
+              text: message.played ? 'Playing...' : 'Could not play (check Audio is enabled).',
+              ok: message.played,
+            })
+            if (message.played) {
+              // Playback is fire-and-forget server-side, same as Test horn
+              // above -- nothing else ever clears this otherwise.
+              hornActionTimerRef.current = setTimeout(() => setHornActionMessage(null), 4000)
+            }
+            break
+          case 'horn_deleted':
+            setHornActionBusy(null)
+            setHornActionMessage({ team: message.team, text: 'Deleted.', ok: true })
+            break
           case 'error':
             if (message.section === 'logs') {
               setLogError(message.message)
             } else if (message.section === 'horn_upload') {
               setHornUploading(false)
               setHornUploadMessage({ text: message.message, ok: false })
+            } else if (message.section === 'horn_action') {
+              setHornActionBusy(null)
+              const team = hornActionTeamRef.current
+              setHornActionMessage(team ? { team, text: message.message, ok: false } : null)
             } else if (message.section === 'audio') {
               setAudioSaveStatus('error')
               setAudioSaveError(message.message)
@@ -688,6 +740,31 @@ function App() {
     }
     setHornTesting(true)
     socketRef.current.send(JSON.stringify({ type: 'test_horn' }))
+  }
+
+  function playHorn(team: string) {
+    if (hornActionTimerRef.current) clearTimeout(hornActionTimerRef.current)
+    hornActionTeamRef.current = team
+    setHornActionMessage(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setHornActionMessage({ team, text: NOT_CONNECTED_ERROR, ok: false })
+      return
+    }
+    setHornActionBusy(team)
+    socketRef.current.send(JSON.stringify({ type: 'play_horn', team }))
+  }
+
+  function deleteHorn(team: string) {
+    const label = team === 'default' ? 'the default horn' : `${teamName(team)}'s horn`
+    if (!window.confirm(`Delete ${label}? This reverts to the shipped default.`)) return
+    hornActionTeamRef.current = team
+    setHornActionMessage(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setHornActionMessage({ team, text: NOT_CONNECTED_ERROR, ok: false })
+      return
+    }
+    setHornActionBusy(team)
+    socketRef.current.send(JSON.stringify({ type: 'delete_horn', team }))
   }
 
   return (
@@ -1599,6 +1676,54 @@ function App() {
             Upload a WAV (max 2 MB) to replace the default horn, or to give one team its own. A
             team's own horn always wins over the default.
           </p>
+
+          {hornList.length > 0 ? (
+            <ul className="list-group mb-4">
+              {hornList.map((horn) => (
+                <li
+                  key={horn.team}
+                  className="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2"
+                >
+                  <div>
+                    <strong>
+                      {horn.team === 'default' ? 'Default horn' : `${teamName(horn.team)} (${horn.team})`}
+                    </strong>
+                    <span className="text-body-secondary small ms-2">{horn.filename}</span>
+                    {hornActionMessage?.team === horn.team && (
+                      <span
+                        className={`small ms-2 ${hornActionMessage.ok ? 'text-success' : 'text-danger'}`}
+                      >
+                        {hornActionMessage.text}
+                      </span>
+                    )}
+                  </div>
+                  <div className="btn-group btn-group-sm" role="group">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => playHorn(horn.team)}
+                      disabled={hornActionBusy === horn.team}
+                    >
+                      Play
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger"
+                      onClick={() => deleteHorn(horn.team)}
+                      disabled={hornActionBusy === horn.team}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-body-secondary small mb-4">
+              No custom horns uploaded yet -- every team plays the shipped default.
+            </p>
+          )}
+
           <div className="row g-3 align-items-end">
             <div className="col-md-4">
               <label className="form-label" htmlFor="horn-upload-team">
