@@ -1417,7 +1417,12 @@ def test_play_horn_plays_a_specific_teams_horn_not_just_the_favourites(
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
-    assert json.loads(received) == {"type": "horn_played", "team": "TOR", "played": True}
+    assert json.loads(received) == {
+        "type": "horn_played",
+        "team": "TOR",
+        "played": True,
+        "reason": "",
+    }
     assert len(calls) == 1 and calls[0][-1].endswith("TOR.wav")
 
 
@@ -1446,7 +1451,12 @@ def test_play_horn_default_plays_the_default_stem_not_a_literal_default_file(
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
-    assert json.loads(received) == {"type": "horn_played", "team": "default", "played": True}
+    assert json.loads(received) == {
+        "type": "horn_played",
+        "team": "default",
+        "played": True,
+        "reason": "",
+    }
     assert len(calls) == 1 and calls[0][-1].endswith("_default.wav")
 
 
@@ -1459,7 +1469,72 @@ def test_play_horn_reports_not_played_when_audio_disabled(app_dir, config_path):
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
-    assert json.loads(received) == {"type": "horn_played", "team": "NSH", "played": False}
+    message = json.loads(received)
+    assert message["type"] == "horn_played"
+    assert message["team"] == "NSH"
+    assert message["played"] is False
+    assert "disabled" in message["reason"]
+
+
+def test_play_horn_reports_no_file_found_distinct_from_disabled(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    """#213's own follow-up: a single generic "check Audio is enabled"
+    message couldn't tell a disabled board apart from a missing file --
+    this is the "enabled=true but genuinely nothing to play" case, which
+    must say something different from the disabled case above. horn_dir
+    alone isn't enough to isolate this: default_directories() always also
+    searches upload_directory() and the repo's own committed
+    assets/horns/ (where the real shipped _default.wav lives, and where a
+    developer's own git-ignored drop-in horn can sit too) as further
+    fallbacks, so default_directories() itself has to be replaced to
+    guarantee nothing anywhere resolves."""
+    from nhl_scoreboard import audio as audio_module
+
+    empty_dir = tmp_path / "truly-empty"
+    monkeypatch.setattr(audio_module, "default_directories", lambda override="": [empty_dir])
+    config_path.write_text("[audio]\nenabled = true\n")
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "NSH"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["played"] is False
+    assert "No horn file found" in message["reason"]
+    assert "disabled" not in message["reason"]
+
+
+def test_play_horn_reports_launch_failure_distinct_from_disabled_and_missing(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    """The third collapsed-to-False case: enabled, a file genuinely
+    exists, but the player subprocess itself couldn't launch (this
+    project's own dev sandbox hit exactly this -- no aplay/mpg123 on
+    PATH -- while verifying #213 live)."""
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "NSH.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    def _raise(cmd):
+        raise OSError("aplay not found")
+
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_popen", staticmethod(_raise))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "NSH"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["played"] is False
+    assert "player command" in message["reason"]
+    assert "disabled" not in message["reason"] and "No horn file" not in message["reason"]
 
 
 @pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])

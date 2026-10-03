@@ -901,7 +901,7 @@ def _delete_horn(team: object) -> bool:
     return deleted
 
 
-def _play_named_horn(settings: Settings, team: object) -> bool:
+def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
     """Play a specific horn by key (#211's follow-up), not just whichever
     one the favourite currently resolves to (_test_horn's own job) -- same
     enabled-gating/volume-apply/background-thread reasoning as _test_horn.
@@ -916,13 +916,31 @@ def _play_named_horn(settings: Settings, team: object) -> bool:
     Verified by reading path_for()'s own two-tier loop, not assumed; a
     test locks this in rather than leaving it an accident of that
     fallback behaviour.
+
+    Returns ``(played, reason)`` -- ``reason`` is only meaningful when
+    ``played`` is False. GoalHornPlayer.play() itself only ever returns a
+    bare bool (enabled/no-file/subprocess-launch-failure all collapse to
+    the same False), which is exactly what #213's own follow-up flagged:
+    the admin page showed one fixed "check Audio is enabled" message
+    regardless of which of those three actually happened, so a report of
+    "it's enabled and I still get that message" couldn't be told apart
+    from a genuinely-disabled board, a missing upload, or (verified live
+    in this project's own dev sandbox while building #213) aplay/mpg123
+    not even being on PATH. The three checks here mirror play()'s own,
+    in the same order, purely to label *which* one is why -- they don't
+    change what actually gets played.
     """
     _horn_stem(team)  # validates (raises ValueError for the caller to catch);
     # the "default" literal or a TEAM_COLORS key are both already plain str
     horn = _current_horn(settings)
-    if horn.enabled:
-        horn.apply_volume()
-    return horn.play(team)
+    if not horn.enabled:
+        return False, "Audio is disabled in the Audio section."
+    horn.apply_volume()
+    if horn.path_for(team) is None:
+        return False, "No horn file found for this team, and no default is available either."
+    if horn.play(team):
+        return True, ""
+    return False, "The player command (aplay/mpg123) failed to launch -- check the board's logs."
 
 
 async def _watch_update_state() -> None:
@@ -1123,13 +1141,20 @@ async def _handle(connection: ServerConnection) -> None:
                 team = message.get("team")
                 try:
                     settings = Settings.load(CONFIG_PATH)
-                    played = _play_named_horn(settings, team)
+                    played, reason = _play_named_horn(settings, team)
                 except ValueError as exc:
                     error = {"type": "error", "section": "horn_action", "message": str(exc)}
                     await connection.send(json.dumps(error))
                 else:
                     await connection.send(
-                        json.dumps({"type": "horn_played", "team": team, "played": played})
+                        json.dumps(
+                            {
+                                "type": "horn_played",
+                                "team": team,
+                                "played": played,
+                                "reason": reason,
+                            }
+                        )
                     )
             elif msg_type == "delete_horn":
                 team = message.get("team")
