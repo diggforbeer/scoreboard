@@ -243,7 +243,7 @@ type ServerMessage =
   | { type: 'horn_tested'; played: boolean }
   | { type: 'horn_uploaded'; name: string }
   | { type: 'horn_list'; horns: HornEntry[] }
-  | { type: 'horn_played'; team: string; played: boolean }
+  | { type: 'horn_played'; team: string; played: boolean; reason: string }
   | { type: 'horn_deleted'; team: string }
 
 function connectionBadge(state: ConnectionState) {
@@ -437,7 +437,7 @@ function App() {
             if (hornActionTimerRef.current) clearTimeout(hornActionTimerRef.current)
             setHornActionMessage({
               team: message.team,
-              text: message.played ? 'Playing...' : 'Could not play (check Audio is enabled).',
+              text: message.played ? 'Playing...' : message.reason,
               ok: message.played,
             })
             if (message.played) {
