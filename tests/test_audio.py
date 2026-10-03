@@ -191,3 +191,17 @@ def test_apply_volume_broken_runner_is_caught_not_raised(tmp_path):
     player = GoalHornPlayer([tmp_path], volume=50, mixer_runner=runner)
     assert player.apply_volume() is False  # logged, not raised
     assert len(runner.calls) == len(VOLUME_CONTROLS)  # every control attempted
+
+
+def test_mp3_plays_through_mpg123(tmp_path):
+    touch(tmp_path / "NSH.mp3")
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], device="hw:1,0", runner=runner)
+    assert player.play("NSH")
+    assert runner.calls == [["mpg123", "-q", "-a", "hw:1,0", str(tmp_path / "NSH.mp3")]]
+
+
+def test_team_mp3_beats_default_wav(tmp_path):
+    touch(tmp_path / "NSH.mp3")
+    touch(tmp_path / "_default.wav")
+    assert GoalHornPlayer([tmp_path]).path_for("NSH") == tmp_path / "NSH.mp3"

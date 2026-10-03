@@ -3,8 +3,8 @@
 Mirrors display/logos.py's LogoLibrary: an ordered list of directories, a
 team-specific file first, the shipped default as fallback, absence is never
 an error. Playback is fire-and-forget via aplay so it never blocks the
-render loop; a missing file or broken audio device is logged and otherwise
-ignored -- sound is a nice-to-have, not load-bearing.
+render loop (aplay for WAV, mpg123 for MP3); a missing file or broken audio
+device is logged and otherwise ignored -- sound is a nice-to-have, not load-bearing.
 """
 
 from __future__ import annotations
@@ -17,7 +17,12 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-DEFAULT_NAME = "_default.wav"
+DEFAULT_STEM = "_default"
+DEFAULT_NAME = f"{DEFAULT_STEM}.wav"
+
+#: Horn file extensions, in lookup order within one directory. WAV plays
+#: through aplay, MP3 through mpg123 (#208) -- aplay can't decode MP3.
+HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
 
 #: ALSA mixer control names to try, in order, when applying `volume` --
 #: which one a given card actually exposes isn't standardised (the kernel's
@@ -85,11 +90,12 @@ class GoalHornPlayer:
         directory order -- a team file anywhere in the search path wins
         over a default earlier in it.
         """
-        for name in (f"{abbrev.strip().upper()}.wav", DEFAULT_NAME):
+        for stem in (abbrev.strip().upper(), DEFAULT_STEM):
             for directory in self.directories:
-                candidate = directory / name
-                if candidate.is_file():
-                    return candidate
+                for ext in HORN_EXTENSIONS:
+                    candidate = directory / f"{stem}{ext}"
+                    if candidate.is_file():
+                        return candidate
         return None
 
     def play(self, abbrev: str) -> bool:
@@ -100,9 +106,14 @@ class GoalHornPlayer:
         if path is None:
             log.debug("No horn for %s and no default available", abbrev)
             return False
-        cmd = ["aplay", "-q"]
-        if self.device:
-            cmd += ["-D", self.device]
+        if path.suffix.lower() == ".mp3":
+            cmd = ["mpg123", "-q"]
+            if self.device:
+                cmd += ["-a", self.device]
+        else:
+            cmd = ["aplay", "-q"]
+            if self.device:
+                cmd += ["-D", self.device]
         cmd.append(str(path))
         try:
             self._run(cmd)

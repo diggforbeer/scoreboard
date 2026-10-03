@@ -1620,13 +1620,13 @@ function App() {
             </div>
             <div className="col-md-5">
               <label className="form-label" htmlFor="horn-upload-file">
-                WAV file
+                WAV or MP3 file
               </label>
               <input
                 className="form-control"
                 id="horn-upload-file"
                 type="file"
-                accept=".wav,audio/wav,audio/x-wav"
+                accept=".wav,.mp3,audio/wav,audio/x-wav,audio/mpeg"
                 onChange={(e) => setHornUploadFile(e.target.files?.[0] ?? null)}
               />
             </div>
