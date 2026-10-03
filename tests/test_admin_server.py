@@ -1312,3 +1312,39 @@ def test_upload_horn_rejects_oversize(app_dir, config_path, upload_dir, monkeypa
     monkeypatch.setattr(admin_server, "HORN_MAX_BYTES", 100)
     assert "too large" in _upload("NSH", _wav_b64(frames=500))["message"]
     assert not upload_dir.exists()
+
+
+def test_demo_mode_message_calls_setter_and_broadcasts_snapshot(app_dir, config_path, monkeypatch):
+    seen = []
+    state = {"demo mode": "off"}
+
+    def setter(enabled):
+        seen.append(enabled)
+        state["demo mode"] = "on" if enabled else "off"
+
+    monkeypatch.setattr(admin_server, "DEMO_SETTER", setter)
+    monkeypatch.setattr(admin_server, "SNAPSHOT_PROVIDER", lambda: dict(state))
+
+    async def scenario(client):
+        await _skip_initial(client, n=10)
+        await client.send(json.dumps({"type": "demo_mode", "enabled": True}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert seen == [True]
+    assert json.loads(received) == {"type": "snapshot", "data": {"demo mode": "on"}}
+
+
+def test_demo_mode_message_rejects_non_boolean_and_missing_app(app_dir, config_path, monkeypatch):
+    monkeypatch.setattr(admin_server, "DEMO_SETTER", None)
+
+    async def scenario(client):
+        await _skip_initial(client, n=10)
+        await client.send(json.dumps({"type": "demo_mode", "enabled": "yes"}))
+        first = await client.recv()
+        await client.send(json.dumps({"type": "demo_mode", "enabled": True}))
+        return first, await client.recv()
+
+    first, second = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(first)["type"] == "error"
+    assert json.loads(second)["type"] == "error"
