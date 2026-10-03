@@ -93,9 +93,10 @@ async def _serve_and_get(path):
         return await asyncio.to_thread(_get)
 
 
-async def _skip_initial(client, n=10):
+async def _skip_initial(client, n=11):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update/snapshot messages every connection opens with."""
+    rotation/update/horn_list/snapshot messages every connection opens
+    with."""
     for _ in range(n):
         await client.recv()
 
@@ -1142,7 +1143,7 @@ def test_websocket_upgrade_still_works_with_process_request_installed(admin_dir)
 
 def test_sends_an_empty_snapshot_with_no_provider_configured(app_dir, config_path):
     async def scenario(client):
-        await _skip_initial(client, n=9)  # everything up to but not including snapshot
+        await _skip_initial(client, n=10)  # everything up to but not including snapshot
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -1153,7 +1154,7 @@ def test_sends_the_configured_snapshot_on_connect(app_dir, config_path, monkeypa
     monkeypatch.setattr(admin_server, "SNAPSHOT_PROVIDER", lambda: {"scene": "game", "error": ""})
 
     async def scenario(client):
-        await _skip_initial(client, n=9)
+        await _skip_initial(client, n=10)
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
@@ -1181,7 +1182,7 @@ def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch
             async with serve(admin_server._handle, "localhost", 0) as server:
                 port = server.sockets[0].getsockname()[1]
                 async with connect(f"ws://localhost:{port}/") as client:
-                    await _skip_initial(client, n=9)  # up to but not including the first snapshot
+                    await _skip_initial(client, n=10)  # up to but not including the first snapshot
                     first = json.loads(await client.recv())
                     state["scene"] = "game"
                     second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
@@ -1224,7 +1225,7 @@ def test_admin_server_class_sets_config_path_and_snapshot_provider(app_dir, conf
     server.start()
     try:
         with sync_connect(f"ws://localhost:{server.port}/", open_timeout=5) as ws:
-            messages = [json.loads(ws.recv(timeout=5)) for _ in range(10)]
+            messages = [json.loads(ws.recv(timeout=5)) for _ in range(11)]
         audio = next(m for m in messages if m.get("section") == "audio")
         assert audio["data"]["device"] == "hw:9,0"
         snapshot = next(m for m in messages if m["type"] == "snapshot")
@@ -1338,6 +1339,195 @@ def test_upload_horn_rejects_oversize(app_dir, config_path, upload_dir, monkeypa
     assert not upload_dir.exists()
 
 
+# -- follow-up: the "Custom goal horns" list (play/delete an upload) ----------
+
+
+def test_sends_an_empty_horn_list_on_connect_with_no_uploads(app_dir, config_path, upload_dir):
+    async def scenario(client):
+        await _skip_initial(client, n=9)  # up to but not including horn_list
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "horn_list", "horns": []}
+
+
+def test_sends_the_current_horn_list_on_connect(app_dir, config_path, upload_dir):
+    upload_dir.mkdir()
+    (upload_dir / "_default.mp3").write_bytes(b"x")
+    (upload_dir / "NSH.wav").write_bytes(b"x")
+
+    async def scenario(client):
+        await _skip_initial(client, n=9)
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {
+        "type": "horn_list",
+        "horns": [
+            {"team": "default", "filename": "_default.mp3"},
+            {"team": "NSH", "filename": "NSH.wav"},
+        ],
+    }
+
+
+def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
+    app_dir, config_path, upload_dir
+):
+    """_broadcast() iterates every connected client, including whichever one
+    triggered it -- so even a single connection sees its own "horn_uploaded"
+    ack followed by a fresh "horn_list" push, not just the direct reply."""
+
+    async def scenario(client):
+        await _skip_initial(client, n=9)  # up to but not including horn_list
+        before = json.loads(await client.recv())  # horn_list
+        await client.recv()  # snapshot, the 11th and last initial message
+        await client.send(json.dumps({"type": "upload_horn", "team": "NSH", "data": _wav_b64()}))
+        ack = json.loads(await client.recv())
+        after = json.loads(await client.recv())
+        return before, ack, after
+
+    before, ack, after = asyncio.run(_serve_and_run(scenario))
+    assert before == {"type": "horn_list", "horns": []}
+    assert ack == {"type": "horn_uploaded", "name": "NSH.wav"}
+    assert after == {"type": "horn_list", "horns": [{"team": "NSH", "filename": "NSH.wav"}]}
+
+
+def test_play_horn_plays_a_specific_teams_horn_not_just_the_favourites(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    """The favourite is NSH, but this asks for TOR's horn specifically --
+    proves play_horn answers "play this named horn", a different question
+    from _test_horn's "play whatever the favourite's own horn resolves to"."""
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "TOR.wav").write_bytes(b"fake wav")
+    (horn_dir / "_default.wav").write_bytes(b"fake wav")
+    config_path.write_text(
+        f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n[scoreboard]\nfavourite_team = "NSH"\n'
+    )
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "TOR"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "horn_played", "team": "TOR", "played": True}
+    assert len(calls) == 1 and calls[0][-1].endswith("TOR.wav")
+
+
+def test_play_horn_default_plays_the_default_stem_not_a_literal_default_file(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    """Locks in path_for()'s own fallback behaviour (documented on
+    _play_named_horn): "default" never matches a stored stem directly
+    (uploads are always saved as _default.*, never DEFAULT.*), but still
+    resolves to the right file via path_for()'s second-tier DEFAULT_STEM
+    lookup -- this would silently start playing nothing if that fallback
+    ever changed, so it's covered rather than left an accident."""
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "_default.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "default"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "horn_played", "team": "default", "played": True}
+    assert len(calls) == 1 and calls[0][-1].endswith("_default.wav")
+
+
+def test_play_horn_reports_not_played_when_audio_disabled(app_dir, config_path):
+    config_path.write_text("[audio]\nenabled = false\n")
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "NSH"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "horn_played", "team": "NSH", "played": False}
+
+
+@pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
+def test_play_horn_rejects_unknown_team(app_dir, config_path, team):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": team}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
+def test_delete_horn_removes_the_file_and_broadcasts_the_updated_list(
+    app_dir, config_path, upload_dir
+):
+    _upload("NSH", _wav_b64())
+
+    async def scenario(client):
+        await _skip_initial(client, n=9)  # up to but not including horn_list
+        before = json.loads(await client.recv())  # horn_list
+        await client.recv()  # snapshot, the 11th and last initial message
+        await client.send(json.dumps({"type": "delete_horn", "team": "NSH"}))
+        ack = json.loads(await client.recv())
+        after = json.loads(await client.recv())
+        return before, ack, after
+
+    before, ack, after = asyncio.run(_serve_and_run(scenario))
+    assert before == {"type": "horn_list", "horns": [{"team": "NSH", "filename": "NSH.wav"}]}
+    assert ack == {"type": "horn_deleted", "team": "NSH"}
+    assert after == {"type": "horn_list", "horns": []}
+    assert not (upload_dir / "NSH.wav").exists()
+
+
+def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_path, upload_dir):
+    """Same verification style as test_upload_horn_default_overrides_the_shipped_one
+    -- proves Delete isn't just "remove a file", it actually changes what a
+    real goal would play next, by reading path_for() through GoalHornPlayer."""
+    _upload("default", _wav_b64())
+    from nhl_scoreboard.audio import GoalHornPlayer
+
+    assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
+
+    async def scenario(client):
+        await _skip_initial(client, n=9)  # up to but not including horn_list
+        await client.recv()  # the list with the override still present
+        await client.recv()  # snapshot, the 11th and last initial message
+        await client.send(json.dumps({"type": "delete_horn", "team": "default"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "horn_deleted", "team": "default"}
+    assert GoalHornPlayer.default().path_for("TOR") != upload_dir / "_default.wav"
+
+
+@pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
+def test_delete_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "delete_horn", "team": team}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    message = json.loads(received)
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
 def test_demo_mode_message_calls_setter_and_broadcasts_snapshot(app_dir, config_path, monkeypatch):
     seen = []
     state = {"demo mode": "off"}
@@ -1350,7 +1540,7 @@ def test_demo_mode_message_calls_setter_and_broadcasts_snapshot(app_dir, config_
     monkeypatch.setattr(admin_server, "SNAPSHOT_PROVIDER", lambda: dict(state))
 
     async def scenario(client):
-        await _skip_initial(client, n=10)
+        await _skip_initial(client, n=11)
         await client.send(json.dumps({"type": "demo_mode", "enabled": True}))
         return await client.recv()
 
@@ -1363,7 +1553,7 @@ def test_demo_mode_message_rejects_non_boolean_and_missing_app(app_dir, config_p
     monkeypatch.setattr(admin_server, "DEMO_SETTER", None)
 
     async def scenario(client):
-        await _skip_initial(client, n=10)
+        await _skip_initial(client, n=11)
         await client.send(json.dumps({"type": "demo_mode", "enabled": "yes"}))
         first = await client.recv()
         await client.send(json.dumps({"type": "demo_mode", "enabled": True}))
