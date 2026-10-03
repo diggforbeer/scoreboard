@@ -296,6 +296,20 @@ which derives the pre-#150 list from `rotate_seconds` +
 still defaults `false`, so an upgraded board's rotation is unchanged
 until the owner opts in) -- those three settings are only read for that
 derivation and are ignored the moment an explicit `[[rotation]]` exists.
+**That was the intent from #150 itself, but `show_standings` didn't
+actually honour it until a later fix**: `_standings_scene()` also checked
+`cfg.show_standings` directly, so an explicit `[[rotation]]` entry for
+`"standings"` could still be silently defeated by a stale `show_standings`
+value left over from before a board migrated -- caught when the owner
+noticed the admin page's "Show favourite's playoff standings" checkbox
+felt redundant once the Rotation section could add/remove that row
+directly. Fixed by removing that live check (the gate now lives solely in
+`_default_rotation`, where it belongs) and dropping the field from the
+admin page's Scoreboard section (`_SCOREBOARD_FIELDS`,
+`saveScoreboard`/App.tsx) -- same "received in the asdict payload, not
+sent back on save" precedent `savePanel` already set for `pitch_mm`. The
+TOML field itself (`scoreboard.toml`'s `show_standings`) stays, for a
+board that's never touched `[[rotation]]` at all.
 An entry with nothing to show for the current pass (`standings` before
 `games_played > 0`, or `countdown_preview` with no upcoming game at all)
 is skipped rather than shown blank; the remaining entries keep cycling.

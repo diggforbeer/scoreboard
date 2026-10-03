@@ -1549,6 +1549,12 @@ def _save_data_for(settings: Settings, section: str, **overrides: object) -> dic
     for status_server.py's HTML forms -- JSON keeps real types, so unlike
     that helper there's no bool->string encoding to do."""
     data = dataclasses.asdict(getattr(settings, section))
+    if section == "scoreboard":
+        # show_standings is a real field (so it's in the asdict above) but
+        # no longer part of the Scoreboard section's own save contract --
+        # see admin_server.py's _SCOREBOARD_FIELDS and App.tsx's
+        # saveScoreboard, which strip it the same way for the same reason.
+        del data["show_standings"]
     data.update(overrides)
     return data
 
