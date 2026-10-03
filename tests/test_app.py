@@ -2197,8 +2197,18 @@ def test_live_demo_steps_through_scenes_then_returns_to_real_scenes(fake_backend
     app.set_demo_mode(False)
     calls.clear()
     app.draw()
-    assert calls[0][0] not in [s.scene for s in steps]
+    # This fixture's app never called refresh(), so real-mode select_scene()
+    # legitimately falls through to the same "connecting" scene demo step 0
+    # also uses (Scene equality is by value, not by which mode produced it)
+    # -- asserting non-membership in the demo step list is flaky by
+    # coincidence, not a real signal. What actually proves demo mode is off
+    # is the real select_scene() value itself, and status_snapshot's "scene"
+    # field (which reports the literal string "demo" while it's on,
+    # regardless of the underlying Scene kind -- see status_snapshot's own
+    # docstring/implementation).
+    assert calls[0][0] == Scene("connecting")
     assert app.status_snapshot()["demo mode"] == "off"
+    assert app.status_snapshot()["scene"] == "connecting"
 
 
 def test_live_demo_does_not_override_night_blanking(fake_backend, games):

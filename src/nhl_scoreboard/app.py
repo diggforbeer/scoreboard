@@ -708,7 +708,7 @@ class ScoreboardApp:
                     config_path=str(new_settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                     port=new_settings.status.port,
                     snapshot=self.status_snapshot,
-                demo_setter=self.set_demo_mode,
+                    demo_setter=self.set_demo_mode,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,
