@@ -1302,10 +1302,34 @@ def test_upload_horn_rejects_non_wav_and_bad_base64(app_dir, config_path, upload
     import base64
 
     not_wav = base64.b64encode(b"definitely not audio").decode()
-    assert "valid WAV" in _upload("NSH", not_wav)["message"]
+    assert "valid WAV or MP3" in _upload("NSH", not_wav)["message"]
     assert "base64" in _upload("NSH", "!!!")["message"]
     assert "no audio" in _upload("NSH", _wav_b64(frames=0))["message"]
     assert not upload_dir.exists()
+
+
+def _mp3_b64(id3=False):
+    import base64
+
+    frame = b"\xff\xfb\x90\x00" + b"\x00" * 100
+    tag = b"ID3\x03\x00\x00\x00\x00\x00\x05" + b"\x00" * 5 if id3 else b""
+    return base64.b64encode(tag + frame).decode()
+
+
+@pytest.mark.parametrize("id3", [False, True])
+def test_upload_horn_accepts_mp3(app_dir, config_path, upload_dir, id3):
+    reply = _upload("NSH", _mp3_b64(id3))
+    assert reply == {"type": "horn_uploaded", "name": "NSH.mp3"}
+    assert (upload_dir / "NSH.mp3").is_file()
+
+
+def test_upload_horn_replaces_other_format(app_dir, config_path, upload_dir):
+    _upload("NSH", _wav_b64())
+    _upload("NSH", _mp3_b64())
+    assert not (upload_dir / "NSH.wav").exists()
+    _upload("NSH", _wav_b64())
+    assert (upload_dir / "NSH.wav").is_file()
+    assert not (upload_dir / "NSH.mp3").exists()
 
 
 def test_upload_horn_rejects_oversize(app_dir, config_path, upload_dir, monkeypatch):

@@ -77,6 +77,12 @@ mmdebstrap:
     - iproute2
     - ca-certificates
     - alsa-utils
+    # MP3 goal horns (#208): aplay can only play WAV/PCM. A genuinely new
+    # dependency, flagged as such -- chosen over ffmpeg/vlc because it is
+    # purpose-built for the one job (play MPEG audio through ALSA) and far
+    # lighter. Real trixie/arm64 package per Debian's index; install on the
+    # actual image not yet verified (#4).
+    - mpg123
     # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
     # over I2C via this. Harmless if no sensor is wired up -- LightSensor
     # .open() degrades to None the same as a missing /dev/i2c-* would.

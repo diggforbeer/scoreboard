@@ -234,7 +234,7 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from . import updater
-from .audio import DEFAULT_NAME, GoalHornPlayer, upload_directory
+from .audio import DEFAULT_STEM, HORN_EXTENSIONS, GoalHornPlayer, upload_directory
 from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
 from .display.teams import TEAM_COLORS
 from .updater import installed_version
@@ -746,20 +746,38 @@ def _test_horn() -> bool:
     return horn.play(settings.scoreboard.favourite_team)
 
 
+def _looks_like_mp3(raw: bytes) -> bool:
+    """Cheap MP3 sniff: an MPEG audio frame sync, after any ID3v2 tag.
+
+    No MP3 decoder in the stdlib and none worth a runtime dependency just
+    to validate an upload; mpg123 itself skips junk it can't decode at
+    playback, so this only has to tell MP3 from not-MP3. Not verified
+    against a real board (#4).
+    """
+    pos = 0
+    if raw[:3] == b"ID3" and len(raw) >= 10:
+        size = 0
+        for b in raw[6:10]:  # ID3v2 size is a 4x7-bit syncsafe integer
+            size = (size << 7) | (b & 0x7F)
+        pos = 10 + size
+    head = raw[pos : pos + 2]
+    return len(head) == 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0 and (head[1] & 0x06) != 0
+
+
 def _save_horn(team: object, data_b64: object) -> str:
-    """Validate and store an uploaded horn WAV (#193); returns the file name.
+    """Validate and store an uploaded horn, WAV or MP3 (#193, #208); returns the file name.
 
     ``team`` is a real abbreviation from TEAM_COLORS or ``"default"`` (the
-    shipped ``_default.wav``), which keeps the file name off the wire --
+    shipped default horn), which keeps the file name off the wire --
     nothing client-supplied ever becomes part of a path. Written
     atomically into the persistent upload directory that
     ``audio.default_directories()`` already searches, so GoalHornPlayer
     needs no new mechanism. Raises ValueError with a message fit to show.
     """
     if team == "default":
-        name = DEFAULT_NAME
+        stem = DEFAULT_STEM
     elif isinstance(team, str) and team in TEAM_COLORS:
-        name = f"{team}.wav"
+        stem = team
     else:
         raise ValueError(f"unknown team {team!r}")
     if not isinstance(data_b64, str):
@@ -772,18 +790,26 @@ def _save_horn(team: object, data_b64: object) -> str:
         raise ValueError("file is empty")
     if len(raw) > HORN_MAX_BYTES:
         raise ValueError(f"file is too large (max {HORN_MAX_BYTES // (1024 * 1024)} MB)")
-    try:
-        with wave.open(io.BytesIO(raw)) as wav:
-            if wav.getnframes() <= 0:
-                raise ValueError("WAV file has no audio")
-    except (wave.Error, EOFError):
-        raise ValueError("not a valid WAV file") from None
+    ext = ".mp3" if _looks_like_mp3(raw) else ".wav"
+    if ext == ".wav":
+        try:
+            with wave.open(io.BytesIO(raw)) as wav:
+                if wav.getnframes() <= 0:
+                    raise ValueError("WAV file has no audio")
+        except (wave.Error, EOFError):
+            raise ValueError("not a valid WAV or MP3 file") from None
+    name = f"{stem}{ext}"
     directory = upload_directory()
     try:
         directory.mkdir(parents=True, exist_ok=True)
         tmp = directory / f".{name}.tmp"
         tmp.write_bytes(raw)
         tmp.replace(directory / name)
+        # path_for() prefers .wav within a directory, so a stale one of the
+        # other format would shadow this upload.
+        for other in HORN_EXTENSIONS:
+            if other != ext:
+                (directory / f"{stem}{other}").unlink(missing_ok=True)
     except OSError as exc:
         raise ValueError(f"could not store the file: {exc.strerror or exc}") from None
     return name
