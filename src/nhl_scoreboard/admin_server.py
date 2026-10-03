@@ -205,6 +205,31 @@ thing:
   files everything a service writes to stderr at one journal priority.
   Scoped to this one unit -- never the whole system journal.
 
+* Follow-up: a "Custom goal horns" list on the Audio section (#193/#208's
+  own follow-up), so an upload isn't a one-way, invisible action -- the
+  owner found this live ("I uploaded a custom goal horn... and I can
+  really tell I uploaded it" -- i.e. couldn't). Lists every horn actually
+  sitting in ``upload_directory()`` (``_list_uploaded_horns``; a team's
+  own shipped/baked-in horn or the shipped default asset are never listed,
+  since only an upload override is something a Delete button can
+  meaningfully revert), with a Play and a Delete button per row.
+  ``_horn_stem`` is now the one place "is this team key legal" is decided
+  -- ``_save_horn``, ``_delete_horn`` and ``_play_named_horn`` all share
+  it, rather than three copies of the same check. Play
+  (``_play_named_horn``) is deliberately not ``_test_horn`` with an
+  argument bolted on: it plays a *specific* named horn (any row in the
+  list, including ones that aren't the current favourite), while
+  ``_test_horn`` plays whatever the favourite's own horn currently
+  resolves to -- different questions, so a confirmed working ``_test_horn``
+  was left alone rather than generalised. Delete removes the override
+  file(s) only; it can never fail to leave *something* playable, since
+  ``path_for()`` falls through to the shipped default either way. Upload
+  and Delete both broadcast a fresh list to every connected tab
+  (``_broadcast(_horn_list_payload())``), same "every tab learns at once"
+  reasoning as ``demo_mode`` above, since an upload/delete from one tab
+  changes real on-disk state every other tab's view of "what horns exist"
+  needs to reflect too.
+
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
 """
@@ -484,6 +509,10 @@ def _update_payload() -> dict[str, object]:
     }
 
 
+def _horn_list_payload() -> dict[str, object]:
+    return {"type": "horn_list", "horns": _list_uploaded_horns()}
+
+
 def _snapshot_payload() -> dict[str, object]:
     """ScoreboardApp.status_snapshot()'s dict, handed straight through --
     same "this module has no idea what a scene or a game is" relationship
@@ -635,6 +664,10 @@ async def _send_scoreboard_config(connection: ServerConnection) -> None:
     await connection.send(json.dumps(_scoreboard_payload(settings)))
 
 
+async def _send_horn_list(connection: ServerConnection) -> None:
+    await connection.send(json.dumps(_horn_list_payload()))
+
+
 async def _send_status_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_status_payload(settings)))
@@ -763,6 +796,20 @@ def _looks_like_mp3(raw: bytes) -> bool:
     return len(head) == 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0 and (head[1] & 0x06) != 0
 
 
+def _horn_stem(team: object) -> str:
+    """The on-disk stem for ``team`` -- the shipped default slot
+    (``"default"``) or a real TEAM_COLORS abbreviation. Raises ValueError
+    with a message fit to show; the one place "is this team key legal" is
+    decided, shared by upload/list/delete/play (#193, #208, and #211's
+    follow-up below) so there's exactly one definition of a valid key.
+    """
+    if team == "default":
+        return DEFAULT_STEM
+    if isinstance(team, str) and team in TEAM_COLORS:
+        return team
+    raise ValueError(f"unknown team {team!r}")
+
+
 def _save_horn(team: object, data_b64: object) -> str:
     """Validate and store an uploaded horn, WAV or MP3 (#193, #208); returns the file name.
 
@@ -773,12 +820,7 @@ def _save_horn(team: object, data_b64: object) -> str:
     ``audio.default_directories()`` already searches, so GoalHornPlayer
     needs no new mechanism. Raises ValueError with a message fit to show.
     """
-    if team == "default":
-        stem = DEFAULT_STEM
-    elif isinstance(team, str) and team in TEAM_COLORS:
-        stem = team
-    else:
-        raise ValueError(f"unknown team {team!r}")
+    stem = _horn_stem(team)
     if not isinstance(data_b64, str):
         raise ValueError("missing file data")
     try:
@@ -812,6 +854,74 @@ def _save_horn(team: object, data_b64: object) -> str:
     except OSError as exc:
         raise ValueError(f"could not store the file: {exc.strerror or exc}") from None
     return name
+
+
+def _list_uploaded_horns() -> list[dict[str, str]]:
+    """Every horn actually uploaded via the admin page, for the "Custom
+    goal horns" list (#211's follow-up to #193/#208) -- a team's own
+    shipped/baked-in horn (if any) and the shipped default asset are never
+    listed here, only what's sitting in the writable upload_directory(),
+    since those are the only ones a Delete button can meaningfully revert
+    (deleting one just removes this override; path_for() then falls back
+    to whatever's baked into the image, same as if it were never
+    uploaded). "default" always sorts first, then teams in TEAM_COLORS'
+    own order -- matches the upload dropdown's own stem precedence.
+    """
+    directory = upload_directory()
+    if not directory.is_dir():
+        return []
+    horns: list[dict[str, str]] = []
+    for team, stem in [("default", DEFAULT_STEM), *((t, t) for t in TEAM_COLORS)]:
+        for ext in HORN_EXTENSIONS:
+            path = directory / f"{stem}{ext}"
+            if path.is_file():
+                horns.append({"team": team, "filename": path.name})
+                break
+    return horns
+
+
+def _delete_horn(team: object) -> bool:
+    """Remove an uploaded horn (#211's follow-up), reverting to whatever
+    path_for() finds next -- a team's own shipped horn if the image has
+    one, otherwise the shipped default asset. Raises ValueError for an
+    invalid team key, same as _save_horn. Returns whether a file actually
+    existed to delete (expected to always be True in practice, since the
+    admin page only ever offers Delete for a row _list_uploaded_horns()
+    already found on disk).
+    """
+    stem = _horn_stem(team)
+    directory = upload_directory()
+    deleted = False
+    for ext in HORN_EXTENSIONS:
+        path = directory / f"{stem}{ext}"
+        if path.is_file():
+            path.unlink()
+            deleted = True
+    return deleted
+
+
+def _play_named_horn(settings: Settings, team: object) -> bool:
+    """Play a specific horn by key (#211's follow-up), not just whichever
+    one the favourite currently resolves to (_test_horn's own job) -- same
+    enabled-gating/volume-apply/background-thread reasoning as _test_horn.
+    Raises ValueError for an invalid team key, same as _save_horn/
+    _delete_horn.
+
+    GoalHornPlayer.play() takes a team abbreviation and, on no match,
+    falls back to DEFAULT_STEM itself -- passing the literal string
+    "default" through unchanged still plays the right file, because
+    path_for()'s first lookup ("DEFAULT", upper-cased) never matches a
+    real stored stem and its second lookup is DEFAULT_STEM itself.
+    Verified by reading path_for()'s own two-tier loop, not assumed; a
+    test locks this in rather than leaving it an accident of that
+    fallback behaviour.
+    """
+    _horn_stem(team)  # validates (raises ValueError for the caller to catch);
+    # the "default" literal or a TEAM_COLORS key are both already plain str
+    horn = _current_horn(settings)
+    if horn.enabled:
+        horn.apply_volume()
+    return horn.play(team)
 
 
 async def _watch_update_state() -> None:
@@ -975,6 +1085,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_wifi_config(connection)
         await _send_rotation_config(connection)
         await _send_update_config(connection)
+        await _send_horn_list(connection)
         await _send_snapshot(connection)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
@@ -1003,6 +1114,32 @@ async def _handle(connection: ServerConnection) -> None:
                     await connection.send(json.dumps(error))
                 else:
                     await connection.send(json.dumps({"type": "horn_uploaded", "name": name}))
+                    # Every tab's horn list picks up the new row, not just
+                    # the one that uploaded it -- same "every tab learns at
+                    # once" reasoning as demo_mode below.
+                    await _broadcast(_horn_list_payload())
+            elif msg_type == "play_horn":
+                team = message.get("team")
+                try:
+                    settings = Settings.load(CONFIG_PATH)
+                    played = _play_named_horn(settings, team)
+                except ValueError as exc:
+                    error = {"type": "error", "section": "horn_action", "message": str(exc)}
+                    await connection.send(json.dumps(error))
+                else:
+                    await connection.send(
+                        json.dumps({"type": "horn_played", "team": team, "played": played})
+                    )
+            elif msg_type == "delete_horn":
+                team = message.get("team")
+                try:
+                    _delete_horn(team)
+                except ValueError as exc:
+                    error = {"type": "error", "section": "horn_action", "message": str(exc)}
+                    await connection.send(json.dumps(error))
+                else:
+                    await connection.send(json.dumps({"type": "horn_deleted", "team": team}))
+                    await _broadcast(_horn_list_payload())
             elif msg_type == "logs_subscribe":
                 await _subscribe_logs(connection)
             elif msg_type == "logs_unsubscribe":
