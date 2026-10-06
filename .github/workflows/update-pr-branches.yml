@@ -12,6 +12,13 @@ name: Update PR branches
 # GitHub already knows how to do safely, including for PRs from forks,
 # without this workflow needing to manage git credentials or push access
 # itself.
+#
+# The call is made with the PR_UPDATE_TOKEN secret (a fine-grained PAT
+# scoped to this repo: Contents + Pull requests read/write), NOT
+# GITHUB_TOKEN. A merge commit pushed with GITHUB_TOKEN deliberately does
+# not trigger other workflows, so CI never ran on the updated PR branch
+# and someone had to push or close/reopen to get it going, which stalled
+# auto-merge. A PAT-authored push triggers the normal `pull_request` runs.
 on:
   push:
     branches: [main]
@@ -33,7 +40,7 @@ jobs:
     steps:
       - name: Update each open PR's branch
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PR_UPDATE_TOKEN }}
         run: |
           set -euo pipefail
           prs="$(gh pr list --repo "${{ github.repository }}" --state open --base main --json number --jq '.[].number')"
