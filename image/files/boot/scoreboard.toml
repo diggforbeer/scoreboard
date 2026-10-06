@@ -71,9 +71,15 @@ goal_detail_seconds = 8
 # the NHL has named its three stars, before the final score takes over.
 three_stars_seconds = 8
 
-# Show the favourite's conference playoff picture (their spot plus a few
-# teams on either side), interleaved with the preview/countdown screen.
-# Only appears once favourite_team has actually played a game this season.
+# Whether the favourite's conference playoff picture (their spot plus a
+# few teams on either side) is included when no explicit [[rotation]]
+# list is given below (see the comment on that section) -- only read for
+# that derivation now, not a live on/off switch for the "standings"
+# screen itself, so it has no effect once an explicit [[rotation]] is
+# present. Not on the admin page for the same reason: once you're editing
+# [[rotation]] there, add or remove a "standings" row directly instead of
+# toggling this. Only appears once favourite_team has actually played a
+# game this season either way.
 show_standings = true
 
 # Also cycle the clock into the countdown/preview (and standings, if shown)
