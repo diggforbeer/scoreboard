@@ -1309,6 +1309,35 @@ same bar as everything else in this repo.
   new evidence of a *different* bug, not this one -- capture it
   (HDMI console, `journalctl`) before changing anything, per #129.
 
+## Enclosure (OpenSCAD) changes
+
+Every change to a `.scad` file in `enclosure/` follows this path, no
+exceptions, so a printed case can always be matched to its source and
+the repo always shows what the current model looks like:
+
+1. Make the design change in **both** `scoreboard-case-v3.scad` and
+   `scoreboard-case-v3-pi3b.scad` unless it is deliberately
+   variant-specific (they differ only in `pi_model`; say so in the PR if
+   a change is applied to one only).
+2. Run `scripts/enclosure.sh all` (add `major` for a redesign, e.g. a
+   new case generation; the default minor bump is right for everything
+   else). It bumps `case_version` in every model file together, then
+   re-renders a PNG of each model beside it
+   (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`). Needs `openscad`.
+   Never edit `case_version` by hand; the script refuses to run if the
+   files have drifted apart.
+3. `case_version` is printed as raised text on the inside of the back
+   wall (`version_label()`), with the repo URL and board variant, so no
+   extra step is needed for it to appear on the part.
+4. Check both halves still compile: `openscad -D 'part="left"' -o
+   /tmp/l.stl <file>` and the same for `"right"`, looking for errors or
+   a non-"Simple: yes" result.
+5. Look at the regenerated PNG (not just that it exists): confirm the
+   thing you changed is actually visible and right.
+6. Commit the `.scad` changes, the version bump and the PNGs together,
+   and note the new version in the PR body. Update `enclosure/README.md`
+   if the change alters what it describes.
+
 ## Config conventions
 
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
