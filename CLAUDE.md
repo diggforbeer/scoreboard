@@ -1323,18 +1323,21 @@ the repo always shows what the current model looks like:
    new case generation; the default minor bump is right for everything
    else). It bumps `case_version` in every model file together, then
    re-renders a PNG of each model beside it
-   (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`). Needs `openscad`.
+   (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`) and exports the
+   printable halves as STLs beside it too
+   (`scoreboard-case-v3-left.stl`, `-right.stl`, and the `-pi3b` pair).
+   Needs `openscad`; the STL export takes a few minutes.
    Never edit `case_version` by hand; the script refuses to run if the
    files have drifted apart.
 3. `case_version` is printed as raised text on the inside of the back
    wall (`version_label()`), with the repo URL and board variant, so no
    extra step is needed for it to appear on the part.
-4. Check both halves still compile: `openscad -D 'part="left"' -o
-   /tmp/l.stl <file>` and the same for `"right"`, looking for errors or
-   a non-"Simple: yes" result.
+4. The STL export in step 2 doubles as the compile check: it fails the
+   script if either half doesn't export. For a closer look, run `openscad
+   -D 'part="left"' -o /tmp/l.stl <file>` and confirm "Simple: yes".
 5. Look at the regenerated PNG (not just that it exists): confirm the
    thing you changed is actually visible and right.
-6. Commit the `.scad` changes, the version bump and the PNGs together,
+6. Commit the `.scad` changes, the version bump, the PNGs and the STLs together,
    and note the new version in the PR body. Update `enclosure/README.md`
    if the change alters what it describes.
 

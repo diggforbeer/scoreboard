@@ -66,8 +66,10 @@ without supports: flat base (the back wall), no overhangs beyond 45°,
 open front face.
 
 Every design change bumps `case_version` and regenerates the preview
-images (`scoreboard-case-v3.png`, `scoreboard-case-v3-pi3b.png`, beside
-the models) with `scripts/enclosure.sh all` -- see `CLAUDE.md`.
+images (`scoreboard-case-v3.png`, `scoreboard-case-v3-pi3b.png`) and the
+printable STLs (`*-left.stl`, `*-right.stl`), all beside the models, with
+`scripts/enclosure.sh all` -- see `CLAUDE.md`. The STLs are ready to slice
+as they are; they match the `case_version` printed on the part.
 
 ```bash
 # Preview
