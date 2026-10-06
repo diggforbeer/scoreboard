@@ -580,7 +580,15 @@ function App() {
     if (!scoreboard) return
     setScoreboardSaveStatus('saving')
     setScoreboardSaveError(null)
-    if (!save('scoreboard', scoreboard)) {
+    // show_standings is in the payload the server sends (it's a real
+    // ScoreboardConfig field, still read for the derived-default rotation
+    // on a board with no explicit [[rotation]]) but no longer one this
+    // page edits directly or validates on save -- the Rotation section's
+    // own list is the authoritative, admin-editable control for whether
+    // "standings" appears in the idle rotation now (#150/#151). Same
+    // strip-before-send precedent as savePanel's pitch_mm above.
+    const { show_standings: _showStandings, ...data } = scoreboard
+    if (!save('scoreboard', data)) {
       setScoreboardSaveStatus('error')
       setScoreboardSaveError(NOT_CONNECTED_ERROR)
     }
@@ -954,7 +962,6 @@ function App() {
                   ['show_clock_when_idle', 'Show clock when there are no games'],
                   ['show_clock_between_games', "Show clock between favourite's games"],
                   ['show_logos', 'Show team logos'],
-                  ['show_standings', "Show favourite's playoff standings"],
                   ['prefer_favourite', 'Prefer favourite when choosing a game'],
                 ] as const
               ).map(([key, label]) => (

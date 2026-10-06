@@ -1117,10 +1117,20 @@ class ScoreboardApp:
         season's final table through the whole off-season rather than an
         empty result, and ``games_played`` is the only signal available to
         tell the two apart.
+
+        Deliberately does NOT also gate on ``cfg.show_standings`` here (it
+        used to): that field now only controls whether ``standings`` is
+        included in the *derived default* rotation (``_default_rotation()``,
+        for a board with no explicit ``[[rotation]]``) -- checking it again
+        in this method meant an explicit ``[[rotation]]`` entry for
+        ``standings`` could be silently defeated by a stale
+        ``show_standings`` toggle left over from before the board migrated,
+        which contradicts #150/#151's whole point of the rotation list
+        being the authoritative, admin-editable source of truth.
         """
         cfg = self.settings.scoreboard
         favourite = cfg.favourite_team
-        if not cfg.show_standings or not favourite:
+        if not favourite:
             return None
         rows = self._refresh_standings(allow_fetch=allow_fetch)
         if not rows:
