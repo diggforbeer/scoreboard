@@ -18,7 +18,7 @@ every design change.
 What changed from v2:
 
 - **Power brick moves outside.** Having it inside blocked access to the
-  Pi. A 12mm hole low on the left wall takes a panel-mount 5.5mm barrel
+  Pi. A 21mm hole low on the left wall takes a panel-mount 5.5mm barrel
   jack (nut inside, flange outside) that feeds the matrix hat.
 - **Pi against the right wall**, USB/Ethernet end out through a port
   faceplate -- one rounded opening per jack with solid columns between,
@@ -49,7 +49,7 @@ What changed from v2:
 
 Hardware: 5x M3x10 socket-head bolts + nuts (seam), 4x M2.5 screws (Pi),
 10x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
-(12mm thread), 7mm momentary button.
+(21mm hole), 7mm momentary button.
 
 Still open: the speaker grille's hole size/pitch (generic until a real
 driver is picked), and confirming the magnet
