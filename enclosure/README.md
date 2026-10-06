@@ -65,6 +65,10 @@ panel + magnet-screw depth (`mag_total_t`, 27mm). `wall` (2.4mm) assumes a 0.4mm
 without supports: flat base (the back wall), no overhangs beyond 45°,
 open front face.
 
+Every design change bumps `case_version` and regenerates the preview
+images (`scoreboard-case-v3.png`, `scoreboard-case-v3-pi3b.png`, beside
+the models) with `scripts/enclosure.sh all` -- see `CLAUDE.md`.
+
 ```bash
 # Preview
 openscad enclosure/scoreboard-case-v3.scad

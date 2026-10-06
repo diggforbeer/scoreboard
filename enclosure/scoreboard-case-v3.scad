@@ -29,7 +29,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.4";
+case_version = "3.5";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -89,11 +89,18 @@ pi_floor_gap    = 5;   // board's bottom edge above the floor -- the 3.5mm audio
 // the official mechanical drawings -- the 3B+ has Ethernet and USB
 // swapped, so pick the board here.
 pi_model = 4;   // 4 or 3 (3 Model B+)
-usb_w = 13.1;  usb_h = 16;     // double-stacked USB-A
+// Double-stacked USB-A, measured on the real Pi 4's jack shells: the two
+// jacks are 14.5 and 15.1mm wide with 3.72mm between them. The Pi 4 gets
+// ONE opening spanning both jacks (no pillar between them): centred where
+// the official drawing puts the pair (18mm), wide enough for the wider
+// jack at either end.
+usb_w = 15.1;  usb_h = 16;
+usb_gap   = 3.72;
+usb_pitch = (14.5 + 15.1) / 2 + usb_gap;   // centre to centre, 18.52mm
 eth_w = 16;    eth_h = 13.5;   // RJ45
 // [centre, width, height] for each port
 ports = pi_model == 4
-    ? [[9.0,   usb_w, usb_h], [27.0, usb_w, usb_h], [45.75, eth_w, eth_h]]
+    ? [[18, usb_pitch + usb_w, usb_h], [45.75, eth_w, eth_h]]
     : [[10.25, eth_w, eth_h], [29.0, usb_w, usb_h], [47.0,  usb_w, usb_h]];
 port_margin = 0.75;  // clearance around each jack
 port_r      = 1;     // corner radius
