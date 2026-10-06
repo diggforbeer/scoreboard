@@ -240,6 +240,7 @@ type ServerMessage =
   | { type: 'checking' }
   | { type: 'applying' }
   | { type: 'rebooting' }
+  | { type: 'shutting_down' }
   | { type: 'horn_tested'; played: boolean }
   | { type: 'horn_uploaded'; name: string }
   | { type: 'horn_list'; horns: HornEntry[] }
@@ -327,6 +328,7 @@ function App() {
   const [updateActionError, setUpdateActionError] = useState<string | null>(null)
   const [rebooting, setRebooting] = useState(false)
   const [rebootError, setRebootError] = useState<string | null>(null)
+  const [shuttingDown, setShuttingDown] = useState(false)
 
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
@@ -493,6 +495,10 @@ function App() {
             break
           case 'rebooting':
             setRebooting(true)
+            setRebootError(null)
+            break
+          case 'shutting_down':
+            setShuttingDown(true)
             setRebootError(null)
             break
           case 'horn_tested':
@@ -694,6 +700,16 @@ function App() {
       return
     }
     socketRef.current.send(JSON.stringify({ type: 'reboot' }))
+  }
+
+  function shutdownBoard() {
+    setRebootError(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setRebootError(NOT_CONNECTED_ERROR)
+      return
+    }
+    if (!window.confirm('Shut the board down? It stays off until someone power-cycles it.')) return
+    socketRef.current.send(JSON.stringify({ type: 'shutdown' }))
   }
 
   function uploadHorn() {
@@ -1556,17 +1572,25 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Reboot</h2>
+          <h2 className="card-title h5">Reboot / Shut down</h2>
           <p className="text-body-secondary small">
             Reboots the whole board to apply any "applies after restart" change. This interrupts
-            whatever is on screen right now, including a live game.
+            whatever is on screen right now, including a live game. Shut down powers it off
+            completely: it stays off until someone power-cycles it.
           </p>
           {rebooting ? (
             <p className="text-warning mb-0">Rebooting the board now...</p>
+          ) : shuttingDown ? (
+            <p className="text-warning mb-0">
+              Shutting the board down. It stays off until it is power-cycled.
+            </p>
           ) : (
             <div className="d-flex align-items-center gap-3">
               <button type="button" className="btn btn-danger" onClick={rebootBoard}>
                 Reboot board
+              </button>
+              <button type="button" className="btn btn-outline-danger" onClick={shutdownBoard}>
+                Shut down board
               </button>
               {rebootError && <span className="text-danger">{rebootError}</span>}
             </div>

@@ -471,6 +471,17 @@ def test_reboot_acks_immediately_and_calls_systemctl_reboot(app_dir, config_path
     assert fake_systemctl == [["systemctl", "reboot"]]
 
 
+def test_shutdown_acks_and_calls_systemctl_poweroff(app_dir, config_path, fake_systemctl):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "shutdown"}))
+        return await client.recv()
+
+    received = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(received) == {"type": "shutting_down"}
+    assert fake_systemctl == [["systemctl", "poweroff"]]
+
+
 def test_horn_test_reports_not_played_when_audio_disabled(app_dir, config_path):
     """enabled=False short-circuits before GoalHornPlayer ever touches a
     subprocess, so this needs no fake runner at all."""

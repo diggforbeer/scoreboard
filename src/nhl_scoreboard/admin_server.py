@@ -725,6 +725,15 @@ def _reboot() -> None:
         log.warning("Could not reboot: %s", exc)
 
 
+def _shutdown() -> None:
+    """Power the board off (``systemctl poweroff``); it stays off until
+    someone physically power-cycles it, unlike ``_reboot``."""
+    try:
+        subprocess.run(["systemctl", "poweroff"], check=False, capture_output=True, timeout=120)
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("Could not shut down: %s", exc)
+
+
 def _current_horn(settings: Settings) -> GoalHornPlayer:
     return GoalHornPlayer.default(
         device=settings.audio.device,
@@ -1125,6 +1134,9 @@ async def _handle(connection: ServerConnection) -> None:
             elif msg_type == "reboot":
                 await connection.send(json.dumps({"type": "rebooting"}))
                 _reboot()
+            elif msg_type == "shutdown":
+                await connection.send(json.dumps({"type": "shutting_down"}))
+                _shutdown()
             elif msg_type == "upload_horn":
                 try:
                     name = _save_horn(message.get("team"), message.get("data"))
