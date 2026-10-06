@@ -45,11 +45,11 @@ here needs JS-driven components (modals, dropdowns) yet. Dark by default
 `status_server.py`'s old theme. Laid out as two columns on a wide viewport
 (Bootstrap's grid, `col-lg-6`), stacking to one on anything narrower.
 
-**Reboot and Software update call real `systemctl` commands.** Harmless
+**Reboot, Shut down and Software update call real `systemctl` commands.** Harmless
 on the real board (the same commands `status_server.py` used to run), but
 if you're testing these locally, shadow `systemctl` with a fake binary on
 `PATH` first (log its args, exit 0) rather than let a dev machine actually
-try to reboot itself or start a systemd unit that doesn't exist there.
+try to reboot or power itself off or start a systemd unit that doesn't exist there.
 
 ## Running it locally (dev mode, with HMR)
 
