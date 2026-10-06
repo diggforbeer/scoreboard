@@ -29,7 +29,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.5";
+case_version = "3.6";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -116,8 +116,8 @@ grille_hole_d   = 3;
 grille_pitch    = 4.5;
 
 // ---- side walls: power jack + light sensor (left), button (right) ---------
-// Panel-mount 5.5mm barrel jack (12mm thread, nut inside, flange outside).
-jack_hole_d = 12;
+// Power jack: 21mm hole for the panel-mount barrel jack (nut inside, flange outside).
+jack_hole_d = 21;
 jack_y      = 28;   // hole centre, from the outside bottom of the case
 // BH1750 (#44/#45) behind a 6mm window, held in rails (see sensor_mount).
 sensor_hole_d = 6;

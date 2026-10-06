@@ -18,7 +18,7 @@ every design change.
 What changed from v2:
 
 - **Power brick moves outside.** Having it inside blocked access to the
-  Pi. A 12mm hole low on the left wall takes a panel-mount 5.5mm barrel
+  Pi. A 21mm hole low on the left wall takes a panel-mount 5.5mm barrel
   jack (nut inside, flange outside) that feeds the matrix hat.
 - **Pi against the right wall**, USB/Ethernet end out through a port
   faceplate -- one rounded opening per jack with solid columns between,
@@ -49,7 +49,7 @@ What changed from v2:
 
 Hardware: 5x M3x10 socket-head bolts + nuts (seam), 4x M2.5 screws (Pi),
 10x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
-(12mm thread), 7mm momentary button.
+(21mm hole), 7mm momentary button.
 
 Still open: the speaker grille's hole size/pitch (generic until a real
 driver is picked), and confirming the magnet
@@ -66,8 +66,10 @@ without supports: flat base (the back wall), no overhangs beyond 45°,
 open front face.
 
 Every design change bumps `case_version` and regenerates the preview
-images (`scoreboard-case-v3.png`, `scoreboard-case-v3-pi3b.png`, beside
-the models) with `scripts/enclosure.sh all` -- see `CLAUDE.md`.
+images (`scoreboard-case-v3.png`, `scoreboard-case-v3-pi3b.png`) and the
+printable STLs (`*-left.stl`, `*-right.stl`), all beside the models, with
+`scripts/enclosure.sh all` -- see `CLAUDE.md`. The STLs are ready to slice
+as they are; they match the `case_version` printed on the part.
 
 ```bash
 # Preview

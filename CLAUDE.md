@@ -1323,20 +1323,46 @@ the repo always shows what the current model looks like:
    new case generation; the default minor bump is right for everything
    else). It bumps `case_version` in every model file together, then
    re-renders a PNG of each model beside it
-   (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`). Needs `openscad`.
+   (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`) and exports the
+   printable halves as STLs beside it too
+   (`scoreboard-case-v3-left.stl`, `-right.stl`, and the `-pi3b` pair).
+   Needs `openscad`; the whole run takes about a minute.
    Never edit `case_version` by hand; the script refuses to run if the
    files have drifted apart.
 3. `case_version` is printed as raised text on the inside of the back
    wall (`version_label()`), with the repo URL and board variant, so no
    extra step is needed for it to appear on the part.
-4. Check both halves still compile: `openscad -D 'part="left"' -o
-   /tmp/l.stl <file>` and the same for `"right"`, looking for errors or
-   a non-"Simple: yes" result.
+4. The STL export in step 2 doubles as the compile check: it fails the
+   script if either half doesn't export. For a closer look, run `openscad
+   -D 'part="left"' -o /tmp/l.stl <file>` and confirm "Simple: yes".
 5. Look at the regenerated PNG (not just that it exists): confirm the
    thing you changed is actually visible and right.
-6. Commit the `.scad` changes, the version bump and the PNGs together,
+6. Commit the `.scad` changes, the version bump, the PNGs and the STLs together,
    and note the new version in the PR body. Update `enclosure/README.md`
    if the change alters what it describes.
+
+**The STLs and PNGs are generated artifacts that must always match the
+committed `.scad` files**: someone slices the STL straight from the repo,
+so a stale one prints the wrong case. So:
+
+- Never hand-edit or hand-export them; only `scripts/enclosure.sh`
+  writes them. A PR that changes a `.scad` file without the regenerated
+  STLs and PNGs is incomplete.
+- Before committing, check `git status`: after any `.scad` change all
+  four STLs (`*-left.stl`, `*-right.stl` for both variants) should show
+  as modified, along with both PNGs. If an STL did not change, the
+  change did not reach the geometry; confirm that is really the case
+  (e.g. a variant-specific edit leaves the other variant's STL alone).
+- If you rebase or merge and the `.scad` files, STLs or PNGs conflict,
+  resolve the `.scad` conflict by hand, then re-run
+  `scripts/enclosure.sh render` and `scripts/enclosure.sh stl` (not
+  `all`, which would bump the version again) rather than picking one
+  side's binary files. Do this too after merging another enclosure PR,
+  even when git reports no conflict: the merged `.scad` may differ from
+  both parents' STLs.
+- If you find the committed STLs out of date with the `.scad` files
+  (e.g. someone edited a `.scad` by hand), regenerate them in a PR of
+  their own and say why.
 
 ## Config conventions
 
