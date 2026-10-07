@@ -29,7 +29,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.7";
+case_version = "3.8";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -38,7 +38,12 @@ label_raise  = 0.8;   // how far the text stands off the wall
 panel_w     = 160;  // mm, one panel
 panel_h     = 80;
 panel_count = 2;    // chained horizontally, matches PanelConfig.chain_length
-panel_gap   = 0;
+// Gap between the two panels. The seam flanges (and their bolts) sit in
+// it, centred, so each half gets panel_gap / 2 of extra room at the seam
+// and the panels' ends clear the flanges (measured: 3mm overlap per panel
+// with no gap). Magnet pads are placed per panel from this, so each
+// panel's pads stay aligned with its own magnets.
+panel_gap   = 6;
 panel_t     = 15;   // panel frame thickness, measured (no magnet screws)
 
 // Magnetic screws (came with the panels) thread into the panel's M3 posts.
@@ -204,7 +209,7 @@ outer_d = inner_d + wall;
 
 bay_mid_z    = wall + electronics_clearance / 2;
 mag_face_z   = outer_d - mag_total_t;  // where the magnets touch the washers
-split_x      = wall + panel_w;
+split_x      = wall + panel_w + panel_gap / 2;  // middle of the gap
 
 // ---- placement (derived) ---------------------------------------------------------
 // Pi: ports end against the right wall, bottom edge near the floor (so the
