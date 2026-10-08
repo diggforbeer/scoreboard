@@ -12,7 +12,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../enclosure"
-models=(scoreboard-case-v3.scad scoreboard-case-v3-pi3b.scad scoreboard-legs.scad)
+models=(scoreboard-case-v3.scad scoreboard-case-v3-pi3b.scad legs/scoreboard-legs.scad)
 
 current_version() {
     local v
@@ -42,7 +42,7 @@ bump() {
 render() {
     local m
     for m in "${models[@]}"; do
-        if [ "$m" = scoreboard-legs.scad ]; then
+        if [ "$m" = legs/scoreboard-legs.scad ]; then
             # The legs standing under a stand-in for the case, seen from below.
             openscad -D 'part="preview"' -o "${m%.scad}.png" --imgsize=1600,600 \
                 --camera=0,0,0,115,0,25,0 --viewall --autocenter \
@@ -63,7 +63,7 @@ render() {
 stl() {
     local m part parts pids=() pid
     for m in "${models[@]}"; do
-        if [ "$m" = scoreboard-legs.scad ]; then parts="leg"; else parts="left right"; fi
+        if [ "$m" = legs/scoreboard-legs.scad ]; then parts="leg"; else parts="left right"; fi
         for part in $parts; do
             openscad -D "part=\"$part\"" -o "${m%.scad}-$part.stl" "$m" >/dev/null 2>&1 &
             pids+=($!)

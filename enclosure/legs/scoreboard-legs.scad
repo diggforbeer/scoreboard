@@ -1,4 +1,4 @@
-// NHL Scoreboard retro legs -- 70s-style splayed, tapered furniture legs
+// NHL Scoreboard retro legs (enclosure/legs/) -- 70s-style splayed, tapered furniture legs
 // to glue under the case after printing.
 //
 // Each leg is a square glue plate (its flat top face goes against the

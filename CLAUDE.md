@@ -1318,10 +1318,10 @@ the repo always shows what the current model looks like:
 1. Make the design change in **both** `scoreboard-case-v3.scad` and
    `scoreboard-case-v3-pi3b.scad` unless it is deliberately
    variant-specific (they differ only in `pi_model`; say so in the PR if
-   a change is applied to one only). `scoreboard-legs.scad` (the glue-on
+   a change is applied to one only). `legs/scoreboard-legs.scad` (the glue-on
    legs) is a third model file with no Pi variant; `scripts/enclosure.sh`
    versions, renders and exports it with the others, and its STL is a single
-   leg (`scoreboard-legs-leg.stl`; print four).
+   leg (`legs/scoreboard-legs-leg.stl`; print four).
 2. Run `scripts/enclosure.sh all` (add `major` for a redesign, e.g. a
    new case generation; the default minor bump is right for everything
    else). It bumps `case_version` in every model file together, then
@@ -1329,7 +1329,7 @@ the repo always shows what the current model looks like:
    (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`) and exports the
    printable halves as STLs beside it too
    (`scoreboard-case-v3-left.stl`, `-right.stl`, the `-pi3b` pair, and
-   `scoreboard-legs-leg.stl`).
+   `legs/scoreboard-legs-leg.stl`).
    Needs `openscad`; the whole run takes about a minute.
    Never edit `case_version` by hand; the script refuses to run if the
    files have drifted apart.

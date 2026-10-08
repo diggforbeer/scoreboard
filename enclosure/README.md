@@ -57,18 +57,18 @@ Still open: the speaker grille's hole size/pitch (generic until a real
 driver is picked), and confirming the magnet
 positions and right-panel stability on a full print.
 
-## `scoreboard-legs.scad`
+## `legs/scoreboard-legs.scad`
 
 Retro 70s-style furniture legs to glue under the case after printing:
 splayed, tapered round legs with a ferrule band near the foot and a flat
 foot, each on a 28mm square glue plate (its flat face goes against the
 case's bottom wall; the version is raised on the plate's edge). The four
 legs are one part rotated 90 degrees, so **print four of
-`scoreboard-legs-leg.stl`**. It is printed plate-down with no supports (the
+`legs/scoreboard-legs-leg.stl`**. It is printed plate-down with no supports (the
 leg leans only ~11 degrees from vertical). Defaults: 100mm floor to case,
 8 degree splay, 24mm tapering to 14mm; every number is a parameter at the
 top. `part` is `preview` (legs under a stand-in slab, the image
-`scoreboard-legs.png`), `leg` (the printable one) or `set` (four on one bed).
+`legs/scoreboard-legs.png`), `leg` (the printable one) or `set` (four on one bed).
 `case_w`/`case_d` mirror the case's outside size: update them if that changes.
 
 ## Shared conventions
