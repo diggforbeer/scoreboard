@@ -49,6 +49,7 @@ works, and still fully supported, not replaced by the flow above.
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
 | Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
 | Button (optional) | Momentary push-button between GPIO 26 and GND, for `[button]` (#50) |
+| Case (optional) | 3D-printed enclosure, see [Enclosure](#enclosure) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -66,6 +67,27 @@ to damage one of them.
 
 Panel geometry is configuration-driven, so a single 64×32 or a 128×64 stack
 works too — see `[panel]` in the config file.
+
+## Enclosure
+
+A 3D-printed case for the Pi and the two panels, designed in OpenSCAD
+([`enclosure/`](enclosure/)). It prints in two halves that bolt together
+(too wide for most beds), the panels hold on with their own magnetic screws,
+and it has a side power-jack hole, a top-mounted light sensor beside the
+speaker grille, a port faceplate for the Pi, and vent slits.
+
+[![The enclosure, front view with the open face, Pi side and ceiling grilles](enclosure/scoreboard-case-v3.png)](enclosure/scoreboard-case-v3.png)
+
+- Ready-to-slice STLs sit beside the models: `enclosure/scoreboard-case-v3-left.stl` and
+  `-right.stl` (Pi 4), or the `-pi3b` pair for a Pi 3B+. Each case file prints the
+  version it was built from on the inside of the back wall.
+- Optional retro 70s legs to glue on afterwards: [`enclosure/legs/`](enclosure/legs/)
+  (print four of `scoreboard-legs-leg.stl`).
+
+[![The retro legs under the case](enclosure/legs/scoreboard-legs.png)](enclosure/legs/scoreboard-legs.png)
+
+Design notes, hardware list and the OpenSCAD commands are in
+[`enclosure/README.md`](enclosure/README.md).
 
 ## Status
 
