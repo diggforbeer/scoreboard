@@ -18,7 +18,7 @@ every design change.
 What changed from v2:
 
 - **Power brick moves outside.** Having it inside blocked access to the
-  Pi. A 22mm hole on the left wall takes a panel-mount 5.5mm barrel
+  Pi. A 22mm hole, centred on the left wall, takes a panel-mount 5.5mm barrel
   jack (nut inside, flange outside) that feeds the matrix hat.
 - **Pi against the right wall**, USB/Ethernet end out through a port
   faceplate -- one rounded opening per jack with solid columns between,
@@ -34,7 +34,9 @@ What changed from v2:
   the right panel that would sit over the Pi/hat have no pad (unscrew the
   bottom-middle one). A half-circle finger notch in each side wall's
   front edge helps pull the panels off.
-- **Light sensor (#44/#45)** on the left wall: the GY-302/BH1750 board
+- **Light sensor (#44/#45)** in the top wall, just left of the left speaker's
+  grille (so the left panel's middle top magnet has no pad; it is held by
+  its other five): the GY-302/BH1750 board
   slides into rails from the open front, chip facing a 6mm window, until
   it hits a stop. The chip-side step is trimmed to 0.8mm (`bh_step_ov`)
   so a part near the board edge doesn't catch.
