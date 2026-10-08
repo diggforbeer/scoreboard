@@ -19,10 +19,15 @@ What changed from v2:
 
 - **Power brick moves outside.** Having it inside blocked access to the
   Pi. A 22mm hole, centred on the left wall, takes a panel-mount 5.5mm barrel
-  jack (nut inside, flange outside) that feeds the matrix hat.
+  jack (nut inside, flange outside) that feeds the matrix hat. The nut's
+  size is an assumption (30mm across, 3mm of room: `jack_nut_d` /
+  `jack_nut_room`), and an `assert` stops the render if it would hit the
+  bottom-left magnet pad; measure the real nut and adjust.
 - **Pi against the right wall**, USB/Ethernet end out through a port
-  faceplate -- one rounded opening per jack with solid columns between,
-  so an external USB speaker can plug straight in. The board sits 5mm
+  faceplate -- on the Pi 4, one wide opening spanning both USB jacks (no
+  pillar between them, sized from measured jack shells 14.5 and 15.1mm wide,
+  3.72mm apart) and a separate Ethernet opening; the Pi 3B+ still has one
+  rounded opening per jack. An external USB speaker can plug straight in. The board sits 5mm
   off the floor (the 3.5mm audio jack overhangs its bottom edge ~3mm).
   Standoffs are cones (10mm base, 6mm top) so they don't snap off.
   Tilted vent slits through the back wall behind it (#49).
@@ -43,6 +48,10 @@ What changed from v2:
 - **Push button (#50)**, 7mm, on the right wall above the faceplate.
 - **Speaker grilles (#114)** in the ceiling, now between the magnet pads.
   Still sized for a placeholder 40mm driver (`speaker_d`/`speaker_depth`).
+- **Seam gap.** The two panels sit `panel_gap` = 2mm apart, with the split
+  and the seam flanges centred in that gap, so the flanges clear the panels'
+  ends. Each panel's magnet pads are placed from its own left end, so they
+  stay aligned with that panel's magnets whatever the gap is.
 - **Bolted seam.** Still two halves split at the panel seam (`part` =
   `"left"` / `"right"`), now joined by a 5mm internal U-flange on each
   half (back, top and bottom walls) with five M3 bolts -- heads on the
@@ -50,7 +59,7 @@ What changed from v2:
   the cut, so each half is one clean solid for the slicer.
 
 Hardware: 5x M3x10 socket-head bolts + nuts (seam), 4x M2.5 screws (Pi),
-10x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
+9x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
 (22mm hole), 7mm momentary button.
 
 Still open: the speaker grille's hole size/pitch (generic until a real
