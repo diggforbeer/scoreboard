@@ -18,7 +18,7 @@ every design change.
 What changed from v2:
 
 - **Power brick moves outside.** Having it inside blocked access to the
-  Pi. A 22mm hole low on the left wall takes a panel-mount 5.5mm barrel
+  Pi. A 22mm hole on the left wall takes a panel-mount 5.5mm barrel
   jack (nut inside, flange outside) that feeds the matrix hat.
 - **Pi against the right wall**, USB/Ethernet end out through a port
   faceplate -- one rounded opening per jack with solid columns between,

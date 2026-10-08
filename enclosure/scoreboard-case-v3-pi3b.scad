@@ -29,7 +29,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.8";
+case_version = "3.9";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -114,15 +114,21 @@ grille_hole_d   = 3;
 grille_pitch    = 4.5;
 
 // ---- side walls: power jack + light sensor (left), button (right) ---------
-// Power jack: 22mm hole for the panel-mount barrel jack (nut inside, flange outside).
-jack_hole_d = 22;
-jack_y      = 28;   // hole centre, from the outside bottom of the case
+// Power jack: 22mm hole for the panel-mount connector. Its nut goes on from
+// inside, so the hole is placed so the nut (and room to turn it) clears the
+// bottom-left screen mount's pad, which reaches pad_depth up the wall from
+// the bottom. Nut size is an assumption (no measurement yet): change
+// jack_nut_d / jack_nut_room if it needs more.
+jack_hole_d   = 22;
+jack_nut_d    = 30;   // nut across its widest point, mm
+jack_nut_room = 3;    // working room around the nut, mm
+// jack_y (hole centre, from the outside bottom) is derived below, once the
+// magnet pads are defined.
 // BH1750 (#44/#45) behind a 6mm window, held in rails (see sensor_mount).
-// The rails reach 9.2mm either side of the window, and the jack's nut is
-// wider than its hole, so the sensor sits ~6mm above the jack hole's edge
-// (hole top at jack_y + 11 = 39, rail bottom at sensor_y - 9.2 = 44.8).
+// It sits 6mm above the jack hole's top edge, measured to the rails'
+// lower end (the rails reach bh_w/2 + bh_clr + bh_rail_w either side).
 sensor_hole_d = 6;
-sensor_y      = 54;
+// sensor_y is derived below with jack_y.
 // 7mm momentary push button (#50) -- right wall, above the port faceplate
 // and close to the back wall, so it clears the magnet pad above it.
 button_hole_d = 7;
@@ -217,6 +223,12 @@ pi_holes = [for (x = pi_hole_xs) for (dy = [0, pi_hole_dy])
 // Magnet pads: [x, "top"|"bottom"] for every magnet, then drop any bottom
 // pad that would land over the Pi/hat (its magnet just goes unused).
 pad_depth = washer_off + washer_d / 2 + 2;   // how far a pad reaches in from its wall
+
+// Power jack and light sensor heights on the left wall (see their notes
+// above): the nut clears the bottom-left pad's reach, and the sensor sits
+// 6mm above the jack hole's top edge, measured to the rails' lower end.
+jack_y   = wall + pad_depth + jack_nut_room + jack_nut_d / 2;
+sensor_y = jack_y + jack_hole_d / 2 + 6 + (bh_w / 2 + bh_clr + bh_rail_w);
 all_pads = concat(
     [for (p = [0 : panel_count - 1]) for (x = mag_top_xs)
         [wall + p * (panel_w + panel_gap) + x, "top"]],
