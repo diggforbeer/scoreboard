@@ -4,7 +4,7 @@
 #
 #   scripts/enclosure.sh bump [major|minor]   # default minor: 3.5 -> 3.6
 #   scripts/enclosure.sh render               # PNG beside each .scad
-#   scripts/enclosure.sh stl                  # printable halves beside each .scad
+#   scripts/enclosure.sh stl                  # printable parts beside each .scad
 #   scripts/enclosure.sh all [major|minor]    # bump, then render and stl
 #
 # case_version is printed on the part (version_label in the .scad) and is
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../enclosure"
-models=(scoreboard-case-v3.scad scoreboard-case-v3-pi3b.scad)
+models=(scoreboard-case-v3.scad scoreboard-case-v3-pi3b.scad scoreboard-legs.scad)
 
 current_version() {
     local v
@@ -42,21 +42,29 @@ bump() {
 render() {
     local m
     for m in "${models[@]}"; do
-        # Front, tilted so the open face, the Pi side and the ceiling all show.
-        openscad -o "${m%.scad}.png" --imgsize=1600,600 \
-            --camera=0,0,0,-20,-20,0,0 --viewall --autocenter \
-            --colorscheme=Tomorrow "$m" >/dev/null 2>&1
+        if [ "$m" = scoreboard-legs.scad ]; then
+            # The legs standing under a stand-in for the case, seen from below.
+            openscad -D 'part="preview"' -o "${m%.scad}.png" --imgsize=1600,600 \
+                --camera=0,0,0,115,0,25,0 --viewall --autocenter \
+                --colorscheme=Tomorrow "$m" >/dev/null 2>&1
+        else
+            # Front, tilted so the open face, the Pi side and the ceiling all show.
+            openscad -o "${m%.scad}.png" --imgsize=1600,600 \
+                --camera=0,0,0,-20,-20,0,0 --viewall --autocenter \
+                --colorscheme=Tomorrow "$m" >/dev/null 2>&1
+        fi
         echo "rendered ${m%.scad}.png"
     done
 }
 
-# The two printable halves of each model (the full case is too wide for the
-# bed), as <model>-left.stl / <model>-right.stl. Exported in parallel; a
-# failed export fails the script.
+# The printable parts of each model beside it, as <model>-<part>.stl: the case
+# is too wide for the bed, so it is two halves (left, right); the legs are one
+# leg (print four). Exported in parallel; a failed export fails the script.
 stl() {
-    local m part pids=() pid
+    local m part parts pids=() pid
     for m in "${models[@]}"; do
-        for part in left right; do
+        if [ "$m" = scoreboard-legs.scad ]; then parts="leg"; else parts="left right"; fi
+        for part in $parts; do
             openscad -D "part=\"$part\"" -o "${m%.scad}-$part.stl" "$m" >/dev/null 2>&1 &
             pids+=($!)
         done
@@ -64,9 +72,7 @@ stl() {
     for pid in "${pids[@]}"; do
         wait "$pid" || { echo "STL export failed" >&2; exit 1; }
     done
-    for m in "${models[@]}"; do
-        echo "exported ${m%.scad}-left.stl, ${m%.scad}-right.stl"
-    done
+    echo "exported STLs for: ${models[*]}"
 }
 
 case "${1:-}" in
