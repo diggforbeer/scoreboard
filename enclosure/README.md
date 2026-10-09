@@ -18,31 +18,49 @@ every design change.
 What changed from v2:
 
 - **Power brick moves outside.** Having it inside blocked access to the
-  Pi. A 22mm hole, centred on the left wall, takes a panel-mount 5.5mm barrel
-  jack (nut inside, flange outside) that feeds the matrix hat.
-- **Pi against the right wall**, USB/Ethernet end out through a port
-  faceplate -- one rounded opening per jack with solid columns between,
-  so an external USB speaker can plug straight in. The board sits 5mm
+  Pi. A 22mm hole, centred on the end wall opposite the Pi (the right wall by default), takes a panel-mount 5.5mm barrel
+  jack (nut inside, flange outside) that feeds the matrix hat. The nut's
+  size is an assumption (30mm across, 3mm of room: `jack_nut_d` /
+  `jack_nut_room`), and an `assert` stops the render if it would hit the
+  nearest bottom magnet pad; measure the real nut and adjust.
+- **Pi against an end wall**, `pi_side` = `"left"` (the default: the HUB75
+  ribbon runs to the first panel's input, which is at the left) or `"right"`,
+  USB/Ethernet end out through a port
+  faceplate -- on the Pi 4, one wide opening spanning both USB jacks (no
+  pillar between them, sized from measured jack shells 14.5 and 15.1mm wide,
+  3.72mm apart) and a separate Ethernet opening; the Pi 3B+ still has one
+  rounded opening per jack. An external USB speaker can plug straight in. The board sits 5mm
   off the floor (the 3.5mm audio jack overhangs its bottom edge ~3mm).
   Standoffs are cones (10mm base, 6mm top) so they don't snap off.
-  Tilted vent slits through the back wall behind it (#49).
+  Tilted vent slits through the back wall behind it (#49). With the Pi on
+  the left the board is turned 180 degrees (ports facing the left wall), so
+  its GPIO header edge is at the bottom of the case and the HDMI/audio edge
+  at the top.
 - **Magnetic panel mounting.** The panels' own magnetic screws land on
   16mm steel washers glued into pads on the top and bottom walls; the old
   ledge is gone and the panel fronts sit flush with the case. Magnet
   positions were read from a photo of the panel backs -- the washers are
-  oversized to absorb a couple of mm of error. The two bottom magnets of
-  the right panel that would sit over the Pi/hat have no pad (unscrew the
-  bottom-middle one). A half-circle finger notch in each side wall's
+  oversized to absorb a couple of mm of error. The bottom magnets of
+  the panel that would sit over the Pi/hat have no pad (with the Pi on the
+  left that is the first two, 16 and 94mm in; unscrew those). A half-circle finger notch in each side wall's
   front edge helps pull the panels off.
-- **Light sensor (#44/#45)** in the top wall, just left of the left speaker's
-  grille (so the left panel's middle top magnet has no pad; it is held by
-  its other five): the GY-302/BH1750 board
+- **Light sensor (#44/#45)** in the BOTTOM wall, just left of the speaker grille
+  at the jack's end (the right panel by default; that panel's middle bottom
+  magnet has no pad, so it is held by its other five): the GY-302/BH1750 board
   slides into rails from the open front, chip facing a 6mm window, until
   it hits a stop. The chip-side step is trimmed to 0.8mm (`bh_step_ov`)
-  so a part near the board edge doesn't catch.
-- **Push button (#50)**, 7mm, on the right wall above the faceplate.
-- **Speaker grilles (#114)** in the ceiling, now between the magnet pads.
+  so a part near the board edge doesn't catch. It faces down, so mount the
+  case so the bottom wall is not against a surface if the sensor is to read
+  room light (it will read dark with the case on the legs and close to the table).
+- **Push button (#50)**, 7mm, on the Pi's wall above the faceplate.
+- **Speaker grilles (#114)** in the BOTTOM wall, one per panel, each in the
+  middle of the widest free gap there (clear of the magnet pads, the Pi above
+  it, the seam flange and the end walls; computed, so it follows `pi_side`).
   Still sized for a placeholder 40mm driver (`speaker_d`/`speaker_depth`).
+- **Seam gap.** The two panels sit `panel_gap` = 2mm apart, with the split
+  and the seam flanges centred in that gap, so the flanges clear the panels'
+  ends. Each panel's magnet pads are placed from its own left end, so they
+  stay aligned with that panel's magnets whatever the gap is.
 - **Bolted seam.** Still two halves split at the panel seam (`part` =
   `"left"` / `"right"`), now joined by a 5mm internal U-flange on each
   half (back, top and bottom walls) with five M3 bolts -- heads on the
@@ -50,12 +68,26 @@ What changed from v2:
   the cut, so each half is one clean solid for the slicer.
 
 Hardware: 5x M3x10 socket-head bolts + nuts (seam), 4x M2.5 screws (Pi),
-10x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
+9x ~16mm steel washers (magnet pads), panel-mount 5.5mm barrel jack
 (22mm hole), 7mm momentary button.
 
 Still open: the speaker grille's hole size/pitch (generic until a real
 driver is picked), and confirming the magnet
 positions and right-panel stability on a full print.
+
+## `legs/scoreboard-legs.scad`
+
+Retro 70s-style furniture legs to glue under the case after printing:
+splayed, tapered round legs with a ferrule band near the foot and a flat
+foot, each on a 28mm square glue plate (its flat face goes against the
+case's bottom wall; the version is raised on the plate's edge). The four
+legs are one part rotated 90 degrees, so **print four of
+`legs/scoreboard-legs-leg.stl`**. It is printed plate-down with no supports (the
+leg leans only ~11 degrees from vertical). Defaults: 100mm floor to case,
+8 degree splay, 24mm tapering to 14mm; every number is a parameter at the
+top. `part` is `preview` (legs under a stand-in slab, the image
+`legs/scoreboard-legs.png`), `leg` (the printable one) or `set` (four on one bed).
+`case_w`/`case_d` mirror the case's outside size: update them if that changes.
 
 ## Shared conventions
 

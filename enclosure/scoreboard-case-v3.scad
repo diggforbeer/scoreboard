@@ -4,9 +4,9 @@
 // screws.
 //
 // Changes from v2: the power brick lives outside now (a panel-mount 5.5mm
-// barrel jack in the left wall feeds the hat); the Pi's USB/Ethernet end
-// sits against the right wall behind a port faceplate; the sensor moves to
-// the left wall; the panel ledge is gone -- magnet pads set the
+// barrel jack in the end wall opposite the Pi feeds the hat); the Pi's USB/Ethernet end
+// sits against an end wall (pi_side) behind a port faceplate; the sensor moves to
+// the bottom wall; the panel ledge is gone -- magnet pads set the
 // panels' depth instead; the speakers move inboard between the magnets.
 //
 // Orientation: z=0 is the back wall; the front (z=outer_d) is open and the
@@ -14,8 +14,8 @@
 // Left/right are as seen from the front. Prints flat, back face down.
 //
 // Layout, left to right:
-//   ceiling:               L speaker                       R speaker
-//   bay:  L wall: jack  |  open  |  Pi ▐ ports + button, R wall; top: sensor
+//   floor:                 L speaker                       R speaker, sensor
+//   bay:  L wall: jack  |  open  |  Pi ▐ ports + button, R wall; bottom: sensor, speakers
 //
 // Too wide for a 256mm bed in one piece, so it prints as two halves split
 // at the seam between the two panels (set `part`). Each half has an
@@ -29,7 +29,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.10";
+case_version = "3.14";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -39,11 +39,11 @@ panel_w     = 160;  // mm, one panel
 panel_h     = 80;
 panel_count = 2;    // chained horizontally, matches PanelConfig.chain_length
 // Gap between the two panels. The seam flanges (and their bolts) sit in
-// it, centred, so each half gets panel_gap / 2 of extra room at the seam
-// and the panels' ends clear the flanges (measured: 3mm overlap per panel
-// with no gap). Magnet pads are placed per panel from this, so each
-// panel's pads stay aligned with its own magnets.
-panel_gap   = 6;
+// it, centred, so each half gets panel_gap / 2 of extra room at the seam.
+// With the panels fitted the seam needed some room (6mm was too much, 2mm
+// total is what's wanted). Magnet pads are placed per panel from this, so
+// each panel's pads stay aligned with its own magnets.
+panel_gap   = 2;
 panel_t     = 15;   // panel frame thickness, measured (no magnet screws)
 
 // Magnetic screws (came with the panels) thread into the panel's M3 posts.
@@ -71,7 +71,8 @@ pad_w     = washer_d + 4;
 // ---- Raspberry Pi 4 Model B / 3 Model B+ (official mechanical spec) -----
 // Same outline and hole pattern on both. Holes sit 3.5mm in from the edge
 // OPPOSITE the USB/Ethernet ports. Mounted with the GPIO header (and hat)
-// along the top edge, ports facing the right wall.
+// along the top edge, ports facing the right wall (pi_side = "right"); with the
+// Pi on the left it is turned 180 degrees instead.
 pi_w            = 85;
 pi_h            = 56;
 pi_hole_dx      = 58;
@@ -85,15 +86,25 @@ pi_standoff_d   = 6;   // top diameter, where the board sits
 // don't snap off at the back wall.
 pi_standoff_base_d = 10;
 pi_pcb_t        = 1.4;
-pi_port_gap     = 0.5; // board edge to the inside of the right wall
+pi_port_gap     = 0.5; // board edge to the inside of its end wall
 pi_floor_gap    = 5;   // board's bottom edge above the floor -- the 3.5mm audio
                        // jack overhangs that edge by ~3mm, so this leaves ~2mm under it
 
-// Port faceplate in the right wall: one opening per jack, with solid
+// Port faceplate in the Pi's end wall: one opening per jack, with solid
 // columns between. Centres are from the board's bottom (HDMI) edge, per
 // the official mechanical drawings -- the 3B+ has Ethernet and USB
 // swapped, so pick the board here.
 pi_model = 4;   // 4 or 3 (3 Model B+)
+
+// Which END of the case the Pi sits at (its USB/Ethernet end faces that wall).
+// The HUB75 ribbon runs to the first panel's input, so put the Pi at that
+// panel's end. Everything that belongs with the Pi moves with it: the port
+// faceplate, the vents, the button, and the standoffs. The power jack and the
+// light sensor go to the other end. "left" turns the board 180 degrees in
+// the case (its ports now face the left wall), so its GPIO header edge is at
+// the bottom, not the top.
+pi_side = "left";   // "left" or "right"
+pi_on_left = pi_side == "left";
 // Double-stacked USB-A, measured on the real Pi 4's jack shells: the two
 // jacks are 14.5 and 15.1mm wide with 3.72mm between them. The Pi 4 gets
 // ONE opening spanning both jacks (no pillar between them): centred where
@@ -110,20 +121,21 @@ ports = pi_model == 4
 port_margin = 0.75;  // clearance around each jack
 port_r      = 1;     // corner radius
 
-// ---- speakers (ceiling, firing up) ----------------------------------------
-// Placeholder 40mm driver. Each sits in the gap between the 2nd and 3rd
-// top-row magnets of its panel, firing up through a grille.
+// ---- speakers (floor, firing down) ----------------------------------------
+// Placeholder 40mm driver. Each sits in the widest free gap on the BOTTOM
+// wall of its panel (between the magnet pads, clear of the Pi and the seam
+// flange), firing down through a grille. spk_xs is worked out below.
 speaker_d       = 40;
-speaker_depth   = 18;  // how far it hangs down from the ceiling
+speaker_depth   = 18;  // how far it stands up from the bottom wall
 speaker_hole_d  = speaker_d - 4;
 speaker_wall_margin = 2.5;
 grille_hole_d   = 3;
 grille_pitch    = 4.5;
 
-// ---- power jack (left wall), light sensor (top wall), button (right wall) ---
+// ---- power jack (end wall opposite the Pi), light sensor (bottom wall), button (Pi's wall) ---
 // Power jack: 22mm hole for the panel-mount connector, centred top to bottom
-// on the left wall. Its nut goes on from inside, so there must be room for
-// the nut (and room to turn it) above the bottom-left screen mount's pad,
+// on the end wall opposite the Pi. Its nut goes on from inside, so there must be room for
+// the nut (and room to turn it) above the nearest bottom screen mount's pad,
 // which reaches pad_depth up the wall; an assert below checks that. Nut size
 // is an assumption (no measurement yet): change jack_nut_d / jack_nut_room if
 // it needs more.
@@ -132,11 +144,11 @@ jack_nut_d    = 30;   // nut across its widest point, mm
 jack_nut_room = 3;    // working room around the nut, mm
 // jack_y (hole centre, from the outside bottom) is set below, once the
 // magnet pads are defined.
-// BH1750 (#44/#45) behind a 6mm window in the TOP wall, beside the left
-// speaker's grille, held in rails (see sensor_mount). sensor_x is set below.
+// BH1750 (#44/#45) behind a 6mm window in the BOTTOM wall, beside the speaker's
+// grille, held in rails (see sensor_mount). sensor_x is set below.
 sensor_hole_d = 6;
 sensor_grille_gap = 4;  // mm between the grille's edge and the rails
-// 7mm momentary push button (#50) -- right wall, above the port faceplate
+// 7mm momentary push button (#50) -- on the Pi's wall, above the port faceplate
 // and close to the back wall, so it clears the magnet pad above it.
 button_hole_d = 7;
 button_y      = 71;
@@ -201,7 +213,7 @@ function seam_bolts() = [
 
 // ---- enclosure -------------------------------------------------------------------
 wall = 2.4;  // ~6 perimeters at a 0.4mm nozzle
-// Bay behind the panels: fits a ceiling speaker with solid wall around it.
+// Bay behind the panels: fits a speaker with solid wall around it.
 electronics_clearance = speaker_d + speaker_wall_margin * 2;
 
 total_panel_w = panel_w * panel_count + panel_gap * (panel_count - 1);
@@ -218,12 +230,15 @@ mag_face_z   = outer_d - mag_total_t;  // where the magnets touch the washers
 split_x      = wall + panel_w + panel_gap / 2;  // middle of the gap
 
 // ---- placement (derived) ---------------------------------------------------------
-// Pi: ports end against the right wall, bottom edge near the floor (so the
-// right speaker fits above it).
-pi_x1 = outer_w - wall - pi_port_gap;
-pi_x0 = pi_x1 - pi_w;
+// Pi: ports end against the chosen end wall, near the floor (so the speaker
+// above it fits). The mounting holes sit 3.5mm in from the edge OPPOSITE the
+// ports, so on the left they are measured from the board's right edge.
+pi_x0 = pi_on_left ? wall + pi_port_gap : outer_w - wall - pi_port_gap - pi_w;
+pi_x1 = pi_x0 + pi_w;
 pi_y0 = wall + pi_floor_gap;
-pi_hole_xs = [pi_x0 + pi_hole_inset_x, pi_x0 + pi_hole_inset_x + pi_hole_dx];
+pi_hole_xs = pi_on_left
+    ? [pi_x1 - pi_hole_inset_x - pi_hole_dx, pi_x1 - pi_hole_inset_x]
+    : [pi_x0 + pi_hole_inset_x, pi_x0 + pi_hole_inset_x + pi_hole_dx];
 pi_holes = [for (x = pi_hole_xs) for (dy = [0, pi_hole_dy])
                 [x, pi_y0 + pi_hole_inset_y + dy]];
 
@@ -231,11 +246,11 @@ pi_holes = [for (x = pi_hole_xs) for (dy = [0, pi_hole_dy])
 // pad that would land over the Pi/hat (its magnet just goes unused).
 pad_depth = washer_off + washer_d / 2 + 2;   // how far a pad reaches in from its wall
 
-// Power jack: centred top to bottom on the left wall; the nut and working
-// room must clear the bottom-left pad.
+// Power jack: centred top to bottom on the end wall opposite the Pi; the nut
+// and working room must clear the nearest bottom pad.
 jack_y = outer_h / 2;
 assert(jack_y - jack_nut_d / 2 >= wall + pad_depth + jack_nut_room,
-       "power jack nut would hit the bottom-left magnet pad");
+       "power jack nut would hit the nearest bottom magnet pad");
 all_pads = concat(
     [for (p = [0 : panel_count - 1]) for (x = mag_top_xs)
         [wall + p * (panel_w + panel_gap) + x, "top"]],
@@ -243,22 +258,37 @@ all_pads = concat(
         [wall + p * (panel_w + panel_gap) + x, "bottom"]]);
 function over_pi(pd) = pd[1] == "bottom"
     && pd[0] + pad_w / 2 > pi_x0 - 2 && pd[0] - pad_w / 2 < pi_x1 + 2;
-// The left panel's middle top pad is dropped: the light sensor and its rails
-// take that spot on the top wall, beside the speaker grille. (That panel is
-// held by its other five magnets.)
-function dropped(pd) = pd[1] == "top" && abs(pd[0] - (wall + mag_top_xs[1])) < 0.01;
+// One panel's middle BOTTOM pad is dropped: the light sensor and its rails
+// take that spot on the bottom wall, beside the speaker grille. (That panel is held
+// by its other five magnets.)
+// The light sensor goes on the panel at the end away from the Pi (with the
+// jack). That panel's middle bottom pad is dropped.
+sensor_panel = pi_on_left ? panel_count - 1 : 0;
+function dropped(pd) = pd[1] == "bottom"
+    && abs(pd[0] - (wall + sensor_panel * (panel_w + panel_gap) + mag_bot_xs[1])) < 0.01;
 pads = [for (pd = all_pads) if (!over_pi(pd) && !dropped(pd)) pd];
 
-// Speakers: midway between the 2nd and 3rd top-row magnets of each panel.
-spk_xs = [for (p = [0 : panel_count - 1])
-    wall + p * (panel_w + panel_gap) + (mag_top_xs[1] + mag_top_xs[2]) / 2];
+// Speakers: each panel's grille goes in the middle of the free run on the
+// bottom wall where a speaker body (speaker_d plus margin all round) clears the
+// magnet pads, the Pi above it, the seam flange and the end walls.
+spk_keep = speaker_d / 2 + speaker_wall_margin;
+bottom_obstacles = concat(
+    [for (pd = pads) if (pd[1] == "bottom") [pd[0], pad_w / 2]],
+    [[(pi_x0 + pi_x1) / 2, pi_w / 2 + 2]],
+    [[split_x, flange_t]],
+    [[wall, 0], [outer_w - wall, 0]]);
+function spk_free(c) = len([for (o = bottom_obstacles) if (abs(c - o[0]) < o[1] + spk_keep) 1]) == 0;
+function spk_candidates(p) = [for (c = [0 : 0.5 : outer_w]) if (spk_free(c) && (c < split_x ? 0 : 1) == p) c];
+spk_xs = [for (p = [0 : panel_count - 1]) let (cs = spk_candidates(p)) cs[floor(len(cs) / 2)]];
+assert(len([for (x = spk_xs) if (x != undef) x]) == panel_count,
+       "no room on the bottom wall for a speaker grille");
 
-// Light sensor: on the top wall, just left of the left speaker's grille. The
+// Light sensor: on the bottom wall, just left of its panel's speaker grille. The
 // rails reach bh_w/2 + bh_clr + bh_rail_w either side of the window.
 sensor_half = bh_w / 2 + bh_clr + bh_rail_w;
-sensor_x = spk_xs[0] - speaker_hole_d / 2 - sensor_grille_gap - sensor_half;
-assert(min([for (pd = pads) if (pd[1] == "top") abs(pd[0] - sensor_x)]) >= pad_w / 2 + sensor_half,
-       "light sensor rails would hit a top magnet pad");
+sensor_x = spk_xs[sensor_panel] - speaker_hole_d / 2 - sensor_grille_gap - sensor_half;
+assert(min([for (pd = pads) if (pd[1] == "bottom") abs(pd[0] - sensor_x)]) >= pad_w / 2 + sensor_half,
+       "light sensor rails would hit a bottom magnet pad");
 
 // ---- modules ------------------------------------------------------------------------
 module shell() {
@@ -304,15 +334,15 @@ module magnet_pads() {
     for (pd = pads) magnet_pad(pd[0], pd[1]);
 }
 
-// Round hole through the left wall at bay depth.
-module left_wall_hole(y, d) {
-    translate([-1, y, bay_mid_z])
+// Round hole through the left or right end wall at bay depth.
+module side_wall_hole(on_left, y, d) {
+    translate([on_left ? -1 : outer_w - wall - 1, y, bay_mid_z])
         rotate([0, 90, 0])
             cylinder(h = wall + 2, d = d, $fn = 48);
 }
 
 // Sensor rails, drawn centred on y=0 against the RIGHT wall, then turned
-// onto the top wall by sensor_mount().
+// onto the bottom wall by sensor_mount().
 module sensor_mount_right() {
     wall_in = outer_w - wall;
     x_face  = wall_in - bh_standoff;
@@ -341,20 +371,24 @@ module sensor_mount_right() {
     }
 }
 module sensor_mount() {
-    // Turn 90deg about z so the right wall becomes the top wall, with the
+    // Turn -90deg about z so the right wall becomes the BOTTOM wall, with the
     // board still sliding in from the open front, chip facing the wall.
-    translate([sensor_x, outer_h, 0]) rotate([0, 0, 90])
-        translate([-outer_w, 0, 0]) sensor_mount_right();
+    translate([sensor_x, outer_w, 0]) rotate([0, 0, -90])
+        sensor_mount_right();
 }
 
 module port_faceplate() {
-    // Right wall: a rounded opening per jack, each sitting on the board's
-    // top surface, extruded along +x through the wall.
+    // Pi-side wall: a rounded opening per jack, each sitting on the board's
+    // top surface, extruded along +x through the wall. Centres are measured
+    // from the board's HDMI edge; with the board turned round (Pi on the
+    // left) that edge is at the top.
     board_top = wall + pi_standoff_h + pi_pcb_t;
     for (pt = ports) {
         w = pt[1] + port_margin * 2;
         h = pt[2] + port_margin * 2;
-        translate([outer_w - wall - 1, pi_y0 + pt[0], board_top - port_margin + h / 2])
+        translate([pi_on_left ? -1 : outer_w - wall - 1,
+                   pi_y0 + (pi_on_left ? pi_h - pt[0] : pt[0]),
+                   board_top - port_margin + h / 2])
             rotate([0, 90, 0])        // local x -> -z, local y -> y, local z -> +x
                 linear_extrude(height = wall + 2)
                     offset(r = port_r)
@@ -363,7 +397,7 @@ module port_faceplate() {
 }
 
 module button_hole() {
-    translate([outer_w - wall - 1, button_y, button_z])
+    translate([pi_on_left ? -1 : outer_w - wall - 1, button_y, button_z])
         rotate([0, 90, 0])
             cylinder(h = wall + 2, d = button_hole_d, $fn = 32);
 }
@@ -376,12 +410,12 @@ module finger_notches() {
 }
 
 module speaker_grilles() {
-    // Hex grid of holes clipped to the port circle, through the top wall.
+    // Hex grid of holes clipped to the port circle, through the bottom wall.
     r   = speaker_hole_d / 2 - grille_hole_d / 2;
     n   = ceil(r / grille_pitch) + 1;
     row = grille_pitch * sqrt(3) / 2;
     for (x = spk_xs)
-        translate([x, outer_h - wall - 1, bay_mid_z])
+        translate([x, -1, bay_mid_z])
             rotate([-90, 0, 0])
                 for (j = [-n * 2 : n * 2])
                     for (i = [-n : n]) {
@@ -440,15 +474,18 @@ module seam_bolt_holes() {
     }
 }
 
-// Two left-aligned lines on the back wall, in the strip above the Pi
-// (between the Pi's top edge and the top wall), starting just right of
-// the seam flange. Nothing else touches the back wall there -- the right
-// speaker and the magnet pads hang from the top wall and stay clear of it.
+// Two left-aligned lines on the back wall, starting just right of the seam
+// flange: in the strip above the Pi when it is on the right, or mid-height in
+// the right half when the Pi is on the left. Nothing else touches the back
+// wall there -- the speakers and the magnet pads hang from the top wall and
+// stay clear of it.
 module version_label() {
     variant = pi_model == 3 ? "pi3b" : "pi4";
     lines = [repo_label, str("case v", case_version, " - ", variant)];
     x0 = split_x + flange_t + 4;
-    strip_mid = (pi_y0 + pi_h + outer_h - wall) / 2;   // middle of the strip
+    // Pi on the right: the strip above it. Pi on the left: the right half's
+    // back wall is free, so mid-height, clear of the sensor rails at the top.
+    strip_mid = pi_on_left ? outer_h / 2 : (pi_y0 + pi_h + outer_h - wall) / 2;
     pitch = label_size * 1.6;
     for (i = [0 : len(lines) - 1])
         translate([x0, strip_mid + (0.5 - i) * pitch, wall])
@@ -468,9 +505,9 @@ module body() {
             magnet_pads();
             sensor_mount();
         }
-        left_wall_hole(jack_y,   jack_hole_d);
-        // sensor window through the top wall, same z as the speaker grilles
-        translate([sensor_x, outer_h - wall - 1, bay_mid_z])
+        side_wall_hole(!pi_on_left, jack_y, jack_hole_d);
+        // sensor window through the bottom wall, same z as the speaker grilles
+        translate([sensor_x, -1, bay_mid_z])
             rotate([-90, 0, 0])
                 cylinder(h = wall + 2, d = sensor_hole_d, $fn = 48);
         button_hole();
