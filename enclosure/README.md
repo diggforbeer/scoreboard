@@ -44,14 +44,18 @@ What changed from v2:
   the panel that would sit over the Pi/hat have no pad (with the Pi on the
   left that is the first two, 16 and 94mm in; unscrew those). A half-circle finger notch in each side wall's
   front edge helps pull the panels off.
-- **Light sensor (#44/#45)** in the top wall, just left of the speaker grille at the jack's end (the right
-  panel by default; that panel's middle top magnet has no pad; it is held by
-  its other five): the GY-302/BH1750 board
+- **Light sensor (#44/#45)** in the BOTTOM wall, just left of the speaker grille
+  at the jack's end (the right panel by default; that panel's middle bottom
+  magnet has no pad, so it is held by its other five): the GY-302/BH1750 board
   slides into rails from the open front, chip facing a 6mm window, until
   it hits a stop. The chip-side step is trimmed to 0.8mm (`bh_step_ov`)
-  so a part near the board edge doesn't catch.
+  so a part near the board edge doesn't catch. It faces down, so mount the
+  case so the bottom wall is not against a surface if the sensor is to read
+  room light (it will read dark with the case on the legs and close to the table).
 - **Push button (#50)**, 7mm, on the Pi's wall above the faceplate.
-- **Speaker grilles (#114)** in the ceiling, now between the magnet pads.
+- **Speaker grilles (#114)** in the BOTTOM wall, one per panel, each in the
+  middle of the widest free gap there (clear of the magnet pads, the Pi above
+  it, the seam flange and the end walls; computed, so it follows `pi_side`).
   Still sized for a placeholder 40mm driver (`speaker_d`/`speaker_depth`).
 - **Seam gap.** The two panels sit `panel_gap` = 2mm apart, with the split
   and the seam flanges centred in that gap, so the flanges clear the panels'

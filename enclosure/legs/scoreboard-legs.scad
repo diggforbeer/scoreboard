@@ -22,7 +22,7 @@ part = "preview";
 // ---- version label ------------------------------------------------------------
 // Raised text on the plate's edge. Bumped by scripts/enclosure.sh together
 // with the case files; never edit by hand.
-case_version = "3.13";
+case_version = "3.14";
 label_size   = 3.2;
 label_raise  = 0.6;
 

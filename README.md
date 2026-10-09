@@ -73,10 +73,10 @@ works too — see `[panel]` in the config file.
 A 3D-printed case for the Pi and the two panels, designed in OpenSCAD
 ([`enclosure/`](enclosure/)). It prints in two halves that bolt together
 (too wide for most beds), the panels hold on with their own magnetic screws,
-and it has a side power-jack hole, a top-mounted light sensor beside the
-speaker grille, a port faceplate for the Pi, and vent slits.
+and it has a side power-jack hole, a light sensor and speaker grilles in the bottom
+wall, a port faceplate for the Pi, and vent slits.
 
-[![The enclosure, front view with the open face, Pi side and ceiling grilles](enclosure/scoreboard-case-v3.png)](enclosure/scoreboard-case-v3.png)
+[![The enclosure, front view with the open face, Pi side and floor grilles](enclosure/scoreboard-case-v3.png)](enclosure/scoreboard-case-v3.png)
 
 - Ready-to-slice STLs sit beside the models: `enclosure/scoreboard-case-v3-left.stl` and
   `-right.stl` (Pi 4), or the `-pi3b` pair for a Pi 3B+. Each case file prints the
