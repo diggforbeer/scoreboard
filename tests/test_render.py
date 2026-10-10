@@ -1753,3 +1753,42 @@ def test_groundhog_burrow_and_verdict_frame_the_clock(year, name, update_snapsho
     text = plain.bbox()
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot(f"holiday_groundhog_clock_{name}", art, update_snapshots)
+
+
+def test_st_patricks_leprechaun_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import LEP_BEARD, LEPRECHAUN
+
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 4.6s in at 14px/s: mid-panel, two shamrocks dropped behind him.
+    assert draw_halloween(c, "game", flyby_at=4.6, holiday="st_patricks")
+    art = show("st patricks leprechaun over live game", c)
+
+    assert not c.out_of_bounds
+    assert MID_LEFT < bbox_of(c, LEP_BEARD).center_x < MID_RIGHT
+    top = H - LEPRECHAUN.height
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < top}
+    assert c.lit(0, 0, W - 1, top - 1) == above, "score untouched above him"
+    check_snapshot("holiday_st_patricks_leprechaun", art, update_snapshots)
+
+
+def test_st_patricks_shamrocks_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import SHAMROCK
+
+    now = datetime(2027, 3, 17, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="st_patricks") is False
+    art = show("st patricks shamrocks, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    leaves = [x for (x, _), rgb in c.pixels.items() if rgb == SHAMROCK]
+    assert min(leaves) < text.x0 and max(leaves) > text.x1, "one either side"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_st_patricks_clock", art, update_snapshots)

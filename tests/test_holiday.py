@@ -31,10 +31,13 @@ from nhl_scoreboard.display.holiday import (
     HEART_RED,
     HOLIDAY_NAMES,
     HOLIDAYS,
+    LEPRECHAUN,
+    LEPRECHAUN_FRAMES,
     NO_OVERLAY_SCENES,
     PRESENT_COLOURS,
     PUMPKIN,
     SANTA,
+    SHAMROCK,
     SMALL_PRESENT,
     SNOW,
     SNOW_BAND,
@@ -207,6 +210,20 @@ def test_shadow_is_decided_once_per_year_and_varies_between_years():
     assert verdicts == {True, False}
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2027, 3, 13), None),
+        (date(2027, 3, 14), "st_patricks"),
+        (date(2027, 3, 17), "st_patricks"),
+        (date(2027, 3, 18), None),
+    ],
+)
+def test_st_patricks_is_the_days_up_to_the_seventeenth(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -228,6 +245,7 @@ def test_off_by_default_with_every_default_on_holiday_ticked():
         "new_year",
         "groundhog",
         "valentines",
+        "st_patricks",
     ]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
@@ -492,6 +510,35 @@ def test_clock_shows_the_verdict(day, verdict, other):
     _, canvas = draw(HolidayOverlay(), 0.0, kind="clock", holiday=HOLIDAYS["groundhog"], day=day)
     colours = set(canvas.pixels.values())
     assert verdict in colours and other not in colours
+
+
+def test_leprechaun_and_his_shamrocks_are_outlined_against_green_logos():
+    """No green pixel of the walker or a dropped shamrock touches the background."""
+    sprites = [*LEPRECHAUN.frames, *(drop.rows for drop in LEPRECHAUN.drops)]
+    for rows in sprites:
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                if ch in "GHC":
+                    neighbours = [
+                        rows[y + dy][x + dx] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                    ]
+                    assert "." not in neighbours, f"{ch} at {x},{y} touches the background"
+    assert len(LEPRECHAUN.frames[0]) == len(LEPRECHAUN_FRAMES[0]) + 2
+
+
+def test_leprechaun_drops_shamrocks_that_only_accumulate():
+    overlay = HolidayOverlay()
+    overlay.start_flyby(0.0)
+    t, counts = 0.0, []
+    while True:
+        moving, canvas = draw(overlay, t, holiday=HOLIDAYS["st_patricks"])
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            break
+        counts.append(sum(1 for c in canvas.pixels.values() if c == SHAMROCK))
+        t += ANIMATION_FRAME_INTERVAL
+    assert counts[0] == 0 and counts[-1] > 0
+    assert counts == sorted(counts), "dropped shamrocks stay put until the pass ends"
 
 
 def test_pumpkins_only_on_idle_scenes():

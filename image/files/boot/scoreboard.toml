@@ -213,8 +213,12 @@ cooldown_minutes = 15
 #                    once a year); a sun or a cloud beside the clock says which.
 #   valentines       Feb 7-14: a beating heart floats across now and then,
 #                    and two beating hearts flank the clock.
+#   st_patricks      Mar 14-17: a leprechaun walks along the bottom dropping
+#                    shamrocks, and shamrocks flank the clock.
 enabled = false
-themes = ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines"]
+themes = [
+  "halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks",
+]
 
 # Random gap, in minutes, between fly-bys (the Halloween ghost).
 flyby_min_minutes = 5

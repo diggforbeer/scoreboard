@@ -882,6 +882,109 @@ def _groundhog_day(day: date) -> bool:
     return (day.month, day.day) == (2, 2)
 
 
+# -- St. Patrick's Day (#249) --------------------------------------------------
+
+LEP_HAT = (0, 170, 60)
+LEP_COAT = (0, 150, 50)
+LEP_DARK = (60, 60, 60)
+LEP_BEARD = (255, 110, 0)
+SHAMROCK = (0, 200, 60)
+SHAMROCK_VEIN = (0, 110, 30)
+SHAMROCK_STEM = (0, 140, 40)
+#: Pale gold outline on everything that crosses a game: green on green
+#: (DAL/MIN/SEA logos, the green live-status text) all but vanished in a
+#: rendered preview -- the Valentine's heart's red-on-red lesson again.
+LEP_OUTLINE = (255, 225, 120)
+
+# Facing left: 'H' hat, 'K' band/belt/boots, 'Y' buckles, 'F' face and
+# hands, 'e' eye, 'O' orange beard, 'C' coat. Two frames: the boots.
+_LEPRECHAUN_TOP = (
+    "...HHHH.....",
+    "...HHHH.....",
+    "...KYKK.....",
+    ".HHHHHHHH...",
+    "..FeFFF.....",
+    ".OFFFFFO....",
+    ".OOOOOOO....",
+    "..OOOOO.....",
+    "..CCCCCC....",
+    ".FCCCCCCF...",
+    ".FKKYKKKF...",
+    "..CCCCCC....",
+)
+LEPRECHAUN_FRAMES = (
+    (*_LEPRECHAUN_TOP, "..CC..CC....", ".KKK..KKK..."),
+    (*_LEPRECHAUN_TOP, "...CC.CC....", "..KKK.KKK..."),
+)
+# 'G' leaf, 'v' vein, 's' stem.
+_SHAMROCK_PALETTE = (("G", SHAMROCK), ("v", SHAMROCK_VEIN), ("s", SHAMROCK_STEM))
+SMALL_SHAMROCK = (
+    "GG.GG",
+    "GGGGG",
+    ".GGG.",
+    ".GGG.",
+    "..s..",
+)
+FOUR_LEAF = (
+    "..GGG.GGG...",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    "..vvvvvvv...",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    "..GGG.GGG...",
+    "......s.....",
+    ".......s....",
+    "........s...",
+)
+THREE_LEAF = (
+    ".GG.GG.",
+    "GGGvGGG",
+    "GGGvGGG",
+    ".GvvvG.",
+    "..GGG..",
+    "..GGG..",
+    "...s...",
+    "....s..",
+)
+LEPRECHAUN = Flyby(
+    frames=tuple(_outlined(frame) for frame in LEPRECHAUN_FRAMES),
+    palette=(
+        ("o", LEP_OUTLINE),
+        ("H", LEP_HAT),
+        ("K", LEP_DARK),
+        ("Y", BUCKLE),
+        ("F", SANTA_FACE),
+        ("e", EYE),
+        ("O", LEP_BEARD),
+        ("C", LEP_COAT),
+    ),
+    speed=14.0,
+    frame_seconds=0.3,
+    align="bottom",
+    # Shamrocks behind him as he goes (owner's pick, #249) -- Santa's drops.
+    drops=(Drop(_outlined(SMALL_SHAMROCK), (*_SHAMROCK_PALETTE, ("o", LEP_OUTLINE))),),
+    drop_spacing=22,
+    drop_column=9,
+    linger_seconds=2.0,
+)
+
+
+def _draw_shamrocks(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    """A lucky four-leaf clover on the left, a shamrock on the right."""
+    del now, day
+    palette = dict(_SHAMROCK_PALETTE)
+    y = (height - len(FOUR_LEAF)) // 2
+    draw_sprite(canvas, FOUR_LEAF, palette, CORNER_INSET, y, width, height)
+    x = width - CORNER_INSET - len(THREE_LEAF[0]) - 2
+    y = (height - len(THREE_LEAF)) // 2
+    draw_sprite(canvas, THREE_LEAF, palette, x, y, width, height)
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(
@@ -938,6 +1041,14 @@ HOLIDAYS: dict[str, Holiday] = {
         _between((2, 7), (2, 14)),
         HEART,
         _draw_beating_hearts,
+    ),
+    "st_patricks": Holiday(
+        "st_patricks",
+        "St. Patrick's Day",
+        "Mar 14-17",
+        _between((3, 14), (3, 17)),
+        LEPRECHAUN,
+        _draw_shamrocks,
     ),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)

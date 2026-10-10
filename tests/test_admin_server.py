@@ -1670,7 +1670,15 @@ def test_demo_mode_message_rejects_non_boolean_and_missing_app(app_dir, config_p
 
 _DEFAULT_HOLIDAY_DATA = {
     "enabled": False,
-    "themes": ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines"],
+    "themes": [
+        "halloween",
+        "thanksgiving",
+        "christmas",
+        "new_year",
+        "groundhog",
+        "valentines",
+        "st_patricks",
+    ],
     "flyby_min_minutes": 5.0,
     "flyby_max_minutes": 20.0,
 }
@@ -1699,6 +1707,7 @@ def test_sends_the_holiday_config_and_every_available_holiday_last(app_dir, conf
         "new_year",
         "groundhog",
         "valentines",
+        "st_patricks",
     ]
     assert available[0] == {"name": "halloween", "label": "Halloween", "window": "Oct 1-31"}
 
