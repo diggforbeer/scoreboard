@@ -222,7 +222,7 @@ def test_page_shows_current_mapping_when_not_in_a_trial():
         on_submit=lambda ssid, password: None,
         port=0,
         host="127.0.0.1",
-        panel_state=lambda: ("regular", False),
+        panel_state=lambda: ("regular", False, False),
     )
     server.start()
     try:
@@ -243,7 +243,7 @@ def test_page_gates_the_wifi_form_while_a_trial_is_in_progress():
         on_submit=lambda ssid, password: None,
         port=0,
         host="127.0.0.1",
-        panel_state=lambda: ("adafruit-hat", True),
+        panel_state=lambda: ("adafruit-hat", True, False),
     )
     server.start()
     try:
@@ -264,7 +264,7 @@ def test_posting_wifi_form_while_gated_is_rejected_and_does_not_call_on_submit()
         on_submit=lambda ssid, password: submitted.append((ssid, password)),
         port=0,
         host="127.0.0.1",
-        panel_state=lambda: ("adafruit-hat", True),
+        panel_state=lambda: ("adafruit-hat", True, False),
     )
     server.start()
     try:
@@ -330,3 +330,21 @@ def test_panel_confirm_calls_the_callback_and_redirects_home():
         assert calls == [1]
     finally:
         server.stop()
+
+
+def test_panel_card_after_a_full_lap_points_at_the_wiring():
+    from nhl_scoreboard.setup_server import _render_page
+
+    page = _render_page(
+        [], panel_mapping="adafruit-hat-pwm", panel_in_trial=True, panel_tried_all=True
+    ).decode()
+    assert "ribbon cable" in page
+    assert "Yes, it&#x27;s working" in page or "Yes, it's working" in page
+    assert "/panel/next" in page, "still free to go round again"
+
+
+def test_panel_card_mid_lap_does_not_blame_the_wiring():
+    from nhl_scoreboard.setup_server import _render_page
+
+    page = _render_page([], panel_mapping="adafruit-hat", panel_in_trial=True).decode()
+    assert "ribbon cable" not in page

@@ -73,7 +73,7 @@ _CAPTIVE_PROBE_PATHS = frozenset(
 )
 
 
-def _render_panel_card(mapping: str, in_trial: bool) -> str:
+def _render_panel_card(mapping: str, in_trial: bool, tried_all: bool = False) -> str:
     """The display check (#172): confirm the panel is actually showing this
     page's own SSID/QR scene before assuming setup is otherwise fine.
 
@@ -93,6 +93,14 @@ def _render_panel_card(mapping: str, in_trial: bool) -> str:
             '<button type="submit">Yes, it\'s working</button></form>'
         )
         next_label = "No, try the next option"
+        if tried_all:
+            # A full lap with nothing lit is wiring, not the setting: say so
+            # instead of cycling forever.
+            prompt += (
+                '</p><p class="hint">That\'s every display type this board supports. '
+                "If none of them lit the panel, check its power supply and the ribbon "
+                "cable to the adapter board — the setting isn't the problem."
+            )
     else:
         prompt = (
             f"Display type is set to <b>{html.escape(mapping)}</b>. You should be "
@@ -100,12 +108,11 @@ def _render_panel_card(mapping: str, in_trial: bool) -> str:
         )
         confirm_html = ""
         next_label = "It's not lighting up — try a different display type"
-    next_button = html.escape(next_label)
     return f"""<fieldset>
 <legend>Display check</legend>
 <p>{prompt}</p>
 {confirm_html}
-<form method="POST" action="/panel/next"><button type="submit">{next_button}</button></form>
+<form method="POST" action="/panel/next"><button type="submit">{next_label}</button></form>
 </fieldset>"""
 
 
@@ -115,6 +122,7 @@ def _render_page(
     error: str | None = None,
     panel_mapping: str = "regular",
     panel_in_trial: bool = False,
+    panel_tried_all: bool = False,
 ) -> bytes:
     error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
     picker_html = "".join(
@@ -124,7 +132,7 @@ def _render_page(
     )
     if not networks:
         picker_html = "<p>No nearby networks were seen before setup mode started.</p>"
-    panel_html = _render_panel_card(panel_mapping, panel_in_trial)
+    panel_html = _render_panel_card(panel_mapping, panel_in_trial, panel_tried_all)
     if panel_in_trial:
         # Gated (also enforced server-side in do_POST, not just hidden here):
         # confirm the display works before spending a WiFi join on it --
@@ -230,7 +238,7 @@ def _choose_ssid(form: dict[str, list[str]]) -> str:
 def _make_handler(
     networks: Callable[[], list[str]],
     on_submit: Callable[[str, str | None], None],
-    panel_state: Callable[[], tuple[str, bool]],
+    panel_state: Callable[[], tuple[str, bool, bool]],
     on_panel_confirm: Callable[[], None],
     on_panel_next: Callable[[], str | None],
 ) -> type[BaseHTTPRequestHandler]:
@@ -256,9 +264,14 @@ def _make_handler(
 
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html"):
-                mapping, in_trial = panel_state()
+                mapping, in_trial, tried_all = panel_state()
                 self._send_html(
-                    _render_page(networks(), panel_mapping=mapping, panel_in_trial=in_trial)
+                    _render_page(
+                        networks(),
+                        panel_mapping=mapping,
+                        panel_in_trial=in_trial,
+                        panel_tried_all=tried_all,
+                    )
                 )
                 return
             if self.path in _CAPTIVE_PROBE_PATHS:
@@ -273,7 +286,7 @@ def _make_handler(
             if self.path == "/panel/next":
                 new_mapping = on_panel_next()
                 if new_mapping is None:
-                    mapping, in_trial = panel_state()
+                    mapping, in_trial, _ = panel_state()
                     self._send_html(
                         _render_page(
                             networks(),
@@ -287,7 +300,7 @@ def _make_handler(
                 self._send_html(_render_restarting_page(new_mapping))
                 return
 
-            mapping, in_trial = panel_state()
+            mapping, in_trial, _ = panel_state()
             if in_trial:
                 # Enforced here too, not just hidden from the rendered form
                 # (#172): a join tears down this AP once it succeeds (#133),
@@ -333,7 +346,7 @@ class SetupServer:
         on_submit: Callable[[str, str | None], None],
         port: int,
         host: str = "0.0.0.0",  # intentional: reachable only from the board's own AP anyway
-        panel_state: Callable[[], tuple[str, bool]] | None = None,
+        panel_state: Callable[[], tuple[str, bool, bool]] | None = None,
         on_panel_confirm: Callable[[], None] | None = None,
         on_panel_next: Callable[[], str | None] | None = None,
     ) -> None:
@@ -347,7 +360,7 @@ class SetupServer:
         #: only ScoreboardApp's real callables (app.py) ever write config or
         #: restart the service; this module never touches either itself,
         #: same "presentation only" stance as on_submit/wifi.
-        self._panel_state = panel_state or (lambda: ("regular", False))
+        self._panel_state = panel_state or (lambda: ("regular", False, False))
         self._on_panel_confirm = on_panel_confirm or (lambda: None)
         self._on_panel_next = on_panel_next or (lambda: None)
         self._httpd: ThreadingHTTPServer | None = None

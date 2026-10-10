@@ -170,9 +170,9 @@ class PanelConfig:
 #: The hardware_mapping values this project actually documents in the boot
 #: template/README -- not the full ~7-name set the underlying
 #: rpi-rgb-led-matrix driver technically accepts, most of which target
-#: hardware this project doesn't. Shared by status_server.py's config-editor
-#: picker and setup_server.py's AP-setup display check (#172) so the two
-#: pages can't drift out of sync with each other.
+#: hardware this project doesn't. Shared by admin_server.py's Panel picker
+#: and setup_server.py's AP-setup display check (#172) so the two pages
+#: can't drift out of sync with each other.
 PANEL_HARDWARE_MAPPING_CHOICES = ("regular", "adafruit-hat", "adafruit-hat-pwm")
 
 

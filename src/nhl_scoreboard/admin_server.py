@@ -260,7 +260,12 @@ from websockets.http11 import Request, Response
 
 from . import updater
 from .audio import DEFAULT_STEM, HORN_EXTENSIONS, GoalHornPlayer, upload_directory
-from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
+from .config import (
+    PANEL_HARDWARE_MAPPING_CHOICES,
+    VALID_ROTATION_SCREENS,
+    ConfigWriteError,
+    Settings,
+)
 from .display.teams import TEAM_COLORS
 from .updater import installed_version
 
@@ -399,7 +404,7 @@ _PANEL_FIELDS: dict[str, _FieldSpec] = {
     "chain_length": _FieldSpec("int", restart_required=True),
     "parallel": _FieldSpec("int", restart_required=True),
     "hardware_mapping": _FieldSpec(
-        "select", choices=("regular", "adafruit-hat", "adafruit-hat-pwm"), restart_required=True
+        "select", choices=PANEL_HARDWARE_MAPPING_CHOICES, restart_required=True
     ),
     "rgb_sequence": _FieldSpec(
         "select", choices=("RGB", "RBG", "GRB", "GBR", "BRG", "BGR"), restart_required=True

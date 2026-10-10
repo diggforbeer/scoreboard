@@ -2107,7 +2107,7 @@ def test_panel_check_state_reports_current_mapping_and_no_trial_by_default(
         backend=fake_backend,
         hw_mapping_trial_path=tmp_path / "trial.json",
     )
-    assert app._panel_check_state() == ("regular", False)
+    assert app._panel_check_state() == ("regular", False, False)
 
 
 def test_panel_check_state_reports_trial_in_progress(fake_backend, games, tmp_path):
@@ -2116,7 +2116,7 @@ def test_panel_check_state_reports_trial_in_progress(fake_backend, games, tmp_pa
     app = ScoreboardApp(
         Settings(), client=FakeClient(games), backend=fake_backend, hw_mapping_trial_path=trial_path
     )
-    assert app._panel_check_state() == ("regular", True)
+    assert app._panel_check_state() == ("regular", True, False)
 
 
 def test_on_panel_next_saves_the_next_candidate_and_restarts(fake_backend, games, tmp_path):
@@ -2168,6 +2168,110 @@ def test_on_panel_next_without_a_loaded_config_file_fails_without_restarting(
 
     assert app._on_panel_next() is None
     assert restarted == []
+
+
+def _panel_app(fake_backend, games, tmp_path, mapping="regular", **kwargs):
+    config_path = _write_config(tmp_path, hardware_mapping=mapping)
+    kwargs.setdefault("restart_service", lambda: None)
+    kwargs.setdefault("hw_mapping_trial_path", tmp_path / "trial.json")
+    app = ScoreboardApp(
+        Settings.from_toml(config_path), client=FakeClient(games), backend=fake_backend, **kwargs
+    )
+    return app, config_path
+
+
+def _restart_app(app, config_path):
+    """What the service restart does: a fresh process reads the saved mapping."""
+    app.settings = Settings.from_toml(config_path)
+
+
+def test_a_full_lap_of_candidates_says_check_the_wiring(fake_backend, games, tmp_path):
+    """The review on #180: cycling forever never says "none of these worked"."""
+    app, config_path = _panel_app(fake_backend, games, tmp_path)
+    seen = []
+    for _ in range(2):
+        app._on_panel_next()
+        _restart_app(app, config_path)
+        seen.append(app._panel_check_state())
+    assert seen == [("adafruit-hat", True, False), ("adafruit-hat-pwm", True, True)]
+    assert json.loads((tmp_path / "trial.json").read_text()) == [
+        "regular",
+        "adafruit-hat",
+        "adafruit-hat-pwm",
+    ]
+
+
+def test_a_legacy_empty_marker_is_still_a_trial(fake_backend, games, tmp_path):
+    """#180's first version wrote an empty marker; the gate must still hold."""
+    trial_path = tmp_path / "trial.json"
+    trial_path.write_text("")
+    app, _ = _panel_app(fake_backend, games, tmp_path, hw_mapping_trial_path=trial_path)
+    assert app._panel_check_state() == ("regular", True, False)
+    assert app._on_panel_next() == "adafruit-hat"
+    assert json.loads(trial_path.read_text()) == ["regular", "adafruit-hat"]
+
+
+def test_on_panel_next_changes_nothing_if_the_marker_cannot_be_written(
+    fake_backend, games, tmp_path
+):
+    """No gate means no "is it working?" card: don't change the mapping blind."""
+    restarted = []
+    app, config_path = _panel_app(
+        fake_backend,
+        games,
+        tmp_path,
+        hw_mapping_trial_path=tmp_path / "missing-dir" / "trial.json",
+        restart_service=lambda: restarted.append(1),
+    )
+    assert app._on_panel_next() is None
+    assert Settings.from_toml(config_path).panel.hardware_mapping == "regular"
+    assert restarted == []
+
+
+def test_on_panel_next_puts_the_marker_back_if_the_save_fails(
+    fake_backend, games, tmp_path, monkeypatch
+):
+    restarted = []
+    app, _ = _panel_app(fake_backend, games, tmp_path, restart_service=lambda: restarted.append(1))
+
+    def fail(self, changes):
+        raise OSError("read-only")
+
+    monkeypatch.setattr(Settings, "save", fail)
+    assert app._on_panel_next() is None
+    assert not (tmp_path / "trial.json").exists(), "no trial started"
+    assert restarted == []
+
+    (tmp_path / "trial.json").write_text(json.dumps(["regular"]))
+    assert app._on_panel_next() is None
+    assert json.loads((tmp_path / "trial.json").read_text()) == ["regular"], "trial unchanged"
+
+
+def test_restart_scoreboard_service_runs_systemctl_off_thread(monkeypatch):
+    from nhl_scoreboard import app as app_module
+
+    calls = []
+    monkeypatch.setattr(app_module.subprocess, "run", lambda args, **kw: calls.append(args))
+    app_module._restart_scoreboard_service()
+    for thread in threading.enumerate():
+        if thread.name == "hw-mapping-restart":
+            thread.join(timeout=5)
+    assert calls == [["systemctl", "restart", "nhl-scoreboard.service"]]
+
+
+def test_restart_scoreboard_service_logs_instead_of_raising(monkeypatch, caplog):
+    from nhl_scoreboard import app as app_module
+
+    def boom(args, **kw):
+        raise OSError("no systemctl")
+
+    monkeypatch.setattr(app_module.subprocess, "run", boom)
+    with caplog.at_level("WARNING"):
+        app_module._restart_scoreboard_service()
+        for thread in threading.enumerate():
+            if thread.name == "hw-mapping-restart":
+                thread.join(timeout=5)
+    assert "Could not restart nhl-scoreboard.service" in caplog.text
 
 
 def test_on_panel_confirm_clears_the_trial_marker(fake_backend, games, tmp_path):
