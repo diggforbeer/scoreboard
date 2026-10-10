@@ -205,8 +205,10 @@ cooldown_minutes = 15
 #   thanksgiving_ca  Canadian Thanksgiving's long weekend, same turkey. Not
 #                    listed by default; while ticked it takes that weekend
 #                    over from Halloween.
+#   christmas        Dec 1-26: Santa walks along the bottom dropping presents,
+#                    and presents with gentle snow flank the clock.
 enabled = false
-themes = ["halloween", "thanksgiving"]
+themes = ["halloween", "thanksgiving", "christmas"]
 
 # Random gap, in minutes, between fly-bys (the Halloween ghost).
 flyby_min_minutes = 5

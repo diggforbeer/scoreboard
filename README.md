@@ -206,7 +206,7 @@ cooldown_minutes = 15        # how long after that game ends before dimming resu
 
 [holiday]
 enabled = false              # seasonal decorations; each holiday only shows during its own dates
-themes = ["halloween", "thanksgiving"]  # also "thanksgiving_ca" (Canadian)
+themes = ["halloween", "thanksgiving", "christmas"]  # also "thanksgiving_ca" (Canadian)
 flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
 flyby_max_minutes = 20
 
@@ -280,7 +280,9 @@ readable.
 across the board every so often (even during games, though never over a
 GOAL screen) and jack-o'-lanterns flank the clock. The week of Thanksgiving
 (US, or Canadian if you tick it), a turkey walks along the bottom instead,
-with autumn leaves beside the clock.
+with autumn leaves beside the clock. Through December 26, Santa walks
+across dropping presents, and snow falls on a pile of presents beside the
+clock.
 
 ## Audio
 

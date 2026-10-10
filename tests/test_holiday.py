@@ -22,7 +22,12 @@ from nhl_scoreboard.display.holiday import (
     HOLIDAY_NAMES,
     HOLIDAYS,
     NO_OVERLAY_SCENES,
+    PRESENT_COLOURS,
     PUMPKIN,
+    SANTA,
+    SMALL_PRESENT,
+    SNOW,
+    SNOW_BAND,
     TURKEY,
     HolidayOverlay,
     active_holiday,
@@ -119,6 +124,20 @@ def test_canadian_thanksgiving_wins_its_weekend_over_halloween(themes, day, expe
     assert active_holiday(themes, day).name == expected
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 11, 30), None),
+        (date(2026, 12, 1), "christmas"),
+        (date(2026, 12, 26), "christmas"),
+        (date(2026, 12, 27), None),
+    ],
+)
+def test_christmas_runs_december_first_to_boxing_day(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -133,7 +152,7 @@ def test_an_unticked_holiday_never_shows_in_its_window():
 def test_off_by_default_with_every_default_on_holiday_ticked():
     cfg = Settings().holiday
     assert cfg.enabled is False
-    assert cfg.themes == ["halloween", "thanksgiving"]
+    assert cfg.themes == ["halloween", "thanksgiving", "christmas"]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
 
@@ -236,6 +255,56 @@ def test_turkey_walks_along_the_bottom_edge_without_leaving_the_panel():
     assert max(rows) == H - 1, "feet on the bottom row"
     assert min(rows) == H - TURKEY.height
     assert t == pytest.approx((W + TURKEY.width) / TURKEY.speed, abs=0.1)
+
+
+def presents_on(canvas: AsciiCanvas) -> int:
+    """How many dropped presents are on the ground.
+
+    By box colour on the bottom row: each present's "CCrCC" base has four
+    box pixels there, and Santa (boots on that row) shares none of them --
+    unlike the bow row, which his body crosses in matching red and gold.
+    """
+    boxes = {dict(colours)["C"] for colours in PRESENT_COLOURS}
+    bottom = [c for (_, y), c in canvas.pixels.items() if y == H - 1 and c in boxes]
+    return len(bottom) // (len(SMALL_PRESENT[-1]) - 1)
+
+
+def test_santa_drops_presents_behind_him_and_they_linger_after_he_leaves():
+    overlay = HolidayOverlay()
+    overlay.start_flyby(0.0)
+    christmas = HOLIDAYS["christmas"]
+    t, counts, santa_gone_at = 0.0, [], None
+    while True:
+        moving, canvas = draw(overlay, t, holiday=christmas)
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            break
+        counts.append(presents_on(canvas))
+        if santa_gone_at is None and W - round(t * SANTA.speed) + SANTA.width <= 0:
+            santa_gone_at = t
+        t += ANIMATION_FRAME_INTERVAL
+    assert counts[0] == 0, "nothing on the ground before he's walked anywhere"
+    assert counts == sorted(counts), "presents only ever accumulate during a pass"
+    assert counts[-1] >= 4
+    assert t - santa_gone_at == pytest.approx(SANTA.linger_seconds, abs=0.1)
+
+
+def test_snow_falls_only_in_the_side_bands_and_keeps_moving():
+    overlay = HolidayOverlay()
+    christmas = HOLIDAYS["christmas"]
+    frames = [draw(overlay, t, kind="clock", holiday=christmas)[1] for t in (0.0, 0.5, 1.0)]
+    for canvas in frames:
+        flakes = [p for p, c in canvas.pixels.items() if c == SNOW]
+        assert flakes, "some snow on screen"
+        assert all(x <= SNOW_BAND + 1 or x >= W - SNOW_BAND - 1 for x, _ in flakes)
+    snow = [{p for p, c in f.pixels.items() if c == SNOW} for f in frames]
+    assert snow[0] != snow[1] != snow[2], "it actually falls"
+
+
+def test_snow_alone_never_speeds_up_the_loop():
+    overlay = HolidayOverlay()
+    moving, _ = draw(overlay, 0.0, kind="clock", holiday=HOLIDAYS["christmas"], gap=(600, 600))
+    assert moving is False
 
 
 def test_pumpkins_only_on_idle_scenes():

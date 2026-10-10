@@ -1607,3 +1607,41 @@ def test_thanksgiving_leaves_frame_the_clock(update_snapshots):
     assert bbox_of(c, LEAF_GOLD).x0 > text.x1, "gold leaf right of the text"
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_thanksgiving_clock", art, update_snapshots)
+
+
+def test_christmas_santa_and_presents_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import SANTA, SANTA_RED
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 6.4s in at 14px/s: three presents dropped, Santa past the middle.
+    assert draw_halloween(c, "game", flyby_at=6.4, holiday="christmas")
+    art = show("christmas santa over live game", c)
+
+    assert not c.out_of_bounds
+    assert bbox_of(c, SANTA_RED).x0 < MID_RIGHT
+    top = H - SANTA.height
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < top}
+    assert c.lit(0, 0, W - 1, top - 1) == above, "score and SOG untouched"
+    check_snapshot("holiday_christmas_santa", art, update_snapshots)
+
+
+def test_christmas_presents_and_snow_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import SNOW
+
+    now = datetime(2026, 12, 12, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="christmas") is False
+    art = show("christmas presents and snow, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert all(not (text.x0 <= x <= text.x1) for (x, _), rgb in c.pixels.items() if rgb == SNOW)
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_christmas_clock", art, update_snapshots)

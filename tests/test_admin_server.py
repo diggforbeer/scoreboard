@@ -1670,7 +1670,7 @@ def test_demo_mode_message_rejects_non_boolean_and_missing_app(app_dir, config_p
 
 _DEFAULT_HOLIDAY_DATA = {
     "enabled": False,
-    "themes": ["halloween", "thanksgiving"],
+    "themes": ["halloween", "thanksgiving", "christmas"],
     "flyby_min_minutes": 5.0,
     "flyby_max_minutes": 20.0,
 }
@@ -1691,7 +1691,12 @@ def test_sends_the_holiday_config_and_every_available_holiday_last(app_dir, conf
     assert received["section"] == "holiday"
     assert received["data"] == _DEFAULT_HOLIDAY_DATA
     available = received["available"]
-    assert [h["name"] for h in available] == ["halloween", "thanksgiving_ca", "thanksgiving"]
+    assert [h["name"] for h in available] == [
+        "halloween",
+        "thanksgiving_ca",
+        "thanksgiving",
+        "christmas",
+    ]
     assert available[0] == {"name": "halloween", "label": "Halloween", "window": "Oct 1-31"}
 
 
@@ -1708,7 +1713,7 @@ def test_holiday_save_writes_the_file_and_confirms_with_fresh_config(app_dir, co
     assert fresh["data"]["flyby_min_minutes"] == 2
     text = config_path.read_text()
     assert "enabled = true" in text
-    assert 'themes = ["halloween", "thanksgiving"]' in text
+    assert 'themes = ["halloween", "thanksgiving", "christmas"]' in text
 
 
 def test_holiday_save_can_untick_every_holiday(app_dir, config_path):

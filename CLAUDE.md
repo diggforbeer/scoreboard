@@ -494,8 +494,16 @@ Canadian (`thanksgiving_ca`, Fri through the 2nd Monday of October,
 Overlaps go to the higher `Holiday.priority` (registry order is just
 calendar/checkbox order): `thanksgiving_ca` has priority 1 and takes its
 long weekend over from `halloween`, by the owner's call; kept to a long
-weekend so it displaces as little of Halloween as possible. Christmas,
-New Year's and Valentine's are #240-#242; holiday *screens* (a Christmas
+weekend so it displaces as little of Halloween as possible. Christmas
+(#240, Dec 1-26): Santa walks the bottom edge and drops presents behind
+him (`Flyby.drops`/`drop_spacing`/`drop_column`, a pure function of
+distance travelled; `linger_seconds` keeps the pass -- and the fast loop
+-- alive a moment after he's gone so the trail is seen); `corners` draws
+present stacks plus snow. Snow falls only in a `SNOW_BAND` at each edge:
+the real panel can't report which pixels the clock text lit, so flakes
+can't weave around it, and they're slow enough (1.5-3 px/s) for the
+normal 2fps loop -- a month of snow never holds the fast loop on.
+New Year's and Valentine's are #241-#242; holiday *screens* (a Christmas
 tree, as a `[[rotation]]` entry) #243.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic

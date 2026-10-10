@@ -35,6 +35,14 @@ CORNER_INSET = 4
 
 
 @dataclass(frozen=True, slots=True)
+class Drop:
+    """A small sprite a fly-by leaves behind on the bottom edge."""
+
+    rows: tuple[str, ...]
+    palette: tuple[tuple[str, RGB], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Flyby:
     """Something that crosses the panel right to left now and then."""
 
@@ -50,6 +58,14 @@ class Flyby:
     bob_period: float = 1.0
     #: "middle" floats through the centre; "bottom" walks along the bottom edge.
     align: str = "middle"
+    #: Things left on the ground behind it (Santa's presents, #240): one
+    #: dropped every ``drop_spacing`` px travelled, from sprite column
+    #: ``drop_column``, cycling through ``drops``. They stay put until the
+    #: pass ends, ``linger_seconds`` after the sprite itself has left.
+    drops: tuple[Drop, ...] = ()
+    drop_spacing: int = 0
+    drop_column: int = 0
+    linger_seconds: float = 0.0
 
     @property
     def width(self) -> int:
@@ -274,6 +290,136 @@ def _draw_leaves(canvas: Any, now: float, width: int, height: int) -> None:
     draw_sprite(canvas, GOLD_LEAF, palette, right, y, width, height)
 
 
+# -- Christmas (#240) ----------------------------------------------------------
+
+SANTA_RED = (220, 0, 0)
+SANTA_WHITE = (255, 255, 255)
+SANTA_FACE = (255, 185, 140)
+# Not black: (0, 0, 0) is an unlit LED, so boots and belt would read as holes.
+SANTA_DARK = (70, 70, 70)
+BUCKLE = (255, 210, 0)
+SACK = (160, 100, 40)
+SNOW = (190, 200, 230)
+
+# Side view facing left: 'R' suit, 'W' fur trim and beard, 'F' face, 'e'
+# eye, 'K' belt/boots, 'G' buckle, 'S' the sack over his shoulder. Two
+# frames that differ only in the boots.
+_SANTA_TOP = (
+    "..RRRR........",
+    ".RRRRRRW......",
+    ".WWWWWW...SSS.",
+    ".FeFFF...SSSSS",
+    "WWFFFWW.SSSSSS",
+    "WWWWWWWRSSSSSS",
+    ".WWWWWRRRSSSS.",
+    ".RRWWRRRRRSS..",
+    ".RRRRRRRR.....",
+    "KKKGKKKKK.....",
+    ".RRRRRRRR.....",
+    ".WWWWWWWW.....",
+)
+SANTA_FRAMES = (
+    (*_SANTA_TOP, "..RR..RR......", ".KKK.KKK......"),
+    (*_SANTA_TOP, "...RR.RR......", "..KKKKKK......"),
+)
+
+
+def _present(box: RGB, ribbon: RGB) -> tuple[tuple[str, RGB], ...]:
+    return (("C", box), ("r", ribbon))
+
+
+# Dropped as he walks: small, bow on top, ribbon cross.
+SMALL_PRESENT = (
+    ".r.r.",
+    "CCrCC",
+    "rrrrr",
+    "CCrCC",
+    "CCrCC",
+)
+# Stacked beside the clock.
+BIG_PRESENT = (
+    "..r.r..",
+    "...r...",
+    "CCCrCCC",
+    "CCCrCCC",
+    "rrrrrrr",
+    "CCCrCCC",
+    "CCCrCCC",
+    "CCCrCCC",
+)
+PRESENT_COLOURS = (
+    _present((200, 0, 0), (255, 210, 0)),
+    _present((0, 160, 40), (220, 0, 0)),
+    _present((40, 90, 255), (255, 255, 255)),
+)
+SANTA = Flyby(
+    frames=SANTA_FRAMES,
+    palette=(
+        ("R", SANTA_RED),
+        ("W", SANTA_WHITE),
+        ("F", SANTA_FACE),
+        ("e", EYE),
+        ("K", SANTA_DARK),
+        ("G", BUCKLE),
+        ("S", SACK),
+    ),
+    speed=14.0,
+    frame_seconds=0.3,
+    align="bottom",
+    drops=tuple(Drop(SMALL_PRESENT, colours) for colours in PRESENT_COLOURS),
+    # Every ~26px: four or five presents across the panel.
+    drop_spacing=26,
+    # Under the sack, which hangs off his back (the right, since he walks left).
+    drop_column=9,
+    # Long enough to see the trail of presents once he's gone.
+    linger_seconds=2.0,
+)
+
+
+def _snowflakes(count: int, seed: int) -> tuple[tuple[int, float, float], ...]:
+    """(column within its band, start offset, px per second), fixed per run.
+
+    Seeded, not live random: the corner draw has to be a pure function of
+    time so a snapshot can freeze it.
+    """
+    rng = random.Random(seed)
+    return tuple(
+        (rng.randrange(28), rng.uniform(0, 32), rng.uniform(1.5, 3.0)) for _ in range(count)
+    )
+
+
+#: Slow enough (1.5-3 px/s) to look right at the normal 2fps loop, so a
+#: month of snow never needs the fast animation loop (#240).
+SNOWFLAKES = (_snowflakes(9, 1), _snowflakes(9, 2))
+#: Snow stays in a band this wide at each edge -- the real panel can't be
+#: asked which pixels the clock text lit, so flakes can't weave around it.
+SNOW_BAND = 30
+
+
+def _draw_presents_and_snow(canvas: Any, now: float, width: int, height: int) -> None:
+    for band, flakes in enumerate(SNOWFLAKES):
+        left = 1 if band == 0 else width - SNOW_BAND - 1
+        for column, offset, speed in flakes:
+            y = int(offset + now * speed) % height
+            sway = round(math.sin(now * 0.8 + offset))
+            x = min(max(left + column + sway, left), left + SNOW_BAND - 1)
+            canvas.SetPixel(x, y, *SNOW)
+    # Presents on top of the snow: two side by side in each corner, a
+    # small one perched on the first.
+    red, green, blue = PRESENT_COLOURS
+    y = height - len(BIG_PRESENT)
+    step = len(BIG_PRESENT[0]) + 1
+    for x, first, second, small in (
+        (CORNER_INSET, green, blue, red),
+        (width - CORNER_INSET - 2 * step + 1, red, green, blue),
+    ):
+        draw_sprite(canvas, BIG_PRESENT, dict(first), x, y, width, height)
+        draw_sprite(canvas, BIG_PRESENT, dict(second), x + step, y, width, height)
+        draw_sprite(
+            canvas, SMALL_PRESENT, dict(small), x + 1, y - len(SMALL_PRESENT), width, height
+        )
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(
@@ -298,6 +444,14 @@ HOLIDAYS: dict[str, Holiday] = {
         _us_thanksgiving_week,
         TURKEY,
         _draw_leaves,
+    ),
+    "christmas": Holiday(
+        "christmas",
+        "Christmas",
+        "Dec 1-26",
+        _between((12, 1), (12, 26)),
+        SANTA,
+        _draw_presents_and_snow,
     ),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)
@@ -408,11 +562,15 @@ class HolidayOverlay:
                 return False
             self.start_flyby(now)
         elapsed = now - self._flyby_started
-        x = width - round(elapsed * flyby.speed)
-        if x + flyby.width <= 0:
+        travelled = round(elapsed * flyby.speed)
+        x = width - travelled
+        linger = round(flyby.linger_seconds * flyby.speed)
+        if x + flyby.width + linger <= 0:
             self._flyby_started = None
             self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)
             return False
+        if flyby.drops:
+            self._draw_drops(canvas, flyby, travelled, width, height)
         if flyby.align == "bottom":
             y = height - flyby.height
         else:
@@ -421,3 +579,22 @@ class HolidayOverlay:
         frame = flyby.frames[int(elapsed / flyby.frame_seconds) % len(flyby.frames)]
         draw_sprite(canvas, frame, dict(flyby.palette), x, y, width, height)
         return True
+
+    @staticmethod
+    def _draw_drops(canvas: Any, flyby: Flyby, travelled: int, width: int, height: int) -> None:
+        """Everything dropped so far, each where the sprite was when it fell.
+
+        A pure function of distance travelled, like the sprite itself: drop
+        ``i`` falls once ``(i + 1) * drop_spacing`` px are covered, at the
+        x ``drop_column`` was at that moment, and only while that's on-panel.
+        """
+        i = 0
+        while (distance := (i + 1) * flyby.drop_spacing) <= travelled:
+            drop = flyby.drops[i % len(flyby.drops)]
+            drop_x = width - distance + flyby.drop_column
+            if drop_x + len(drop.rows[0]) > width or drop_x < 0:
+                i += 1
+                continue
+            y = height - len(drop.rows)
+            draw_sprite(canvas, drop.rows, dict(drop.palette), drop_x, y, width, height)
+            i += 1
