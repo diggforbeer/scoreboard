@@ -26,6 +26,7 @@ from .brightness import lux_to_brightness
 from .button import Button
 from .config import DEFAULT_CONFIG_PATHS, RotationEntry, Settings, resolve_timezone
 from .display.fonts import FontSet
+from .display.holiday import HOLIDAYS, Holiday, HolidayOverlay, active_holiday
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
@@ -56,6 +57,10 @@ log = logging.getLogger(__name__)
 #: How long stale data stays on the board before we admit we are offline.
 STALE_AFTER_SECONDS = 15 * 60
 FRAME_INTERVAL = 0.5
+#: Frame interval while a holiday fly-by is crossing the panel (#237). At
+#: FRAME_INTERVAL a sprite would jump ~10px a frame; this is ~1px. Only for
+#: the few seconds something is moving -- the board idles at 2fps otherwise.
+ANIMATION_FRAME_INTERVAL = 0.05
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
@@ -343,6 +348,14 @@ class ScoreboardApp:
         self._demo_next_step_at = 0.0
         self._demo_scene: Scene | None = None
         self._demo_was_on = False
+        #: Holiday decorations (#237). _overlay_animating is whether the
+        #: last frame drew something moving, which is what speeds the loop
+        #: up. While a demo is drawing, its own step decides the holiday
+        #: (_demo_holiday) instead of the config and the calendar.
+        self.holiday_overlay = HolidayOverlay()
+        self._overlay_animating = False
+        self._demo_drawing = False
+        self._demo_holiday: Holiday | None = None
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -404,8 +417,11 @@ class ScoreboardApp:
             self.wifi_join.poll()
             self.wifi_join.expire_outcome_if_stale()
             self.draw()
-            self.sleep(FRAME_INTERVAL)
+            self.sleep(self.frame_interval())
         self.shutdown()
+
+    def frame_interval(self) -> float:
+        return ANIMATION_FRAME_INTERVAL if self._overlay_animating else FRAME_INTERVAL
 
     def run_demo(self) -> None:
         """Loop every scene with synthetic data until stopped (#47).
@@ -423,6 +439,7 @@ class ScoreboardApp:
 
         self._running = True
         self._demo_real_logos = self.renderer.logos
+        self._demo_drawing = True
         ticks_per_scene = max(1, round(DEMO_SCENE_SECONDS / FRAME_INTERVAL))
         while self._running:
             # Rebuilt each pass so the preview/countdown stay relative to now.
@@ -431,13 +448,34 @@ class ScoreboardApp:
                 if not self._running:
                     break
                 self._set_demo_logos(step.use_logos)
+                self._start_demo_holiday(step)
+                if self._demo_holiday is not None:
+                    self._play_animated_demo_step(step.scene)
+                    continue
                 self.draw_scene(step.scene)
                 for _ in range(ticks_per_scene):
                     if not self._running:
                         break
                     self.sleep(FRAME_INTERVAL)
+        self._demo_drawing = False
         self.renderer.logos = self._demo_real_logos
         self.shutdown()
+
+    def _start_demo_holiday(self, step: DemoStep) -> None:
+        """Force a step's holiday on, with a fly-by starting right now.
+
+        A demo step lasts seconds; the real gap between fly-bys is minutes.
+        """
+        self._demo_holiday = HOLIDAYS.get(step.holiday) if step.holiday else None
+        if self._demo_holiday is not None:
+            self.holiday_overlay.start_flyby(self.monotonic())
+
+    def _play_animated_demo_step(self, scene: Scene) -> None:
+        """Redraw every frame for DEMO_SCENE_SECONDS, so the fly-by actually moves."""
+        end = self.monotonic() + DEMO_SCENE_SECONDS
+        while self._running and self.monotonic() < end:
+            self.draw_scene(scene)
+            self.sleep(self.frame_interval())
 
     def set_demo_mode(self, enabled: bool) -> None:
         """Turn the live demo on or off (#204); safe from any thread."""
@@ -457,8 +495,13 @@ class ScoreboardApp:
             self._demo_step_index += 1
             self._demo_next_step_at = now + DEMO_SCENE_SECONDS
             self._set_demo_logos(step.use_logos)
+            self._start_demo_holiday(step)
             self._demo_scene = step.scene
-        self.draw_scene(self._demo_scene)
+        self._demo_drawing = True
+        try:
+            self.draw_scene(self._demo_scene)
+        finally:
+            self._demo_drawing = False
 
     def _set_demo_logos(self, use_logos: bool) -> None:
         """Show the text fallback layout on demand, whatever the board has configured.
@@ -1687,6 +1730,7 @@ class ScoreboardApp:
             # can see.
             self.canvas.Clear()
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            self._overlay_animating = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -1736,4 +1780,26 @@ class ScoreboardApp:
             r.draw_wifi_join(self.canvas, scene.wifi_join_status, scene.wifi_join_ssid)
         else:
             r.draw_message(self.canvas, "NO GAMES")
+        self._draw_holiday_overlay(scene)
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
+
+    def active_holiday(self) -> Holiday | None:
+        """The configured holiday in season today (local date), if any."""
+        cfg = self.settings.holiday
+        if not cfg.enabled:
+            return None
+        return active_holiday(cfg.themes, self.clock().astimezone(self.tz).date())
+
+    def _draw_holiday_overlay(self, scene: Scene) -> None:
+        holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
+        cfg = self.settings.holiday
+        self._overlay_animating = self.holiday_overlay.draw(
+            self.canvas,
+            scene_kind=scene.kind,
+            holiday=holiday,
+            now=self.monotonic(),
+            width=self.renderer.width,
+            height=self.renderer.height,
+            min_gap_seconds=cfg.flyby_min_minutes * 60,
+            max_gap_seconds=cfg.flyby_max_minutes * 60,
+        )
