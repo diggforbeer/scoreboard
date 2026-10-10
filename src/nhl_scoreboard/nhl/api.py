@@ -36,6 +36,13 @@ BASE_URL = "https://api-web.nhle.com/v1"
 USER_AGENT = "nhl-scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
 
 
+#: (connect, read) seconds. Every fetch runs on the render loop, so this is
+#: also how long one stalled request can freeze the panel. 10s read with
+#: three retries froze it ~44s per poll -- ~2.5 min straight across three
+#: back-to-back failed polls in a real board's log, 2026-10-10.
+TIMEOUT = (5.0, 5.0)
+
+
 class NHLApiError(RuntimeError):
     """Raised when the API could not be reached or returned unusable data."""
 
@@ -44,7 +51,7 @@ class NHLClient:
     def __init__(
         self,
         base_url: str = BASE_URL,
-        timeout: float = 10.0,
+        timeout: float | tuple[float, float] = TIMEOUT,
         session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -196,8 +203,13 @@ def _parse_items(raw_items: list[Any], parse: Callable[[Any], Any], label: str) 
 def _build_session() -> requests.Session:
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
+    # A timeout is retried once, not three times: a server that didn't
+    # answer in 5s rarely does a second later, and the next poll is
+    # seconds away anyway. Quick 429/5xx answers keep the full three.
     retry = Retry(
         total=3,
+        connect=1,
+        read=1,
         backoff_factor=0.5,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset({"GET"}),
