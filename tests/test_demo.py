@@ -142,3 +142,10 @@ def test_every_step_renders_on_panel(width):
             r.draw_message(c, scene.kind.upper())
         assert c.out_of_bounds == [], f"{scene.kind} drew off-panel"
         assert c.lit(), f"{scene.kind} drew nothing"
+
+
+def test_every_holiday_is_shown_and_named_correctly():
+    from nhl_scoreboard.display.holiday import HOLIDAY_NAMES
+
+    holidays = {s.holiday for s in demo_steps("NSH", NOW) if s.holiday is not None}
+    assert holidays == set(HOLIDAY_NAMES)

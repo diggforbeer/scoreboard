@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from nhl_scoreboard.display.ascii import AsciiCanvas
+from nhl_scoreboard.display.ascii import AsciiCanvas, BBox
 from nhl_scoreboard.display.fonts import FontSet
 from nhl_scoreboard.display.logos import LogoLibrary
 from nhl_scoreboard.display.renderer import (
@@ -1490,3 +1490,77 @@ def test_leaders_long_name_never_leaves_the_panel(synthetic_logos):
     )
     make_renderer(logos=synthetic_logos).draw_leaders(c, long, "NSH")
     assert not c.out_of_bounds
+
+
+# --------------------------------------------------------------------------
+# holiday overlay (#237)
+# --------------------------------------------------------------------------
+
+
+def bbox_of(c: AsciiCanvas, rgb: tuple[int, int, int]) -> BBox:
+    xs = [x for (x, _), v in c.pixels.items() if v == rgb]
+    ys = [y for (_, y), v in c.pixels.items() if v == rgb]
+    return BBox(min(xs), min(ys), max(xs), max(ys))
+
+
+def draw_halloween(c: AsciiCanvas, kind: str, flyby_at: float | None) -> bool:
+    from nhl_scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
+
+    overlay = HolidayOverlay()
+    if flyby_at is not None:
+        overlay.start_flyby(0.0)
+    return overlay.draw(
+        c,
+        scene_kind=kind,
+        holiday=HOLIDAYS["halloween"],
+        now=flyby_at or 0.0,
+        width=W,
+        height=H,
+        min_gap_seconds=600,
+        max_gap_seconds=600,
+    )
+
+
+def test_halloween_ghost_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import GHOST_BODY, GHOST_HEIGHT
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 3s in: mid-panel, right over the score column.
+    assert draw_halloween(c, "game", flyby_at=3.0)
+    art = show("halloween ghost over live game", c)
+
+    assert not c.out_of_bounds
+    ghost = bbox_of(c, GHOST_BODY)
+    assert ghost.height == GHOST_HEIGHT
+    assert MID_LEFT < ghost.center_x < MID_RIGHT
+    # Everything outside the ghost's box is the untouched game scene.
+    outside = {
+        p: rgb
+        for p, rgb in plain.pixels.items()
+        if not (ghost.x0 <= p[0] <= ghost.x1 and ghost.y0 <= p[1] <= ghost.y1)
+    }
+    assert all(c.pixels.get(p) == rgb for p, rgb in outside.items())
+    check_snapshot("holiday_halloween_ghost", art, update_snapshots)
+
+
+def test_halloween_pumpkins_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import PUMPKIN
+
+    now = datetime(2026, 10, 10, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None) is False
+    art = show("halloween pumpkins, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    pumpkins = bbox_of(c, PUMPKIN)
+    assert pumpkins.x0 < text.x0 and pumpkins.x1 > text.x1, "one either side of the text"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_halloween_clock", art, update_snapshots)

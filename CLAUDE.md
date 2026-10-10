@@ -464,6 +464,24 @@ and rendering entirely, rather than trusting brightness 0 alone to be dark
 on every backend. Transitions are instant; eased steps were considered and
 cut, and a dim-by-default "passive mode" is #94, not this.
 
+Holiday decorations (#236 tracking, #237 framework + Halloween,
+`[holiday]`, off by default) are an **overlay, not a scene**:
+`draw_scene()` draws the scene, then `HolidayOverlay.draw()`
+(`display/holiday.py`) decorates the same canvas before the swap, so no
+scene knows holidays exist. Each holiday is a date window in `HOLIDAYS`
+(local to `scoreboard.timezone`); `themes` is just the checkbox list, never
+dates. Never drawn on `goal`/`goal_detail`/`three_stars`/`ap_setup`/
+`wifi_join` (`NO_OVERLAY_SCENES`) or under night-mode blanking. A fly-by
+(the ghost) only *starts* on an allowed scene, after a random
+`flyby_min_minutes`-`flyby_max_minutes` gap; static decorations (pumpkins)
+only go on `clock`/`no_games` -- the 32px logos fill both edges of every
+game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
+(50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
+otherwise. Demo steps carry an optional `holiday`, forced on with an
+immediate fly-by and redrawn every frame for the step. Admin-page
+checkboxes are #238; other holidays #239-#242; holiday *screens* (a
+Christmas tree, as a `[[rotation]]` entry) #243.
+
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
 like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`

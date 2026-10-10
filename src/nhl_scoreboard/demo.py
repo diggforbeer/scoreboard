@@ -66,6 +66,9 @@ class DemoStep(NamedTuple):
 
     scene: Scene
     use_logos: bool = True
+    #: A holiday (#237) to force on for this step, whatever the date or
+    #: config, with a fly-by starting the moment the step does.
+    holiday: str | None = None
 
 
 def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
@@ -125,6 +128,8 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("leaders", leaders=_LEADERS)),
         DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
         DemoStep(Scene("clock")),
+        DemoStep(Scene("game", live), holiday="halloween"),
+        DemoStep(Scene("clock"), holiday="halloween"),
         DemoStep(Scene("no_games")),
         DemoStep(Scene("no_data")),
     ]

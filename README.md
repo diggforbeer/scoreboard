@@ -204,6 +204,12 @@ dim_brightness = 0           # 0-100; 0 blanks the panel outright instead of a d
 suppress_scope = "tracked"   # "tracked" = only the favourite's game holds off dimming; "all" = any live game
 cooldown_minutes = 15        # how long after that game ends before dimming resumes
 
+[holiday]
+enabled = false              # seasonal decorations; each holiday only shows during its own dates
+themes = ["halloween"]       # which holidays to show
+flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
+flyby_max_minutes = 20
+
 [panel]
 rows = 32
 cols = 64
@@ -269,6 +275,10 @@ still only ever fire for your favourite team's own goal.
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
 a tracked game is live or was held recently, so a late finish stays
 readable.
+
+`[holiday]` adds seasonal decorations on top. In October, a ghost floats
+across the board every so often (even during games, though never over a
+GOAL screen) and jack-o'-lanterns flank the clock.
 
 ## Audio
 

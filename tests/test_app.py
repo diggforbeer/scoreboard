@@ -1711,17 +1711,29 @@ def stub_renderer(app: ScoreboardApp) -> None:
 
 
 def run_demo_for_frames(app: ScoreboardApp, src: FakeClockSource, frames: int) -> None:
-    remaining = frames
+    """Run the demo for ``frames`` worth of FRAME_INTERVAL time.
+
+    Time, not a sleep count: holiday steps (#237) animate, sleeping
+    ANIMATION_FRAME_INTERVAL many more times within the same step.
+    """
+    end = frames * FRAME_INTERVAL - 1e-9
 
     def sleep(seconds: float) -> None:
-        nonlocal remaining
         src.sleep(seconds)
-        remaining -= 1
-        if remaining <= 0:
+        if src.now >= end:
             app._running = False
 
     app.sleep = sleep
     app.run_demo()
+
+
+def first_draw_per_step(calls: list[tuple]) -> list[tuple]:
+    """One spy record per demo step: animated holiday steps redraw every frame."""
+    firsts: list[tuple] = []
+    for call in calls:
+        if not firsts or call[2] >= firsts[-1][2] + DEMO_SCENE_SECONDS:
+            firsts.append(call)
+    return firsts
 
 
 def test_demo_draws_each_step_in_order_for_demo_scene_seconds(fake_backend, games):
@@ -1745,7 +1757,8 @@ def test_demo_loops_back_to_the_first_step(fake_backend, games):
 
     run_demo_for_frames(app, src, (len(steps) + 1) * TICKS_PER_SCENE)
 
-    assert [c[0] for c in calls] == [s.scene for s in steps] + [steps[0].scene]
+    firsts = first_draw_per_step(calls)
+    assert [c[0] for c in firsts] == [s.scene for s in steps] + [steps[0].scene]
 
 
 def test_demo_never_touches_the_real_state_machine(fake_backend, games):
@@ -1818,6 +1831,7 @@ def test_demo_toggles_logos_per_step_and_restores_them(fake_backend, games):
 
     run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
 
+    calls = first_draw_per_step(calls)
     assert len(calls) == len(steps)
     for step, (_scene, logos, _t) in zip(steps, calls, strict=True):
         assert logos is (library if step.use_logos else None)
@@ -1834,7 +1848,7 @@ def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, game
 
     run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
 
-    assert len(calls) == len(steps)
+    assert len(first_draw_per_step(calls)) == len(steps)
     assert all(c[1] is None for c in calls)
 
 

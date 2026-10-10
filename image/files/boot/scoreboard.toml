@@ -194,6 +194,19 @@ suppress_scope = "tracked"
 # is still readable. 0 dims the moment it's over.
 cooldown_minutes = 15
 
+[holiday]
+# Seasonal decorations over the normal screens. Each holiday only appears
+# during its own dates, so leaving every one ticked is the normal setting.
+# Never drawn over a GOAL / goal-detail / three-stars screen. Off by default.
+#   halloween  Oct 1-31: a ghost floats across the board now and then
+#              (games included), and jack-o'-lanterns flank the clock.
+enabled = false
+themes = ["halloween"]
+
+# Random gap, in minutes, between fly-bys (the Halloween ghost).
+flyby_min_minutes = 5
+flyby_max_minutes = 20
+
 [button]
 # An optional momentary push-button: one leg to a GPIO pin, the other to
 # GND, no resistor needed. A short press mutes the goal horn for
