@@ -188,6 +188,22 @@ interface WifiConfig {
   connect_timeout_seconds: number
 }
 
+// Mirrors HolidayConfig (config.py, #237). `themes` is the ticked subset
+// of the `available` list the server sends alongside it (#238).
+interface HolidayConfig {
+  enabled: boolean
+  themes: string[]
+  flyby_min_minutes: number
+  flyby_max_minutes: number
+}
+
+// One entry in display/holiday.py's HOLIDAYS registry.
+interface HolidayOption {
+  name: string
+  label: string
+  window: string
+}
+
 interface RotationRow {
   screen: string
   seconds: number
@@ -232,6 +248,7 @@ type ServerMessage =
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
   | { type: 'config'; section: 'wifi'; data: WifiConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
+  | { type: 'config'; section: 'holiday'; data: HolidayConfig; available: HolidayOption[] }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'snapshot'; data: SnapshotData }
   | { type: 'logs'; backlog?: boolean; entries: LogEntry[] }
@@ -320,6 +337,11 @@ function App() {
   const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
   const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
 
+  const [holiday, setHoliday] = useState<HolidayConfig | null>(null)
+  const [holidayOptions, setHolidayOptions] = useState<HolidayOption[]>([])
+  const [holidaySaveStatus, setHolidaySaveStatus] = useState<SaveStatus>('idle')
+  const [holidaySaveError, setHolidaySaveError] = useState<string | null>(null)
+
   const [update, setUpdate] = useState<UpdateConfig | null>(null)
   // 'checking'/'applying' cover the gap between clicking the button and the
   // watcher's broadcast landing once the real check/apply (out of process)
@@ -333,7 +355,7 @@ function App() {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
   // Two pages don't justify a router (#193): plain view state.
-  const [page, setPage] = useState<'home' | 'audio' | 'logs'>('home')
+  const [page, setPage] = useState<'home' | 'audio' | 'holidays' | 'logs'>('home')
   const [logLines, setLogLines] = useState<LogEntry[]>([])
   const [logError, setLogError] = useState<string | null>(null)
   const logBoxRef = useRef<HTMLPreElement | null>(null)
@@ -398,7 +420,10 @@ function App() {
             else if (message.section === 'night_mode') setNightMode(message.data)
             else if (message.section === 'wifi') setWifi(message.data)
             else if (message.section === 'rotation') setRotation(message.data)
-            else if (message.section === 'update') {
+            else if (message.section === 'holiday') {
+              setHoliday(message.data)
+              setHolidayOptions(message.available)
+            } else if (message.section === 'update') {
               setUpdate(message.data)
               setUpdatePhase('idle') // real data just arrived -- whatever was in flight is done
             }
@@ -426,6 +451,7 @@ function App() {
             else if (message.section === 'night_mode') setNightModeSaveStatus('saved')
             else if (message.section === 'wifi') setWifiSaveStatus('saved')
             else if (message.section === 'rotation') setRotationSaveStatus('saved')
+            else if (message.section === 'holiday') setHolidaySaveStatus('saved')
             break
           case 'horn_uploaded':
             setHornUploading(false)
@@ -483,6 +509,9 @@ function App() {
             } else if (message.section === 'rotation') {
               setRotationSaveStatus('error')
               setRotationSaveError(message.message)
+            } else if (message.section === 'holiday') {
+              setHolidaySaveStatus('error')
+              setHolidaySaveError(message.message)
             }
             break
           case 'checking':
@@ -657,6 +686,26 @@ function App() {
       setRotationSaveStatus('error')
       setRotationSaveError(NOT_CONNECTED_ERROR)
     }
+  }
+
+  function saveHoliday(event: React.FormEvent) {
+    event.preventDefault()
+    if (!holiday) return
+    setHolidaySaveStatus('saving')
+    setHolidaySaveError(null)
+    if (!save('holiday', holiday)) {
+      setHolidaySaveStatus('error')
+      setHolidaySaveError(NOT_CONNECTED_ERROR)
+    }
+  }
+
+  function toggleHolidayTheme(name: string, ticked: boolean) {
+    if (!holiday) return
+    // Keep registry order, whatever order the boxes were ticked in.
+    const themes = holidayOptions
+      .map((option) => option.name)
+      .filter((n) => (n === name ? ticked : holiday.themes.includes(n)))
+    setHoliday({ ...holiday, themes })
   }
 
   function updateRow(index: number, row: RotationRow) {
@@ -835,14 +884,16 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'audio', 'logs'] as const).map((name) => (
+        {(['home', 'audio', 'holidays', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
               className={`nav-link${page === name ? ' active' : ''}`}
               onClick={() => setPage(name)}
             >
-              {name === 'home' ? 'Home' : name === 'audio' ? 'Audio' : 'Logs'}
+              {
+                { home: 'Home', audio: 'Audio', holidays: 'Holiday Cheer', logs: 'Logs' }[name]
+              }
             </button>
           </li>
         ))}
@@ -1806,6 +1857,99 @@ function App() {
       </div>
 
         </>
+      )}
+
+      {page === 'holidays' && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Holiday Cheer</h2>
+            <p className="text-body-secondary small">
+              Seasonal decorations drawn over the normal screens, never over a goal. Each
+              holiday only shows during its own dates, so leaving them all ticked is fine.
+            </p>
+            {holiday ? (
+              <form onSubmit={saveHoliday}>
+                <div className="form-check form-switch mb-3">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    id="holiday-enabled"
+                    checked={holiday.enabled}
+                    onChange={(e) => setHoliday({ ...holiday, enabled: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="holiday-enabled">
+                    Holiday cheer on
+                  </label>
+                </div>
+
+                <h3 className="h6 text-body-secondary mt-4">Holidays</h3>
+                <fieldset disabled={!holiday.enabled}>
+                  {holidayOptions.map((option) => (
+                    <div className="form-check mb-2" key={option.name}>
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id={`holiday-${option.name}`}
+                        checked={holiday.themes.includes(option.name)}
+                        onChange={(e) => toggleHolidayTheme(option.name, e.target.checked)}
+                      />
+                      <label className="form-check-label" htmlFor={`holiday-${option.name}`}>
+                        {option.label}{' '}
+                        <span className="text-body-secondary small">({option.window})</span>
+                      </label>
+                    </div>
+                  ))}
+
+                  <h3 className="h6 text-body-secondary mt-4">Fly-bys</h3>
+                  <p className="text-body-secondary small mb-2">
+                    How often something crosses the board (e.g. the Halloween ghost): a random
+                    gap between these two, in minutes.
+                  </p>
+                  <div className="d-flex gap-3">
+                    {(
+                      [
+                        ['flyby_min_minutes', 'At least'],
+                        ['flyby_max_minutes', 'At most'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <div className="mb-3" key={key}>
+                        <label className="form-label" htmlFor={`holiday-${key}`}>
+                          {label}
+                        </label>
+                        <input
+                          className="form-control"
+                          style={{ maxWidth: '8rem' }}
+                          id={`holiday-${key}`}
+                          type="number"
+                          step="any"
+                          min="1"
+                          value={holiday[key]}
+                          onChange={(e) =>
+                            setHoliday({ ...holiday, [key]: Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <div className="d-flex align-items-center gap-3">
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={holidaySaveStatus === 'saving'}
+                  >
+                    Save Holiday Cheer
+                  </button>
+                  {saveFeedback(holidaySaveStatus, holidaySaveError)}
+                </div>
+              </form>
+            ) : (
+              <p className="text-body-secondary mb-0">waiting for server...</p>
+            )}
+          </div>
+        </div>
       )}
 
       {page === 'logs' && (

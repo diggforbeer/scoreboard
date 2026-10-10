@@ -478,9 +478,62 @@ only go on `clock`/`no_games` -- the 32px logos fill both edges of every
 game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
 (50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
 otherwise. Demo steps carry an optional `holiday`, forced on with an
-immediate fly-by and redrawn every frame for the step. Admin-page
-checkboxes are #238; other holidays #239-#242; holiday *screens* (a
-Christmas tree, as a `[[rotation]]` entry) #243.
+immediate fly-by and redrawn every frame for the step. The admin page's
+own Holiday Cheer tab (#238) edits `[holiday]`: its checkbox list comes from
+`HOLIDAYS` (sent as `available`, each with a human `window` string), so a
+new holiday needs no frontend change; `_coerce_holiday` rejects unknown
+themes and a min-over-max gap rather than repairing them like the TOML
+loader does, and the section is sent last on connect, after the snapshot.
+Each `Holiday` carries its own `Flyby` (frames, palette, speed,
+`align` "middle" to float or "bottom" to walk) and `corners` draw
+function, so adding one is a registry entry, not overlay code.
+Thanksgiving (#239) is two entries sharing the turkey/leaves art: US
+(`thanksgiving`, the 7 days up to the 4th Thursday of November) and
+Canadian (`thanksgiving_ca`, Fri through the 2nd Monday of October,
+`default_on=False` so it isn't ticked unasked -- `DEFAULT_THEMES`).
+Overlaps go to the higher `Holiday.priority` (registry order is just
+calendar/checkbox order): `thanksgiving_ca` has priority 1 and takes its
+long weekend over from `halloween`, by the owner's call; kept to a long
+weekend so it displaces as little of Halloween as possible. Christmas
+(#240, Dec 1-26): Santa walks the bottom edge and drops presents behind
+him (`Flyby.drops`/`drop_spacing`/`drop_column`, a pure function of
+distance travelled; `linger_seconds` keeps the pass -- and the fast loop
+-- alive a moment after he's gone so the trail is seen); `corners` draws
+present stacks plus snow. Snow falls only in a `SNOW_BAND` at each edge:
+the real panel can't report which pixels the clock text lit, so flakes
+can't weave around it, and they're slow enough (1.5-3 px/s) for the
+normal 2fps loop -- a month of snow never holds the fast loop on.
+New Year's (#241, Dec 31-Jan 1, the one window that wraps the year) is
+the first mover that isn't a sprite crossing: `Fireworks` (staggered
+`Rocket`s that rise, then burst into an outer ring plus a lighter inner
+one) implements the same `draw(canvas, elapsed, w, h) -> bool` contract as
+`Flyby`, so `HolidayOverlay` schedules either without knowing which.
+Sparks stop drawing below `MIN_SPARK_FADE` rather than fading to near-
+black -- a linear fade left dark holes over logos in a rendered preview.
+Corners are champagne flutes plus confetti that twinkles at 2fps (no fast
+loop), in the same edge bands as the snow. Valentine's (#242, Feb 7-14):
+a beating heart floats across (two frames, full and squeezed), and two
+beat out of step beside the clock at 2fps. The flying heart is outlined
+(`_outlined`, pale pink) -- a plain red heart vanished crossing a red team
+logo in a rendered preview; any red/white-on-anything sprite added later
+should get the same check -- St. Patrick's (#249, Mar 14-17) needed it
+too: the leprechaun and the shamrocks he drops (`Flyby.drops`, as Santa)
+are outlined in pale gold, after green-on-green (DAL/MIN logos, the
+green live-status text) all but vanished in a preview. Groundhog Day (#247, Feb 2) adds a third
+mover kind, `Popup` (rises out of a mound, looks left/right, then either
+startles at a dark silhouette and ducks, or stays and sinks), and is the
+one holiday that needs the date: shadow-or-not is `random.Random(year)`,
+so `HolidayOverlay.draw(day=...)` threads the board's local date through
+to every mover's `draw` and every `corners` function (ignored by the
+rest); the clock shows a sun (shadow, six more weeks) or a cloud. Holiday *screens* (a Christmas
+tree, as a `[[rotation]]` entry) are #243.
+
+`april_fools.py` (#248) is a small, date-gated Easter egg for NSH boards,
+deliberately low-key (kept out of README.md, the demo, and the rendered
+snapshots) -- read the module docstring before touching the standings,
+scene drawing or `display/teams.py`'s `GUEST_COLORS`. It relabels every screen,
+live games included, but only labels: scores, goal detection, the horn and
+every fetch still key off the real team -- its tests pin that.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.

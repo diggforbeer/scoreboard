@@ -198,10 +198,27 @@ cooldown_minutes = 15
 # Seasonal decorations over the normal screens. Each holiday only appears
 # during its own dates, so leaving every one ticked is the normal setting.
 # Never drawn over a GOAL / goal-detail / three-stars screen. Off by default.
-#   halloween  Oct 1-31: a ghost floats across the board now and then
-#              (games included), and jack-o'-lanterns flank the clock.
+#   halloween        Oct 1-31: a ghost floats across the board now and then
+#                    (games included), and jack-o'-lanterns flank the clock.
+#   thanksgiving     The week up to US Thanksgiving: a turkey walks along the
+#                    bottom, and autumn leaves flank the clock.
+#   thanksgiving_ca  Canadian Thanksgiving's long weekend, same turkey. Not
+#                    listed by default; while ticked it takes that weekend
+#                    over from Halloween.
+#   christmas        Dec 1-26: Santa walks along the bottom dropping presents,
+#                    and presents with gentle snow flank the clock.
+#   new_year         Dec 31-Jan 1: a short fireworks show now and then, and
+#                    champagne with twinkling confetti flanks the clock.
+#   groundhog        Feb 2: a groundhog pops up and may see his shadow (decided
+#                    once a year); a sun or a cloud beside the clock says which.
+#   valentines       Feb 7-14: a beating heart floats across now and then,
+#                    and two beating hearts flank the clock.
+#   st_patricks      Mar 14-17: a leprechaun walks along the bottom dropping
+#                    shamrocks, and shamrocks flank the clock.
 enabled = false
-themes = ["halloween"]
+themes = [
+  "halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks",
+]
 
 # Random gap, in minutes, between fly-bys (the Halloween ghost).
 flyby_min_minutes = 5

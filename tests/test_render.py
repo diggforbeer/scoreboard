@@ -1503,7 +1503,13 @@ def bbox_of(c: AsciiCanvas, rgb: tuple[int, int, int]) -> BBox:
     return BBox(min(xs), min(ys), max(xs), max(ys))
 
 
-def draw_halloween(c: AsciiCanvas, kind: str, flyby_at: float | None) -> bool:
+def draw_halloween(
+    c: AsciiCanvas,
+    kind: str,
+    flyby_at: float | None,
+    holiday: str = "halloween",
+    day=None,
+) -> bool:
     from nhl_scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
 
     overlay = HolidayOverlay()
@@ -1512,12 +1518,13 @@ def draw_halloween(c: AsciiCanvas, kind: str, flyby_at: float | None) -> bool:
     return overlay.draw(
         c,
         scene_kind=kind,
-        holiday=HOLIDAYS["halloween"],
+        holiday=HOLIDAYS[holiday],
         now=flyby_at or 0.0,
         width=W,
         height=H,
         min_gap_seconds=600,
         max_gap_seconds=600,
+        day=day,
     )
 
 
@@ -1564,3 +1571,224 @@ def test_halloween_pumpkins_frame_the_clock(update_snapshots):
     assert pumpkins.x0 < text.x0 and pumpkins.x1 > text.x1, "one either side of the text"
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_halloween_clock", art, update_snapshots)
+
+
+def test_thanksgiving_turkey_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import TURKEY, TURKEY_BODY
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 4.6s in at 14px/s: mid-panel, walking across the status line.
+    assert draw_halloween(c, "game", flyby_at=4.6, holiday="thanksgiving")
+    art = show("thanksgiving turkey over live game", c)
+
+    assert not c.out_of_bounds
+    body = bbox_of(c, TURKEY_BODY)
+    assert MID_LEFT < body.center_x < MID_RIGHT
+    turkey_top = H - TURKEY.height
+    # Above the turkey's rows, the game scene is untouched: score and SOG intact.
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < turkey_top}
+    assert c.lit(0, 0, W - 1, turkey_top - 1) == above
+    check_snapshot("holiday_thanksgiving_turkey", art, update_snapshots)
+
+
+def test_thanksgiving_leaves_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import LEAF_GOLD, MAPLE
+
+    now = datetime(2026, 11, 21, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="thanksgiving") is False
+    art = show("thanksgiving leaves, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert bbox_of(c, MAPLE).x1 < text.x0, "maple leaf left of the text"
+    assert bbox_of(c, LEAF_GOLD).x0 > text.x1, "gold leaf right of the text"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_thanksgiving_clock", art, update_snapshots)
+
+
+def test_christmas_santa_and_presents_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import SANTA, SANTA_RED
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 6.4s in at 14px/s: three presents dropped, Santa past the middle.
+    assert draw_halloween(c, "game", flyby_at=6.4, holiday="christmas")
+    art = show("christmas santa over live game", c)
+
+    assert not c.out_of_bounds
+    assert bbox_of(c, SANTA_RED).x0 < MID_RIGHT
+    top = H - SANTA.height
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < top}
+    assert c.lit(0, 0, W - 1, top - 1) == above, "score and SOG untouched"
+    check_snapshot("holiday_christmas_santa", art, update_snapshots)
+
+
+def test_christmas_presents_and_snow_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import SNOW
+
+    now = datetime(2026, 12, 12, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="christmas") is False
+    art = show("christmas presents and snow, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert all(not (text.x0 <= x <= text.x1) for (x, _), rgb in c.pixels.items() if rgb == SNOW)
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_christmas_clock", art, update_snapshots)
+
+
+def test_new_year_fireworks_over_live_game(games, synthetic_logos, update_snapshots):
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 2.3s in: one rocket mid-burst, one just bursting, one still climbing.
+    assert draw_halloween(c, "game", flyby_at=2.3, holiday="new_year")
+    art = show("new year fireworks over live game", c)
+
+    assert not c.out_of_bounds
+    check_snapshot("holiday_new_year_fireworks", art, update_snapshots)
+
+
+def test_new_year_champagne_and_confetti_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import CHAMPAGNE, CONFETTI
+
+    now = datetime(2026, 12, 31, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="new_year") is False
+    art = show("new year champagne and confetti, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    glass = [x for (x, _), rgb in c.pixels.items() if rgb == CHAMPAGNE]
+    assert min(glass) < text.x0 and max(glass) > text.x1, "a flute either side"
+    assert all(not (text.x0 <= x <= text.x1) for (x, _), rgb in c.pixels.items() if rgb in CONFETTI)
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_new_year_clock", art, update_snapshots)
+
+
+def test_valentines_heart_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import HEART_RED
+
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 3.7s in at 18px/s: in the score column.
+    assert draw_halloween(c, "game", flyby_at=3.7, holiday="valentines")
+    art = show("valentines heart over live game", c)
+
+    assert not c.out_of_bounds
+    assert MID_LEFT < bbox_of(c, HEART_RED).center_x < MID_RIGHT
+    check_snapshot("holiday_valentines_heart", art, update_snapshots)
+
+
+def test_valentines_hearts_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import HEART_PINK, HEART_RED
+
+    now = datetime(2027, 2, 14, 1, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="valentines") is False
+    art = show("valentines hearts, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert bbox_of(c, HEART_RED).x1 < text.x0, "red heart left of the text"
+    assert bbox_of(c, HEART_PINK).x0 > text.x1, "pink heart right of the text"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_valentines_clock", art, update_snapshots)
+
+
+def test_groundhog_sees_his_shadow_over_live_game(games, synthetic_logos, update_snapshots):
+    from datetime import date
+
+    from nhl_scoreboard.display.holiday import GROUNDHOG, GROUNDHOG_SHADOW
+
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 2027 is a shadow year; 3.3s in he's up and has just seen it.
+    assert draw_halloween(c, "game", flyby_at=3.3, holiday="groundhog", day=date(2027, 2, 2))
+    art = show("groundhog sees his shadow over live game", c)
+
+    assert not c.out_of_bounds
+    shadow = bbox_of(c, GROUNDHOG_SHADOW)
+    assert MID_LEFT < shadow.center_x < MID_RIGHT
+    assert shadow.y1 < H - len(GROUNDHOG.mound), "the shadow stands on the ground"
+    check_snapshot("holiday_groundhog_shadow", art, update_snapshots)
+
+
+@pytest.mark.parametrize(("year", "name"), [(2027, "sun"), (2026, "cloud")])
+def test_groundhog_burrow_and_verdict_frame_the_clock(year, name, update_snapshots):
+    from datetime import date
+
+    now = datetime(year, 2, 2, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert not draw_halloween(c, "clock", flyby_at=None, holiday="groundhog", day=date(year, 2, 2))
+    art = show(f"groundhog burrow and {name}, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot(f"holiday_groundhog_clock_{name}", art, update_snapshots)
+
+
+def test_st_patricks_leprechaun_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import LEP_BEARD, LEPRECHAUN
+
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 4.6s in at 14px/s: mid-panel, two shamrocks dropped behind him.
+    assert draw_halloween(c, "game", flyby_at=4.6, holiday="st_patricks")
+    art = show("st patricks leprechaun over live game", c)
+
+    assert not c.out_of_bounds
+    assert MID_LEFT < bbox_of(c, LEP_BEARD).center_x < MID_RIGHT
+    top = H - LEPRECHAUN.height
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < top}
+    assert c.lit(0, 0, W - 1, top - 1) == above, "score untouched above him"
+    check_snapshot("holiday_st_patricks_leprechaun", art, update_snapshots)
+
+
+def test_st_patricks_shamrocks_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import SHAMROCK
+
+    now = datetime(2027, 3, 17, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="st_patricks") is False
+    art = show("st patricks shamrocks, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    leaves = [x for (x, _), rgb in c.pixels.items() if rgb == SHAMROCK]
+    assert min(leaves) < text.x0 and max(leaves) > text.x1, "one either side"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_st_patricks_clock", art, update_snapshots)

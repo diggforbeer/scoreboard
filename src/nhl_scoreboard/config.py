@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import tomlkit
 
-from .display.holiday import HOLIDAY_NAMES
+from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 
 log = logging.getLogger(__name__)
 
@@ -465,7 +465,9 @@ class HolidayConfig:
     """
 
     enabled: bool = False
-    themes: list[str] = field(default_factory=lambda: list(HOLIDAY_NAMES))
+    #: Every holiday but the ones marked default_on=False (Canadian
+    #: Thanksgiving), so a US board doesn't sprout October turkeys unasked.
+    themes: list[str] = field(default_factory=lambda: list(DEFAULT_THEMES))
     #: Random gap between fly-bys (the Halloween ghost). Generic names, not
     #: ghost_*: every later holiday's fly-by (#239-#242) reuses them.
     flyby_min_minutes: float = 5.0

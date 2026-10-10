@@ -45,9 +45,18 @@ TEAM_COLORS: dict[str, tuple[int, int, int]] = {
 
 DEFAULT_COLOR = (220, 220, 220)
 
+#: Non-NHL teams the board can show without being NHL teams anywhere else
+#: (logo fetching, horn uploads, the favourite picker all key off
+#: TEAM_COLORS). Only the Milwaukee Admirals, for April Fools' (#248):
+#: their navy lifted to their own light blue, the same substitution as the
+#: NHL navies above; silver as the secondary.
+GUEST_COLORS: dict[str, tuple[int, int, int]] = {"MIL": (110, 175, 230)}
+GUEST_SECONDARY_COLORS: dict[str, tuple[int, int, int]] = {"MIL": (190, 195, 205)}
+
 
 def team_color(abbrev: str) -> tuple[int, int, int]:
-    return TEAM_COLORS.get(abbrev.strip().upper(), DEFAULT_COLOR)
+    key = abbrev.strip().upper()
+    return TEAM_COLORS.get(key) or GUEST_COLORS.get(key, DEFAULT_COLOR)
 
 
 #: abbrev -> (r, g, b), a second accent colour distinct from TEAM_COLORS.
@@ -96,4 +105,5 @@ TEAM_SECONDARY_COLORS: dict[str, tuple[int, int, int]] = {
 
 
 def team_secondary_color(abbrev: str) -> tuple[int, int, int]:
-    return TEAM_SECONDARY_COLORS.get(abbrev.strip().upper(), DEFAULT_COLOR)
+    key = abbrev.strip().upper()
+    return TEAM_SECONDARY_COLORS.get(key) or GUEST_SECONDARY_COLORS.get(key, DEFAULT_COLOR)

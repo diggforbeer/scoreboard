@@ -230,6 +230,15 @@ thing:
   changes real on-disk state every other tab's view of "what horns exist"
   needs to reflect too.
 
+* Holiday Cheer tab (#238): ``[holiday]``'s master switch, one checkbox per
+  ``HOLIDAYS`` entry (sent as ``available`` alongside the config, so a new
+  holiday needs no frontend change) and the fly-by gap. ``themes`` is a
+  list, so ``_coerce_holiday`` checks it itself rather than through
+  ``_coerce_scalar_fields``, and rejects unknown names and a min-over-max
+  gap outright -- same "show the person their mistake" stance as
+  ``_coerce_rotation``, where the TOML loader would silently repair them.
+  Sent last on connect, after the snapshot.
+
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
 """
@@ -261,6 +270,7 @@ from websockets.http11 import Request, Response
 from . import updater
 from .audio import DEFAULT_STEM, HORN_EXTENSIONS, GoalHornPlayer, upload_directory
 from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
+from .display.holiday import HOLIDAYS
 from .display.teams import TEAM_COLORS
 from .updater import installed_version
 
@@ -479,6 +489,28 @@ def _night_mode_payload(settings: Settings) -> dict[str, object]:
     }
 
 
+def _holiday_payload(settings: Settings) -> dict[str, object]:
+    """``[holiday]`` plus the registry it picks from (#238).
+
+    ``available`` comes from ``HOLIDAYS`` itself, so a holiday added there
+    gets its checkbox on this page with no frontend change.
+    """
+    cfg = settings.holiday
+    return {
+        "type": "config",
+        "section": "holiday",
+        "data": {
+            "enabled": cfg.enabled,
+            "themes": list(cfg.themes),
+            "flyby_min_minutes": cfg.flyby_min_minutes,
+            "flyby_max_minutes": cfg.flyby_max_minutes,
+        },
+        "available": [
+            {"name": h.name, "label": h.label, "window": h.window} for h in HOLIDAYS.values()
+        ],
+    }
+
+
 def _wifi_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "wifi", "data": dataclasses.asdict(settings.wifi)}
 
@@ -681,6 +713,11 @@ async def _send_panel_config(connection: ServerConnection) -> None:
 async def _send_night_mode_config(connection: ServerConnection) -> None:
     settings = Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_night_mode_payload(settings)))
+
+
+async def _send_holiday_config(connection: ServerConnection) -> None:
+    settings = Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_holiday_payload(settings)))
 
 
 async def _send_wifi_config(connection: ServerConnection) -> None:
@@ -1054,6 +1091,48 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
     return entries
 
 
+#: The scalar half of ``[holiday]``; ``themes`` is a list, checked by
+#: _coerce_holiday itself.
+_HOLIDAY_FIELDS: dict[str, _FieldSpec] = {
+    "enabled": _FieldSpec("bool"),
+    "flyby_min_minutes": _FieldSpec("float"),
+    "flyby_max_minutes": _FieldSpec("float"),
+}
+
+
+def _coerce_holiday(data: object) -> dict[str, object]:
+    """Validate a ``[holiday]`` save (#238).
+
+    Stricter than HolidayConfig's own load-time handling, for the same
+    reason as _coerce_rotation: a hand-edited TOML typo must not stop the
+    board booting, so the loader warns and repairs (drops unknown themes,
+    floors and swaps the gap), but someone editing this page should see
+    the mistake rather than have it quietly rewritten.
+    """
+    if not isinstance(data, dict):
+        raise ValueError(json.dumps({"data": "must be an object"}))
+    scalars = {k: v for k, v in data.items() if k != "themes"}
+    values = dict(_coerce_scalar_fields(scalars, _HOLIDAY_FIELDS))
+    if "themes" in data:
+        themes = data["themes"]
+        if not isinstance(themes, list) or not all(isinstance(t, str) for t in themes):
+            raise ValueError(json.dumps({"themes": "must be a list of names"}))
+        unknown = [t for t in themes if t not in HOLIDAYS]
+        if unknown:
+            choices = ", ".join(HOLIDAYS)
+            raise ValueError(
+                json.dumps({"themes": f"unknown {', '.join(unknown)} (must be from {choices})"})
+            )
+        values["themes"] = list(dict.fromkeys(themes))
+    low, high = values.get("flyby_min_minutes"), values.get("flyby_max_minutes")
+    for key, value in (("flyby_min_minutes", low), ("flyby_max_minutes", high)):
+        if value is not None and value < 1:
+            raise ValueError(json.dumps({key: "must be at least 1 minute"}))
+    if low is not None and high is not None and low > high:
+        raise ValueError(json.dumps({"flyby_min_minutes": "must not exceed flyby_max_minutes"}))
+    return values
+
+
 #: Which _send_*_config to call after a save, keyed by section -- fresh
 #: from disk each time, same discipline as status_server.py: never assume
 #: the in-memory values just validated are exactly what landed.
@@ -1065,6 +1144,7 @@ _SEND_AFTER_SAVE = {
     "night_mode": _send_night_mode_config,
     "wifi": _send_wifi_config,
     "rotation": _send_rotation_config,
+    "holiday": _send_holiday_config,
 }
 
 
@@ -1085,6 +1165,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_scalar_fields(message.get("data"), _WIFI_FIELDS)
         elif section == "rotation":
             values = _coerce_rotation(message.get("data"))
+        elif section == "holiday":
+            values = _coerce_holiday(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
@@ -1114,6 +1196,10 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_update_config(connection)
         await _send_horn_list(connection)
         await _send_snapshot(connection)
+        # Last, not grouped with the other sections: everything (tests
+        # included) that counts the initial messages up to the snapshot
+        # keeps working unchanged.
+        await _send_holiday_config(connection)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:

@@ -17,10 +17,267 @@ import math
 import random
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 RGB = tuple[int, int, int]
+
+
+#: The scoring moments and the Wi-Fi setup screens stay clean: a ghost
+#: crossing "GOAL" or a QR code someone is trying to scan helps nobody.
+NO_OVERLAY_SCENES = frozenset({"goal", "goal_detail", "three_stars", "ap_setup", "wifi_join"})
+#: Idle scenes with empty corners for a holiday's static decoration. Not
+#: countdown/preview: their 32px logos fill both edges, same reason the
+#: game scene gets none.
+CORNER_SCENES = frozenset({"clock", "no_games"})
+#: Gap between a corner decoration and the panel edge.
+CORNER_INSET = 4
+
+
+@dataclass(frozen=True, slots=True)
+class Drop:
+    """A small sprite a fly-by leaves behind on the bottom edge."""
+
+    rows: tuple[str, ...]
+    palette: tuple[tuple[str, RGB], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Flyby:
+    """Something that crosses the panel right to left now and then."""
+
+    #: Animation frames, cycled every ``frame_seconds``. Every frame the same size.
+    frames: tuple[tuple[str, ...], ...]
+    #: Sprite character -> colour, as pairs so the dataclass stays hashable.
+    palette: tuple[tuple[str, RGB], ...]
+    #: Pixels per second.
+    speed: float
+    frame_seconds: float
+    #: Vertical bob amplitude (px) and period (s); 0 for something walking.
+    bob_pixels: float = 0.0
+    bob_period: float = 1.0
+    #: "middle" floats through the centre; "bottom" walks along the bottom edge.
+    align: str = "middle"
+    #: Things left on the ground behind it (Santa's presents, #240): one
+    #: dropped every ``drop_spacing`` px travelled, from sprite column
+    #: ``drop_column``, cycling through ``drops``. They stay put until the
+    #: pass ends, ``linger_seconds`` after the sprite itself has left.
+    drops: tuple[Drop, ...] = ()
+    drop_spacing: int = 0
+    drop_column: int = 0
+    linger_seconds: float = 0.0
+
+    @property
+    def width(self) -> int:
+        return len(self.frames[0][0])
+
+    @property
+    def height(self) -> int:
+        return len(self.frames[0])
+
+    def draw(
+        self, canvas: Any, elapsed: float, width: int, height: int, day: date | None = None
+    ) -> bool:
+        """Draw the pass ``elapsed`` seconds in; False once it's over."""
+        travelled = round(elapsed * self.speed)
+        x = width - travelled
+        if x + self.width + round(self.linger_seconds * self.speed) <= 0:
+            return False
+        if self.drops:
+            self._draw_drops(canvas, travelled, width, height)
+        if self.align == "bottom":
+            y = height - self.height
+        else:
+            bob = self.bob_pixels * math.sin(2 * math.pi * elapsed / self.bob_period)
+            y = (height - self.height) // 2 + round(bob)
+        frame = self.frames[int(elapsed / self.frame_seconds) % len(self.frames)]
+        draw_sprite(canvas, frame, dict(self.palette), x, y, width, height)
+        return True
+
+    def _draw_drops(self, canvas: Any, travelled: int, width: int, height: int) -> None:
+        """Everything dropped so far, each where the sprite was when it fell.
+
+        A pure function of distance travelled, like the sprite itself: drop
+        ``i`` falls once ``(i + 1) * drop_spacing`` px are covered, at the
+        x ``drop_column`` was at that moment, and only while that's on-panel.
+        """
+        i = 0
+        while (distance := (i + 1) * self.drop_spacing) <= travelled:
+            drop = self.drops[i % len(self.drops)]
+            drop_x = width - distance + self.drop_column
+            if 0 <= drop_x <= width - len(drop.rows[0]):
+                y = height - len(drop.rows)
+                draw_sprite(canvas, drop.rows, dict(drop.palette), drop_x, y, width, height)
+            i += 1
+
+
+@dataclass(frozen=True, slots=True)
+class Rocket:
+    """One firework: launched ``launch`` seconds into the show from ``x``
+    (a fraction of the panel width), bursting at row ``burst_y``."""
+
+    launch: float
+    x: float
+    burst_y: int
+    colour: RGB
+
+
+@dataclass(frozen=True, slots=True)
+class Fireworks:
+    """A short show instead of a crossing sprite (New Year's, #241).
+
+    Same contract as Flyby.draw -- a pure function of seconds since the show
+    started, False once it's over -- so the overlay schedules it the same
+    way and the fast loop runs only while it does.
+    """
+
+    rockets: tuple[Rocket, ...]
+    #: Seconds from the ground to the burst.
+    rise_seconds: float = 0.7
+    #: Seconds from burst to the last spark fading out.
+    burst_seconds: float = 1.6
+    sparks: int = 12
+    radius: float = 8.0
+
+    @property
+    def duration(self) -> float:
+        return max(r.launch for r in self.rockets) + self.rise_seconds + self.burst_seconds
+
+    def draw(
+        self, canvas: Any, elapsed: float, width: int, height: int, day: date | None = None
+    ) -> bool:
+        if elapsed > self.duration:
+            return False
+        for rocket in self.rockets:
+            t = elapsed - rocket.launch
+            if t < 0:
+                continue
+            x = round(rocket.x * (width - 1))
+            if t < self.rise_seconds:
+                # A spark climbing from the bottom, with a dimmer one below it.
+                y = round(height - 1 - (height - 1 - rocket.burst_y) * t / self.rise_seconds)
+                _set(canvas, x, y, ROCKET_TRAIL_HEAD, width, height)
+                _set(canvas, x, y + 1, ROCKET_TRAIL, width, height)
+                continue
+            p = (t - self.rise_seconds) / self.burst_seconds
+            # Bright for most of the burst, then a quick fade -- and gone
+            # before it's dim enough to read as a dark hole over a logo
+            # (a linear fade did exactly that in a rendered preview).
+            fade = 1 - p**3
+            if p > 1 or fade < MIN_SPARK_FADE:
+                continue
+            # Ease-out expansion, sagging a little at the end.
+            r = self.radius * (1 - (1 - p) ** 2)
+            sag = round(2 * p * p)
+            outer = _scale(rocket.colour, fade)
+            inner = _scale(_tint(rocket.colour), fade)
+            for ring_r, colour, count in (
+                (r, outer, self.sparks),
+                (r * 0.55, inner, self.sparks // 2),
+            ):
+                for k in range(count):
+                    angle = 2 * math.pi * k / count + (math.pi / count if colour is inner else 0)
+                    sx = x + round(ring_r * math.cos(angle))
+                    sy = rocket.burst_y + round(ring_r * math.sin(angle)) + sag
+                    _set(canvas, sx, sy, colour, width, height)
+        return True
+
+
+#: Below this a fading spark is dropped rather than drawn dark.
+MIN_SPARK_FADE = 0.35
+
+
+def _scale(colour: RGB, k: float) -> RGB:
+    return (round(colour[0] * k), round(colour[1] * k), round(colour[2] * k))
+
+
+def _tint(colour: RGB) -> RGB:
+    """Halfway to white: the inner ring, so a burst reads as more than an outline."""
+    return (
+        (colour[0] + 255) // 2,
+        (colour[1] + 255) // 2,
+        (colour[2] + 255) // 2,
+    )
+
+
+def _set(canvas: Any, x: int, y: int, colour: RGB, width: int, height: int) -> None:
+    if 0 <= x < width and 0 <= y < height:
+        canvas.SetPixel(x, y, *colour)
+
+
+@dataclass(frozen=True, slots=True)
+class Popup:
+    """Something that pops up out of a hole and back down (Groundhog Day, #247).
+
+    Same draw contract as Flyby and Fireworks. Unlike them it uses ``day``:
+    whether it "sees its shadow" is decided once per year (seeded by it), so
+    it's the same all day, varies year to year, and stays deterministic.
+    The script, in seconds: rise, look left and right, then either startle
+    at its shadow and duck fast, or keep looking a while and sink slowly.
+    """
+
+    #: Looking left, looking right, startled. All the same size.
+    frames: tuple[tuple[str, ...], ...]
+    palette: tuple[tuple[str, RGB], ...]
+    shadow_colour: RGB
+    mound: tuple[str, ...]
+    mound_colour: RGB
+    rise_seconds: float = 0.6
+    look_seconds: float = 2.4
+    startle_seconds: float = 0.8
+    duck_seconds: float = 0.25
+    stay_seconds: float = 1.6
+    sink_seconds: float = 0.9
+    #: The empty hole stays this long after it's gone back down.
+    linger_seconds: float = 0.5
+
+    def sees_shadow(self, day: date | None) -> bool:
+        return random.Random((day.year if day else 0) * 7919).random() < 0.5
+
+    def duration(self, shadow: bool) -> float:
+        tail = (
+            self.startle_seconds + self.duck_seconds
+            if shadow
+            else self.stay_seconds + self.sink_seconds
+        )
+        return self.rise_seconds + self.look_seconds + tail + self.linger_seconds
+
+    def draw(
+        self, canvas: Any, elapsed: float, width: int, height: int, day: date | None = None
+    ) -> bool:
+        shadow = self.sees_shadow(day)
+        if elapsed > self.duration(shadow):
+            return False
+        sprite_h, sprite_w = len(self.frames[0]), len(self.frames[0][0])
+        mound_w = len(self.mound[0])
+        ground = height - len(self.mound)
+        x = (width - sprite_w) // 2
+        # How far up it is (0 = hidden, 1 = fully out), and which face.
+        t = elapsed - self.rise_seconds
+        frame, up, startled = self.frames[0], min(1.0, elapsed / self.rise_seconds), False
+        if t >= 0:
+            frame = self.frames[int(t / 0.5) % 2]
+            t -= self.look_seconds
+            if t >= 0 and shadow:
+                startled = t < self.startle_seconds + self.duck_seconds
+                frame = self.frames[2]
+                t -= self.startle_seconds
+                up = 1.0 if t < 0 else max(0.0, 1 - t / self.duck_seconds)
+            elif t >= 0:
+                t -= self.stay_seconds
+                up = 1.0 if t < 0 else max(0.0, 1 - t / self.sink_seconds)
+        shown = round(sprite_h * up)
+        top = ground - shown
+        if startled and up == 1.0:
+            # The shadow: its own silhouette, flat dark, just beside it.
+            silhouette = {ch: self.shadow_colour for row in frame for ch in row if ch != "."}
+            draw_sprite(canvas, frame, silhouette, x + sprite_w + 1, top, width, ground)
+        # Clipped at the ground line, so it rises out of the hole rather
+        # than sliding up in front of it.
+        draw_sprite(canvas, frame[:shown], dict(self.palette), x, top, width, ground)
+        mound_x = x + (sprite_w - mound_w) // 2
+        draw_sprite(canvas, self.mound, {"D": self.mound_colour}, mound_x, ground, width, height)
+        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +285,21 @@ class Holiday:
     name: str
     #: Human-readable, for the admin page's checkbox list (#238).
     label: str
+    #: When it shows, in words, next to its admin-page checkbox (#238). Text
+    #: rather than derived from is_active: Thanksgiving's window (#239) is
+    #: computed per year and has no fixed dates to print.
+    window: str
     is_active: Callable[[date], bool]
+    #: What crosses (or, for New Year's, bursts over) the board now and then.
+    flyby: Flyby | Fireworks | Popup
+    #: Draws the static decoration on CORNER_SCENES: (canvas, now, width,
+    #: height, local date) -- the date only matters to Groundhog Day (#247).
+    corners: Callable[[Any, float, int, int, date | None], None]
+    #: Ticked when [holiday] themes isn't set. False for a holiday most
+    #: boards wouldn't want unasked (Canadian Thanksgiving on a US board).
+    default_on: bool = True
+    #: Which wins when two ticked windows overlap: the higher number.
+    priority: int = 0
 
 
 def _between(start: tuple[int, int], end: tuple[int, int]) -> Callable[[date], bool]:
@@ -40,28 +311,29 @@ def _between(start: tuple[int, int], end: tuple[int, int]) -> Callable[[date], b
     return check
 
 
-#: Registry order is also precedence if two enabled windows ever overlap --
-#: none do yet; #241 (New Year's) is where that gets decided properly.
-HOLIDAYS: dict[str, Holiday] = {
-    "halloween": Holiday("halloween", "Halloween", _between((10, 1), (10, 31))),
-}
-HOLIDAY_NAMES = tuple(HOLIDAYS)
+def nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """The ``n``th ``weekday`` (Monday = 0) of a month, e.g. 4th Thursday of November."""
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
 
 
-def active_holiday(themes: Sequence[str], day: date) -> Holiday | None:
-    """The first enabled holiday whose window contains ``day``, if any."""
-    for name, holiday in HOLIDAYS.items():
-        if name in themes and holiday.is_active(day):
-            return holiday
-    return None
+def _us_thanksgiving_week(day: date) -> bool:
+    """The 7 days up to and including the 4th Thursday of November (#239)."""
+    thanksgiving = nth_weekday(day.year, 11, 3, 4)
+    return thanksgiving - timedelta(days=6) <= day <= thanksgiving
 
 
-#: The scoring moments and the Wi-Fi setup screens stay clean: a ghost
-#: crossing "GOAL" or a QR code someone is trying to scan helps nobody.
-NO_OVERLAY_SCENES = frozenset({"goal", "goal_detail", "three_stars", "ap_setup", "wifi_join"})
-#: Idle scenes with empty corners. Not countdown/preview: their 32px logos
-#: fill both edges, same reason the game scene gets no pumpkins.
-PUMPKIN_SCENES = frozenset({"clock", "no_games"})
+def _ca_thanksgiving_weekend(day: date) -> bool:
+    """Friday through the 2nd Monday of October -- the long weekend (#239).
+
+    Deliberately short: it sits inside Halloween's window and wins over it
+    there (see HOLIDAYS), so every extra day here is a day less of Halloween.
+    """
+    monday = nth_weekday(day.year, 10, 0, 2)
+    return monday - timedelta(days=3) <= day <= monday
+
+
+# -- Halloween (#237) ----------------------------------------------------------
 
 GHOST_BODY = (235, 235, 255)
 EYE = (0, 0, 0)
@@ -91,8 +363,19 @@ GHOST_FRAMES = (
     (*_GHOST_TOP, "##########", "#.##.##.##"),
     (*_GHOST_TOP, "##########", "##.##.##.#"),
 )
-GHOST_WIDTH = len(_GHOST_TOP[0])
-GHOST_HEIGHT = len(GHOST_FRAMES[0])
+GHOST = Flyby(
+    frames=GHOST_FRAMES,
+    palette=(("#", GHOST_BODY), ("o", EYE)),
+    # ~7s to cross 128px: slow enough to read as floating.
+    speed=20.0,
+    frame_seconds=0.25,
+    bob_pixels=1.5,
+    bob_period=1.6,
+)
+GHOST_WIDTH = GHOST.width
+GHOST_HEIGHT = GHOST.height
+#: The ghost's speed, kept under its original name for the tests.
+FLYBY_SPEED = GHOST.speed
 
 # 'O' pumpkin, 'G' stem, 'Y' the carved face (lit from inside).
 PUMPKIN_SPRITE = (
@@ -110,13 +393,675 @@ PUMPKIN_SPRITE = (
 PUMPKIN_WIDTH = len(PUMPKIN_SPRITE[0])
 PUMPKIN_HEIGHT = len(PUMPKIN_SPRITE)
 
-#: Pixels per second. ~7s to cross 128px: slow enough to read as floating.
-FLYBY_SPEED = 20.0
-#: Bob amplitude (px) and period (s).
-BOB_PIXELS = 1.5
-BOB_PERIOD = 1.6
-#: How often the hem alternates.
-WIGGLE_SECONDS = 0.25
+
+def _draw_pumpkins(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    # Candle flicker: mostly bright, briefly dim, the two pumpkins out of
+    # step so it doesn't read as one blinking light.
+    y = (height - PUMPKIN_HEIGHT) // 2
+    for x, phase in ((CORNER_INSET, 0), (width - PUMPKIN_WIDTH - CORNER_INSET, 1)):
+        glow = GLOW_DIM if (int(now * 2) + phase) % 3 == 0 else GLOW_BRIGHT
+        palette = {"O": PUMPKIN, "G": STEM, "Y": glow}
+        draw_sprite(canvas, PUMPKIN_SPRITE, palette, x, y, width, height)
+
+
+# -- Thanksgiving (#239) -------------------------------------------------------
+
+FEATHER_RED = (210, 30, 0)
+FEATHER_ORANGE = (255, 110, 0)
+FEATHER_GOLD = (255, 200, 0)
+# Brighter than a real turkey: (140, 70, 20) all but vanished in a
+# rendered preview, the same trap teams.py lifts navy/burgundy out of.
+TURKEY_BODY = (180, 95, 30)
+TURKEY_HEAD = (225, 165, 110)
+WATTLE = (255, 0, 0)
+BEAK = (255, 170, 0)
+LEGS = (255, 140, 0)
+MAPLE = (230, 50, 0)
+LEAF_GOLD = (240, 170, 0)
+LEAF_VEIN = (150, 70, 0)
+
+# Side view facing left (the way it walks): fan of tail feathers behind,
+# 'k' beak, 'w' wattle, 'e' eye, 'L' legs. Two frames that differ only in
+# the legs, so it walks rather than slides.
+_TURKEY_TOP = (
+    ".......RRRR...",
+    ".....RROOOORR.",
+    "....ROOYYYYOOR",
+    "..HHROYYYYYYOR",
+    ".HeHROYYYYYYOR",
+    "kHHBBBYYYYYYOR",
+    ".wHBBBBBYYYYOR",
+    ".wBBBBBBBBYOR.",
+    "..BBBBBBBBBRR.",
+    "...BBBBBBBB...",
+    "....BBBBBB....",
+)
+TURKEY_FRAMES = (
+    (*_TURKEY_TOP, ".....L..L.....", "....LL.LL....."),
+    (*_TURKEY_TOP, "......LL......", ".....LL.L....."),
+)
+TURKEY = Flyby(
+    frames=TURKEY_FRAMES,
+    palette=(
+        ("R", FEATHER_RED),
+        ("O", FEATHER_ORANGE),
+        ("Y", FEATHER_GOLD),
+        ("B", TURKEY_BODY),
+        ("H", TURKEY_HEAD),
+        ("e", EYE),
+        ("k", BEAK),
+        ("w", WATTLE),
+        ("L", LEGS),
+    ),
+    # A walk, not a float: slower than the ghost, no bob, along the bottom.
+    speed=14.0,
+    frame_seconds=0.3,
+    align="bottom",
+)
+
+# 'M' maple red, 's' stem.
+MAPLE_LEAF = (
+    "....M....",
+    "...MMM...",
+    ".M.MMM.M.",
+    "MMMMMMMMM",
+    ".MMMMMMM.",
+    "..MMMMM..",
+    ".MMMMMMM.",
+    "....s....",
+    "....s....",
+)
+# 'G' gold, 'v' vein: a plain leaf lying on the diagonal.
+GOLD_LEAF = (
+    "......GG.",
+    "....GGGGG",
+    "...GGGGvG",
+    "..GGGGvGG",
+    ".GGGGvGG.",
+    ".GGGvGGG.",
+    "GGGvGGG..",
+    "..vGGG...",
+    ".v.......",
+)
+LEAF_SIZE = len(MAPLE_LEAF)
+
+
+def _draw_leaves(canvas: Any, now: float, width: int, height: int, day: date | None = None) -> None:
+    # Static: nothing here needs the fast frame loop.
+    del now
+    y = (height - LEAF_SIZE) // 2
+    draw_sprite(canvas, MAPLE_LEAF, {"M": MAPLE, "s": LEAF_VEIN}, CORNER_INSET, y, width, height)
+    right = width - LEAF_SIZE - CORNER_INSET
+    palette = {"G": LEAF_GOLD, "v": LEAF_VEIN}
+    draw_sprite(canvas, GOLD_LEAF, palette, right, y, width, height)
+
+
+# -- Christmas (#240) ----------------------------------------------------------
+
+SANTA_RED = (220, 0, 0)
+SANTA_WHITE = (255, 255, 255)
+SANTA_FACE = (255, 185, 140)
+# Not black: (0, 0, 0) is an unlit LED, so boots and belt would read as holes.
+SANTA_DARK = (70, 70, 70)
+BUCKLE = (255, 210, 0)
+SACK = (160, 100, 40)
+SNOW = (190, 200, 230)
+
+# Side view facing left: 'R' suit, 'W' fur trim and beard, 'F' face, 'e'
+# eye, 'K' belt/boots, 'G' buckle, 'S' the sack over his shoulder. Two
+# frames that differ only in the boots.
+_SANTA_TOP = (
+    "..RRRR........",
+    ".RRRRRRW......",
+    ".WWWWWW...SSS.",
+    ".FeFFF...SSSSS",
+    "WWFFFWW.SSSSSS",
+    "WWWWWWWRSSSSSS",
+    ".WWWWWRRRSSSS.",
+    ".RRWWRRRRRSS..",
+    ".RRRRRRRR.....",
+    "KKKGKKKKK.....",
+    ".RRRRRRRR.....",
+    ".WWWWWWWW.....",
+)
+SANTA_FRAMES = (
+    (*_SANTA_TOP, "..RR..RR......", ".KKK.KKK......"),
+    (*_SANTA_TOP, "...RR.RR......", "..KKKKKK......"),
+)
+
+
+def _present(box: RGB, ribbon: RGB) -> tuple[tuple[str, RGB], ...]:
+    return (("C", box), ("r", ribbon))
+
+
+# Dropped as he walks: small, bow on top, ribbon cross.
+SMALL_PRESENT = (
+    ".r.r.",
+    "CCrCC",
+    "rrrrr",
+    "CCrCC",
+    "CCrCC",
+)
+# Stacked beside the clock.
+BIG_PRESENT = (
+    "..r.r..",
+    "...r...",
+    "CCCrCCC",
+    "CCCrCCC",
+    "rrrrrrr",
+    "CCCrCCC",
+    "CCCrCCC",
+    "CCCrCCC",
+)
+PRESENT_COLOURS = (
+    _present((200, 0, 0), (255, 210, 0)),
+    _present((0, 160, 40), (220, 0, 0)),
+    _present((40, 90, 255), (255, 255, 255)),
+)
+SANTA = Flyby(
+    frames=SANTA_FRAMES,
+    palette=(
+        ("R", SANTA_RED),
+        ("W", SANTA_WHITE),
+        ("F", SANTA_FACE),
+        ("e", EYE),
+        ("K", SANTA_DARK),
+        ("G", BUCKLE),
+        ("S", SACK),
+    ),
+    speed=14.0,
+    frame_seconds=0.3,
+    align="bottom",
+    drops=tuple(Drop(SMALL_PRESENT, colours) for colours in PRESENT_COLOURS),
+    # Every ~26px: four or five presents across the panel.
+    drop_spacing=26,
+    # Under the sack, which hangs off his back (the right, since he walks left).
+    drop_column=9,
+    # Long enough to see the trail of presents once he's gone.
+    linger_seconds=2.0,
+)
+
+
+def _snowflakes(count: int, seed: int) -> tuple[tuple[int, float, float], ...]:
+    """(column within its band, start offset, px per second), fixed per run.
+
+    Seeded, not live random: the corner draw has to be a pure function of
+    time so a snapshot can freeze it.
+    """
+    rng = random.Random(seed)
+    return tuple(
+        (rng.randrange(28), rng.uniform(0, 32), rng.uniform(1.5, 3.0)) for _ in range(count)
+    )
+
+
+#: Slow enough (1.5-3 px/s) to look right at the normal 2fps loop, so a
+#: month of snow never needs the fast animation loop (#240).
+SNOWFLAKES = (_snowflakes(9, 1), _snowflakes(9, 2))
+#: Snow stays in a band this wide at each edge -- the real panel can't be
+#: asked which pixels the clock text lit, so flakes can't weave around it.
+SNOW_BAND = 30
+
+
+def _draw_presents_and_snow(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    for band, flakes in enumerate(SNOWFLAKES):
+        left = 1 if band == 0 else width - SNOW_BAND - 1
+        for column, offset, speed in flakes:
+            y = int(offset + now * speed) % height
+            sway = round(math.sin(now * 0.8 + offset))
+            x = min(max(left + column + sway, left), left + SNOW_BAND - 1)
+            canvas.SetPixel(x, y, *SNOW)
+    # Presents on top of the snow: two side by side in each corner, a
+    # small one perched on the first.
+    red, green, blue = PRESENT_COLOURS
+    y = height - len(BIG_PRESENT)
+    step = len(BIG_PRESENT[0]) + 1
+    for x, first, second, small in (
+        (CORNER_INSET, green, blue, red),
+        (width - CORNER_INSET - 2 * step + 1, red, green, blue),
+    ):
+        draw_sprite(canvas, BIG_PRESENT, dict(first), x, y, width, height)
+        draw_sprite(canvas, BIG_PRESENT, dict(second), x + step, y, width, height)
+        draw_sprite(
+            canvas, SMALL_PRESENT, dict(small), x + 1, y - len(SMALL_PRESENT), width, height
+        )
+
+
+# -- New Year's (#241) ---------------------------------------------------------
+
+ROCKET_TRAIL_HEAD = (255, 230, 150)
+ROCKET_TRAIL = (120, 90, 40)
+GLASS = (150, 170, 200)
+CHAMPAGNE = (255, 200, 40)
+BUBBLE = (255, 255, 220)
+CONFETTI = ((255, 40, 40), (40, 220, 80), (60, 120, 255), (255, 210, 0), (255, 60, 200))
+
+#: Spread across the panel and staggered so the bursts overlap a little --
+#: a show, not four separate events.
+FIREWORKS = Fireworks(
+    rockets=(
+        Rocket(0.0, 0.22, 8, (255, 40, 40)),
+        Rocket(0.7, 0.72, 6, (60, 220, 255)),
+        Rocket(1.3, 0.46, 9, (255, 210, 0)),
+        Rocket(2.0, 0.88, 7, (255, 60, 200)),
+        Rocket(2.4, 0.10, 6, (80, 255, 80)),
+    ),
+)
+
+# 'g' glass, 'C' champagne, 'b' a bubble.
+FLUTE = (
+    "g.....g",
+    "gCCCCCg",
+    "gCbCCCg",
+    "gCCCbCg",
+    "gCCCCCg",
+    ".gCbCg.",
+    "..gCg..",
+    "...g...",
+    "...g...",
+    "...g...",
+    "...g...",
+    ".ggggg.",
+)
+FLUTE_WIDTH = len(FLUTE[0])
+FLUTE_HEIGHT = len(FLUTE)
+#: (column within its band, row, colour index, phase), fixed per run like
+#: the snow -- seeded so the corner draw stays a pure function of time.
+_rng = random.Random(41)
+CONFETTI_DOTS = tuple(
+    tuple(
+        (_rng.randrange(SNOW_BAND), _rng.randrange(32), _rng.randrange(len(CONFETTI)), i % 3)
+        for i in range(12)
+    )
+    for _ in range(2)
+)
+del _rng
+
+
+def _draw_champagne_and_confetti(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    # Twinkle: each dot is lit two ticks in three, stepping at 2fps, so this
+    # never needs the fast loop either.
+    tick = int(now * 2)
+    for band, dots in enumerate(CONFETTI_DOTS):
+        left = 1 if band == 0 else width - SNOW_BAND - 1
+        for column, row, colour, phase in dots:
+            if (tick + phase) % 3 and row < height:
+                canvas.SetPixel(left + column, row, *CONFETTI[colour])
+    y = (height - FLUTE_HEIGHT) // 2
+    palette = {"g": GLASS, "C": CHAMPAGNE, "b": BUBBLE}
+    for x in (CORNER_INSET + 6, width - CORNER_INSET - 6 - FLUTE_WIDTH):
+        draw_sprite(canvas, FLUTE, palette, x, y, width, height)
+
+
+def _new_years(day: date) -> bool:
+    """Dec 31 and Jan 1 -- the one window that wraps the year."""
+    return (day.month, day.day) in ((12, 31), (1, 1))
+
+
+# -- Valentine's Day (#242) ---------------------------------------------------
+
+HEART_RED = (230, 0, 60)
+HEART_PINK = (255, 90, 160)
+HEART_SHINE = (255, 220, 235)
+
+# 'R' heart, 'W' a highlight. Two frames, full and squeezed, so it beats.
+# Both padded to the same 11x10 box so the beat doesn't shift its position.
+HEART_FRAMES = (
+    (
+        ".RRR...RRR.",
+        "RRRRR.RRRRR",
+        "RRWRRRRRRRR",
+        "RWRRRRRRRRR",
+        "RRRRRRRRRRR",
+        ".RRRRRRRRR.",
+        "..RRRRRRR..",
+        "...RRRRR...",
+        "....RRR....",
+        ".....R.....",
+    ),
+    (
+        "...........",
+        "..RR...RR..",
+        ".RRRR.RRRR.",
+        ".RWRRRRRRR.",
+        ".RRRRRRRRR.",
+        "..RRRRRRR..",
+        "...RRRRR...",
+        "....RRR....",
+        ".....R.....",
+        "...........",
+    ),
+)
+HEART_SIZE = len(HEART_FRAMES[0][0])
+
+
+def _outlined(rows: tuple[str, ...], mark: str = "o") -> tuple[str, ...]:
+    """``rows`` padded by one pixel, with ``mark`` on every empty pixel that
+    touches the sprite (4-neighbour)."""
+    padded = ["." * (len(rows[0]) + 2), *(f".{row}." for row in rows), "." * (len(rows[0]) + 2)]
+    out = []
+    for y, row in enumerate(padded):
+        line = []
+        for x, ch in enumerate(row):
+            near = any(
+                0 <= y + dy < len(padded)
+                and 0 <= x + dx < len(row)
+                and padded[y + dy][x + dx] not in ".o"
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            )
+            line.append(mark if ch == "." and near else ch)
+        out.append("".join(line))
+    return tuple(out)
+
+
+#: Outlined for the fly-by: a plain red heart vanished crossing a red team
+#: logo in a rendered preview. The corner hearts sit on black and don't.
+HEART_OUTLINE = (255, 200, 225)
+HEART = Flyby(
+    frames=tuple(_outlined(frame) for frame in HEART_FRAMES),
+    palette=(("R", HEART_RED), ("W", HEART_SHINE), ("o", HEART_OUTLINE)),
+    speed=18.0,
+    frame_seconds=0.4,
+    bob_pixels=2.0,
+    bob_period=1.4,
+)
+
+
+def _draw_beating_hearts(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    # One beat per second at the normal 2fps -- no fast loop -- with the
+    # two hearts out of step, like the pumpkins' flicker.
+    tick = int(now * 2)
+    y = (height - len(HEART_FRAMES[0])) // 2
+    for x, colour, phase in (
+        (CORNER_INSET, HEART_RED, 0),
+        (width - CORNER_INSET - HEART_SIZE, HEART_PINK, 1),
+    ):
+        frame = HEART_FRAMES[(tick + phase) % 2]
+        draw_sprite(canvas, frame, {"R": colour, "W": HEART_SHINE}, x, y, width, height)
+
+
+# -- Groundhog Day (#247) ------------------------------------------------------
+
+GROUNDHOG_FUR = (170, 105, 50)
+GROUNDHOG_BELLY = (225, 175, 115)
+GROUNDHOG_NOSE = (90, 45, 20)
+GROUNDHOG_SHADOW = (45, 45, 60)
+DIRT = (120, 75, 30)
+SUN = (255, 200, 0)
+CLOUD = (190, 200, 215)
+
+# Front-facing: 'B' fur, 'L' belly, 'e' eye, 'n' nose, 'p' paws. Frames:
+# looking left, looking right, startled (eyes wide).
+_GROUNDHOG_EARS = "..B....B.."
+
+
+def _groundhog(eyes: str) -> tuple[str, ...]:
+    return (
+        _GROUNDHOG_EARS,
+        ".BBBBBBBB.",
+        eyes,
+        "BBBBnnBBBB",
+        "BBBBBBBBBB",
+        ".BBLLLLBB.",
+        ".BpLLLLpB.",
+        ".BBLLLLBB.",
+        ".BBLLLLBB.",
+        ".BBBBBBBB.",
+    )
+
+
+GROUNDHOG = Popup(
+    frames=(
+        _groundhog("BeBBBBeBBB"),
+        _groundhog("BBBeBBBBeB"),
+        _groundhog("BeeBBBBeeB"),
+    ),
+    palette=(
+        ("B", GROUNDHOG_FUR),
+        ("L", GROUNDHOG_BELLY),
+        ("e", EYE),
+        ("n", GROUNDHOG_NOSE),
+        ("p", GROUNDHOG_NOSE),
+    ),
+    shadow_colour=GROUNDHOG_SHADOW,
+    mound=(
+        "..DDDDDDDDDD..",
+        "DDDDDDDDDDDDDD",
+    ),
+    mound_colour=DIRT,
+)
+
+# 'Y' sun, 'W' cloud: the verdict, beside the clock.
+SUN_SPRITE = (
+    "....Y....",
+    ".Y.....Y.",
+    "...YYY...",
+    "..YYYYY..",
+    "Y.YYYYY.Y",
+    "..YYYYY..",
+    "...YYY...",
+    ".Y.....Y.",
+    "....Y....",
+)
+CLOUD_SPRITE = (
+    "...WWW.....",
+    "..WWWWW.WW.",
+    ".WWWWWWWWWW",
+    "WWWWWWWWWWW",
+    ".WWWWWWWWW.",
+)
+
+
+def _draw_burrow_and_verdict(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    """A burrow with the groundhog peeking out on the left; the verdict on
+    the right -- sun if he saw his shadow (six more weeks), cloud if not."""
+    del now
+    mound = GROUNDHOG.mound
+    ground = (height + 10) // 2
+    peek = _groundhog("BeBBBBeBBB")[:5]
+    draw_sprite(canvas, peek, dict(GROUNDHOG.palette), CORNER_INSET + 2, ground - 5, width, ground)
+    draw_sprite(canvas, mound, {"D": DIRT}, CORNER_INSET, ground, width, height)
+    if GROUNDHOG.sees_shadow(day):
+        sprite, palette = SUN_SPRITE, {"Y": SUN}
+    else:
+        sprite, palette = CLOUD_SPRITE, {"W": CLOUD}
+    x = width - CORNER_INSET - 2 - len(sprite[0])
+    draw_sprite(canvas, sprite, palette, x, (height - len(sprite)) // 2, width, height)
+
+
+def _groundhog_day(day: date) -> bool:
+    return (day.month, day.day) == (2, 2)
+
+
+# -- St. Patrick's Day (#249) --------------------------------------------------
+
+LEP_HAT = (0, 170, 60)
+LEP_COAT = (0, 150, 50)
+LEP_DARK = (60, 60, 60)
+LEP_BEARD = (255, 110, 0)
+SHAMROCK = (0, 200, 60)
+SHAMROCK_VEIN = (0, 110, 30)
+SHAMROCK_STEM = (0, 140, 40)
+#: Pale gold outline on everything that crosses a game: green on green
+#: (DAL/MIN/SEA logos, the green live-status text) all but vanished in a
+#: rendered preview -- the Valentine's heart's red-on-red lesson again.
+LEP_OUTLINE = (255, 225, 120)
+
+# Facing left: 'H' hat, 'K' band/belt/boots, 'Y' buckles, 'F' face and
+# hands, 'e' eye, 'O' orange beard, 'C' coat. Two frames: the boots.
+_LEPRECHAUN_TOP = (
+    "...HHHH.....",
+    "...HHHH.....",
+    "...KYKK.....",
+    ".HHHHHHHH...",
+    "..FeFFF.....",
+    ".OFFFFFO....",
+    ".OOOOOOO....",
+    "..OOOOO.....",
+    "..CCCCCC....",
+    ".FCCCCCCF...",
+    ".FKKYKKKF...",
+    "..CCCCCC....",
+)
+LEPRECHAUN_FRAMES = (
+    (*_LEPRECHAUN_TOP, "..CC..CC....", ".KKK..KKK..."),
+    (*_LEPRECHAUN_TOP, "...CC.CC....", "..KKK.KKK..."),
+)
+# 'G' leaf, 'v' vein, 's' stem.
+_SHAMROCK_PALETTE = (("G", SHAMROCK), ("v", SHAMROCK_VEIN), ("s", SHAMROCK_STEM))
+SMALL_SHAMROCK = (
+    "GG.GG",
+    "GGGGG",
+    ".GGG.",
+    ".GGG.",
+    "..s..",
+)
+FOUR_LEAF = (
+    "..GGG.GGG...",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    "..vvvvvvv...",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    ".GGGGvGGGG..",
+    "..GGG.GGG...",
+    "......s.....",
+    ".......s....",
+    "........s...",
+)
+THREE_LEAF = (
+    ".GG.GG.",
+    "GGGvGGG",
+    "GGGvGGG",
+    ".GvvvG.",
+    "..GGG..",
+    "..GGG..",
+    "...s...",
+    "....s..",
+)
+LEPRECHAUN = Flyby(
+    frames=tuple(_outlined(frame) for frame in LEPRECHAUN_FRAMES),
+    palette=(
+        ("o", LEP_OUTLINE),
+        ("H", LEP_HAT),
+        ("K", LEP_DARK),
+        ("Y", BUCKLE),
+        ("F", SANTA_FACE),
+        ("e", EYE),
+        ("O", LEP_BEARD),
+        ("C", LEP_COAT),
+    ),
+    speed=14.0,
+    frame_seconds=0.3,
+    align="bottom",
+    # Shamrocks behind him as he goes (owner's pick, #249) -- Santa's drops.
+    drops=(Drop(_outlined(SMALL_SHAMROCK), (*_SHAMROCK_PALETTE, ("o", LEP_OUTLINE))),),
+    drop_spacing=22,
+    drop_column=9,
+    linger_seconds=2.0,
+)
+
+
+def _draw_shamrocks(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    """A lucky four-leaf clover on the left, a shamrock on the right."""
+    del now, day
+    palette = dict(_SHAMROCK_PALETTE)
+    y = (height - len(FOUR_LEAF)) // 2
+    draw_sprite(canvas, FOUR_LEAF, palette, CORNER_INSET, y, width, height)
+    x = width - CORNER_INSET - len(THREE_LEAF[0]) - 2
+    y = (height - len(THREE_LEAF)) // 2
+    draw_sprite(canvas, THREE_LEAF, palette, x, y, width, height)
+
+
+#: In calendar order: also the order of the admin page's checkboxes.
+HOLIDAYS: dict[str, Holiday] = {
+    "halloween": Holiday(
+        "halloween", "Halloween", "Oct 1-31", _between((10, 1), (10, 31)), GHOST, _draw_pumpkins
+    ),
+    "thanksgiving_ca": Holiday(
+        "thanksgiving_ca",
+        "Thanksgiving (Canada)",
+        "Fri-Mon of the 2nd Monday in Oct",
+        _ca_thanksgiving_weekend,
+        TURKEY,
+        _draw_leaves,
+        default_on=False,
+        # Its long weekend sits inside Halloween's October and wins there
+        # (owner's call, #239).
+        priority=1,
+    ),
+    "thanksgiving": Holiday(
+        "thanksgiving",
+        "Thanksgiving (US)",
+        "The week up to the 4th Thursday in Nov",
+        _us_thanksgiving_week,
+        TURKEY,
+        _draw_leaves,
+    ),
+    "christmas": Holiday(
+        "christmas",
+        "Christmas",
+        "Dec 1-26",
+        _between((12, 1), (12, 26)),
+        SANTA,
+        _draw_presents_and_snow,
+    ),
+    "new_year": Holiday(
+        "new_year",
+        "New Year's",
+        "Dec 31-Jan 1",
+        _new_years,
+        FIREWORKS,
+        _draw_champagne_and_confetti,
+    ),
+    "groundhog": Holiday(
+        "groundhog",
+        "Groundhog Day",
+        "Feb 2",
+        _groundhog_day,
+        GROUNDHOG,
+        _draw_burrow_and_verdict,
+    ),
+    "valentines": Holiday(
+        "valentines",
+        "Valentine's Day",
+        "Feb 7-14",
+        _between((2, 7), (2, 14)),
+        HEART,
+        _draw_beating_hearts,
+    ),
+    "st_patricks": Holiday(
+        "st_patricks",
+        "St. Patrick's Day",
+        "Mar 14-17",
+        _between((3, 14), (3, 17)),
+        LEPRECHAUN,
+        _draw_shamrocks,
+    ),
+}
+HOLIDAY_NAMES = tuple(HOLIDAYS)
+DEFAULT_THEMES = tuple(name for name, holiday in HOLIDAYS.items() if holiday.default_on)
+
+
+def active_holiday(themes: Sequence[str], day: date) -> Holiday | None:
+    """The ticked holiday whose window contains ``day``, if any.
+
+    Overlaps go to the higher ``priority``; ties to the earlier entry.
+    """
+    active = [h for name, h in HOLIDAYS.items() if name in themes and h.is_active(day)]
+    return max(active, key=lambda h: h.priority, default=None)
 
 
 def draw_sprite(
@@ -178,8 +1123,12 @@ class HolidayOverlay:
         height: int,
         min_gap_seconds: float,
         max_gap_seconds: float,
+        day: date | None = None,
     ) -> bool:
         """Decorate ``canvas``; returns True while something is moving.
+
+        ``day`` is the board's local date, for decorations that depend on it
+        (Groundhog Day's shadow, #247); None draws them as if in year 0.
 
         The caller uses that to run the frame loop fast only for the few
         seconds a fly-by is on screen, and at its normal 2fps otherwise.
@@ -191,27 +1140,22 @@ class HolidayOverlay:
             return False
         if scene_kind in NO_OVERLAY_SCENES:
             return False
-        if scene_kind in PUMPKIN_SCENES:
-            self._draw_pumpkins(canvas, now, width, height)
-        return self._draw_ghost(canvas, now, width, height, min_gap_seconds, max_gap_seconds)
+        if scene_kind in CORNER_SCENES:
+            holiday.corners(canvas, now, width, height, day)
+        return self._draw_flyby(
+            canvas, holiday.flyby, now, width, height, min_gap_seconds, max_gap_seconds, day
+        )
 
-    def _draw_pumpkins(self, canvas: Any, now: float, width: int, height: int) -> None:
-        # Candle flicker: mostly bright, briefly dim, the two pumpkins out
-        # of step so it doesn't read as one blinking light.
-        y = (height - PUMPKIN_HEIGHT) // 2
-        for x, phase in ((4, 0), (width - PUMPKIN_WIDTH - 4, 1)):
-            glow = GLOW_DIM if (int(now * 2) + phase) % 3 == 0 else GLOW_BRIGHT
-            palette = {"O": PUMPKIN, "G": STEM, "Y": glow}
-            draw_sprite(canvas, PUMPKIN_SPRITE, palette, x, y, width, height)
-
-    def _draw_ghost(
+    def _draw_flyby(
         self,
         canvas: Any,
+        mover: Flyby | Fireworks | Popup,
         now: float,
         width: int,
         height: int,
         min_gap: float,
         max_gap: float,
+        day: date | None,
     ) -> bool:
         if self._flyby_started is None:
             if self._next_flyby_at is None:
@@ -219,14 +1163,8 @@ class HolidayOverlay:
             if now < self._next_flyby_at:
                 return False
             self.start_flyby(now)
-        elapsed = now - self._flyby_started
-        x = width - round(elapsed * FLYBY_SPEED)
-        if x + GHOST_WIDTH <= 0:
-            self._flyby_started = None
-            self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)
-            return False
-        bob = round(BOB_PIXELS * math.sin(2 * math.pi * elapsed / BOB_PERIOD))
-        y = (height - GHOST_HEIGHT) // 2 + bob
-        frame = GHOST_FRAMES[int(elapsed / WIGGLE_SECONDS) % len(GHOST_FRAMES)]
-        draw_sprite(canvas, frame, {"#": GHOST_BODY, "o": EYE}, x, y, width, height)
-        return True
+        if mover.draw(canvas, now - self._flyby_started, width, height, day):
+            return True
+        self._flyby_started = None
+        self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)
+        return False
