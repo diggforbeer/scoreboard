@@ -206,7 +206,7 @@ cooldown_minutes = 15        # how long after that game ends before dimming resu
 
 [holiday]
 enabled = false              # seasonal decorations; each holiday only shows during its own dates
-themes = ["halloween"]       # which holidays to show
+themes = ["halloween", "thanksgiving"]  # also "thanksgiving_ca" (Canadian)
 flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
 flyby_max_minutes = 20
 
@@ -278,7 +278,9 @@ readable.
 
 `[holiday]` adds seasonal decorations on top. In October, a ghost floats
 across the board every so often (even during games, though never over a
-GOAL screen) and jack-o'-lanterns flank the clock.
+GOAL screen) and jack-o'-lanterns flank the clock. The week of Thanksgiving
+(US, or Canadian if you tick it), a turkey walks along the bottom instead,
+with autumn leaves beside the clock.
 
 ## Audio
 

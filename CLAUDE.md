@@ -484,8 +484,19 @@ own Holiday Cheer tab (#238) edits `[holiday]`: its checkbox list comes from
 new holiday needs no frontend change; `_coerce_holiday` rejects unknown
 themes and a min-over-max gap rather than repairing them like the TOML
 loader does, and the section is sent last on connect, after the snapshot.
-Other holidays are #239-#242; holiday *screens* (a Christmas tree, as a
-`[[rotation]]` entry) #243.
+Each `Holiday` carries its own `Flyby` (frames, palette, speed,
+`align` "middle" to float or "bottom" to walk) and `corners` draw
+function, so adding one is a registry entry, not overlay code.
+Thanksgiving (#239) is two entries sharing the turkey/leaves art: US
+(`thanksgiving`, the 7 days up to the 4th Thursday of November) and
+Canadian (`thanksgiving_ca`, Fri through the 2nd Monday of October,
+`default_on=False` so it isn't ticked unasked -- `DEFAULT_THEMES`).
+Overlaps go to the higher `Holiday.priority` (registry order is just
+calendar/checkbox order): `thanksgiving_ca` has priority 1 and takes its
+long weekend over from `halloween`, by the owner's call; kept to a long
+weekend so it displaces as little of Halloween as possible. Christmas,
+New Year's and Valentine's are #240-#242; holiday *screens* (a Christmas
+tree, as a `[[rotation]]` entry) #243.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.

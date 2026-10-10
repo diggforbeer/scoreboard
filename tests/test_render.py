@@ -1503,7 +1503,9 @@ def bbox_of(c: AsciiCanvas, rgb: tuple[int, int, int]) -> BBox:
     return BBox(min(xs), min(ys), max(xs), max(ys))
 
 
-def draw_halloween(c: AsciiCanvas, kind: str, flyby_at: float | None) -> bool:
+def draw_halloween(
+    c: AsciiCanvas, kind: str, flyby_at: float | None, holiday: str = "halloween"
+) -> bool:
     from nhl_scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
 
     overlay = HolidayOverlay()
@@ -1512,7 +1514,7 @@ def draw_halloween(c: AsciiCanvas, kind: str, flyby_at: float | None) -> bool:
     return overlay.draw(
         c,
         scene_kind=kind,
-        holiday=HOLIDAYS["halloween"],
+        holiday=HOLIDAYS[holiday],
         now=flyby_at or 0.0,
         width=W,
         height=H,
@@ -1564,3 +1566,44 @@ def test_halloween_pumpkins_frame_the_clock(update_snapshots):
     assert pumpkins.x0 < text.x0 and pumpkins.x1 > text.x1, "one either side of the text"
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_halloween_clock", art, update_snapshots)
+
+
+def test_thanksgiving_turkey_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import TURKEY, TURKEY_BODY
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 4.6s in at 14px/s: mid-panel, walking across the status line.
+    assert draw_halloween(c, "game", flyby_at=4.6, holiday="thanksgiving")
+    art = show("thanksgiving turkey over live game", c)
+
+    assert not c.out_of_bounds
+    body = bbox_of(c, TURKEY_BODY)
+    assert MID_LEFT < body.center_x < MID_RIGHT
+    turkey_top = H - TURKEY.height
+    # Above the turkey's rows, the game scene is untouched: score and SOG intact.
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < turkey_top}
+    assert c.lit(0, 0, W - 1, turkey_top - 1) == above
+    check_snapshot("holiday_thanksgiving_turkey", art, update_snapshots)
+
+
+def test_thanksgiving_leaves_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import LEAF_GOLD, MAPLE
+
+    now = datetime(2026, 11, 21, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="thanksgiving") is False
+    art = show("thanksgiving leaves, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert bbox_of(c, MAPLE).x1 < text.x0, "maple leaf left of the text"
+    assert bbox_of(c, LEAF_GOLD).x0 > text.x1, "gold leaf right of the text"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_thanksgiving_clock", art, update_snapshots)

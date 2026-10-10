@@ -23,6 +23,7 @@ from nhl_scoreboard.display.holiday import (
     HOLIDAYS,
     NO_OVERLAY_SCENES,
     PUMPKIN,
+    TURKEY,
     HolidayOverlay,
     active_holiday,
 )
@@ -70,6 +71,58 @@ def test_halloween_window_is_all_of_october(day, expected):
     assert (found.name if found else None) == expected
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        # 2026: Thanksgiving is Thu Nov 26, so the window is Nov 20-26.
+        (date(2026, 11, 19), None),
+        (date(2026, 11, 20), "thanksgiving"),
+        (date(2026, 11, 26), "thanksgiving"),
+        (date(2026, 11, 27), None),
+        # 2025 moves it: Thu Nov 27, window Nov 21-27.
+        (date(2025, 11, 20), None),
+        (date(2025, 11, 27), "thanksgiving"),
+    ],
+)
+def test_us_thanksgiving_is_the_week_up_to_the_fourth_thursday(day, expected):
+    found = active_holiday(["thanksgiving"], day)
+    assert (found.name if found else None) == expected
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        # 2026: 2nd Monday of October is the 12th, so Fri 9th - Mon 12th.
+        (date(2026, 10, 8), None),
+        (date(2026, 10, 9), "thanksgiving_ca"),
+        (date(2026, 10, 12), "thanksgiving_ca"),
+        (date(2026, 10, 13), None),
+        # 2025: Mon Oct 13, so Fri 10th - Mon 13th.
+        (date(2025, 10, 9), None),
+        (date(2025, 10, 13), "thanksgiving_ca"),
+    ],
+)
+def test_canadian_thanksgiving_is_the_long_weekend(day, expected):
+    found = active_holiday(["thanksgiving_ca"], day)
+    assert (found.name if found else None) == expected
+
+
+@pytest.mark.parametrize(
+    ("themes", "day", "expected"),
+    [
+        (HOLIDAY_NAMES, date(2026, 10, 10), "thanksgiving_ca"),
+        (HOLIDAY_NAMES, date(2026, 10, 13), "halloween"),
+        (["halloween"], date(2026, 10, 10), "halloween"),
+    ],
+)
+def test_canadian_thanksgiving_wins_its_weekend_over_halloween(themes, day, expected):
+    assert active_holiday(themes, day).name == expected
+
+
+def test_both_thanksgivings_share_the_turkey():
+    assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
+
+
 def test_an_unticked_holiday_never_shows_in_its_window():
     assert active_holiday([], date(2026, 10, 15)) is None
 
@@ -77,10 +130,11 @@ def test_an_unticked_holiday_never_shows_in_its_window():
 # -- config -------------------------------------------------------------------
 
 
-def test_off_by_default_with_every_holiday_ticked():
+def test_off_by_default_with_every_default_on_holiday_ticked():
     cfg = Settings().holiday
     assert cfg.enabled is False
-    assert cfg.themes == list(HOLIDAY_NAMES)
+    assert cfg.themes == ["halloween", "thanksgiving"]
+    assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
 
 def test_unknown_theme_warns_and_is_dropped(caplog):
@@ -165,6 +219,23 @@ def test_out_of_season_forgets_the_schedule():
     assert (moving, canvas.pixels) == (False, {})
     assert overlay._flyby_started is None
     assert overlay._next_flyby_at is None
+
+
+def test_turkey_walks_along_the_bottom_edge_without_leaving_the_panel():
+    overlay = HolidayOverlay()
+    overlay.start_flyby(0.0)
+    turkey = HOLIDAYS["thanksgiving"]
+    t, rows = 0.0, set()
+    while True:
+        moving, canvas = draw(overlay, t, holiday=turkey)
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            break
+        rows |= {y for _, y in canvas.pixels}
+        t += ANIMATION_FRAME_INTERVAL
+    assert max(rows) == H - 1, "feet on the bottom row"
+    assert min(rows) == H - TURKEY.height
+    assert t == pytest.approx((W + TURKEY.width) / TURKEY.speed, abs=0.1)
 
 
 def test_pumpkins_only_on_idle_scenes():

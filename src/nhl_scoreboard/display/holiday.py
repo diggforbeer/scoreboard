@@ -17,10 +17,47 @@ import math
 import random
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 RGB = tuple[int, int, int]
+
+
+#: The scoring moments and the Wi-Fi setup screens stay clean: a ghost
+#: crossing "GOAL" or a QR code someone is trying to scan helps nobody.
+NO_OVERLAY_SCENES = frozenset({"goal", "goal_detail", "three_stars", "ap_setup", "wifi_join"})
+#: Idle scenes with empty corners for a holiday's static decoration. Not
+#: countdown/preview: their 32px logos fill both edges, same reason the
+#: game scene gets none.
+CORNER_SCENES = frozenset({"clock", "no_games"})
+#: Gap between a corner decoration and the panel edge.
+CORNER_INSET = 4
+
+
+@dataclass(frozen=True, slots=True)
+class Flyby:
+    """Something that crosses the panel right to left now and then."""
+
+    #: Animation frames, cycled every ``frame_seconds``. Every frame the same size.
+    frames: tuple[tuple[str, ...], ...]
+    #: Sprite character -> colour, as pairs so the dataclass stays hashable.
+    palette: tuple[tuple[str, RGB], ...]
+    #: Pixels per second.
+    speed: float
+    frame_seconds: float
+    #: Vertical bob amplitude (px) and period (s); 0 for something walking.
+    bob_pixels: float = 0.0
+    bob_period: float = 1.0
+    #: "middle" floats through the centre; "bottom" walks along the bottom edge.
+    align: str = "middle"
+
+    @property
+    def width(self) -> int:
+        return len(self.frames[0][0])
+
+    @property
+    def height(self) -> int:
+        return len(self.frames[0])
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +70,14 @@ class Holiday:
     #: computed per year and has no fixed dates to print.
     window: str
     is_active: Callable[[date], bool]
+    flyby: Flyby
+    #: Draws the static decoration on CORNER_SCENES: (canvas, now, width, height).
+    corners: Callable[[Any, float, int, int], None]
+    #: Ticked when [holiday] themes isn't set. False for a holiday most
+    #: boards wouldn't want unasked (Canadian Thanksgiving on a US board).
+    default_on: bool = True
+    #: Which wins when two ticked windows overlap: the higher number.
+    priority: int = 0
 
 
 def _between(start: tuple[int, int], end: tuple[int, int]) -> Callable[[date], bool]:
@@ -44,28 +89,29 @@ def _between(start: tuple[int, int], end: tuple[int, int]) -> Callable[[date], b
     return check
 
 
-#: Registry order is also precedence if two enabled windows ever overlap --
-#: none do yet; #241 (New Year's) is where that gets decided properly.
-HOLIDAYS: dict[str, Holiday] = {
-    "halloween": Holiday("halloween", "Halloween", "Oct 1-31", _between((10, 1), (10, 31))),
-}
-HOLIDAY_NAMES = tuple(HOLIDAYS)
+def nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """The ``n``th ``weekday`` (Monday = 0) of a month, e.g. 4th Thursday of November."""
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
 
 
-def active_holiday(themes: Sequence[str], day: date) -> Holiday | None:
-    """The first enabled holiday whose window contains ``day``, if any."""
-    for name, holiday in HOLIDAYS.items():
-        if name in themes and holiday.is_active(day):
-            return holiday
-    return None
+def _us_thanksgiving_week(day: date) -> bool:
+    """The 7 days up to and including the 4th Thursday of November (#239)."""
+    thanksgiving = nth_weekday(day.year, 11, 3, 4)
+    return thanksgiving - timedelta(days=6) <= day <= thanksgiving
 
 
-#: The scoring moments and the Wi-Fi setup screens stay clean: a ghost
-#: crossing "GOAL" or a QR code someone is trying to scan helps nobody.
-NO_OVERLAY_SCENES = frozenset({"goal", "goal_detail", "three_stars", "ap_setup", "wifi_join"})
-#: Idle scenes with empty corners. Not countdown/preview: their 32px logos
-#: fill both edges, same reason the game scene gets no pumpkins.
-PUMPKIN_SCENES = frozenset({"clock", "no_games"})
+def _ca_thanksgiving_weekend(day: date) -> bool:
+    """Friday through the 2nd Monday of October -- the long weekend (#239).
+
+    Deliberately short: it sits inside Halloween's window and wins over it
+    there (see HOLIDAYS), so every extra day here is a day less of Halloween.
+    """
+    monday = nth_weekday(day.year, 10, 0, 2)
+    return monday - timedelta(days=3) <= day <= monday
+
+
+# -- Halloween (#237) ----------------------------------------------------------
 
 GHOST_BODY = (235, 235, 255)
 EYE = (0, 0, 0)
@@ -95,8 +141,19 @@ GHOST_FRAMES = (
     (*_GHOST_TOP, "##########", "#.##.##.##"),
     (*_GHOST_TOP, "##########", "##.##.##.#"),
 )
-GHOST_WIDTH = len(_GHOST_TOP[0])
-GHOST_HEIGHT = len(GHOST_FRAMES[0])
+GHOST = Flyby(
+    frames=GHOST_FRAMES,
+    palette=(("#", GHOST_BODY), ("o", EYE)),
+    # ~7s to cross 128px: slow enough to read as floating.
+    speed=20.0,
+    frame_seconds=0.25,
+    bob_pixels=1.5,
+    bob_period=1.6,
+)
+GHOST_WIDTH = GHOST.width
+GHOST_HEIGHT = GHOST.height
+#: The ghost's speed, kept under its original name for the tests.
+FLYBY_SPEED = GHOST.speed
 
 # 'O' pumpkin, 'G' stem, 'Y' the carved face (lit from inside).
 PUMPKIN_SPRITE = (
@@ -114,13 +171,146 @@ PUMPKIN_SPRITE = (
 PUMPKIN_WIDTH = len(PUMPKIN_SPRITE[0])
 PUMPKIN_HEIGHT = len(PUMPKIN_SPRITE)
 
-#: Pixels per second. ~7s to cross 128px: slow enough to read as floating.
-FLYBY_SPEED = 20.0
-#: Bob amplitude (px) and period (s).
-BOB_PIXELS = 1.5
-BOB_PERIOD = 1.6
-#: How often the hem alternates.
-WIGGLE_SECONDS = 0.25
+
+def _draw_pumpkins(canvas: Any, now: float, width: int, height: int) -> None:
+    # Candle flicker: mostly bright, briefly dim, the two pumpkins out of
+    # step so it doesn't read as one blinking light.
+    y = (height - PUMPKIN_HEIGHT) // 2
+    for x, phase in ((CORNER_INSET, 0), (width - PUMPKIN_WIDTH - CORNER_INSET, 1)):
+        glow = GLOW_DIM if (int(now * 2) + phase) % 3 == 0 else GLOW_BRIGHT
+        palette = {"O": PUMPKIN, "G": STEM, "Y": glow}
+        draw_sprite(canvas, PUMPKIN_SPRITE, palette, x, y, width, height)
+
+
+# -- Thanksgiving (#239) -------------------------------------------------------
+
+FEATHER_RED = (210, 30, 0)
+FEATHER_ORANGE = (255, 110, 0)
+FEATHER_GOLD = (255, 200, 0)
+# Brighter than a real turkey: (140, 70, 20) all but vanished in a
+# rendered preview, the same trap teams.py lifts navy/burgundy out of.
+TURKEY_BODY = (180, 95, 30)
+TURKEY_HEAD = (225, 165, 110)
+WATTLE = (255, 0, 0)
+BEAK = (255, 170, 0)
+LEGS = (255, 140, 0)
+MAPLE = (230, 50, 0)
+LEAF_GOLD = (240, 170, 0)
+LEAF_VEIN = (150, 70, 0)
+
+# Side view facing left (the way it walks): fan of tail feathers behind,
+# 'k' beak, 'w' wattle, 'e' eye, 'L' legs. Two frames that differ only in
+# the legs, so it walks rather than slides.
+_TURKEY_TOP = (
+    ".......RRRR...",
+    ".....RROOOORR.",
+    "....ROOYYYYOOR",
+    "..HHROYYYYYYOR",
+    ".HeHROYYYYYYOR",
+    "kHHBBBYYYYYYOR",
+    ".wHBBBBBYYYYOR",
+    ".wBBBBBBBBYOR.",
+    "..BBBBBBBBBRR.",
+    "...BBBBBBBB...",
+    "....BBBBBB....",
+)
+TURKEY_FRAMES = (
+    (*_TURKEY_TOP, ".....L..L.....", "....LL.LL....."),
+    (*_TURKEY_TOP, "......LL......", ".....LL.L....."),
+)
+TURKEY = Flyby(
+    frames=TURKEY_FRAMES,
+    palette=(
+        ("R", FEATHER_RED),
+        ("O", FEATHER_ORANGE),
+        ("Y", FEATHER_GOLD),
+        ("B", TURKEY_BODY),
+        ("H", TURKEY_HEAD),
+        ("e", EYE),
+        ("k", BEAK),
+        ("w", WATTLE),
+        ("L", LEGS),
+    ),
+    # A walk, not a float: slower than the ghost, no bob, along the bottom.
+    speed=14.0,
+    frame_seconds=0.3,
+    align="bottom",
+)
+
+# 'M' maple red, 's' stem.
+MAPLE_LEAF = (
+    "....M....",
+    "...MMM...",
+    ".M.MMM.M.",
+    "MMMMMMMMM",
+    ".MMMMMMM.",
+    "..MMMMM..",
+    ".MMMMMMM.",
+    "....s....",
+    "....s....",
+)
+# 'G' gold, 'v' vein: a plain leaf lying on the diagonal.
+GOLD_LEAF = (
+    "......GG.",
+    "....GGGGG",
+    "...GGGGvG",
+    "..GGGGvGG",
+    ".GGGGvGG.",
+    ".GGGvGGG.",
+    "GGGvGGG..",
+    "..vGGG...",
+    ".v.......",
+)
+LEAF_SIZE = len(MAPLE_LEAF)
+
+
+def _draw_leaves(canvas: Any, now: float, width: int, height: int) -> None:
+    # Static: nothing here needs the fast frame loop.
+    del now
+    y = (height - LEAF_SIZE) // 2
+    draw_sprite(canvas, MAPLE_LEAF, {"M": MAPLE, "s": LEAF_VEIN}, CORNER_INSET, y, width, height)
+    right = width - LEAF_SIZE - CORNER_INSET
+    palette = {"G": LEAF_GOLD, "v": LEAF_VEIN}
+    draw_sprite(canvas, GOLD_LEAF, palette, right, y, width, height)
+
+
+#: In calendar order: also the order of the admin page's checkboxes.
+HOLIDAYS: dict[str, Holiday] = {
+    "halloween": Holiday(
+        "halloween", "Halloween", "Oct 1-31", _between((10, 1), (10, 31)), GHOST, _draw_pumpkins
+    ),
+    "thanksgiving_ca": Holiday(
+        "thanksgiving_ca",
+        "Thanksgiving (Canada)",
+        "Fri-Mon of the 2nd Monday in Oct",
+        _ca_thanksgiving_weekend,
+        TURKEY,
+        _draw_leaves,
+        default_on=False,
+        # Its long weekend sits inside Halloween's October and wins there
+        # (owner's call, #239).
+        priority=1,
+    ),
+    "thanksgiving": Holiday(
+        "thanksgiving",
+        "Thanksgiving (US)",
+        "The week up to the 4th Thursday in Nov",
+        _us_thanksgiving_week,
+        TURKEY,
+        _draw_leaves,
+    ),
+}
+HOLIDAY_NAMES = tuple(HOLIDAYS)
+DEFAULT_THEMES = tuple(name for name, holiday in HOLIDAYS.items() if holiday.default_on)
+
+
+def active_holiday(themes: Sequence[str], day: date) -> Holiday | None:
+    """The ticked holiday whose window contains ``day``, if any.
+
+    Overlaps go to the higher ``priority``; ties to the earlier entry.
+    """
+    active = [h for name, h in HOLIDAYS.items() if name in themes and h.is_active(day)]
+    return max(active, key=lambda h: h.priority, default=None)
 
 
 def draw_sprite(
@@ -195,22 +385,16 @@ class HolidayOverlay:
             return False
         if scene_kind in NO_OVERLAY_SCENES:
             return False
-        if scene_kind in PUMPKIN_SCENES:
-            self._draw_pumpkins(canvas, now, width, height)
-        return self._draw_ghost(canvas, now, width, height, min_gap_seconds, max_gap_seconds)
+        if scene_kind in CORNER_SCENES:
+            holiday.corners(canvas, now, width, height)
+        return self._draw_flyby(
+            canvas, holiday.flyby, now, width, height, min_gap_seconds, max_gap_seconds
+        )
 
-    def _draw_pumpkins(self, canvas: Any, now: float, width: int, height: int) -> None:
-        # Candle flicker: mostly bright, briefly dim, the two pumpkins out
-        # of step so it doesn't read as one blinking light.
-        y = (height - PUMPKIN_HEIGHT) // 2
-        for x, phase in ((4, 0), (width - PUMPKIN_WIDTH - 4, 1)):
-            glow = GLOW_DIM if (int(now * 2) + phase) % 3 == 0 else GLOW_BRIGHT
-            palette = {"O": PUMPKIN, "G": STEM, "Y": glow}
-            draw_sprite(canvas, PUMPKIN_SPRITE, palette, x, y, width, height)
-
-    def _draw_ghost(
+    def _draw_flyby(
         self,
         canvas: Any,
+        flyby: Flyby,
         now: float,
         width: int,
         height: int,
@@ -224,13 +408,16 @@ class HolidayOverlay:
                 return False
             self.start_flyby(now)
         elapsed = now - self._flyby_started
-        x = width - round(elapsed * FLYBY_SPEED)
-        if x + GHOST_WIDTH <= 0:
+        x = width - round(elapsed * flyby.speed)
+        if x + flyby.width <= 0:
             self._flyby_started = None
             self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)
             return False
-        bob = round(BOB_PIXELS * math.sin(2 * math.pi * elapsed / BOB_PERIOD))
-        y = (height - GHOST_HEIGHT) // 2 + bob
-        frame = GHOST_FRAMES[int(elapsed / WIGGLE_SECONDS) % len(GHOST_FRAMES)]
-        draw_sprite(canvas, frame, {"#": GHOST_BODY, "o": EYE}, x, y, width, height)
+        if flyby.align == "bottom":
+            y = height - flyby.height
+        else:
+            bob = flyby.bob_pixels * math.sin(2 * math.pi * elapsed / flyby.bob_period)
+            y = (height - flyby.height) // 2 + round(bob)
+        frame = flyby.frames[int(elapsed / flyby.frame_seconds) % len(flyby.frames)]
+        draw_sprite(canvas, frame, dict(flyby.palette), x, y, width, height)
         return True

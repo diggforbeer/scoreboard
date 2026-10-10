@@ -144,8 +144,10 @@ def test_every_step_renders_on_panel(width):
         assert c.lit(), f"{scene.kind} drew nothing"
 
 
-def test_every_holiday_is_shown_and_named_correctly():
-    from nhl_scoreboard.display.holiday import HOLIDAY_NAMES
+def test_every_holidays_art_is_shown():
+    """Per distinct fly-by, not per name: both Thanksgivings share the turkey."""
+    from nhl_scoreboard.display.holiday import HOLIDAYS
 
-    holidays = {s.holiday for s in demo_steps("NSH", NOW) if s.holiday is not None}
-    assert holidays == set(HOLIDAY_NAMES)
+    named = [s.holiday for s in demo_steps("NSH", NOW) if s.holiday is not None]
+    assert all(name in HOLIDAYS for name in named)
+    assert {HOLIDAYS[n].flyby for n in named} == {h.flyby for h in HOLIDAYS.values()}
