@@ -1182,13 +1182,7 @@ class ScoreboardApp:
         favourite_row = next((r for r in rows if r.abbrev == favourite), None)
         if favourite_row is None or favourite_row.games_played <= 0:
             return None
-        ranked = conference_standings(rows, favourite_row.conference)
-        if self.april_fools_active():
-            # Relabelled here, not in draw_scene: moving them to the bottom
-            # needs the whole conference, not just the drawn window (#248).
-            ranked = april_fools.prank_conference(ranked)
-            favourite = april_fools.PRANK_AS
-        window = standings_window(ranked, favourite)
+        window = standings_window(conference_standings(rows, favourite_row.conference), favourite)
         if not window:
             return None
         return Scene("standings", standings=tuple(window))
@@ -1766,7 +1760,7 @@ class ScoreboardApp:
             changes["goal_event"] = april_fools.swap_goal(scene.goal_event)
         if scene.stars is not None:
             changes["stars"] = tuple(april_fools.swap_star(s) for s in scene.stars)
-        if scene.kind == "conference_leaders" and scene.standings is not None:
+        if scene.standings is not None:
             changes["standings"] = april_fools.swap_rows(scene.standings)
         return dataclasses.replace(scene, **changes) if changes else scene
 

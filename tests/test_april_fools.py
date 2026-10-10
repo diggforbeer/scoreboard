@@ -91,25 +91,6 @@ def test_game_swap_relabels_only_the_preds_side():
     assert swapped.start_utc == original.start_utc
 
 
-def test_mid_table_preds_drop_to_last_winless():
-    pranked = april_fools.prank_conference(conference(nsh_at=6))
-    assert "NSH" not in [r.abbrev for r in pranked]
-    last = pranked[-1]
-    assert last.abbrev == "MIL"
-    assert (last.wins, last.losses, last.ot_losses, last.points) == (0, 70, 0, 0)
-    assert [r.conference_sequence for r in pranked] == list(range(1, 17))
-    assert [r.abbrev for r in pranked[:5]] == ["WPG", "DAL", "VGK", "LAK", "COL"]
-
-
-def test_preds_already_last_jump_to_first_unbeaten_instead():
-    pranked = april_fools.prank_conference(conference(nsh_at=16))
-    first = pranked[0]
-    assert first.abbrev == "MIL"
-    assert (first.wins, first.losses, first.points) == (70, 0, 140)
-    assert pranked[-1].abbrev != "MIL", "never shown in their true spot"
-    assert [r.conference_sequence for r in pranked] == list(range(1, 17))
-
-
 def test_admirals_logo_and_colours_ship_without_becoming_an_nhl_team():
     logo = LogoLibrary(default_directories(32, "dark")).get("MIL")
     assert logo is not None
@@ -194,10 +175,16 @@ def test_it_ignores_the_holiday_cheer_switch(app):
     assert app.april_fools_active()
 
 
-def test_standings_scene_is_built_from_the_pranked_conference(app):
-    app._refresh_standings = lambda **_: conference(nsh_at=6)
-    scene = app._standings_scene()
-    assert scene.standings[-1].abbrev == "MIL"
-    assert scene.standings[-1].points == 0
-    app.draw_scene(scene)
+@pytest.mark.parametrize("kind", ["standings", "conference_leaders"])
+def test_standings_relabel_in_their_real_spot_with_their_real_record(app, kind):
+    rows = tuple(conference(nsh_at=6)[3:8])
+    scene = ScoreboardApp._april_fools_scene(Scene(kind, standings=rows))
+    assert [r.abbrev for r in scene.standings] == ["LAK", "COL", "MIL", "EDM", "MIN"]
+    nsh, mil = rows[2], scene.standings[2]
+    assert (mil.conference_sequence, mil.points, mil.record_label()) == (
+        nsh.conference_sequence,
+        nsh.points,
+        nsh.record_label(),
+    )
+    app.draw_scene(Scene("standings", standings=rows))
     assert app.calls[-1][1][1] == "MIL", "MIL highlighted and its logo drawn"
