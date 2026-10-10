@@ -918,12 +918,28 @@ LEPRECHAUN_FRAMES = (
 )
 # 'G' leaf, 'v' vein, 's' stem.
 _SHAMROCK_PALETTE = (("G", SHAMROCK), ("v", SHAMROCK_VEIN), ("s", SHAMROCK_STEM))
+# Three separate round leaves around a centre, with gaps between them: the
+# first versions were one solid notched V -- read as a heart, not a clover.
 SMALL_SHAMROCK = (
-    "GG.GG",
-    "GGGGG",
-    ".GGG.",
-    ".GGG.",
-    "..s..",
+    "...GGG...",
+    "..GGGGG..",
+    "..GGGGG..",
+    "...GvG...",
+    ".GGGvGGG.",
+    "GGGG.GGGG",
+    ".GGG.GGG.",
+    "....s....",
+    "....s....",
+)
+#: The dropped ones' colours. Not outlined -- at this size an outline
+#: closes the gaps between the leaves and they read as acorns -- so instead
+#: a yellow-green that stands apart from the green team logos and the green
+#: live-status text they land on.
+DROPPED_SHAMROCK = (150, 255, 50)
+_DROPPED_SHAMROCK_PALETTE = (
+    ("G", DROPPED_SHAMROCK),
+    ("v", (60, 150, 20)),
+    ("s", (90, 170, 30)),
 )
 FOUR_LEAF = (
     "..GGG.GGG...",
@@ -940,14 +956,17 @@ FOUR_LEAF = (
     "........s...",
 )
 THREE_LEAF = (
-    ".GG.GG.",
-    "GGGvGGG",
-    "GGGvGGG",
-    ".GvvvG.",
-    "..GGG..",
-    "..GGG..",
-    "...s...",
-    "....s..",
+    "....GGG....",
+    "...GGGGG...",
+    "...GGGGG...",
+    "....GGG....",
+    ".GGGGvGGGG.",
+    "GGGGGvGGGGG",
+    ".GGGG.GGGG.",
+    ".GGG...GGG.",
+    ".....s.....",
+    "......s....",
+    "......s....",
 )
 LEPRECHAUN = Flyby(
     frames=tuple(_outlined(frame) for frame in LEPRECHAUN_FRAMES),
@@ -965,8 +984,8 @@ LEPRECHAUN = Flyby(
     frame_seconds=0.3,
     align="bottom",
     # Shamrocks behind him as he goes (owner's pick, #249) -- Santa's drops.
-    drops=(Drop(_outlined(SMALL_SHAMROCK), (*_SHAMROCK_PALETTE, ("o", LEP_OUTLINE))),),
-    drop_spacing=22,
+    drops=(Drop(SMALL_SHAMROCK, _DROPPED_SHAMROCK_PALETTE),),
+    drop_spacing=24,
     drop_column=9,
     linger_seconds=2.0,
 )
