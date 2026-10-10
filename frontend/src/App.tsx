@@ -892,7 +892,7 @@ function App() {
               onClick={() => setPage(name)}
             >
               {
-                { home: 'Home', audio: 'Audio', holidays: 'Holidays', logs: 'Logs' }[name]
+                { home: 'Home', audio: 'Audio', holidays: 'Holiday Cheer', logs: 'Logs' }[name]
               }
             </button>
           </li>
@@ -1862,7 +1862,7 @@ function App() {
       {page === 'holidays' && (
         <div className="card mb-4">
           <div className="card-body">
-            <h2 className="card-title h5">Holiday decorations</h2>
+            <h2 className="card-title h5">Holiday Cheer</h2>
             <p className="text-body-secondary small">
               Seasonal decorations drawn over the normal screens, never over a goal. Each
               holiday only shows during its own dates, so leaving them all ticked is fine.
@@ -1879,7 +1879,7 @@ function App() {
                     onChange={(e) => setHoliday({ ...holiday, enabled: e.target.checked })}
                   />
                   <label className="form-check-label" htmlFor="holiday-enabled">
-                    Holiday decorations on
+                    Holiday cheer on
                   </label>
                 </div>
 
@@ -1940,7 +1940,7 @@ function App() {
                     className="btn btn-primary"
                     disabled={holidaySaveStatus === 'saving'}
                   >
-                    Save Holidays
+                    Save Holiday Cheer
                   </button>
                   {saveFeedback(holidaySaveStatus, holidaySaveError)}
                 </div>

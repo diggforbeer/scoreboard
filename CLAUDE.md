@@ -479,7 +479,7 @@ game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
 (50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
 otherwise. Demo steps carry an optional `holiday`, forced on with an
 immediate fly-by and redrawn every frame for the step. The admin page's
-own Holidays tab (#238) edits `[holiday]`: its checkbox list comes from
+own Holiday Cheer tab (#238) edits `[holiday]`: its checkbox list comes from
 `HOLIDAYS` (sent as `available`, each with a human `window` string), so a
 new holiday needs no frontend change; `_coerce_holiday` rejects unknown
 themes and a min-over-max gap rather than repairing them like the TOML

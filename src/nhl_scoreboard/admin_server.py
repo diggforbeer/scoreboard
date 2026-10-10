@@ -230,7 +230,7 @@ thing:
   changes real on-disk state every other tab's view of "what horns exist"
   needs to reflect too.
 
-* Holidays tab (#238): ``[holiday]``'s master switch, one checkbox per
+* Holiday Cheer tab (#238): ``[holiday]``'s master switch, one checkbox per
   ``HOLIDAYS`` entry (sent as ``available`` alongside the config, so a new
   holiday needs no frontend change) and the fly-by gap. ``themes`` is a
   list, so ``_coerce_holiday`` checks it itself rather than through
