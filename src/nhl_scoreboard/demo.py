@@ -15,6 +15,7 @@ from .app import Scene
 from .nhl.models import (
     Game,
     GoalieLine,
+    MeetingResult,
     SeasonSeriesRecord,
     Situation,
     SkaterLine,
@@ -23,6 +24,17 @@ from .nhl.models import (
     conference_standings,
     standings_window,
 )
+
+
+def _meetings(now: datetime) -> tuple[MeetingResult, ...]:
+    """A 2-1 series so far, one win needing overtime, from the favourite's side."""
+    day = now.date()
+    return (
+        MeetingResult(day - timedelta(days=60), True, 4, 1, ""),
+        MeetingResult(day - timedelta(days=35), False, 2, 3, "OT"),
+        MeetingResult(day - timedelta(days=12), True, 3, 2, "SO"),
+    )
+
 
 #: Stand-ins for the favourite's opponents; any of them is skipped if it
 #: happens to be the favourite itself, so a matchup never plays itself.
@@ -109,6 +121,8 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(
             Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1)), use_logos=False
         ),
+        DemoStep(Scene("matchup_meetings", upcoming, meetings=_meetings(now))),
+        DemoStep(Scene("matchup_meetings", upcoming, meetings=_meetings(now)), use_logos=False),
         DemoStep(Scene("countdown", soon)),
         DemoStep(Scene("game", soon)),
         DemoStep(Scene("game", live)),

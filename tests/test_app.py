@@ -1702,6 +1702,7 @@ def stub_renderer(app: ScoreboardApp) -> None:
         "draw_preview",
         "draw_standings",
         "draw_matchup",
+        "draw_matchup_meetings",
         "draw_conference_leaders",
         "draw_leaders",
         "draw_message",

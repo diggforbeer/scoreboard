@@ -177,7 +177,7 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # [[rotation]]
 # screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders
 # seconds = 10
-# "matchup" (season series vs. the next opponent), "top_west"/"top_east" (top five of
+# "matchup" (season series vs. the next opponent, then each finished meeting), "top_west"/"top_east" (top five of
 # that conference) and "leaders" (your team's top goal scorer, top point getter and
 # top two goalies) only show if listed here.
 

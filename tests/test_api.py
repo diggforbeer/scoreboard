@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import time
+from datetime import date
 
 import pytest
 import requests
 import responses
 
 from nhl_scoreboard.nhl.api import BASE_URL, NHLApiError, NHLClient
-from nhl_scoreboard.nhl.models import ClubStats, GoalieLine, SeasonSeriesRecord, SkaterLine
+from nhl_scoreboard.nhl.models import (
+    ClubStats,
+    GoalieLine,
+    SeasonSeriesRecord,
+    SeriesMeeting,
+    SkaterLine,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -354,6 +361,7 @@ def test_season_series_url_and_parsed_payload():
             "seasonSeries": [
                 {
                     "id": 2025020183,
+                    "gameDate": "2025-10-18",
                     "gameType": 2,
                     "gameState": "OFF",
                     "awayTeam": {"abbrev": "CGY", "score": 1},
@@ -366,7 +374,10 @@ def test_season_series_url_and_parsed_payload():
     )
     with NHLClient() as client:
         record = client.season_series(2025020183)
-    assert record == SeasonSeriesRecord(away_wins=0, home_wins=3)
+    assert (record.away_wins, record.home_wins) == (0, 3)
+    assert record.meetings == (
+        SeriesMeeting(2025020183, date(2025, 10, 18), "CGY", "NSH", 1, 4, "REG"),
+    )
     assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/2025020183/right-rail"
 
 
@@ -400,6 +411,90 @@ def test_season_series_returns_none_for_missing_or_malformed_wins(payload):
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/right-rail", json=payload, status=200)
     with NHLClient() as client:
         assert client.season_series(1) is None
+
+
+def _meeting(gid, day, state="OFF", away=("NSH", 2), home=("MIN", 3), period="REG", **extra):
+    entry = {
+        "id": gid,
+        "gameDate": day,
+        "gameType": 2,
+        "gameState": state,
+        "awayTeam": {"abbrev": away[0], "score": away[1]},
+        "homeTeam": {"abbrev": home[0], "score": home[1]},
+        "gameOutcome": {"lastPeriodType": period},
+    }
+    entry.update(extra)
+    return entry
+
+
+@responses.activate
+def test_season_series_meetings_finished_regular_season_only_oldest_first():
+    """Shape from real 2025-26 right-rail responses (#168): a future meeting
+    has no scores but still reads lastPeriodType REG, so it must not count."""
+    future = _meeting(5, "2026-03-01", state="FUT")
+    del future["awayTeam"]["score"], future["homeTeam"]["score"]
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/1/right-rail",
+        json={
+            "seasonSeriesWins": {"awayTeamWins": 1, "homeTeamWins": 2},
+            "seasonSeries": [
+                _meeting(4, "2026-01-10", away=("MIN", 2), home=("NSH", 3), period="OT"),
+                _meeting(2, "2025-10-14", away=("NSH", 4), home=("MIN", 1)),
+                future,
+                _meeting(6, "2026-04-20", gameType=3),  # a playoff game: not the series
+                _meeting(7, "2026-02-01", state="LIVE"),  # in progress: no result yet
+                _meeting(3, "2025-12-02"),
+            ],
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        meetings = client.season_series(1).meetings
+    assert [m.game_id for m in meetings] == [2, 3, 4]
+    assert meetings[2].last_period_type == "OT"
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        None,
+        "2-1",
+        {"gameType": 2, "gameState": "OFF"},
+        _meeting(1, "not a date"),
+        _meeting(1, "2025-10-14", away=("NSH", None)),
+        _meeting(1, "2025-10-14", away=("NSH", True)),
+        _meeting(1, "2025-10-14", away=(None, 2)),
+        _meeting(1, "2025-10-14", away=("NSH", 3)),  # 3-3 is no finished game
+    ],
+)
+@responses.activate
+def test_season_series_skips_malformed_meetings_but_keeps_the_tally(entry):
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/1/right-rail",
+        json={
+            "seasonSeriesWins": {"awayTeamWins": 1, "homeTeamWins": 0},
+            "seasonSeries": [entry, _meeting(2, "2025-11-01")],
+        },
+        status=200,
+    )
+    with NHLClient() as client:
+        record = client.season_series(1)
+    assert (record.away_wins, record.home_wins) == (1, 0)
+    assert [m.game_id for m in record.meetings] == [2]
+
+
+@responses.activate
+def test_season_series_without_a_meetings_list_still_has_the_tally():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/1/right-rail",
+        json={"seasonSeriesWins": {"awayTeamWins": 0, "homeTeamWins": 0}},
+        status=200,
+    )
+    with NHLClient() as client:
+        assert client.season_series(1) == SeasonSeriesRecord(0, 0)
 
 
 @responses.activate
