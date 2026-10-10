@@ -17,13 +17,16 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .models import (
+    ClubStats,
     Game,
     GoalEvent,
+    PlayerSeasonDetail,
     SeasonSeriesRecord,
     Situation,
     StandingsRow,
     Star,
     goal_events_from_landing,
+    player_details_from_api,
     three_stars_from_landing,
 )
 
@@ -96,6 +99,20 @@ class NHLClient:
             log.warning("Skipping malformed scoring for game %s: %s", game_id, exc)
             return ()
 
+    def team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        """Jersey number + season points for every player on ``team`` (#124).
+
+        Two calls, combined: neither ``roster/{team}/current`` nor
+        ``club-stats/{team}/now`` alone has both jersey number and points
+        (confirmed live) -- see ``player_details_from_api``. Malformed
+        entries are skipped per-player, same precedent as ``_parse_items``,
+        rather than losing the whole roster over one bad entry.
+        """
+        team = team.strip().upper()
+        roster = self._get(f"/roster/{team}/current")
+        club_stats = self._get(f"/club-stats/{team}/now")
+        return player_details_from_api(roster, club_stats)
+
     def season_series(self, game_id: int) -> SeasonSeriesRecord | None:
         """Head-to-head wins this season between ``game_id``'s two teams (#157).
 
@@ -136,6 +153,14 @@ class NHLClient:
         """
         payload = self._get(f"/standings/{date}")
         return _parse_items(payload.get("standings") or [], StandingsRow.from_api, "standings row")
+
+    def club_stats(self, team: str, date: str = "now") -> ClubStats:
+        """``team``'s season stats per player (#201); both lists empty pre-season.
+
+        ``now`` 307-redirects to ``/club-stats/{team}/{season}/{gameType}``.
+        """
+        payload = self._get(f"/club-stats/{team.strip().upper()}/{date}")
+        return ClubStats.from_api(payload)
 
     # -- plumbing --------------------------------------------------------
 

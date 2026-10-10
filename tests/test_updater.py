@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import http.client
 import importlib.util
 import io
 import json
@@ -14,7 +13,6 @@ import pytest
 
 from nhl_scoreboard import updater
 from nhl_scoreboard.config import Settings
-from nhl_scoreboard.status_server import StatusServer
 
 
 @pytest.fixture
@@ -231,66 +229,6 @@ def test_update_config_defaults_on():
     assert Settings.from_dict({"update": {"enabled": False}}).update.enabled is False
 
 
-# -- admin page ---------------------------------------------------------
-
-
-def _request(port, method, path, origin=True):
-    headers = {"Origin": f"http://127.0.0.1:{port}"} if origin else {}
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    try:
-        conn.request(method, path, headers=headers)
-        resp = conn.getresponse()
-        return resp.status, dict(resp.getheaders()), resp.read().decode()
-    finally:
-        conn.close()
-
-
-def test_admin_page_buttons_trigger_units(env):
-    updater._write_state(
-        {
-            "latest": "v2026.09.29",
-            "available": True,
-            "applicable": True,
-            "checked_at": "now",
-        }
-    )
-    triggered: list[str] = []
-    server = StatusServer(
-        snapshot=dict,
-        port=0,
-        settings=Settings,
-        host="127.0.0.1",
-        update_trigger=triggered.append,
-    )
-    server.start()
-    try:
-        _, _, body = _request(server.port, "GET", "/")
-        assert "Check for updates now" in body
-        assert "Install v2026.09.29" in body
-
-        status, headers, _ = _request(server.port, "POST", "/update/check")
-        assert status == 303 and headers["Location"] == "/?update=check"
-        assert _request(server.port, "POST", "/update/apply")[0] == 303
-        assert triggered == ["check", "apply"]
-
-        assert _request(server.port, "POST", "/update/apply", origin=False)[0] == 403
-        assert triggered == ["check", "apply"]
-    finally:
-        server.stop()
-
-
-def test_admin_page_hides_install_when_not_applicable(env):
-    updater._write_state({"latest": "v2026.09.29", "available": True, "applicable": False})
-    server = StatusServer(snapshot=dict, port=0, settings=Settings, host="127.0.0.1")
-    server.start()
-    try:
-        _, _, body = _request(server.port, "GET", "/")
-        assert "Install v" not in body
-        assert "Check for updates now" in body
-    finally:
-        server.stop()
-
-
 # -- bundle builder -----------------------------------------------------
 
 
@@ -309,3 +247,61 @@ def test_build_app_bundle_matches_what_the_updater_expects(tmp_path):
     updater._extract(bundle, dest)
     assert (dest / "nhl_scoreboard" / "updater.py").is_file()
     assert not list(dest.rglob("__pycache__"))
+
+
+def test_build_app_bundle_includes_admin_dist_when_built(tmp_path):
+    path = Path(__file__).resolve().parent.parent / "scripts" / "build-app-bundle.py"
+    spec = importlib.util.spec_from_file_location("build_app_bundle", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>")
+    (dist / "assets" / "app.js").write_text("js")
+    module.build("v2026.09.29", tmp_path / "out", admin_dist=dist)
+    dest = tmp_path / "x"
+    updater._extract(tmp_path / "out" / updater.BUNDLE_ASSET, dest)
+    assert (dest / "admin" / "index.html").is_file()
+    assert (dest / "admin" / "assets" / "app.js").is_file()
+
+
+# -- admin frontend redeploy (#185) --------------------------------------
+
+
+@pytest.fixture
+def admin(tmp_path, monkeypatch):
+    directory = tmp_path / "share" / "admin"
+    directory.mkdir(parents=True)
+    (directory / "index.html").write_text("OLD-UI")
+    monkeypatch.setattr(updater, "ADMIN_DIR", directory)
+    return directory
+
+
+WITH_UI = {**GOOD, "admin/index.html": "NEW-UI"}
+
+
+def test_apply_redeploys_admin_frontend(env, admin, monkeypatch):
+    _prepared(env, monkeypatch, _bundle(WITH_UI), healthy=True)
+    assert updater.apply() is True
+    assert (admin / "index.html").read_text() == "NEW-UI"
+    assert not (env / "admin").exists()
+    assert not admin.with_name("admin.prev").exists()
+    assert not admin.with_name("admin.new").exists()
+
+
+def test_apply_rolls_back_admin_frontend_with_the_backend(env, admin, monkeypatch):
+    _prepared(env, monkeypatch, _bundle(WITH_UI), healthy=False)
+    monkeypatch.setattr(
+        updater,
+        "_service_active",
+        lambda: (env / "nhl_scoreboard" / "__init__.py").read_text() == "OLD",
+    )
+    assert updater.apply() is False
+    assert (admin / "index.html").read_text() == "OLD-UI"
+    assert not admin.with_name("admin.prev").exists()
+
+
+def test_apply_without_admin_in_bundle_leaves_frontend_alone(env, admin, monkeypatch):
+    _prepared(env, monkeypatch, _bundle(GOOD), healthy=True)
+    assert updater.apply() is True
+    assert (admin / "index.html").read_text() == "OLD-UI"

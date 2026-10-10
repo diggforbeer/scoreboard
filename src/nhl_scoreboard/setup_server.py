@@ -1,8 +1,10 @@
 """WiFi setup page served while the board's own first-boot AP is up (#132).
 
 Sub-issue of #116, depending on the AP/DHCP/DNS infrastructure #131 already
-built. Stdlib-only (`http.server`), same "no heavy dependencies on the
-device" stance as `status_server.py`. Scope is strictly the page and
+built. Stdlib-only (`http.server`) -- this page genuinely must work with
+zero network connectivity (it's the mechanism for getting the board online
+at all), unlike `admin_server.py`, which only needs to work once the board
+already has real connectivity. Scope is strictly the page and
 captive-portal probe handling -- collecting a network choice and a
 password and handing it off to a submission file. Actually joining that
 network is #133's job, not this module's: this only ever writes the

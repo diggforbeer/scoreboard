@@ -6,18 +6,18 @@ scheduling and selection logic against a stand-in that records draw calls.
 
 from __future__ import annotations
 
-import http.client
+import dataclasses
 import json
 import os
 import signal
 import threading
 import time
-import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from websockets.sync.client import connect
 
 from nhl_scoreboard import updater
 from nhl_scoreboard.app import (
@@ -35,12 +35,12 @@ from nhl_scoreboard.nhl.api import NHLApiError
 from nhl_scoreboard.nhl.models import (
     Game,
     GoalEvent,
+    PlayerSeasonDetail,
     SeasonSeriesRecord,
     Situation,
     StandingsRow,
     Star,
 )
-from nhl_scoreboard.status_server import _FIELDS_BY_SECTION
 from nhl_scoreboard.wifi_join import WifiJoinAttempt
 
 
@@ -110,6 +110,8 @@ class FakeClient:
         self.situations: dict[int, Situation | None] = {}
         self.goal_scoring_calls: list[int] = []
         self.goal_events: dict[int, tuple[GoalEvent, ...]] = {}
+        self.team_roster_calls: list[str] = []
+        self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
         self.three_stars_calls: list[int] = []
         self.stars: dict[int, tuple[Star, ...]] = {}
         self.standings_rows: list[StandingsRow] = []
@@ -135,6 +137,12 @@ class FakeClient:
         if self.fail:
             raise NHLApiError("boom")
         return self.goal_events.get(game_id, ())
+
+    def team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        self.team_roster_calls.append(team)
+        if self.fail:
+            raise NHLApiError("boom")
+        return self.team_rosters.get(team, {})
 
     def three_stars(self, game_id: int) -> tuple[Star, ...]:
         self.three_stars_calls.append(game_id)
@@ -200,7 +208,7 @@ class FakeClockSource:
         self.now += seconds
 
 
-class FakeStatusServer:
+class FakeAdminServer:
     def __init__(self) -> None:
         self.started = False
         self.stopped = False
@@ -411,11 +419,14 @@ def test_situation_fetch_failure_keeps_last_value(fake_backend, games):
 # -- goal detail polling: favourite's live game only (#122) ------------------
 
 
-def goal_event(team="CGY", scorer="F. FORSBERG", goals=1, strength="ev") -> GoalEvent:
+def goal_event(
+    team="CGY", scorer="F. FORSBERG", goals=1, strength="ev", player_id=8480000
+) -> GoalEvent:
     return GoalEvent(
         team_abbrev=team,
         scorer_name=scorer,
         scorer_goals_to_date=goals,
+        scorer_player_id=player_id,
         assists=(),
         strength=strength,
     )
@@ -544,17 +555,17 @@ def test_goal_detail_state_pruned_with_the_rest(fake_backend, games):
     assert app._shown_goal_events == {}
 
 
-def test_status_server_built_by_default(fake_backend, games):
+def test_admin_server_built_by_default(fake_backend, games):
     app = build_app(fake_backend, games)
-    assert app.status_server is not None
-    assert app.status_server.port == 8080
+    assert app.admin_server is not None
+    assert app.admin_server.port == 8080
 
 
-def test_status_server_not_built_when_disabled(fake_backend, games):
+def test_admin_server_not_built_when_disabled(fake_backend, games):
     settings = Settings()
     settings.status.enabled = False
     app = ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is None
+    assert app.admin_server is None
 
 
 def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
@@ -652,6 +663,73 @@ def test_reload_picks_up_a_changed_setting(fake_backend, games, tmp_path):
 
     assert app.reload_config_if_changed() is True
     assert app.settings.scoreboard.favourite_team == "TOR"
+
+
+def test_reload_invalidates_schedule_cache_on_favourite_team_change(fake_backend, games, tmp_path):
+    """next_favourite_game()'s _schedule cache is keyed purely by elapsed
+    time, not by which team it was fetched for -- a favourite switch must
+    force a fresh fetch, or the countdown/preview/matchup screens keep
+    showing the *previous* team's next game for up to an hour. Confirmed
+    live (#178's admin-page work): this is exactly why the matchup/
+    season-series screen (#157) kept showing the old opponent after a
+    favourite switch -- it's fed straight from next_favourite_game()."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    # Simulate an already-fetched, still-fresh schedule cache for the old favourite.
+    app._schedule = (app.monotonic(), games)
+    app._schedule_retry_after = app.monotonic() + 100
+
+    path.write_text('[scoreboard]\nfavourite_team = "TOR"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app._schedule is None
+    assert app._schedule_retry_after == 0.0
+
+
+def test_reload_keeps_schedule_cache_when_favourite_team_unchanged(fake_backend, games, tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "UTC"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app._schedule = (app.monotonic(), games)
+    app._schedule_retry_after = app.monotonic() + 100
+    cached = app._schedule
+
+    # Change something unrelated -- the schedule cache must survive.
+    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "America/Chicago"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    assert app._schedule is cached
+
+
+def test_favourite_team_switch_triggers_a_fresh_schedule_fetch(fake_backend, games, tmp_path):
+    """End-to-end: neither EDM nor WPG has a game in the fixture (today's
+    slate), so favourite_game_today() answers None for both and
+    next_favourite_game() must consult the season schedule -- proving the
+    invalidation actually changes real fetch behaviour, not just internal
+    bookkeeping."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nfavourite_team = "EDM"\n')
+    app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
+    app.refresh()
+    assert app.favourite_game_today() is None
+
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 1
+
+    # Still within the 1-hour TTL -- a second call with no favourite
+    # change must not refetch.
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 1
+
+    path.write_text('[scoreboard]\nfavourite_team = "WPG"\n')
+    _touch_later(path, app)
+    app.reload_config_if_changed()
+
+    app.next_favourite_game()
+    assert app.client.schedule_calls == 2, "switching favourite must force a fresh schedule fetch"
 
 
 def test_reload_keeps_previous_settings_on_parse_error(fake_backend, games, tmp_path, caplog):
@@ -870,14 +948,14 @@ def test_run_stops_on_sigterm_and_shuts_down(fake_backend, games):
     settings.scoreboard.rotate_seconds = 1_000_000
     settings.panel.brightness_poll_seconds = 1_000_000
     src = FakeClockSource()
-    status = FakeStatusServer()
+    status = FakeAdminServer()
     app = ScoreboardApp(
         settings,
         client=FakeClient(_non_live_games(games)),
         backend=fake_backend,
         monotonic=src.monotonic,
         sleep=src.sleep,
-        status_server=status,
+        admin_server=status,
     )
     frame_count = 0
 
@@ -1158,63 +1236,63 @@ def test_reload_keeps_light_sensor_when_auto_brightness_unchanged(fake_backend, 
     assert app.light_sensor is old_sensor
 
 
-def test_reload_builds_status_server_when_enabled(fake_backend, games, tmp_path):
+def test_reload_builds_admin_server_when_enabled(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = false\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is None
+    assert app.admin_server is None
 
     path.write_text("[status]\nenabled = true\nport = 9191\n")
     _touch_later(path, app)
     app.reload_config_if_changed()
 
     # Built but not started: run() never ran, so nothing should bind a socket.
-    assert app.status_server is not None
-    assert app.status_server.port == 9191
+    assert app.admin_server is not None
+    assert app.admin_server.port == 9191
 
 
-def test_reload_drops_status_server_when_disabled(fake_backend, games, tmp_path):
+def test_reload_drops_admin_server_when_disabled(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = true\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is not None
+    assert app.admin_server is not None
 
     path.write_text("[status]\nenabled = false\n")
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is None
+    assert app.admin_server is None
 
 
-def test_reload_rebuilds_status_server_on_port_change(fake_backend, games, tmp_path):
+def test_reload_rebuilds_admin_server_on_port_change(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = true\nport = 9191\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    old_server = app.status_server
+    old_server = app.admin_server
 
     path.write_text("[status]\nenabled = true\nport = 9292\n")
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is not old_server
-    assert app.status_server is not None
-    assert app.status_server.port == 9292
+    assert app.admin_server is not old_server
+    assert app.admin_server is not None
+    assert app.admin_server.port == 9292
 
 
-def test_reload_keeps_status_server_when_status_unchanged(fake_backend, games, tmp_path):
+def test_reload_keeps_admin_server_when_status_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    old_server = app.status_server
+    old_server = app.admin_server
 
     path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "TOR"\n')
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is old_server
+    assert app.admin_server is old_server
 
 
-def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, tmp_path):
+def test_reload_starts_admin_server_when_inside_run_loop(fake_backend, games, tmp_path):
     """run() only starts the server once, before looping; a live rebuild must start itself."""
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = false\n")
@@ -1225,14 +1303,19 @@ def test_reload_starts_status_server_when_inside_run_loop(fake_backend, games, t
     _touch_later(path, app)
     app.reload_config_if_changed()
 
-    assert app.status_server is not None
+    assert app.admin_server is not None
     try:
-        url = f"http://127.0.0.1:{app.status_server.port}/"
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            assert resp.status == 200
-            assert "Hockey Scoreboard" in resp.read().decode("utf-8")
+        # A real WebSocket round trip, not just "did something bind the
+        # port" -- proves the server rebuilt inside the live loop is
+        # actually serving admin_server.py's real protocol, not merely
+        # listening. No frontend/dist on disk in this test environment, so
+        # a plain HTTP GET (the other half of what this server does, #178
+        # story 10) isn't checked here -- test_admin_server.py covers that.
+        with connect(f"ws://127.0.0.1:{app.admin_server.port}/", open_timeout=5) as ws:
+            message = json.loads(ws.recv(timeout=5))
+            assert message["type"] == "version"
     finally:
-        app.status_server.stop()
+        app.admin_server.stop()
 
 
 # -- physical button (#50) -------------------------------------------------
@@ -1458,97 +1541,90 @@ def test_reload_keeps_button_when_button_unchanged(fake_backend, games, tmp_path
     assert not spy.closed
 
 
-# -- status page config editor (#110) --------------------------------------
+# -- admin page config editor (#110, #178 story 10) -------------------------
 
 
-def _form_for(settings: Settings, section: str, **overrides: object) -> dict[str, str]:
-    """A full form submission for ``section``, same helper as test_status_server.py."""
-    data: dict[str, str] = {"section": section}
-    for field in _FIELDS_BY_SECTION[section]:
-        value = (
-            overrides[field.key]
-            if field.key in overrides
-            else getattr(getattr(settings, section), field.key)
-        )
-        if field.kind == "bool":
-            if value:
-                data[field.key] = "true"
-        else:
-            data[field.key] = str(value)
+def _save_data_for(settings: Settings, section: str, **overrides: object) -> dict[str, object]:
+    """A full save payload for ``section``, same helper role _form_for had
+    for status_server.py's HTML forms -- JSON keeps real types, so unlike
+    that helper there's no bool->string encoding to do."""
+    data = dataclasses.asdict(getattr(settings, section))
+    if section == "scoreboard":
+        # show_standings is a real field (so it's in the asdict above) but
+        # no longer part of the Scoreboard section's own save contract --
+        # see admin_server.py's _SCOREBOARD_FIELDS and App.tsx's
+        # saveScoreboard, which strip it the same way for the same reason.
+        del data["show_standings"]
+    data.update(overrides)
     return data
 
 
-def _post(port: int, data: dict[str, str]) -> int:
-    body = urllib.parse.urlencode(data)
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    try:
-        conn.request(
-            "POST",
-            "/save",
-            body=body,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Origin": f"http://127.0.0.1:{port}",
-            },
-        )
-        resp = conn.getresponse()
-        resp.read()
-        return resp.status
-    finally:
-        conn.close()
+def _ws_save(port: int, section: str, data: dict[str, object]) -> dict[str, object]:
+    """Connect, send one save, and return the saved/error ack -- draining
+    and discarding every message ahead of it (the initial per-section config
+    dump; see admin_server.py's _handle), since this only cares about the
+    one save's own outcome, not the connect-time payload."""
+    with connect(f"ws://127.0.0.1:{port}/", open_timeout=5) as ws:
+        ws.send(json.dumps({"type": "save", "section": section, "data": data}))
+        while True:
+            message = json.loads(ws.recv(timeout=5))
+            if message["type"] in ("saved", "error"):
+                return message
 
 
-def test_status_page_post_writes_file_and_reload_picks_it_up(fake_backend, games, tmp_path):
-    """do_POST (#110) only ever writes the file; reload_config_if_changed() (#51) -- polled
-    every main-loop tick -- is what actually applies the change to the running app."""
+def test_admin_page_save_writes_file_and_reload_picks_it_up(fake_backend, games, tmp_path):
+    """A save (#110, #178 story 10) only ever writes the file;
+    reload_config_if_changed() (#51) -- polled every main-loop tick -- is
+    what actually applies the change to the running app."""
     path = tmp_path / "scoreboard.toml"
     path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is not None
-    app.status_server.start()
+    assert app.admin_server is not None
+    app.admin_server.start()
     try:
-        status = _post(
-            app.status_server.port, _form_for(app.settings, "scoreboard", favourite_team="tor")
-        )
-        assert status == 303
+        data = _save_data_for(app.settings, "scoreboard", favourite_team="TOR")
+        ack = _ws_save(app.admin_server.port, "scoreboard", data)
+        assert ack["type"] == "saved"
     finally:
-        app.status_server.stop()
+        app.admin_server.stop()
 
-    # Not applied yet -- the request thread never touches the live Settings.
+    # Not applied yet -- the admin server's own thread never touches the
+    # live Settings.
     assert app.settings.scoreboard.favourite_team == "NSH"
     _touch_later(path, app)
     assert app.reload_config_if_changed() is True
     assert app.settings.scoreboard.favourite_team == "TOR"
 
 
-def test_status_page_post_disabling_status_does_not_crash_in_flight_request(
+def test_admin_page_save_disabling_status_does_not_crash_in_flight_request(
     fake_backend, games, tmp_path
 ):
-    """The status page can disable itself (#110 SS4); the in-flight response must still
+    """The admin page can disable itself (#110 SS4); the in-flight response must still
     complete normally -- the teardown only happens on the next reload tick."""
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = true\nport = 0\n")
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    assert app.status_server is not None
-    app.status_server.start()
+    assert app.admin_server is not None
+    app.admin_server.start()
     try:
-        status = _post(app.status_server.port, _form_for(app.settings, "status", enabled=False))
-        assert status == 303
+        data = _save_data_for(app.settings, "status", enabled=False)
+        ack = _ws_save(app.admin_server.port, "status", data)
+        assert ack["type"] == "saved"
     finally:
-        app.status_server.stop()
+        app.admin_server.stop()
 
     _touch_later(path, app)
     assert app.reload_config_if_changed() is True
-    assert app.status_server is None
+    assert app.admin_server is None
 
 
-def test_status_page_post_concurrent_with_reload_does_not_raise(fake_backend, games, tmp_path):
-    """A POST from the request thread and reload_config_if_changed() on the main thread
-    running at the same time must not raise or deadlock (#110 SS1)."""
+def test_admin_page_save_concurrent_with_reload_does_not_raise(fake_backend, games, tmp_path):
+    """A save from the admin server's own thread and reload_config_if_changed() on the
+    main thread running at the same time must not raise or deadlock (#110 SS1)."""
     path = tmp_path / "scoreboard.toml"
     path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
-    app.status_server.start()
+    app.admin_server.start()
     errors: list[Exception] = []
 
     def hammer_reload() -> None:
@@ -1562,13 +1638,12 @@ def test_status_page_post_concurrent_with_reload_does_not_raise(fake_backend, ga
         thread = threading.Thread(target=hammer_reload)
         thread.start()
         for i in range(20):
-            team = "tor" if i % 2 else "nsh"
-            _post(
-                app.status_server.port, _form_for(app.settings, "scoreboard", favourite_team=team)
-            )
+            team = "TOR" if i % 2 else "NSH"
+            data = _save_data_for(app.settings, "scoreboard", favourite_team=team)
+            _ws_save(app.admin_server.port, "scoreboard", data)
         thread.join(timeout=5)
     finally:
-        app.status_server.stop()
+        app.admin_server.stop()
 
     assert errors == []
 
@@ -1627,6 +1702,8 @@ def stub_renderer(app: ScoreboardApp) -> None:
         "draw_preview",
         "draw_standings",
         "draw_matchup",
+        "draw_conference_leaders",
+        "draw_leaders",
         "draw_message",
         "draw_clock",
     ):
@@ -1634,17 +1711,29 @@ def stub_renderer(app: ScoreboardApp) -> None:
 
 
 def run_demo_for_frames(app: ScoreboardApp, src: FakeClockSource, frames: int) -> None:
-    remaining = frames
+    """Run the demo for ``frames`` worth of FRAME_INTERVAL time.
+
+    Time, not a sleep count: holiday steps (#237) animate, sleeping
+    ANIMATION_FRAME_INTERVAL many more times within the same step.
+    """
+    end = frames * FRAME_INTERVAL - 1e-9
 
     def sleep(seconds: float) -> None:
-        nonlocal remaining
         src.sleep(seconds)
-        remaining -= 1
-        if remaining <= 0:
+        if src.now >= end:
             app._running = False
 
     app.sleep = sleep
     app.run_demo()
+
+
+def first_draw_per_step(calls: list[tuple]) -> list[tuple]:
+    """One spy record per demo step: animated holiday steps redraw every frame."""
+    firsts: list[tuple] = []
+    for call in calls:
+        if not firsts or call[2] >= firsts[-1][2] + DEMO_SCENE_SECONDS:
+            firsts.append(call)
+    return firsts
 
 
 def test_demo_draws_each_step_in_order_for_demo_scene_seconds(fake_backend, games):
@@ -1668,7 +1757,8 @@ def test_demo_loops_back_to_the_first_step(fake_backend, games):
 
     run_demo_for_frames(app, src, (len(steps) + 1) * TICKS_PER_SCENE)
 
-    assert [c[0] for c in calls] == [s.scene for s in steps] + [steps[0].scene]
+    firsts = first_draw_per_step(calls)
+    assert [c[0] for c in firsts] == [s.scene for s in steps] + [steps[0].scene]
 
 
 def test_demo_never_touches_the_real_state_machine(fake_backend, games):
@@ -1711,8 +1801,8 @@ def test_demo_goal_scenes_never_play_the_horn(fake_backend, games):
 def test_demo_stops_within_one_frame_of_a_signal(fake_backend, games):
     app, src = demo_app(fake_backend, games)
     stub_renderer(app)
-    status = FakeStatusServer()
-    app.status_server = status
+    status = FakeAdminServer()
+    app.admin_server = status
     frames = 0
 
     def sleep(seconds: float) -> None:
@@ -1741,6 +1831,7 @@ def test_demo_toggles_logos_per_step_and_restores_them(fake_backend, games):
 
     run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
 
+    calls = first_draw_per_step(calls)
     assert len(calls) == len(steps)
     for step, (_scene, logos, _t) in zip(steps, calls, strict=True):
         assert logos is (library if step.use_logos else None)
@@ -1757,7 +1848,7 @@ def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, game
 
     run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
 
-    assert len(calls) == len(steps)
+    assert len(first_draw_per_step(calls)) == len(steps)
     assert all(c[1] is None for c in calls)
 
 
@@ -2204,3 +2295,69 @@ def test_config_reload_updates_wifi_join_connect_timeout_in_place(fake_backend, 
     app._apply_reloaded_settings(Settings.load(config_path))
     assert app.wifi_join is join, "reload updates the existing object, not a new one"
     assert app.wifi_join.connect_timeout == 20.0
+
+
+def test_boot_volume_is_applied_off_the_render_thread(fake_backend, games):
+    seen = []
+
+    class VolumeHorn(RecordingHorn):
+        def apply_volume(self) -> bool:
+            seen.append(threading.current_thread())
+            return True
+
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, horn=VolumeHorn()
+    )
+    app._apply_boot_volume().join(timeout=5)
+
+    assert len(seen) == 1
+    assert seen[0] is not threading.main_thread()
+
+
+def test_boot_volume_failure_does_not_raise(fake_backend, games):
+    app = ScoreboardApp(
+        Settings(), client=FakeClient(games), backend=fake_backend, horn=RecordingHorn()
+    )
+    app._apply_boot_volume().join(timeout=5)  # RecordingHorn has no apply_volume
+
+
+# -- live demo toggle (#204) -------------------------------------------------
+
+
+def test_live_demo_steps_through_scenes_then_returns_to_real_scenes(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    stub_renderer(app)
+    calls = spy_draw_scene(app)
+    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+
+    app.set_demo_mode(True)
+    app.draw()
+    src.sleep(DEMO_SCENE_SECONDS)
+    app.draw()
+    assert [c[0] for c in calls] == [s.scene for s in steps[:2]]
+    assert app.status_snapshot()["demo mode"] == "on"
+    assert app.status_snapshot()["scene"] == "demo"
+
+    app.set_demo_mode(False)
+    calls.clear()
+    app.draw()
+    # This fixture's app never called refresh(), so real-mode select_scene()
+    # legitimately falls through to the same "connecting" scene demo step 0
+    # also uses (Scene equality is by value, not by which mode produced it)
+    # -- asserting non-membership in the demo step list is flaky by
+    # coincidence, not a real signal. What actually proves demo mode is off
+    # is the real select_scene() value itself, and status_snapshot's "scene"
+    # field (which reports the literal string "demo" while it's on,
+    # regardless of the underlying Scene kind -- see status_snapshot's own
+    # docstring/implementation).
+    assert calls[0][0] == Scene("connecting")
+    assert app.status_snapshot()["demo mode"] == "off"
+    assert app.status_snapshot()["scene"] == "connecting"
+
+
+def test_live_demo_does_not_override_night_blanking(fake_backend, games):
+    app = night_app(fake_backend, games, dim_brightness=0)
+    calls = spy_draw_scene(app)
+    app.set_demo_mode(True)
+    app.draw()
+    assert calls == []

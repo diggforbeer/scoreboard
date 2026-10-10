@@ -49,6 +49,7 @@ works, and still fully supported, not replaced by the flow above.
 | Audio (optional) | USB speaker or USB audio adapter, for the goal horn — see [Audio](#audio) |
 | Light sensor (optional) | BH1750 breakout on I2C (SDA/SCL/VCC/GND), for `auto_brightness` (#44) |
 | Button (optional) | Momentary push-button between GPIO 26 and GND, for `[button]` (#50) |
+| Case (optional) | 3D-printed enclosure, see [Enclosure](#enclosure) |
 
 The adapter board's pinout is the driver's `regular` mapping, with output-enable
 on GPIO 18. That is the hardware-PWM pin, so you get flicker-free refresh with
@@ -66,6 +67,27 @@ to damage one of them.
 
 Panel geometry is configuration-driven, so a single 64×32 or a 128×64 stack
 works too — see `[panel]` in the config file.
+
+## Enclosure
+
+A 3D-printed case for the Pi and the two panels, designed in OpenSCAD
+([`enclosure/`](enclosure/)). It prints in two halves that bolt together
+(too wide for most beds), the panels hold on with their own magnetic screws,
+and it has a side power-jack hole, a light sensor and speaker grilles in the bottom
+wall, a port faceplate for the Pi, and vent slits.
+
+[![The enclosure, front view with the open face, Pi side and floor grilles](enclosure/scoreboard-case-v3.png)](enclosure/scoreboard-case-v3.png)
+
+- Ready-to-slice STLs sit beside the models: `enclosure/scoreboard-case-v3-left.stl` and
+  `-right.stl` (Pi 4), or the `-pi3b` pair for a Pi 3B+. Each case file prints the
+  version it was built from on the inside of the back wall.
+- Optional retro 70s legs to glue on afterwards: [`enclosure/legs/`](enclosure/legs/)
+  (print four of `scoreboard-legs-leg.stl`).
+
+[![The retro legs under the case](enclosure/legs/scoreboard-legs.png)](enclosure/legs/scoreboard-legs.png)
+
+Design notes, hardware list and the OpenSCAD commands are in
+[`enclosure/README.md`](enclosure/README.md).
 
 ## Status
 
@@ -91,7 +113,7 @@ Early development. Working today:
 - [x] Optional web status page for headless debugging, with a config editor
 - [x] `--demo` mode that loops every scene with synthetic data, no network needed
 - [x] Optional push-button on GPIO 26: tap to mute the goal horn, hold to skip to the next game
-- [ ] Verified on real hardware
+- [x] Verified on real hardware
 
 ## Development
 
@@ -153,9 +175,11 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders
 # seconds = 10
-# "matchup" (season series vs. the next opponent) only shows if listed here.
+# "matchup" (season series vs. the next opponent), "top_west"/"top_east" (top five of
+# that conference) and "leaders" (your team's top goal scorer, top point getter and
+# top two goalies) only show if listed here.
 
 [audio]
 enabled = true
@@ -179,6 +203,12 @@ end_time = "07:00"
 dim_brightness = 0           # 0-100; 0 blanks the panel outright instead of a dim screen
 suppress_scope = "tracked"   # "tracked" = only the favourite's game holds off dimming; "all" = any live game
 cooldown_minutes = 15        # how long after that game ends before dimming resumes
+
+[holiday]
+enabled = false              # seasonal decorations; each holiday only shows during its own dates
+themes = ["halloween"]       # which holidays to show
+flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
+flyby_max_minutes = 20
 
 [panel]
 rows = 32
@@ -245,6 +275,10 @@ still only ever fire for your favourite team's own goal.
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
 a tracked game is live or was held recently, so a late finish stays
 readable.
+
+`[holiday]` adds seasonal decorations on top. In October, a ghost floats
+across the board every so often (even during games, though never over a
+GOAL screen) and jack-o'-lanterns flank the clock.
 
 ## Audio
 

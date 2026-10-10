@@ -19,6 +19,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import tomlkit
 
+from .display.holiday import HOLIDAY_NAMES
+
 log = logging.getLogger(__name__)
 
 #: Nashville's zone, used whenever a configured timezone can't be resolved
@@ -245,8 +247,17 @@ class ScoreboardConfig:
 #: "countdown_preview" auto-switches between countdown/preview based on
 #: countdown_hours, same as always -- which one shows isn't a user choice,
 #: so it isn't split into two separately configurable screens (#150).
-#: "matchup" (#157) is opt-in only: never part of the derived default list.
-VALID_ROTATION_SCREENS = ("countdown_preview", "standings", "clock", "matchup")
+#: "matchup" (#157), "top_west"/"top_east" (#200) and "leaders" (#201) are
+#: opt-in only: never part of the derived default list.
+VALID_ROTATION_SCREENS = (
+    "countdown_preview",
+    "standings",
+    "clock",
+    "matchup",
+    "top_west",
+    "top_east",
+    "leaders",
+)
 
 
 @dataclass(slots=True)
@@ -309,6 +320,16 @@ class AudioConfig:
     #: Override the search directory for horn WAVs. Empty uses the built-in
     #: search path (NHL_SCOREBOARD_HORN_DIR env var, then the shipped assets).
     horn_dir: str = ""
+    #: 0-100, applied via the ALSA mixer (GoalHornPlayer.apply_volume) --
+    #: not a per-play gain on the WAV itself. 100 leaves the mixer at
+    #: whatever it already was rather than assuming a "correct" starting
+    #: level, matching every other 0-100 field in this project
+    #: (PanelConfig.max_brightness, NightModeConfig.dim_brightness's own
+    #: upper end).
+    volume: int = 100
+
+    def __post_init__(self) -> None:
+        self.volume = max(0, min(100, self.volume))
 
 
 @dataclass(slots=True)
@@ -459,6 +480,52 @@ class ButtonConfig:
             self.hold_seconds = MIN_HOLD_SECONDS
 
 
+@dataclass(slots=True)
+class HolidayConfig:
+    """Seasonal decorations over the normal scenes (#236, #237).
+
+    Off by default. ``themes`` is the per-holiday checkbox list: each one
+    only shows inside its own date window (``display/holiday.py``), so
+    enabling all of them is the normal setting, not a calendar to manage.
+    """
+
+    enabled: bool = False
+    themes: list[str] = field(default_factory=lambda: list(HOLIDAY_NAMES))
+    #: Random gap between fly-bys (the Halloween ghost). Generic names, not
+    #: ghost_*: every later holiday's fly-by (#239-#242) reuses them.
+    flyby_min_minutes: float = 5.0
+    flyby_max_minutes: float = 20.0
+
+    def __post_init__(self) -> None:
+        if isinstance(self.themes, str):
+            self.themes = [self.themes]
+        themes: list[str] = []
+        for raw in self.themes:
+            name = str(raw).strip().lower()
+            if name not in HOLIDAY_NAMES:
+                log.warning(
+                    "Ignoring unknown holiday theme %r (must be one of %s)",
+                    raw,
+                    ", ".join(HOLIDAY_NAMES),
+                )
+            elif name not in themes:
+                themes.append(name)
+        self.themes = themes
+        # A sub-minute floor: back-to-back ghosts stop being a surprise.
+        self.flyby_min_minutes = max(1.0, float(self.flyby_min_minutes))
+        self.flyby_max_minutes = max(1.0, float(self.flyby_max_minutes))
+        if self.flyby_min_minutes > self.flyby_max_minutes:
+            log.warning(
+                "holiday.flyby_min_minutes (%s) > flyby_max_minutes (%s); swapping",
+                self.flyby_min_minutes,
+                self.flyby_max_minutes,
+            )
+            self.flyby_min_minutes, self.flyby_max_minutes = (
+                self.flyby_max_minutes,
+                self.flyby_min_minutes,
+            )
+
+
 def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
     """Parse a 24-hour "HH:MM", warning and falling back to ``default`` if it isn't one."""
     try:
@@ -486,6 +553,7 @@ class Settings:
     night_mode: NightModeConfig = field(default_factory=NightModeConfig)
     update: UpdateConfig = field(default_factory=UpdateConfig)
     button: ButtonConfig = field(default_factory=ButtonConfig)
+    holiday: HolidayConfig = field(default_factory=HolidayConfig)
     source_path: Path | None = None
 
     @classmethod
@@ -520,6 +588,7 @@ class Settings:
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
             update=_build(UpdateConfig, raw.get("update", {})),
             button=_build(ButtonConfig, raw.get("button", {})),
+            holiday=_build(HolidayConfig, raw.get("holiday", {})),
         )
 
     def save(self, updates: Mapping[str, Any]) -> None:
@@ -587,6 +656,7 @@ class Settings:
         self.night_mode = reloaded.night_mode
         self.update = reloaded.update
         self.button = reloaded.button
+        self.holiday = reloaded.holiday
 
 
 def _build(cls: type, raw: dict[str, Any]) -> Any:

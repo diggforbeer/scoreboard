@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -107,12 +108,18 @@ class AssistDetail:
 
     name: str
     assists_to_date: int
+    #: Free in the same landing payload as everything else here (#124) --
+    #: unlike the scorer's own entry, an assist's raw object carries this
+    #: directly, confirmed live. Unlike scorer_sweater_number/scorer_points
+    #: below, no second call needed for this one.
+    sweater_number: int
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> AssistDetail:
         return cls(
             name=_default_str(raw.get("name")),
             assists_to_date=int(raw.get("assistsToDate") or 0),
+            sweater_number=int(raw.get("sweaterNumber") or 0),
         )
 
 
@@ -123,19 +130,30 @@ class GoalEvent:
     Confirmed free in that payload against two real live games: scorer name
     (already compact "F. Lastname"), the scorer's season goal total
     (``goalsToDate``, confirmed genuinely cumulative-season, not per-game),
-    each assister's name/season assist total, and ``strength``
-    ("ev"/"pp"/"sh"). NOT confirmed free, and deliberately not modelled here:
-    jersey number (the scorer's own entry has none, unlike an assist's
-    ``sweaterNumber``), total points for either player, and explicit
-    primary/secondary assist labelling -- see #124, split out because
-    closing those gaps needs a second API call this issue doesn't.
+    each assister's name/season assist total/``sweaterNumber``, and
+    ``strength`` ("ev"/"pp"/"sh"). NOT free from this endpoint: the
+    scorer's own jersey number, and total points (goals + assists) for
+    either player -- this endpoint gives only one half of that sum per
+    person. ``scorer_sweater_number``/``scorer_points`` close that gap
+    (#124) but need a second call this dataclass alone can't make; both
+    stay ``None`` until ``ScoreboardApp`` fills them in via
+    ``dataclasses.replace`` once the scoring team's roster+stats are
+    fetched, and permanently ``None`` if that fetch ever fails -- the
+    screen still shows without them, same graceful-degradation precedent
+    as the rest of this app.
     """
 
     team_abbrev: str
     scorer_name: str
     scorer_goals_to_date: int
+    #: Free in this payload (unlike an assist's own id, not needed since
+    #: sweater_number is already free there) -- the key for looking up
+    #: scorer_sweater_number/scorer_points in the team roster (#124).
+    scorer_player_id: int
     assists: tuple[AssistDetail, ...]
     strength: str
+    scorer_sweater_number: int | None = None
+    scorer_points: int | None = None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> GoalEvent:
@@ -143,6 +161,7 @@ class GoalEvent:
             team_abbrev=_default_str(raw.get("teamAbbrev")).upper(),
             scorer_name=_default_str(raw.get("name")),
             scorer_goals_to_date=int(raw.get("goalsToDate") or 0),
+            scorer_player_id=int(raw.get("playerId") or 0),
             assists=tuple(AssistDetail.from_api(a) for a in (raw.get("assists") or [])),
             strength=str(raw.get("strength") or "ev").lower(),
         )
@@ -165,6 +184,56 @@ def goal_events_from_landing(raw: dict[str, Any] | None) -> tuple[GoalEvent, ...
             except (AttributeError, KeyError, TypeError, ValueError):
                 continue
     return tuple(events)
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerSeasonDetail:
+    """Jersey number + season points for one player (#124).
+
+    Exists only because closing GoalEvent's gap needs combining two
+    endpoints, confirmed live, neither of which has both alone:
+    ``roster/{team}/current`` has ``sweaterNumber`` (keyed by ``id``) but
+    not points; ``club-stats/{team}/now`` has ``points`` (keyed by
+    ``playerId``) but not sweaterNumber.
+    """
+
+    sweater_number: int
+    points: int
+
+
+def player_details_from_api(
+    roster: dict[str, Any], club_stats: dict[str, Any]
+) -> dict[int, PlayerSeasonDetail]:
+    """Combine a team's roster and club-stats payloads into one id -> detail map.
+
+    Only players present in both are included -- a player needs a roster
+    entry (for the jersey number) and a stats entry (for points) to be any
+    use to the goal-detail screen; one without the other can't be shown
+    anyway. Goalies included on both sides even though the goal-detail
+    screen only ever looks up scorers/assisters, who are practically never
+    goalies -- but rare on-ice-credit oddities exist, and this is a
+    zero-cost `dict` builder, not a live call, so there's no reason to
+    special-case them out.
+    """
+    numbers: dict[int, int] = {}
+    for group in ("forwards", "defensemen", "goalies"):
+        for player in roster.get(group) or []:
+            try:
+                numbers[int(player["id"])] = int(player["sweaterNumber"])
+            except (KeyError, TypeError, ValueError):
+                continue
+    points: dict[int, int] = {}
+    for group in ("skaters", "goalies"):
+        for player in club_stats.get(group) or []:
+            try:
+                points[int(player["playerId"])] = int(player.get("points") or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+    return {
+        player_id: PlayerSeasonDetail(sweater_number=number, points=points[player_id])
+        for player_id, number in numbers.items()
+        if player_id in points
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,6 +508,126 @@ class SeasonSeriesRecord:
         if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (away, home)):
             return None
         return cls(away_wins=away, home_wins=home)
+
+
+@dataclass(frozen=True, slots=True)
+class SkaterLine:
+    """One skater's season line from ``club-stats/{TEAM}/now`` (#201)."""
+
+    player_id: int
+    name: str
+    goals: int
+    assists: int
+    points: int
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> SkaterLine:
+        return cls(
+            player_id=int(raw.get("playerId") or 0),
+            name=_initial_surname(raw),
+            goals=int(raw.get("goals") or 0),
+            assists=int(raw.get("assists") or 0),
+            points=int(raw.get("points") or 0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalieLine:
+    """One goalie's season line from ``club-stats/{TEAM}/now`` (#201)."""
+
+    player_id: int
+    name: str
+    games_played: int
+    wins: int
+    losses: int
+    ot_losses: int
+    save_pct: float
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> GoalieLine:
+        return cls(
+            player_id=int(raw.get("playerId") or 0),
+            name=_initial_surname(raw),
+            games_played=int(raw.get("gamesPlayed") or 0),
+            wins=int(raw.get("wins") or 0),
+            losses=int(raw.get("losses") or 0),
+            ot_losses=int(raw.get("overtimeLosses") or 0),
+            save_pct=float(raw.get("savePercentage") or 0.0),
+        )
+
+    def record_label(self) -> str:
+        return f"{self.wins}-{self.losses}-{self.ot_losses}"
+
+    def save_pct_label(self) -> str:
+        """``.915``; ``1.000`` for a perfect one."""
+        return f"{self.save_pct:.3f}".removeprefix("0")
+
+
+@dataclass(frozen=True, slots=True)
+class ClubStats:
+    """The favourite's whole roster's season stats. Both empty before the season starts.
+
+    Verified live (#201): unlike ``standings/now``, ``club-stats/{TEAM}/now``
+    does *not* keep serving last season through the off-season -- it
+    resolves to the new season with empty ``skaters``/``goalies``.
+    """
+
+    skaters: tuple[SkaterLine, ...]
+    goalies: tuple[GoalieLine, ...]
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> ClubStats:
+        return cls(
+            skaters=tuple(_parse_lines(raw.get("skaters"), SkaterLine.from_api)),
+            goalies=tuple(_parse_lines(raw.get("goalies"), GoalieLine.from_api)),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TeamLeaders:
+    """What the ``leaders`` rotation screen draws: any part may be absent."""
+
+    goals: SkaterLine | None
+    points: SkaterLine | None
+    goalies: tuple[GoalieLine, ...]
+
+
+def team_leaders(stats: ClubStats, rng: random.Random | None = None) -> TeamLeaders | None:
+    """Pick the goals leader, points leader and top two goalies by games played.
+
+    Ties are broken at random (#201: early on everyone is at zero, and the
+    screen should still show someone rather than hide). Callers pick once per
+    fetch and cache the result, so the choice doesn't flicker frame to frame.
+    None when there is nothing at all to show.
+    """
+    rng = rng or random.Random()
+    skaters = list(stats.skaters)
+    goalies = list(stats.goalies)
+    rng.shuffle(skaters)
+    rng.shuffle(goalies)
+    goals = max(skaters, key=lambda s: s.goals, default=None)
+    points = max(skaters, key=lambda s: s.points, default=None)
+    top_goalies = tuple(sorted(goalies, key=lambda g: g.games_played, reverse=True)[:2])
+    if goals is None and not top_goalies:
+        return None
+    return TeamLeaders(goals=goals, points=points, goalies=top_goalies)
+
+
+def _parse_lines(raw: Any, parse: Any) -> list[Any]:
+    lines = []
+    for entry in raw if isinstance(raw, list) else []:
+        try:
+            lines.append(parse(entry))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    return lines
+
+
+def _initial_surname(raw: dict[str, Any]) -> str:
+    """``F. Lastname`` from the split ``firstName``/``lastName`` objects."""
+    first = _default_str(raw.get("firstName"))
+    last = _default_str(raw.get("lastName"))
+    return f"{first[:1]}. {last}" if first and last else last or first
 
 
 def conference_standings(rows: list[StandingsRow], conference: str) -> list[StandingsRow]:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import random
 import re
 import signal
 import subprocess
@@ -16,9 +17,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import FrameType
+from typing import TYPE_CHECKING
 
 import qrcode
 
+from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
 from .button import Button
@@ -31,6 +34,7 @@ from .config import (
     resolve_timezone,
 )
 from .display.fonts import FontSet
+from .display.holiday import HOLIDAYS, Holiday, HolidayOverlay, active_holiday
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
@@ -39,30 +43,44 @@ from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
     Game,
     GoalEvent,
+    PlayerSeasonDetail,
     SeasonSeriesRecord,
     Situation,
     StandingsRow,
     Star,
+    TeamLeaders,
     conference_standings,
     standings_window,
+    team_leaders,
 )
 from .setup_server import SetupServer
-from .status_server import StatusServer
 from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
+
+if TYPE_CHECKING:
+    from .demo import DemoStep
 
 log = logging.getLogger(__name__)
 
 #: How long stale data stays on the board before we admit we are offline.
 STALE_AFTER_SECONDS = 15 * 60
 FRAME_INTERVAL = 0.5
+#: Frame interval while a holiday fly-by is crossing the panel (#237). At
+#: FRAME_INTERVAL a sprite would jump ~10px a frame; this is ~1px. Only for
+#: the few seconds something is moving -- the board idles at 2fps otherwise.
+ANIMATION_FRAME_INTERVAL = 0.05
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
 STANDINGS_TTL_SECONDS = 60 * 60
+#: A team's jersey numbers never change intra-season; points change only
+#: when that team plays, at most a few times a week (#124).
+ROSTER_TTL_SECONDS = 60 * 60
 #: The upcoming game's head-to-head tally (#157) only moves when another
 #: meeting between the same two teams finishes -- days or weeks apart.
 SEASON_SERIES_TTL_SECONDS = 60 * 60
+#: Season stat leaders (#201) move only when a game finishes.
+LEADERS_TTL_SECONDS = 60 * 60
 #: How much a new lux reading moves the smoothed value, 0-1. Low on purpose:
 #: this is what keeps a cloud passing over a window, or a hand briefly
 #: covering the sensor, from visibly flickering the panel.
@@ -147,8 +165,9 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``, ``matchup``,
-    ``clock``, ``no_games``, ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
+    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
+    ``conference_leaders``, ``matchup``, ``leaders``, ``clock``, ``no_games``,
+    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
     kind: str
@@ -157,6 +176,8 @@ class Scene:
     #: Set only for ``matchup`` (#157) -- oriented to ``game``'s own
     #: away/home sides, as the API returns it.
     season_series: SeasonSeriesRecord | None = None
+    #: Set only for ``leaders`` (#201) -- the favourite's own top players.
+    leaders: TeamLeaders | None = None
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
@@ -190,7 +211,7 @@ class ScoreboardApp:
         monotonic: Callable[[], float] | None = None,
         horn: GoalHornPlayer | None = None,
         light_sensor: LightSensor | None = None,
-        status_server: StatusServer | None = None,
+        admin_server: AdminServer | None = None,
         button: Button | None = None,
         sleep: Callable[[float], None] | None = None,
         ap_setup_state_path: Path | None = None,
@@ -240,6 +261,7 @@ class ScoreboardApp:
             device=settings.audio.device,
             horn_dir=settings.audio.horn_dir,
             enabled=settings.audio.enabled,
+            volume=settings.audio.volume,
         )
         # Only probe the I2C bus when the feature is actually on -- a board
         # without the sensor shouldn't get I2C log noise every startup.
@@ -291,16 +313,17 @@ class ScoreboardApp:
         self.last_success_at: datetime | None = None
         self.last_error: str | None = None
         self.last_error_at: datetime | None = None
-        if status_server is not None:
-            self.status_server = status_server
+        if admin_server is not None:
+            self.admin_server = admin_server
         elif settings.status.enabled:
-            self.status_server = StatusServer(
-                snapshot=self.status_snapshot,
+            self.admin_server = AdminServer(
+                config_path=str(settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                 port=settings.status.port,
-                settings=lambda: self.settings,
+                snapshot=self.status_snapshot,
+                demo_setter=self.set_demo_mode,
             )
         else:
-            self.status_server = None
+            self.admin_server = None
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
@@ -324,6 +347,12 @@ class ScoreboardApp:
         #: _standings_retry_after but per game, so a new upcoming game isn't
         #: stuck behind the previous one's failure.
         self._season_series_retry_after: dict[int, float] = {}
+        #: (team, fetched at, picked leaders) for the opt-in leaders screen (#201).
+        #: The random tie-break is made once per fetch, so it holds for a whole
+        #: TTL instead of flickering each frame.
+        self._leaders: tuple[str, float, TeamLeaders | None] | None = None
+        self._leaders_retry_after: float = 0.0
+        self._rng = random.Random()
         #: game id -> the favourite's own score last seen in that game, so a
         #: goal can be detected as an increase. Set on first sighting without
         #: firing, so a game already 3-1 at startup does not fire a goal.
@@ -343,6 +372,12 @@ class ScoreboardApp:
         #: (game id, monotonic time, event) of the most recent goal_detail
         #: screen, for how long it stays up.
         self._goal_detail: tuple[int, float, GoalEvent] | None = None
+        #: team abbrev -> (fetched at, jersey number/points by player id),
+        #: for GoalEvent's scorer_sweater_number/scorer_points (#124). Only
+        #: ever fetched for a team that has actually just scored the
+        #: favourite a goal-detail screen -- not proactively for every team
+        #: in the schedule.
+        self._team_rosters: dict[str, tuple[float, dict[int, PlayerSeasonDetail]]] = {}
         #: game id -> monotonic time of the last three-stars fetch attempt,
         #: for the favourite's games we watched go final and haven't got a
         #: non-empty threeStars for yet (#156). None = not tried yet.
@@ -356,6 +391,24 @@ class ScoreboardApp:
         #: The configured logo library, held by run_demo() while it toggles
         #: renderer.logos between it and None for the text layout.
         self._demo_real_logos: LogoLibrary | None = logos
+        #: Live demo toggle (#204). Set from admin_server's thread, a plain
+        #: bool read once per draw() on run()'s thread -- same cross-thread
+        #: rule as the physical button's flags. Everything else the main
+        #: loop does (polling, goal horn, config reload) keeps running.
+        self._demo_mode = False
+        self._demo_steps: list[DemoStep] = []
+        self._demo_step_index = 0
+        self._demo_next_step_at = 0.0
+        self._demo_scene: Scene | None = None
+        self._demo_was_on = False
+        #: Holiday decorations (#237). _overlay_animating is whether the
+        #: last frame drew something moving, which is what speeds the loop
+        #: up. While a demo is drawing, its own step decides the holiday
+        #: (_demo_holiday) instead of the config and the calendar.
+        self.holiday_overlay = HolidayOverlay()
+        self._overlay_animating = False
+        self._demo_drawing = False
+        self._demo_holiday: Holiday | None = None
         self._running = False
 
     # -- lifecycle -------------------------------------------------------
@@ -368,10 +421,29 @@ class ScoreboardApp:
         log.info("Received signal %s; shutting down", signal.Signals(signum).name)
         self._running = False
 
+    def _apply_boot_volume(self) -> threading.Thread:
+        """Push the configured volume to the mixer once, off the render loop.
+
+        apply_volume() blocks on `amixer`, so it runs on a short-lived daemon
+        thread (#189). Without this a volume set only in the boot TOML was
+        never applied until the admin page saved Audio or ran Test horn.
+        """
+
+        def work() -> None:
+            try:
+                self.horn.apply_volume()
+            except Exception:
+                log.exception("Could not apply boot volume")
+
+        thread = threading.Thread(target=work, name="apply-volume", daemon=True)
+        thread.start()
+        return thread
+
     def run(self) -> None:
         self._running = True
-        if self.status_server is not None:
-            self.status_server.start()
+        self._apply_boot_volume()
+        if self.admin_server is not None:
+            self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
@@ -398,8 +470,11 @@ class ScoreboardApp:
             self.wifi_join.poll()
             self.wifi_join.expire_outcome_if_stale()
             self.draw()
-            self.sleep(FRAME_INTERVAL)
+            self.sleep(self.frame_interval())
         self.shutdown()
+
+    def frame_interval(self) -> float:
+        return ANIMATION_FRAME_INTERVAL if self._overlay_animating else FRAME_INTERVAL
 
     def run_demo(self) -> None:
         """Loop every scene with synthetic data until stopped (#47).
@@ -417,6 +492,7 @@ class ScoreboardApp:
 
         self._running = True
         self._demo_real_logos = self.renderer.logos
+        self._demo_drawing = True
         ticks_per_scene = max(1, round(DEMO_SCENE_SECONDS / FRAME_INTERVAL))
         while self._running:
             # Rebuilt each pass so the preview/countdown stay relative to now.
@@ -425,13 +501,60 @@ class ScoreboardApp:
                 if not self._running:
                     break
                 self._set_demo_logos(step.use_logos)
+                self._start_demo_holiday(step)
+                if self._demo_holiday is not None:
+                    self._play_animated_demo_step(step.scene)
+                    continue
                 self.draw_scene(step.scene)
                 for _ in range(ticks_per_scene):
                     if not self._running:
                         break
                     self.sleep(FRAME_INTERVAL)
+        self._demo_drawing = False
         self.renderer.logos = self._demo_real_logos
         self.shutdown()
+
+    def _start_demo_holiday(self, step: DemoStep) -> None:
+        """Force a step's holiday on, with a fly-by starting right now.
+
+        A demo step lasts seconds; the real gap between fly-bys is minutes.
+        """
+        self._demo_holiday = HOLIDAYS.get(step.holiday) if step.holiday else None
+        if self._demo_holiday is not None:
+            self.holiday_overlay.start_flyby(self.monotonic())
+
+    def _play_animated_demo_step(self, scene: Scene) -> None:
+        """Redraw every frame for DEMO_SCENE_SECONDS, so the fly-by actually moves."""
+        end = self.monotonic() + DEMO_SCENE_SECONDS
+        while self._running and self.monotonic() < end:
+            self.draw_scene(scene)
+            self.sleep(self.frame_interval())
+
+    def set_demo_mode(self, enabled: bool) -> None:
+        """Turn the live demo on or off (#204); safe from any thread."""
+        self._demo_mode = bool(enabled)
+
+    def _draw_demo_step(self) -> None:
+        """Advance the live demo on ``DEMO_SCENE_SECONDS`` and draw its current step."""
+        from .demo import demo_steps
+
+        now = self.monotonic()
+        if now >= self._demo_next_step_at:
+            if self._demo_step_index >= len(self._demo_steps):
+                # Rebuilt each pass so preview/countdown stay relative to now.
+                self._demo_steps = demo_steps(self.settings.scoreboard.favourite_team, self.clock())
+                self._demo_step_index = 0
+            step = self._demo_steps[self._demo_step_index]
+            self._demo_step_index += 1
+            self._demo_next_step_at = now + DEMO_SCENE_SECONDS
+            self._set_demo_logos(step.use_logos)
+            self._start_demo_holiday(step)
+            self._demo_scene = step.scene
+        self._demo_drawing = True
+        try:
+            self.draw_scene(self._demo_scene)
+        finally:
+            self._demo_drawing = False
 
     def _set_demo_logos(self, use_logos: bool) -> None:
         """Show the text fallback layout on demand, whatever the board has configured.
@@ -443,8 +566,8 @@ class ScoreboardApp:
 
     def shutdown(self) -> None:
         try:
-            if self.status_server is not None:
-                self.status_server.stop()
+            if self.admin_server is not None:
+                self.admin_server.stop()
             if self.setup_server is not None:
                 self.setup_server.stop()
             if self.button is not None:
@@ -544,10 +667,10 @@ class ScoreboardApp:
         editor (#48) -- and all three need to pick up a change the same way.
         Most settings are already read fresh from ``self.settings`` every
         loop iteration; ``[audio]``, the logo library, the ambient light
-        sensor (``panel.auto_brightness``), the status server
+        sensor (``panel.auto_brightness``), the admin server
         (``status.enabled``/``status.port``) and the physical button
         (``[button]``, #50) are built once from it instead, so those get
-        rebuilt explicitly here (#62). A rebuilt status server
+        rebuilt explicitly here (#62). A rebuilt admin server
         is only started if ``run()``'s loop is live (``self._running``):
         ``run()`` starts it exactly once before looping, so a reload outside
         that loop -- e.g. a test calling this directly -- builds it without
@@ -570,6 +693,25 @@ class ScoreboardApp:
         return True
 
     def _apply_reloaded_settings(self, new_settings: Settings) -> None:
+        """Apply a config reload's side effects, field by field.
+
+        Deliberately explicit/per-field rather than one generic "something
+        changed, re-fetch and rebuild everything" pass -- consistent with
+        this project's usual anti-premature-abstraction stance, and a
+        blanket invalidation would force unrelated work on every save
+        (e.g. a schedule refetch or horn rebuild triggered by editing
+        goal_flash_seconds). The real risk with this approach isn't that
+        it doesn't scale, it's that a *new* piece of state cached off a
+        setting (self._schedule/_standings/_season_series-shaped, or a
+        rebuilt object like self.horn/renderer.logos) can be added without
+        anyone remembering to hook its invalidation in here -- exactly how
+        favourite_team_changed's _schedule fix below was missing until a
+        live bug (#178's admin-page work) surfaced it. When adding a new
+        cache or rebuilt-from-settings object anywhere in this class,
+        check here first: does a relevant field change need to reset or
+        rebuild it, the same way audio_changed/logos_changed/
+        favourite_team_changed/etc. do below?
+        """
         old = self.settings
         audio_changed = dataclasses.astuple(old.audio) != dataclasses.astuple(new_settings.audio)
         logos_changed = (
@@ -577,6 +719,9 @@ class ScoreboardApp:
             or old.scoreboard.logo_variant != new_settings.scoreboard.logo_variant
         )
         timezone_changed = old.scoreboard.timezone != new_settings.scoreboard.timezone
+        favourite_team_changed = (
+            old.scoreboard.favourite_team != new_settings.scoreboard.favourite_team
+        )
         auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
         status_changed = (old.status.enabled, old.status.port) != (
             new_settings.status.enabled,
@@ -595,11 +740,43 @@ class ScoreboardApp:
             self.tz = resolve_timezone(new_settings.scoreboard.timezone, fallback=self.tz)
             self.renderer.tz = self.tz
 
+        if favourite_team_changed:
+            # next_favourite_game()'s _schedule cache is a single season
+            # schedule for whichever team it was last fetched for, kept
+            # "fresh" purely by SCHEDULE_TTL_SECONDS elapsing -- nothing
+            # about that staleness check knows *which* team the cached
+            # games belong to. Left alone, a favourite-team switch keeps
+            # showing the *previous* team's next game (not a stale version
+            # of the new one -- a different matchup entirely) for up to an
+            # hour, until the TTL happens to expire on its own. Confirmed
+            # live (#178's admin-page work): this is exactly why the
+            # matchup/season-series screen (#157) kept showing the old
+            # opponent after a favourite switch -- it's fed straight from
+            # next_favourite_game()'s return value. Only relevant when
+            # today's game doesn't already answer it: favourite_game_
+            # today() reads self.games (today's full slate, already
+            # fetched for every team) fresh on every call, so an immediate
+            # favourite with a game today was never affected by this --
+            # only the countdown/preview/matchup fallback to the season
+            # schedule was.
+            self._schedule = None
+            self._schedule_retry_after = 0.0
+            self._leaders = None
+            self._leaders_retry_after = 0.0
+
         if audio_changed:
+            # volume is carried on the rebuilt object but deliberately not
+            # applied to the ALSA mixer here: GoalHornPlayer.apply_volume()
+            # blocks on a real `amixer` subprocess, and this method runs on
+            # the same thread as frame rendering -- a stalled/slow amixer
+            # call here would stutter the panel. admin_server.py applies it
+            # instead, from its own background thread, on an audio save and
+            # on Test horn (#187).
             self.horn = GoalHornPlayer.default(
                 device=new_settings.audio.device,
                 horn_dir=new_settings.audio.horn_dir,
                 enabled=new_settings.audio.enabled,
+                volume=new_settings.audio.volume,
             )
 
         if logos_changed:
@@ -618,24 +795,25 @@ class ScoreboardApp:
             self.light_sensor = LightSensor.open() if new_settings.panel.auto_brightness else None
 
         if status_changed:
-            # StatusServer's port is fixed at construction, so any change
+            # AdminServer's port is fixed at construction, so any change
             # means stop-and-rebuild rather than reconfigure in place.
-            if self.status_server is not None:
-                self.status_server.stop()
+            if self.admin_server is not None:
+                self.admin_server.stop()
             if new_settings.status.enabled:
-                self.status_server = StatusServer(
-                    snapshot=self.status_snapshot,
+                self.admin_server = AdminServer(
+                    config_path=str(new_settings.source_path or DEFAULT_CONFIG_PATHS[0]),
                     port=new_settings.status.port,
-                    settings=lambda: self.settings,
+                    snapshot=self.status_snapshot,
+                    demo_setter=self.set_demo_mode,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,
                 # construct only -- same as __init__ -- so it's run() that
                 # binds the socket, not whoever happened to reload.
                 if self._running:
-                    self.status_server.start()
+                    self.admin_server.start()
             else:
-                self.status_server = None
+                self.admin_server = None
 
         if button_changed:
             # gpiozero fixes pin and hold_time at construction; close first
@@ -651,7 +829,7 @@ class ScoreboardApp:
             )
 
         # wifi.connect_timeout_seconds: plain attribute update, no
-        # stop/rebuild needed the way StatusServer's fixed-at-construction
+        # stop/rebuild needed the way AdminServer's fixed-at-construction
         # port does -- WifiJoinAttempt reads it fresh on its next attempt,
         # and there's nothing live to restart if one isn't in progress.
         self.wifi_join.connect_timeout = new_settings.wifi.connect_timeout_seconds
@@ -859,7 +1037,46 @@ class ScoreboardApp:
             return
         if len(events) > previous:
             self._shown_goal_events[game_id] = previous + 1
-            self._goal_detail = (game_id, self.monotonic(), events[previous])
+            self._goal_detail = (
+                game_id,
+                self.monotonic(),
+                self._enrich_goal_detail(events[previous]),
+            )
+
+    def _team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        """Jersey number + season points for ``team``, cached (#124).
+
+        Fetched lazily -- only once a goal-detail screen for that team is
+        actually about to show, not proactively for every team on the
+        schedule. A failed fetch keeps whatever was cached before (possibly
+        still nothing) rather than clearing it, same precedent as
+        ``next_favourite_game``/``conference_standings``.
+        """
+        now = self.monotonic()
+        fetched_at, roster = self._team_rosters.get(team, (None, {}))
+        if fetched_at is not None and now - fetched_at < ROSTER_TTL_SECONDS:
+            return roster
+        try:
+            roster = self.client.team_roster(team)
+        except NHLApiError as exc:
+            log.debug("Roster fetch for %s failed: %s", team, exc)
+            return roster
+        self._team_rosters[team] = (now, roster)
+        return roster
+
+    def _enrich_goal_detail(self, event: GoalEvent) -> GoalEvent:
+        """Fill in scorer_sweater_number/scorer_points, if the roster fetch works out.
+
+        Left as-is (both stay None) on a failed fetch or a scorer missing
+        from the roster response -- the screen still shows fine without
+        them, same graceful-degradation precedent as everything else here.
+        """
+        detail = self._team_roster(event.team_abbrev).get(event.scorer_player_id)
+        if detail is None:
+            return event
+        return dataclasses.replace(
+            event, scorer_sweater_number=detail.sweater_number, scorer_points=detail.points
+        )
 
     # -- three stars (#156) -------------------------------------------------
 
@@ -996,10 +1213,20 @@ class ScoreboardApp:
         season's final table through the whole off-season rather than an
         empty result, and ``games_played`` is the only signal available to
         tell the two apart.
+
+        Deliberately does NOT also gate on ``cfg.show_standings`` here (it
+        used to): that field now only controls whether ``standings`` is
+        included in the *derived default* rotation (``_default_rotation()``,
+        for a board with no explicit ``[[rotation]]``) -- checking it again
+        in this method meant an explicit ``[[rotation]]`` entry for
+        ``standings`` could be silently defeated by a stale
+        ``show_standings`` toggle left over from before the board migrated,
+        which contradicts #150/#151's whole point of the rotation list
+        being the authoritative, admin-editable source of truth.
         """
         cfg = self.settings.scoreboard
         favourite = cfg.favourite_team
-        if not cfg.show_standings or not favourite:
+        if not favourite:
             return None
         rows = self._refresh_standings(allow_fetch=allow_fetch)
         if not rows:
@@ -1011,6 +1238,22 @@ class ScoreboardApp:
         if not window:
             return None
         return Scene("standings", standings=tuple(window))
+
+    def _conference_leaders_scene(
+        self, conference: str, *, allow_fetch: bool = True
+    ) -> Scene | None:
+        """Top five of one conference (#200), or None with no standings yet.
+
+        Deliberately not gated on anyone's ``games_played``: the owner chose
+        to just show whatever the latest table says.
+        """
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
+        if not rows:
+            return None
+        top = conference_standings(rows, conference)[:5]
+        if not top:
+            return None
+        return Scene("conference_leaders", standings=tuple(top))
 
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
@@ -1053,6 +1296,44 @@ class ScoreboardApp:
             return None
         return Scene("matchup", upcoming, season_series=record)
 
+    def _refresh_leaders(self, team: str, *, allow_fetch: bool = True) -> TeamLeaders | None:
+        """The favourite's stat leaders, cached ``LEADERS_TTL_SECONDS`` like standings.
+
+        A cache for a different team counts as stale, so a live favourite
+        switch never shows the old team's players. A failed refresh keeps
+        serving what was cached for the same team.
+        """
+        now_mono = self.monotonic()
+        entry = self._leaders
+        if entry is not None and entry[0] != team:
+            entry = self._leaders = None
+        stale = entry is None or now_mono - entry[1] > LEADERS_TTL_SECONDS
+        if allow_fetch and stale and now_mono >= self._leaders_retry_after:
+            try:
+                picked = team_leaders(self.client.club_stats(team), self._rng)
+                entry = self._leaders = (team, now_mono, picked)
+            except NHLApiError as exc:
+                log.warning("Club stats fetch failed: %s", exc)
+                self._record_error(f"club stats fetch: {exc}")
+                self._leaders_retry_after = now_mono + LEADERS_TTL_SECONDS
+        return entry[2] if entry is not None else None
+
+    def _leaders_scene(self, *, allow_fetch: bool = True) -> Scene | None:
+        """The favourite's top players (#201), or None (skipped, never blank).
+
+        None with no favourite, before the first fetch lands, or while the
+        API's arrays are empty (pre-season). There's deliberately no minimum
+        games-played floor: early on everyone sits at zero and a random
+        leader is shown rather than hiding the screen.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        leaders = self._refresh_leaders(favourite, allow_fetch=allow_fetch)
+        if leaders is None:
+            return None
+        return Scene("leaders", leaders=leaders)
+
     def _countdown_or_preview(self, upcoming: Game) -> Scene:
         cfg = self.settings.scoreboard
         if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
@@ -1092,10 +1373,17 @@ class ScoreboardApp:
             return standings
         if screen == "clock":
             return Scene("clock")
+        if screen in ("top_west", "top_east"):
+            # Resolved here so a board not listing them never needs the fetch.
+            conference = "W" if screen == "top_west" else "E"
+            return self._conference_leaders_scene(conference, allow_fetch=allow_fetch)
         if screen == "matchup":
             # Resolved here, not up front like standings, so a board without
             # "matchup" in its rotation never calls right-rail at all.
             return self._matchup_scene(upcoming, allow_fetch=allow_fetch)
+        if screen == "leaders":
+            # Resolved lazily like matchup: club-stats is never called unless listed.
+            return self._leaders_scene(allow_fetch=allow_fetch)
         return None
 
     def _rotate_idle_scenes(
@@ -1236,14 +1524,14 @@ class ScoreboardApp:
     def _sync_setup_server(self) -> None:
         """Start/stop the WiFi setup HTTP server in step with the AP state file.
 
-        Only called from run()'s own loop -- status_snapshot() (the status
-        page's own thread) only ever calls select_scene(allow_fetch=False),
+        Only called from run()'s own loop -- status_snapshot() (the admin
+        server's own thread) only ever calls select_scene(allow_fetch=False),
         never this, so there is no cross-thread race to start or stop the
         same socket. Only needs "is the AP state file there", the same
         signal _ap_setup_scene keys off of, not its contents. Also reacts to
         a live config reload (wifi_setup.enabled/port) even when the AP
         state file's presence hasn't changed, the same way _apply_reloaded_
-        settings handles the status server's own port change.
+        settings handles the admin server's own port change.
         """
         cfg = self.settings.wifi_setup
         wanted = cfg.enabled and self.ap_setup_state_path.exists()
@@ -1504,19 +1792,21 @@ class ScoreboardApp:
     # -- status page (#48) ------------------------------------------------
 
     def status_snapshot(self) -> dict[str, str]:
-        """Everything the status page shows -- state already sitting in memory.
+        """Everything the admin page's status box shows -- state already
+        sitting in memory.
 
-        Called from the status server's own request thread (#61): must
-        never trigger a network fetch or mutate shared state concurrently
-        with the main loop, hence ``allow_fetch=False`` -- a slow NHL
-        response must not block a "read-only" status page, and the two
-        threads must not race into duplicate fetches.
+        Called from the admin server's own thread (#61, #178 story 10):
+        must never trigger a network fetch or mutate shared state
+        concurrently with the main loop, hence ``allow_fetch=False`` -- a
+        slow NHL response must not block a "read-only" status view, and
+        the two threads must not race into duplicate fetches.
         """
         scene = self.select_scene(allow_fetch=False)
         cfg = self.settings.scoreboard
         return {
             "version": installed_version() or "unknown (factory image)",
-            "scene": scene.kind,
+            "demo mode": "on" if self._demo_mode else "off",
+            "scene": "demo" if self._demo_mode else scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",
             "last successful poll": self._format_time(self.last_success_at),
@@ -1542,7 +1832,18 @@ class ScoreboardApp:
             # can see.
             self.canvas.Clear()
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            self._overlay_animating = False
             return
+        if self._demo_mode:
+            if not self._demo_was_on:
+                self._demo_was_on = True
+                self._demo_real_logos = self.renderer.logos
+                self._demo_steps, self._demo_step_index, self._demo_next_step_at = [], 0, 0.0
+            self._draw_demo_step()
+            return
+        if self._demo_was_on:
+            self._demo_was_on = False
+            self.renderer.logos = self._demo_real_logos
         self.draw_scene(self.select_scene())
 
     def draw_scene(self, scene: Scene) -> None:
@@ -1559,10 +1860,16 @@ class ScoreboardApp:
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
+        elif scene.kind == "conference_leaders":
+            r.draw_conference_leaders(
+                self.canvas, scene.standings, self.settings.scoreboard.favourite_team
+            )
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
         elif scene.kind == "matchup":
             r.draw_matchup(self.canvas, scene.game, scene.season_series)
+        elif scene.kind == "leaders":
+            r.draw_leaders(self.canvas, scene.leaders, self.settings.scoreboard.favourite_team)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":
@@ -1575,4 +1882,26 @@ class ScoreboardApp:
             r.draw_wifi_join(self.canvas, scene.wifi_join_status, scene.wifi_join_ssid)
         else:
             r.draw_message(self.canvas, "NO GAMES")
+        self._draw_holiday_overlay(scene)
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
+
+    def active_holiday(self) -> Holiday | None:
+        """The configured holiday in season today (local date), if any."""
+        cfg = self.settings.holiday
+        if not cfg.enabled:
+            return None
+        return active_holiday(cfg.themes, self.clock().astimezone(self.tz).date())
+
+    def _draw_holiday_overlay(self, scene: Scene) -> None:
+        holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
+        cfg = self.settings.holiday
+        self._overlay_animating = self.holiday_overlay.draw(
+            self.canvas,
+            scene_kind=scene.kind,
+            holiday=holiday,
+            now=self.monotonic(),
+            width=self.renderer.width,
+            height=self.renderer.height,
+            min_gap_seconds=cfg.flyby_min_minutes * 60,
+            max_gap_seconds=cfg.flyby_max_minutes * 60,
+        )

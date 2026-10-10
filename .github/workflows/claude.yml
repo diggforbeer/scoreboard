@@ -129,6 +129,23 @@ jobs:
           # created without the literal `.venv` argument) -- these two
           # additions cover that without widening scope, and it needs a
           # real follow-up run to confirm either way.
+          #
+          # `Bash(.venv/bin/pip install:*)`/`Bash(.venv/bin/playwright:*)`/
+          # `Bash(npm ci:*)`/`Bash(npm run build:*)` added after PR #195's
+          # run was asked to screenshot the new admin-page Audio tab and
+          # reported exactly which commands were blocked (`gh run view`'s
+          # own PR comment, not guessed): `.venv/bin/pip install -e
+          # '.[dev,e2e]'` needed the venv's own pip binary by path, a
+          # different literal prefix from the already-allowed
+          # `Bash(pip install:*)`/`Bash(python3 -m pip install:*)` --
+          # same "syntactic variant, not a new capability" pattern as the
+          # #159 entries above. `npm ci`/`npm run build` were never needed
+          # before because no earlier run had to build the admin React
+          # frontend itself (#153's screenshot entries were for the LED
+          # panel emulator, a pure Python path). `Bash(playwright
+          # install:*)` already covers the bare command; the run reached
+          # for the venv-local binary instead, so it gets the same
+          # by-path variant as pip.
           claude_args: |
-            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*),Bash(. .venv/bin/activate:*),Bash(python3 -m venv:*)"
-            --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Every other default instruction still applies."
+            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*),Bash(. .venv/bin/activate:*),Bash(python3 -m venv:*),Bash(.venv/bin/pip install:*),Bash(.venv/bin/playwright:*),Bash(npm ci:*),Bash(npm run build:*)"
+            --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Separately: when asked to capture a screenshot (the admin page, a rendered panel scene, anything visual) for a PR or issue, there is no tool that attaches an image directly to a comment -- commit the resulting PNG to your own branch and link it in your comment by its raw.githubusercontent.com URL instead (the same way PR #153's LED-panel screenshots were shared); don't ask for permission to do this, it's the accepted mechanism. Every other default instruction still applies."

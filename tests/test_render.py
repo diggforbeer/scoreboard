@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from nhl_scoreboard.display.ascii import AsciiCanvas
+from nhl_scoreboard.display.ascii import AsciiCanvas, BBox
 from nhl_scoreboard.display.fonts import FontSet
 from nhl_scoreboard.display.logos import LogoLibrary
 from nhl_scoreboard.display.renderer import (
@@ -41,10 +41,13 @@ from nhl_scoreboard.nhl.models import (
     AssistDetail,
     Game,
     GoalEvent,
+    GoalieLine,
     SeasonSeriesRecord,
     Situation,
+    SkaterLine,
     StandingsRow,
     Star,
+    TeamLeaders,
 )
 
 graphics = pytest.importorskip("RGBMatrixEmulator").graphics
@@ -919,6 +922,24 @@ def assert_standings_layout(
         assert team_color(row.abbrev) in colors, f"row {i} ({row.abbrev}) not in its team colour"
 
 
+def test_leaders_layout_labels_conference_and_fits_five_rows(update_snapshots):
+    names = ["COL", "DAL", "NSH", "STL", "WPG"]
+    rows = [standings_row(a, i, 60 - i) for i, a in enumerate(names, 1)]
+    c = canvas()
+    make_renderer().draw_conference_leaders(c, rows, "NSH")
+    art = show("leaders, west, favourite present", c)
+    assert not c.out_of_bounds
+    label = c.lit(0, 0, 31, H - 1)
+    assert label, "conference label missing"
+    assert set(label.values()) == {WHITE}
+    for i, row in enumerate(rows):
+        y0 = i * STANDINGS_ROW_HEIGHT
+        colors = c.colors(32, y0, W - 1, y0 + STANDINGS_ROW_HEIGHT - 1)
+        assert team_color(row.abbrev) in colors
+        assert colors <= {ACCENT if row.abbrev == "NSH" else WHITE, team_color(row.abbrev)}
+    check_snapshot("leaders_west", art, update_snapshots)
+
+
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
     c = canvas()
     make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")
@@ -1013,12 +1034,17 @@ def test_goal_scene_ignores_situation(games, synthetic_logos):
 # --------------------------------------------------------------------------
 
 
-def goal_event(team: str, scorer="F. FORSBERG", goals=12, assists=(), strength="ev") -> GoalEvent:
+def goal_event(
+    team: str, scorer="F. FORSBERG", goals=12, assists=(), strength="ev", player_id=8480000
+) -> GoalEvent:
     return GoalEvent(
         team_abbrev=team,
         scorer_name=scorer,
         scorer_goals_to_date=goals,
-        assists=tuple(AssistDetail(name=n, assists_to_date=a) for n, a in assists),
+        scorer_player_id=player_id,
+        assists=tuple(
+            AssistDetail(name=n, assists_to_date=a, sweater_number=0) for n, a in assists
+        ),
         strength=strength,
     )
 
@@ -1406,3 +1432,135 @@ def test_three_stars_narrow_panel_stays_in_the_middle_column(games, synthetic_lo
         line = c.bbox(NARROW_LEFT, y0, NARROW_RIGHT - 1, y1)
         assert line is not None
         assert line.x0 >= NARROW_LEFT and line.x1 < NARROW_RIGHT
+
+
+# --------------------------------------------------------------------------
+# leaders: the favourite's top players (#201)
+# --------------------------------------------------------------------------
+
+LEADERS = TeamLeaders(
+    goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
+    points=SkaterLine(2, "R. Oreilly", 9, 17, 26),
+    goalies=(
+        GoalieLine(3, "J. Saros", 22, 13, 7, 2, 0.915),
+        GoalieLine(4, "J. Wright", 9, 4, 3, 1, 0.902),
+    ),
+)
+
+
+def assert_leaders_layout(c: AsciiCanvas, rows: int, *, logo_width: int = 0) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    if logo_width:
+        assert team_color("NSH") in c.colors(0, 0, logo_width - 1, H - 1), "favourite logo missing"
+    assert c.bbox(logo_width, 0, W - 1, 5) is not None, "title missing"
+    for i in range(1, rows + 1):
+        y0 = i * STANDINGS_ROW_HEIGHT
+        band = c.bbox(logo_width, y0, W - 1, y0 + STANDINGS_ROW_HEIGHT - 1)
+        assert band is not None, f"row {i} not drawn"
+    assert c.bbox(logo_width, (rows + 1) * STANDINGS_ROW_HEIGHT, W - 1, H - 1) is None
+
+
+def test_leaders_logo_layout(synthetic_logos):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_leaders(c, LEADERS, "NSH")
+    show("leaders w/ logo", c)
+    assert_leaders_layout(c, 4, logo_width=LOGO)
+
+
+def test_leaders_text_layout_no_logo_library():
+    c = canvas()
+    make_renderer().draw_leaders(c, LEADERS, "NSH")
+    show("leaders, no logo library", c)
+    assert_leaders_layout(c, 4)
+
+
+def test_leaders_missing_rows_close_up(synthetic_logos):
+    c = canvas()
+    only_goalie = TeamLeaders(goals=None, points=None, goalies=LEADERS.goalies[:1])
+    make_renderer(logos=synthetic_logos).draw_leaders(c, only_goalie, "NSH")
+    assert_leaders_layout(c, 1, logo_width=LOGO)
+
+
+def test_leaders_long_name_never_leaves_the_panel(synthetic_logos):
+    c = canvas()
+    long = TeamLeaders(
+        goals=SkaterLine(1, "A. Wolfeschlegelsteinhausen", 10, 0, 10),
+        points=None,
+        goalies=(),
+    )
+    make_renderer(logos=synthetic_logos).draw_leaders(c, long, "NSH")
+    assert not c.out_of_bounds
+
+
+# --------------------------------------------------------------------------
+# holiday overlay (#237)
+# --------------------------------------------------------------------------
+
+
+def bbox_of(c: AsciiCanvas, rgb: tuple[int, int, int]) -> BBox:
+    xs = [x for (x, _), v in c.pixels.items() if v == rgb]
+    ys = [y for (_, y), v in c.pixels.items() if v == rgb]
+    return BBox(min(xs), min(ys), max(xs), max(ys))
+
+
+def draw_halloween(c: AsciiCanvas, kind: str, flyby_at: float | None) -> bool:
+    from nhl_scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
+
+    overlay = HolidayOverlay()
+    if flyby_at is not None:
+        overlay.start_flyby(0.0)
+    return overlay.draw(
+        c,
+        scene_kind=kind,
+        holiday=HOLIDAYS["halloween"],
+        now=flyby_at or 0.0,
+        width=W,
+        height=H,
+        min_gap_seconds=600,
+        max_gap_seconds=600,
+    )
+
+
+def test_halloween_ghost_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import GHOST_BODY, GHOST_HEIGHT
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 3s in: mid-panel, right over the score column.
+    assert draw_halloween(c, "game", flyby_at=3.0)
+    art = show("halloween ghost over live game", c)
+
+    assert not c.out_of_bounds
+    ghost = bbox_of(c, GHOST_BODY)
+    assert ghost.height == GHOST_HEIGHT
+    assert MID_LEFT < ghost.center_x < MID_RIGHT
+    # Everything outside the ghost's box is the untouched game scene.
+    outside = {
+        p: rgb
+        for p, rgb in plain.pixels.items()
+        if not (ghost.x0 <= p[0] <= ghost.x1 and ghost.y0 <= p[1] <= ghost.y1)
+    }
+    assert all(c.pixels.get(p) == rgb for p, rgb in outside.items())
+    check_snapshot("holiday_halloween_ghost", art, update_snapshots)
+
+
+def test_halloween_pumpkins_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import PUMPKIN
+
+    now = datetime(2026, 10, 10, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None) is False
+    art = show("halloween pumpkins, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    pumpkins = bbox_of(c, PUMPKIN)
+    assert pumpkins.x0 < text.x0 and pumpkins.x1 > text.x1, "one either side of the text"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_halloween_clock", art, update_snapshots)

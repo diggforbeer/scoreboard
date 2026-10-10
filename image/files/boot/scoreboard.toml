@@ -71,9 +71,15 @@ goal_detail_seconds = 8
 # the NHL has named its three stars, before the final score takes over.
 three_stars_seconds = 8
 
-# Show the favourite's conference playoff picture (their spot plus a few
-# teams on either side), interleaved with the preview/countdown screen.
-# Only appears once favourite_team has actually played a game this season.
+# Whether the favourite's conference playoff picture (their spot plus a
+# few teams on either side) is included when no explicit [[rotation]]
+# list is given below (see the comment on that section) -- only read for
+# that derivation now, not a live on/off switch for the "standings"
+# screen itself, so it has no effect once an explicit [[rotation]] is
+# present. Not on the admin page for the same reason: once you're editing
+# [[rotation]] there, add or remove a "standings" row directly instead of
+# toggling this. Only appears once favourite_team has actually played a
+# game this season either way.
 show_standings = true
 
 # Also cycle the clock into the countdown/preview (and standings, if shown)
@@ -90,9 +96,12 @@ show_clock_between_games = false
 # below; once any [[rotation]] table is present, rotate_seconds/
 # show_standings/show_clock_between_games above are no longer read for this
 # purpose. screen is one of "countdown_preview", "standings", "clock",
-# "matchup". "matchup" (your team's head-to-head record this season against
-# its next opponent) is never in the default list -- it only shows if you
-# add it here. A screen with nothing to show right now (e.g. standings
+# "matchup", "top_west", "top_east", "leaders". "matchup" (your team's
+# head-to-head record this season against its next opponent), "top_west"/
+# "top_east" (top five of that conference) and "leaders" (your team's top
+# goal scorer, top point getter and top two goalies) are never in the
+# default list -- they only show if you add them here. A screen with
+# nothing to show right now (e.g. standings
 # before your team's season has started) is skipped for that pass, not
 # shown blank.
 #
@@ -184,6 +193,19 @@ suppress_scope = "tracked"
 # How long after that game ends the board stays bright, so the final score
 # is still readable. 0 dims the moment it's over.
 cooldown_minutes = 15
+
+[holiday]
+# Seasonal decorations over the normal screens. Each holiday only appears
+# during its own dates, so leaving every one ticked is the normal setting.
+# Never drawn over a GOAL / goal-detail / three-stars screen. Off by default.
+#   halloween  Oct 1-31: a ghost floats across the board now and then
+#              (games included), and jack-o'-lanterns flank the clock.
+enabled = false
+themes = ["halloween"]
+
+# Random gap, in minutes, between fly-bys (the Halloween ghost).
+flyby_min_minutes = 5
+flyby_max_minutes = 20
 
 [button]
 # An optional momentary push-button: one leg to a GPIO pin, the other to

@@ -38,6 +38,7 @@ DEP_TO_APT_PACKAGE = {
     "pillow": "python3-pil",
     "tomlkit": "python3-tomlkit",
     "qrcode": "python3-qrcode",
+    "websockets": "python3-websockets",
 }
 
 
