@@ -525,19 +525,37 @@ def test_leprechaun_is_outlined_against_green_logos():
     assert len(LEPRECHAUN.frames[0]) == len(LEPRECHAUN_FRAMES[0]) + 2
 
 
-def test_leprechaun_drops_gold_coins_that_only_accumulate():
+def test_leprechaun_collects_a_row_of_gold_coins_with_a_sparkle():
+    """Reverse of Santa: the coins start on the ground and only disappear.
+
+    Counted on the ground alone -- with him drawn over them, his alternating
+    legs cover a coin he's standing near by a pixel more or less per frame.
+    """
+    counts = []
+    for travelled in range(0, W + LEPRECHAUN.width + 1):
+        canvas = AsciiCanvas(W, H)
+        LEPRECHAUN._draw_drops(canvas, travelled, W, H, sparkles=False)
+        counts.append(list(canvas.pixels.values()).count(COIN_GOLD))
+    assert counts[0] > 0, "a row of coins waiting from the start"
+    assert counts == sorted(counts, reverse=True), "coins only ever get picked up"
+    assert counts[-1] == 0, "he collects every one"
+
+    # A sparkle right after the first pickup, gone shortly after.
+    first = LEPRECHAUN.drop_spacing
+    for travelled, expected in ((first, True), (first + 2, True), (first + 10, False)):
+        canvas = AsciiCanvas(W, H)
+        LEPRECHAUN._draw_drops(canvas, travelled, W, H, sparkles=True)
+        assert bool(canvas.pixels) is expected, f"sparkle at travelled={travelled}"
+
     overlay = HolidayOverlay()
     overlay.start_flyby(0.0)
-    t, counts = 0.0, []
+    t = 0.0
     while True:
         moving, canvas = draw(overlay, t, holiday=HOLIDAYS["st_patricks"])
         assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
         if not moving:
             break
-        counts.append(sum(1 for c in canvas.pixels.values() if c == COIN_GOLD))
         t += ANIMATION_FRAME_INTERVAL
-    assert counts[0] == 0 and counts[-1] > 0
-    assert counts == sorted(counts), "dropped coins stay put until the pass ends"
 
 
 def test_pumpkins_only_on_idle_scenes():

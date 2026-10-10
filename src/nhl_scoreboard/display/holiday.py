@@ -66,6 +66,13 @@ class Flyby:
     drop_spacing: int = 0
     drop_column: int = 0
     linger_seconds: float = 0.0
+    #: The reverse: the same items lie on the ground from the start, at the
+    #: same spots, and each vanishes as ``drop_column`` reaches it (the
+    #: leprechaun's coins, #249 -- dropped behind a walker at ground level,
+    #: they read as something else entirely). ``sparkle`` flashes where one
+    #: was just collected.
+    collects: bool = False
+    sparkle: RGB | None = None
 
     @property
     def width(self) -> int:
@@ -84,7 +91,7 @@ class Flyby:
         if x + self.width + round(self.linger_seconds * self.speed) <= 0:
             return False
         if self.drops:
-            self._draw_drops(canvas, travelled, width, height)
+            self._draw_drops(canvas, travelled, width, height, sparkles=False)
         if self.align == "bottom":
             y = height - self.height
         else:
@@ -92,23 +99,42 @@ class Flyby:
             y = (height - self.height) // 2 + round(bob)
         frame = self.frames[int(elapsed / self.frame_seconds) % len(self.frames)]
         draw_sprite(canvas, frame, dict(self.palette), x, y, width, height)
+        if self.collects and self.sparkle:
+            # Over the sprite, not under it: the pickup happens at its feet.
+            self._draw_drops(canvas, travelled, width, height, sparkles=True)
         return True
 
-    def _draw_drops(self, canvas: Any, travelled: int, width: int, height: int) -> None:
-        """Everything dropped so far, each where the sprite was when it fell.
+    def _draw_drops(
+        self, canvas: Any, travelled: int, width: int, height: int, *, sparkles: bool
+    ) -> None:
+        """The items on the ground, as a pure function of distance travelled.
 
-        A pure function of distance travelled, like the sprite itself: drop
-        ``i`` falls once ``(i + 1) * drop_spacing`` px are covered, at the
-        x ``drop_column`` was at that moment, and only while that's on-panel.
+        Item ``i`` belongs at the x ``drop_column`` is at once ``(i + 1) *
+        drop_spacing`` px are covered (only while that's on-panel). Dropping:
+        it appears from then on. Collecting: it's there until then, and
+        sparkles for a moment as it's taken.
         """
+        sparkle_px = round(self.speed * SPARKLE_SECONDS)
         i = 0
-        while (distance := (i + 1) * self.drop_spacing) <= travelled:
+        while (distance := (i + 1) * self.drop_spacing) <= width + self.drop_column:
             drop = self.drops[i % len(self.drops)]
+            drop_w, drop_h = len(drop.rows[0]), len(drop.rows)
             drop_x = width - distance + self.drop_column
-            if 0 <= drop_x <= width - len(drop.rows[0]):
-                y = height - len(drop.rows)
-                draw_sprite(canvas, drop.rows, dict(drop.palette), drop_x, y, width, height)
             i += 1
+            if not 0 <= drop_x <= width - drop_w:
+                continue
+            reached = travelled >= distance
+            if not sparkles and reached != self.collects:
+                y = height - drop_h
+                draw_sprite(canvas, drop.rows, dict(drop.palette), drop_x, y, width, height)
+            elif sparkles and reached and travelled - distance < sparkle_px:
+                cx, cy = drop_x + drop_w // 2, height - drop_h // 2 - 1
+                for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (0, -2), (0, 2)):
+                    _set(canvas, cx + dx, cy + dy, self.sparkle, width, height)
+
+
+#: How long a collected item's sparkle lasts.
+SPARKLE_SECONDS = 0.3
 
 
 @dataclass(frozen=True, slots=True)
@@ -947,10 +973,10 @@ THREE_LEAF = (
     "......s....",
     "......s....",
 )
-# Dropped as he walks: 'Y' gold, 'D' rim, 'W' shine. The owner swapped
-# these in for small shamrocks, which never read well at drop size -- solid
-# ones looked like hearts, outlined ones like acorns. Gold stands out
-# against green with no outline.
+# On the ground for him to collect: 'Y' gold, 'D' rim, 'W' shine. The
+# owner swapped these in for small dropped shamrocks, which never read well
+# at that size -- solid ones looked like hearts, outlined ones like acorns.
+# Gold stands out against green with no outline.
 COIN_GOLD = (255, 190, 0)
 COIN_RIM = (190, 120, 0)
 COIN_SHINE = (255, 250, 200)
@@ -977,11 +1003,13 @@ LEPRECHAUN = Flyby(
     speed=14.0,
     frame_seconds=0.3,
     align="bottom",
-    # Gold coins behind him as he goes (owner's pick, #249) -- Santa's drops.
+    # A row of gold coins already on the ground; he picks each one up as he
+    # reaches it (owner's pick, #249) -- Santa's drops, run in reverse.
     drops=(Drop(GOLD_COIN, (("Y", COIN_GOLD), ("D", COIN_RIM), ("W", COIN_SHINE))),),
     drop_spacing=20,
-    drop_column=9,
-    linger_seconds=2.0,
+    drop_column=2,
+    collects=True,
+    sparkle=COIN_SHINE,
 )
 
 

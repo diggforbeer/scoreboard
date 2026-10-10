@@ -284,7 +284,7 @@ with autumn leaves beside the clock. Through December 26, Santa walks
 across dropping presents, and snow falls on a pile of presents beside the
 clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
 a groundhog who may or may not see his shadow; and the week up to
-Valentine's Day, hearts; and St. Patrick's, a leprechaun scattering
+Valentine's Day, hearts; and St. Patrick's, a leprechaun collecting
 gold coins. Canadian Thanksgiving (`thanksgiving_ca`) is
 available but not ticked by default.
 
