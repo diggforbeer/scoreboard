@@ -516,6 +516,14 @@ exit; with `show_logos = false` every step is just text.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
+- **Every fetch blocks the render loop**, so a slow API freezes the panel
+  (clock, animations, button, goal flash) for as long as the request
+  takes. Seen on a real board, 2026-10-10: `score/now` read timeouts at
+  10s with three retries each froze it ~44s per poll, ~2.5 min across
+  three back-to-back polls. `nhl/api.py`'s `TIMEOUT` is now `(5, 5)` and a
+  timed-out connect or read is retried once (quick 429/5xx answers keep
+  three), so one stalled poll costs ~10s. Moving fetches off the render
+  thread would remove the stall entirely; not done, not yet needed.
 - `gamecenter/{id}/right-rail` (#157, a different endpoint from
   `landing`) has `seasonSeriesWins: {awayTeamWins, homeTeamWins}` --
   oriented to *that game's own* away/home (verified: the same NSH-CGY

@@ -598,6 +598,53 @@ def test_get_raises_once_retries_are_exhausted():
     assert len(responses.calls) == 4
 
 
+def test_a_stalled_server_gets_one_retry_not_three():
+    """Every fetch blocks the render loop: a server that accepts and never
+    answers must cost two timeouts, not four (2026-10-10's ~44s freezes)."""
+    import socket
+    import threading
+
+    accepted = []
+    stop = threading.Event()
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    listener.settimeout(0.1)
+
+    def serve() -> None:
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except TimeoutError:
+                continue
+            accepted.append(conn)  # hold it open, never reply
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        port = listener.getsockname()[1]
+        with (
+            NHLClient(base_url=f"http://127.0.0.1:{port}", timeout=(1.0, 0.2)) as client,
+            pytest.raises(NHLApiError),
+        ):
+            client.scores()
+        assert len(accepted) == 2
+    finally:
+        stop.set()
+        thread.join(timeout=2)
+        for conn in accepted:
+            conn.close()
+        listener.close()
+
+
+def test_default_timeout_is_short_enough_for_the_render_loop():
+    from nhl_scoreboard.nhl.api import TIMEOUT
+
+    connect, read = TIMEOUT
+    assert read <= 5.0 and connect <= 5.0
+    assert NHLClient().timeout == TIMEOUT
+
+
 @responses.activate
 def test_get_does_not_retry_a_404():
     responses.add(responses.GET, f"{BASE_URL}/score/now", status=404)
