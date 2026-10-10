@@ -1752,7 +1752,7 @@ class ScoreboardApp:
         self.draw_scene(self.select_scene())
 
     def april_fools_active(self) -> bool:
-        """April 1 before noon on a Preds board (#248) -- see april_fools.py."""
+        """April 1 on a Preds board (#248) -- see april_fools.py."""
         local = self.clock().astimezone(self.tz)
         return april_fools.active(self.settings.scoreboard.favourite_team, local)
 

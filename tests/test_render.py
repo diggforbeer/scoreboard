@@ -1753,22 +1753,3 @@ def test_groundhog_burrow_and_verdict_frame_the_clock(year, name, update_snapsho
     text = plain.bbox()
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot(f"holiday_groundhog_clock_{name}", art, update_snapshots)
-
-
-def test_april_fools_standings_text_layout(update_snapshots):
-    """#248: the Preds, as the Admirals, winless at the bottom -- the giveaway is the 0-70-0."""
-    from nhl_scoreboard.april_fools import prank_conference
-
-    conference = [
-        standings_row(abbrev, seq, 100 - 3 * seq, (40 - seq, 20 + seq, 10))
-        for seq, abbrev in enumerate(
-            ["WPG", "DAL", "VGK", "LAK", "COL", "NSH", "EDM", "MIN", "STL", "CGY"], start=1
-        )
-    ]
-    window = prank_conference(conference)[-5:]
-    c = canvas()
-    make_renderer().draw_standings(c, window, "MIL")
-    art = show("april fools standings, no logo library", c)
-
-    assert_standings_layout(c, window, "MIL")
-    check_snapshot("april_fools_standings", art, update_snapshots)

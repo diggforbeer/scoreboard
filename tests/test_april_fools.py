@@ -68,15 +68,15 @@ def game(away: str, home: str, state: str = "FUT") -> Game:
     ("favourite", "local", "expected"),
     [
         ("NSH", datetime(2027, 4, 1, 0, 0), True),
-        ("NSH", datetime(2027, 4, 1, 11, 59), True),
-        ("NSH", datetime(2027, 4, 1, 12, 0), False),
+        ("NSH", datetime(2027, 4, 1, 23, 59), True),
+        ("NSH", datetime(2027, 4, 2, 0, 0), False),
         ("NSH", datetime(2027, 3, 31, 10, 0), False),
         ("NSH", datetime(2027, 4, 2, 10, 0), False),
         ("DAL", datetime(2027, 4, 1, 10, 0), False),
         ("", datetime(2027, 4, 1, 10, 0), False),
     ],
 )
-def test_only_a_preds_board_only_on_april_first_morning(favourite, local, expected):
+def test_only_a_preds_board_only_on_april_first(favourite, local, expected):
     assert april_fools.active(favourite, local) is expected
 
 
@@ -156,10 +156,12 @@ def test_a_real_game_is_never_pranked(app, kind):
     assert args[0].home.abbrev == "NSH"
 
 
-def test_noon_ends_it(app):
-    app.now["t"] = datetime(2027, 4, 1, 17, 0, tzinfo=UTC)  # 12:00 CDT
+def test_it_lasts_until_local_midnight(app):
+    app.now["t"] = datetime(2027, 4, 2, 4, 59, tzinfo=UTC)  # 23:59 CDT, Apr 1
     app.draw_scene(Scene("clock"))
-    assert app.calls[0][1][1] == "NSH"
+    app.now["t"] = datetime(2027, 4, 2, 5, 0, tzinfo=UTC)  # 00:00 CDT, Apr 2
+    app.draw_scene(Scene("clock"))
+    assert [c[1][1] for c in app.calls] == ["MIL", "NSH"]
 
 
 def test_it_ignores_the_holiday_cheer_switch(app):

@@ -4,7 +4,7 @@ An Easter egg for the owners' own boards, not a holiday overlay: it changes
 what the screens *say*, so it is fenced in tightly --
 
 * only when the favourite is NSH (every other board: nothing);
-* only on April 1, before noon local time;
+* only on April 1 (local time), all day;
 * only on screens that aren't a game: never ``game``, ``goal``,
   ``goal_detail`` or ``three_stars``. April 1 is late in the season, often
   mid playoff race, and a renamed team on a real live game reads as a bug.
@@ -36,11 +36,7 @@ PRANK_SCENES = frozenset(
 
 
 def active(favourite: str, local_now: datetime) -> bool:
-    return (
-        favourite == PRANK_TEAM
-        and (local_now.month, local_now.day) == (4, 1)
-        and local_now.hour < 12
-    )
+    return favourite == PRANK_TEAM and (local_now.month, local_now.day) == (4, 1)
 
 
 def rename(abbrev: str) -> str:

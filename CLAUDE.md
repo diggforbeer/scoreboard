@@ -525,25 +525,11 @@ to every mover's `draw` and every `corners` function (ignored by the
 rest); the clock shows a sun (shadow, six more weeks) or a cloud. Holiday *screens* (a Christmas
 tree, as a `[[rotation]]` entry) are #243.
 
-April Fools' (#248, `april_fools.py`) is an Easter egg for the owners'
-own Predators boards, **not** a holiday overlay and deliberately **not** a
-Holiday Cheer checkbox or gated on `[holiday]` (owner's call): with
-`favourite_team = "NSH"`, on April 1 before noon local time, NSH becomes
-MIL (the Milwaukee Admirals, the Preds' AHL affiliate) on the
-`countdown`/`preview`/`matchup`/`standings`/`leaders`/`clock`/`no_games`
-screens (`PRANK_SCENES`), and the standings drop them to the bottom of the
-conference winless with 0 points -- or, if they really are last, to the top
-unbeaten -- so the screen never shows their true spot. **Never** on `game`,
-`goal`, `goal_detail` or `three_stars`: April 1 is late-season, and a
-relabelled live game reads as a bug. The swap happens in `draw_scene()`
-(scene's game, the `favourite` passed to the renderer) except the standings
-reorder, which needs the whole conference and so lives in
-`_standings_scene()`. The Admirals logo is a committed override
-(`assets/logos/overrides/32/dark/MIL.png`, owner-supplied reference image,
-same flood-fill/largest-component/crop/LANCZOS pipeline as WSH -- the
-largest-component step dropped the ™ mark); its colours live in
-`display/teams.py`'s `GUEST_COLORS`, deliberately not `TEAM_COLORS`, which
-drives logo fetching and horn-upload keys. Left out of README.md on purpose.
+`april_fools.py` (#248) is a small, date-gated Easter egg for NSH boards,
+deliberately low-key (kept out of README.md, the demo, and the rendered
+snapshots) -- read the module docstring before touching the standings,
+scene drawing or `display/teams.py`'s `GUEST_COLORS`; its tests pin the
+fences (never a live game, goal or three stars).
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
