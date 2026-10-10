@@ -27,7 +27,13 @@ from .brightness import lux_to_brightness
 from .button import Button
 from .config import DEFAULT_CONFIG_PATHS, RotationEntry, Settings, resolve_timezone
 from .display.fonts import FontSet
-from .display.holiday import HOLIDAYS, Holiday, HolidayOverlay, active_holiday
+from .display.holiday import (
+    HOLIDAYS,
+    Holiday,
+    HolidayOverlay,
+    active_holiday,
+    christmas_countdown,
+)
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
@@ -119,7 +125,8 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``matchup``, ``leaders``, ``clock``, ``no_games``,
+    ``conference_leaders``, ``matchup``, ``leaders``, ``clock``,
+    ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
@@ -1332,7 +1339,21 @@ class ScoreboardApp:
         if screen == "leaders":
             # Resolved lazily like matchup: club-stats is never called unless listed.
             return self._leaders_scene(allow_fetch=allow_fetch)
+        if screen == "holiday":
+            return self._holiday_screen_scene()
         return None
+
+    def _holiday_screen_scene(self) -> Scene | None:
+        """The active holiday's own screen (#243), or None to skip the slot.
+
+        Only Christmas has one: the tree, Dec 1-25, and only with Holiday
+        Cheer on and Christmas ticked -- the same switches as its overlay.
+        """
+        cfg = self.settings.holiday
+        if not cfg.enabled or "christmas" not in cfg.themes:
+            return None
+        today = self.clock().astimezone(self.tz).date()
+        return Scene("christmas_tree") if christmas_countdown(today) else None
 
     def _rotate_idle_scenes(
         self, upcoming: Game | None, standings: Scene | None, *, allow_fetch: bool = True
@@ -1796,6 +1817,8 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), favourite)
+        elif scene.kind == "christmas_tree":
+            r.draw_christmas_tree(self.canvas, self.clock(), favourite)
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":

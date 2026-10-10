@@ -538,14 +538,22 @@ favourite, threaded through `HolidayOverlay.draw(favourite=...)` from
 (#251, Jul 1 / Jul 4; `canada_day` off by default like `thanksgiving_ca`)
 are the New Year's show recoloured (`_recoloured()`: same rockets, flag
 colours) plus a flag either side of the clock -- July is the off-season,
-so the clock is where they're actually seen. Groundhog Day (#247, Feb 2) adds a third
+so the clock is where they're actually seen. Holiday *screens* (#243) are
+a separate, opt-in `[[rotation]]` entry, `"holiday"` (absent from
+`_default_rotation`, like matchup/leaders), resolved by
+`_holiday_screen_scene()` to the active holiday's own scene -- only
+Christmas has one: `christmas_tree`, Dec 1-25, gated on the same
+`[holiday]` switches as its overlay, skipped (never blank) otherwise.
+`Renderer.draw_christmas_tree` draws a twinkling tree in the favourite's
+colours (2fps, no fast loop) beside a countdown to the 25th ("MERRY
+CHRISTMAS" on the day), and just the tree, centred, when the countdown
+doesn't fit (a single 64px panel). Groundhog Day (#247, Feb 2) adds a third
 mover kind, `Popup` (rises out of a mound, looks left/right, then either
 startles at a dark silhouette and ducks, or stays and sinks), and is the
 one holiday that needs the date: shadow-or-not is `random.Random(year)`,
 so `HolidayOverlay.draw(day=...)` threads the board's local date through
 to every mover's `draw` and every `corners` function (ignored by the
-rest); the clock shows a sun (shadow, six more weeks) or a cloud. Holiday *screens* (a Christmas
-tree, as a `[[rotation]]` entry) are #243.
+rest); the clock shows a sun (shadow, six more weeks) or a cloud.
 
 `april_fools.py` (#248) is a small, date-gated Easter egg for NSH boards,
 deliberately low-key (kept out of README.md, the demo, and the rendered

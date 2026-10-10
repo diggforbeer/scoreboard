@@ -50,6 +50,7 @@ from nhl_scoreboard.display.holiday import (
     US_FIREWORKS,
     HolidayOverlay,
     active_holiday,
+    christmas_countdown,
     easter_sunday,
     egg_teams,
 )
@@ -780,3 +781,53 @@ def test_night_blanking_drops_back_to_the_slow_loop(holiday_app):
     app.settings.night_mode.dim_brightness = 0
     app.draw()
     assert app.frame_interval() == FRAME_INTERVAL
+
+
+# -- the Christmas tree screen (#243) ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 11, 30), None),
+        (date(2026, 12, 1), ("24 DAYS", "TO CHRISTMAS")),
+        (date(2026, 12, 13), ("12 DAYS", "TO CHRISTMAS")),
+        (date(2026, 12, 24), ("1 DAY", "TO CHRISTMAS")),
+        (date(2026, 12, 25), ("MERRY", "CHRISTMAS")),
+        (date(2026, 12, 26), None),
+    ],
+)
+def test_christmas_countdown(day, expected):
+    assert christmas_countdown(day) == expected
+
+
+def test_holiday_rotation_screen_is_the_tree_only_in_its_season(holiday_app):
+    app, _src, now = holiday_app
+    assert app._rotation_screen_scene("holiday", None, None) is None, "October: skipped"
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    assert app._rotation_screen_scene("holiday", None, None) == Scene("christmas_tree")
+    now["t"] = datetime(2026, 12, 26, 18, 0, tzinfo=UTC)
+    assert app._rotation_screen_scene("holiday", None, None) is None, "Boxing Day: skipped"
+
+
+@pytest.mark.parametrize(
+    "switch_off",
+    [
+        lambda cfg: setattr(cfg, "enabled", False),
+        lambda cfg: setattr(cfg, "themes", ["halloween"]),
+    ],
+    ids=["holiday-cheer-off", "christmas-unticked"],
+)
+def test_holiday_rotation_screen_follows_the_holiday_cheer_switches(holiday_app, switch_off):
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    switch_off(app.settings.holiday)
+    assert app._rotation_screen_scene("holiday", None, None) is None
+
+
+def test_holiday_is_an_opt_in_rotation_screen():
+    from nhl_scoreboard.config import VALID_ROTATION_SCREENS
+
+    settings = Settings.from_dict({"rotation": [{"screen": "holiday", "seconds": 10}]})
+    assert [e.screen for e in settings.rotation] == ["holiday"]
+    assert "holiday" in VALID_ROTATION_SCREENS

@@ -23,6 +23,7 @@ EVERY_KIND = {
     "matchup",
     "conference_leaders",
     "leaders",
+    "christmas_tree",
     "clock",
     "no_games",
     "no_data",
@@ -138,6 +139,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_leaders(c, scene.leaders, "NSH")
         elif scene.kind == "clock":
             r.draw_clock(c, NOW)
+        elif scene.kind == "christmas_tree":
+            r.draw_christmas_tree(c, NOW, "NSH")
         else:
             r.draw_message(c, scene.kind.upper())
         assert c.out_of_bounds == [], f"{scene.kind} drew off-panel"

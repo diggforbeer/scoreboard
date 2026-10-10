@@ -1242,6 +1242,85 @@ def _flags(flag: tuple[str, ...]) -> Callable[..., None]:
     return draw
 
 
+# -- The Christmas tree screen (#243) ------------------------------------------
+
+TREE_GREEN = (0, 140, 40)
+TREE_TRUNK = (120, 70, 20)
+TREE_STAR = (255, 210, 0)
+#: The lights cycle through these, each bulb a step out from its neighbours.
+TREE_LIGHTS = ((255, 40, 40), (255, 210, 0), (60, 120, 255), (255, 255, 255))
+
+
+def _build_tree() -> tuple[str, ...]:
+    """'S' star, 'G' needles, 'K' trunk, 'o'/'O' ornaments (the favourite's
+    two colours), '*' lights -- decorations placed by a fixed hash, so the
+    tree is the same every time without hand-placing ~40 baubles."""
+    width, height = 25, 31
+    c = width // 2
+    grid = [["."] * width for _ in range(height)]
+    for x, y in ((c, 0), (c - 2, 1), (c - 1, 1), (c, 1), (c + 1, 1), (c + 2, 1), (c, 2)):
+        grid[y][x] = "S"
+    # Three overlapping tiers: (top row, bottom row, half-width at top, at bottom).
+    for top, bottom, w0, w1 in ((3, 10, 1, 6), (9, 18, 3, 9), (16, 26, 5, 12)):
+        for y in range(top, bottom + 1):
+            half = round(w0 + (w1 - w0) * (y - top) / (bottom - top))
+            for x in range(c - half, c + half + 1):
+                grid[y][x] = "G"
+    for y in range(27, 31):
+        for x in range(c - 2, c + 3):
+            grid[y][x] = "K"
+    ornaments = 0
+    for y in range(4, 27):
+        for x in range(width):
+            if grid[y][x] != "G":
+                continue
+            if (x * 7 + y * 13) % 19 == 0:
+                grid[y][x] = "o" if ornaments % 2 == 0 else "O"
+                ornaments += 1
+            elif (x * 5 + y * 11) % 13 == 0:
+                grid[y][x] = "*"
+    return tuple("".join(row) for row in grid)
+
+
+CHRISTMAS_TREE = _build_tree()
+TREE_WIDTH = len(CHRISTMAS_TREE[0])
+
+
+def draw_christmas_tree(
+    canvas: Any, x: int, y: int, tick: int, favourite: str, width: int, height: int
+) -> None:
+    """The tree at (x, y); ``tick`` (half-seconds) steps the lights and star.
+
+    Twinkles at the normal 2fps -- like the snow, a whole screen of it never
+    needs the fast animation loop.
+    """
+    ornament = team_color(favourite) if favourite else (220, 0, 30)
+    second = team_secondary_color(favourite) if favourite else (255, 210, 0)
+    fixed = {"G": TREE_GREEN, "K": TREE_TRUNK, "o": ornament, "O": second}
+    star = TREE_STAR if tick % 2 == 0 else FLAG_WHITE
+    for dy, row in enumerate(CHRISTMAS_TREE):
+        for dx, ch in enumerate(row):
+            if ch == ".":
+                continue
+            if ch == "*":
+                colour = TREE_LIGHTS[(tick + dx + 2 * dy) % len(TREE_LIGHTS)]
+            elif ch == "S":
+                colour = star
+            else:
+                colour = fixed[ch]
+            _set(canvas, x + dx, y + dy, colour, width, height)
+
+
+def christmas_countdown(day: date) -> tuple[str, str] | None:
+    """The tree screen's two lines, or None outside Dec 1-25."""
+    if day.month != 12 or not 1 <= day.day <= 25:
+        return None
+    left = 25 - day.day
+    if left == 0:
+        return "MERRY", "CHRISTMAS"
+    return f"{left} DAY{'S' if left > 1 else ''}", "TO CHRISTMAS"
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(

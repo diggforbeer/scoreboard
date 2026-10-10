@@ -722,6 +722,34 @@ class Renderer:
             local.strftime("%a %b %-d").upper(),
         )
 
+    def draw_christmas_tree(self, canvas: Any, now: datetime, favourite: str) -> None:
+        """The holiday rotation screen in December (#243): a twinkling tree in
+        the favourite's colours on the left, the countdown to the 25th right.
+        """
+        from .holiday import TREE_WIDTH, christmas_countdown, draw_christmas_tree
+
+        canvas.Clear()
+        local = now.astimezone(self.tz)
+        tick = int(now.timestamp() * 2)
+        lines = christmas_countdown(local.date())
+        left = TREE_WIDTH + 6  # the text column starts here
+        room = self.width - left - 2
+        fits = lines is not None and all(
+            text_width(font, line) <= room
+            for font, line in zip((self.fonts.large, self.fonts.medium), lines, strict=True)
+        )
+        if not fits:
+            # A single 64px panel has no room beside the tree: just the tree.
+            x = (self.width - TREE_WIDTH) // 2
+            draw_christmas_tree(canvas, x, 1, tick, favourite, self.width, self.height)
+            return
+        draw_christmas_tree(canvas, 3, 1, tick, favourite, self.width, self.height)
+        top, bottom = lines
+        centre = (left + self.width) // 2
+        top_colour = team_color(favourite) if favourite else (220, 0, 30)
+        self.text_center(canvas, self.fonts.large, centre, 14, top_colour, top)
+        self.text_center(canvas, self.fonts.medium, centre, self.height - 4, (0, 200, 60), bottom)
+
     def draw_message(self, canvas: Any, title: str, subtitle: str = "") -> None:
         canvas.Clear()
         if subtitle:

@@ -1842,3 +1842,32 @@ def test_flag_holidays_fireworks_and_flags_over_the_clock(name, update_snapshots
 
     assert not c.out_of_bounds
     check_snapshot(f"holiday_{name}_clock", art, update_snapshots)
+
+
+@pytest.mark.parametrize(("day", "name"), [(13, "countdown"), (25, "merry")])
+def test_christmas_tree_screen(day, name, update_snapshots):
+    from nhl_scoreboard.display.holiday import TREE_GREEN, TREE_WIDTH
+
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, datetime(2026, 12, day, 23, 0, tzinfo=UTC), "NSH")
+    art = show(f"christmas tree screen, Dec {day}", c)
+
+    assert not c.out_of_bounds
+    tree = bbox_of(c, TREE_GREEN)
+    assert tree.x1 < TREE_WIDTH + 4, "the tree on the left"
+    text = c.bbox(TREE_WIDTH + 6, 0)
+    assert text is not None, "the countdown on the right"
+    assert team_color("NSH") in c.colors(TREE_WIDTH + 6, 0), "top line in team colour"
+    assert team_color("NSH") in c.colors(0, 0, TREE_WIDTH + 3), "ornaments in team colour"
+    check_snapshot(f"christmas_tree_{name}", art, update_snapshots)
+
+
+def test_christmas_tree_screen_on_a_single_panel_is_just_the_tree():
+    from nhl_scoreboard.display.holiday import TREE_GREEN
+
+    c = AsciiCanvas(64, H)
+    renderer = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ)
+    renderer.draw_christmas_tree(c, datetime(2026, 12, 13, 23, 0, tzinfo=UTC), "NSH")
+    assert not c.out_of_bounds
+    tree = bbox_of(c, TREE_GREEN)
+    assert abs(tree.center_x - 31.5) <= 1, "centred, no countdown beside it"
