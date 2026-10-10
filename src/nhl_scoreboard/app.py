@@ -1756,13 +1756,26 @@ class ScoreboardApp:
         local = self.clock().astimezone(self.tz)
         return april_fools.active(self.settings.scoreboard.favourite_team, local)
 
+    @staticmethod
+    def _april_fools_scene(scene: Scene) -> Scene:
+        """Every NSH label in ``scene`` as MIL; nothing else changes (#248)."""
+        changes: dict[str, object] = {}
+        if scene.game is not None:
+            changes["game"] = april_fools.swap_game(scene.game)
+        if scene.goal_event is not None:
+            changes["goal_event"] = april_fools.swap_goal(scene.goal_event)
+        if scene.stars is not None:
+            changes["stars"] = tuple(april_fools.swap_star(s) for s in scene.stars)
+        if scene.kind == "conference_leaders" and scene.standings is not None:
+            changes["standings"] = april_fools.swap_rows(scene.standings)
+        return dataclasses.replace(scene, **changes) if changes else scene
+
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
         favourite = self.settings.scoreboard.favourite_team
-        if scene.kind in april_fools.PRANK_SCENES and self.april_fools_active():
+        if self.april_fools_active():
             favourite = april_fools.PRANK_AS
-            if scene.game is not None:
-                scene = dataclasses.replace(scene, game=april_fools.swap_game(scene.game))
+            scene = self._april_fools_scene(scene)
         if scene.kind == "game":
             r.draw_game(self.canvas, self.with_situation(scene.game))
         elif scene.kind == "goal":
@@ -1776,9 +1789,7 @@ class ScoreboardApp:
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "conference_leaders":
-            r.draw_conference_leaders(
-                self.canvas, scene.standings, self.settings.scoreboard.favourite_team
-            )
+            r.draw_conference_leaders(self.canvas, scene.standings, favourite)
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, favourite)
         elif scene.kind == "matchup":

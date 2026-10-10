@@ -528,8 +528,9 @@ tree, as a `[[rotation]]` entry) are #243.
 `april_fools.py` (#248) is a small, date-gated Easter egg for NSH boards,
 deliberately low-key (kept out of README.md, the demo, and the rendered
 snapshots) -- read the module docstring before touching the standings,
-scene drawing or `display/teams.py`'s `GUEST_COLORS`; its tests pin the
-fences (never a live game, goal or three stars).
+scene drawing or `display/teams.py`'s `GUEST_COLORS`. It relabels every screen,
+live games included, but only labels: scores, goal detection, the horn and
+every fetch still key off the real team -- its tests pin that.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.

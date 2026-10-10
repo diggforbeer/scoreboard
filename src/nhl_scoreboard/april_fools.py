@@ -5,14 +5,15 @@ what the screens *say*, so it is fenced in tightly --
 
 * only when the favourite is NSH (every other board: nothing);
 * only on April 1 (local time), all day;
-* only on screens that aren't a game: never ``game``, ``goal``,
-  ``goal_detail`` or ``three_stars``. April 1 is late in the season, often
-  mid playoff race, and a renamed team on a real live game reads as a bug.
+* every screen, live games included (owner's call: the joke is the whole
+  day, not a sideshow) -- only labels change, never scores, times or who
+  scored, and goal detection, the horn and every fetch still key off the
+  real NSH.
 
 Deliberately not a Holiday Cheer checkbox and not gated on ``[holiday]``
 (owner's call): a Preds board just gets it.
 
-On those screens NSH becomes MIL, the Milwaukee Admirals -- the Preds' AHL
+NSH becomes MIL, the Milwaukee Admirals -- the Preds' AHL
 affiliate, logo in ``assets/logos/overrides`` -- and the standings drop
 them to the bottom of the conference with a winless record. If they really
 are last, they go to the top with a perfect one instead: either way the
@@ -24,15 +25,10 @@ from __future__ import annotations
 import dataclasses
 from datetime import datetime
 
-from .nhl.models import Game, StandingsRow
+from .nhl.models import Game, GoalEvent, StandingsRow, Star
 
 PRANK_TEAM = "NSH"
 PRANK_AS = "MIL"
-#: Scenes that are safe to prank -- everything that isn't a game in progress
-#: or a moment from one.
-PRANK_SCENES = frozenset(
-    {"countdown", "preview", "matchup", "standings", "leaders", "clock", "no_games"}
-)
 
 
 def active(favourite: str, local_now: datetime) -> bool:
@@ -48,6 +44,19 @@ def swap_game(game: Game) -> Game:
     away = dataclasses.replace(game.away, abbrev=rename(game.away.abbrev))
     home = dataclasses.replace(game.home, abbrev=rename(game.home.abbrev))
     return dataclasses.replace(game, away=away, home=home)
+
+
+def swap_goal(event: GoalEvent) -> GoalEvent:
+    return dataclasses.replace(event, team_abbrev=rename(event.team_abbrev))
+
+
+def swap_star(star: Star) -> Star:
+    return dataclasses.replace(star, team_abbrev=rename(star.team_abbrev))
+
+
+def swap_rows(rows: tuple[StandingsRow, ...]) -> tuple[StandingsRow, ...]:
+    """Relabel only -- positions untouched (the top-five conference screen)."""
+    return tuple(dataclasses.replace(r, abbrev=rename(r.abbrev)) for r in rows)
 
 
 def prank_conference(ranked: list[StandingsRow]) -> list[StandingsRow]:

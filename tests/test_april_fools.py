@@ -17,7 +17,7 @@ from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.logos import LogoLibrary, default_directories
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.display.teams import GUEST_COLORS, TEAM_COLORS, team_color
-from nhl_scoreboard.nhl.models import Game, StandingsRow
+from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow, Star
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
 
 # 10:00 CDT on April 1 2027 -- inside the window for the default timezone.
@@ -150,10 +150,35 @@ def test_clock_and_countdown_are_pranked(app):
 
 
 @pytest.mark.parametrize("kind", ["game", "goal"])
-def test_a_real_game_is_never_pranked(app, kind):
+def test_live_games_are_relabelled_too_but_the_score_is_real(app, kind):
     app.draw_scene(Scene(kind, game("DAL", "NSH", state="LIVE")))
     ((_, args),) = app.calls
-    assert args[0].home.abbrev == "NSH"
+    assert args[0].home.abbrev == "MIL"
+    assert (args[0].away.score, args[0].home.score) == (2, 3)
+
+
+def test_goal_detail_and_three_stars_relabel_in_step_with_the_game():
+    event = GoalEvent(
+        team_abbrev="NSH",
+        scorer_name="F. Forsberg",
+        scorer_goals_to_date=10,
+        scorer_player_id=1,
+        assists=(),
+        strength="ev",
+    )
+    star = Star(1, 2, "NSH", "J. Saros", 74, "G", 0, 0, 0)
+    scene = ScoreboardApp._april_fools_scene(
+        Scene("goal_detail", game("DAL", "NSH"), goal_event=event, stars=(star,))
+    )
+    assert scene.game.home.abbrev == scene.goal_event.team_abbrev == "MIL"
+    assert scene.stars[0].team_abbrev == "MIL"
+
+
+def test_conference_leaders_relabel_without_moving_anyone():
+    rows = tuple(conference(nsh_at=3)[:5])
+    scene = ScoreboardApp._april_fools_scene(Scene("conference_leaders", standings=rows))
+    assert [r.abbrev for r in scene.standings] == ["WPG", "DAL", "MIL", "VGK", "LAK"]
+    assert [r.points for r in scene.standings] == [r.points for r in rows]
 
 
 def test_it_lasts_until_local_midnight(app):
