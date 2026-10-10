@@ -1504,7 +1504,11 @@ def bbox_of(c: AsciiCanvas, rgb: tuple[int, int, int]) -> BBox:
 
 
 def draw_halloween(
-    c: AsciiCanvas, kind: str, flyby_at: float | None, holiday: str = "halloween"
+    c: AsciiCanvas,
+    kind: str,
+    flyby_at: float | None,
+    holiday: str = "halloween",
+    day=None,
 ) -> bool:
     from nhl_scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
 
@@ -1520,6 +1524,7 @@ def draw_halloween(
         height=H,
         min_gap_seconds=600,
         max_gap_seconds=600,
+        day=day,
     )
 
 
@@ -1711,3 +1716,40 @@ def test_valentines_hearts_frame_the_clock(update_snapshots):
     assert bbox_of(c, HEART_PINK).x0 > text.x1, "pink heart right of the text"
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_valentines_clock", art, update_snapshots)
+
+
+def test_groundhog_sees_his_shadow_over_live_game(games, synthetic_logos, update_snapshots):
+    from datetime import date
+
+    from nhl_scoreboard.display.holiday import GROUNDHOG, GROUNDHOG_SHADOW
+
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 2027 is a shadow year; 3.3s in he's up and has just seen it.
+    assert draw_halloween(c, "game", flyby_at=3.3, holiday="groundhog", day=date(2027, 2, 2))
+    art = show("groundhog sees his shadow over live game", c)
+
+    assert not c.out_of_bounds
+    shadow = bbox_of(c, GROUNDHOG_SHADOW)
+    assert MID_LEFT < shadow.center_x < MID_RIGHT
+    assert shadow.y1 < H - len(GROUNDHOG.mound), "the shadow stands on the ground"
+    check_snapshot("holiday_groundhog_shadow", art, update_snapshots)
+
+
+@pytest.mark.parametrize(("year", "name"), [(2027, "sun"), (2026, "cloud")])
+def test_groundhog_burrow_and_verdict_frame_the_clock(year, name, update_snapshots):
+    from datetime import date
+
+    now = datetime(year, 2, 2, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert not draw_halloween(c, "clock", flyby_at=None, holiday="groundhog", day=date(year, 2, 2))
+    art = show(f"groundhog burrow and {name}, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot(f"holiday_groundhog_clock_{name}", art, update_snapshots)

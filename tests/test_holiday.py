@@ -16,11 +16,15 @@ from nhl_scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, 
 from nhl_scoreboard.config import HolidayConfig, Settings
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.holiday import (
+    CLOUD,
     CONFETTI,
     FIREWORKS,
     FLYBY_SPEED,
     GHOST_BODY,
     GHOST_WIDTH,
+    GROUNDHOG,
+    GROUNDHOG_FUR,
+    GROUNDHOG_SHADOW,
     HEART,
     HEART_OUTLINE,
     HEART_PINK,
@@ -34,6 +38,7 @@ from nhl_scoreboard.display.holiday import (
     SMALL_PRESENT,
     SNOW,
     SNOW_BAND,
+    SUN,
     TURKEY,
     HolidayOverlay,
     active_holiday,
@@ -46,7 +51,14 @@ HALLOWEEN = HOLIDAYS["halloween"]
 CROSSING_SECONDS = (W + GHOST_WIDTH) / FLYBY_SPEED
 
 
-def draw(overlay: HolidayOverlay, now: float, kind: str = "game", holiday=HALLOWEEN, gap=(60, 60)):
+def draw(
+    overlay: HolidayOverlay,
+    now: float,
+    kind: str = "game",
+    holiday=HALLOWEEN,
+    gap=(60, 60),
+    day: date | None = None,
+):
     canvas = AsciiCanvas(W, H)
     moving = overlay.draw(
         canvas,
@@ -57,6 +69,7 @@ def draw(overlay: HolidayOverlay, now: float, kind: str = "game", holiday=HALLOW
         height=H,
         min_gap_seconds=gap[0],
         max_gap_seconds=gap[1],
+        day=day,
     )
     return moving, canvas
 
@@ -173,6 +186,27 @@ def test_valentines_is_the_week_up_to_the_fourteenth(day, expected):
     assert (found.name if found else None) == expected
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [(date(2027, 2, 1), None), (date(2027, 2, 2), "groundhog"), (date(2027, 2, 3), None)],
+)
+def test_groundhog_day_is_one_day(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
+#: Fixed by the year seed (see GROUNDHOG.sees_shadow); pinned here so a
+#: change to the seed is a deliberate, visible test change.
+SHADOW_YEAR, SPRING_YEAR = date(2027, 2, 2), date(2026, 2, 2)
+
+
+def test_shadow_is_decided_once_per_year_and_varies_between_years():
+    assert GROUNDHOG.sees_shadow(SHADOW_YEAR) is True
+    assert GROUNDHOG.sees_shadow(SPRING_YEAR) is False
+    verdicts = {GROUNDHOG.sees_shadow(date(y, 2, 2)) for y in range(2025, 2035)}
+    assert verdicts == {True, False}
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -187,7 +221,14 @@ def test_an_unticked_holiday_never_shows_in_its_window():
 def test_off_by_default_with_every_default_on_holiday_ticked():
     cfg = Settings().holiday
     assert cfg.enabled is False
-    assert cfg.themes == ["halloween", "thanksgiving", "christmas", "new_year", "valentines"]
+    assert cfg.themes == [
+        "halloween",
+        "thanksgiving",
+        "christmas",
+        "new_year",
+        "groundhog",
+        "valentines",
+    ]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
 
@@ -412,6 +453,45 @@ def test_corner_hearts_beat_out_of_step_without_the_fast_loop():
     (red0, pink0), (red1, pink1) = sizes
     assert red0 != red1 and pink0 != pink1, "both beat"
     assert (red0 > red1) != (pink0 > pink1), "out of step"
+
+
+def run_groundhog(day: date) -> tuple[float, bool, int]:
+    """(how long it lasted, whether a shadow ever appeared, lowest fur row)."""
+    overlay = HolidayOverlay()
+    overlay.start_flyby(0.0)
+    t, saw_shadow, lowest = 0.0, False, 0
+    while True:
+        moving, canvas = draw(overlay, t, holiday=HOLIDAYS["groundhog"], day=day)
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            return t, saw_shadow, lowest
+        colours = canvas.pixels.items()
+        saw_shadow |= any(c == GROUNDHOG_SHADOW for _, c in colours)
+        lowest = max([lowest, *(y for (_, y), c in colours if c == GROUNDHOG_FUR)])
+        t += ANIMATION_FRAME_INTERVAL
+
+
+def test_shadow_year_startles_and_ducks_fast():
+    lasted, saw_shadow, lowest = run_groundhog(SHADOW_YEAR)
+    assert saw_shadow
+    assert lasted == pytest.approx(GROUNDHOG.duration(True), abs=0.1)
+    assert lowest < H - len(GROUNDHOG.mound), "never drawn in front of the mound"
+
+
+def test_spring_year_has_no_shadow_and_stays_up_longer():
+    lasted, saw_shadow, _ = run_groundhog(SPRING_YEAR)
+    assert not saw_shadow
+    assert lasted == pytest.approx(GROUNDHOG.duration(False), abs=0.1)
+    assert GROUNDHOG.duration(False) > GROUNDHOG.duration(True)
+
+
+@pytest.mark.parametrize(
+    ("day", "verdict", "other"), [(SHADOW_YEAR, SUN, CLOUD), (SPRING_YEAR, CLOUD, SUN)]
+)
+def test_clock_shows_the_verdict(day, verdict, other):
+    _, canvas = draw(HolidayOverlay(), 0.0, kind="clock", holiday=HOLIDAYS["groundhog"], day=day)
+    colours = set(canvas.pixels.values())
+    assert verdict in colours and other not in colours
 
 
 def test_pumpkins_only_on_idle_scenes():

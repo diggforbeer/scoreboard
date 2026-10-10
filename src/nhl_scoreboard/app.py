@@ -1802,4 +1802,5 @@ class ScoreboardApp:
             height=self.renderer.height,
             min_gap_seconds=cfg.flyby_min_minutes * 60,
             max_gap_seconds=cfg.flyby_max_minutes * 60,
+            day=self.clock().astimezone(self.tz).date(),
         )

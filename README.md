@@ -206,7 +206,7 @@ cooldown_minutes = 15        # how long after that game ends before dimming resu
 
 [holiday]
 enabled = false              # seasonal decorations; each holiday only shows during its own dates
-themes = ["halloween", "thanksgiving", "christmas", "new_year", "valentines"]  # also "thanksgiving_ca"
+themes = ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines"]
 flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
 flyby_max_minutes = 20
 
@@ -282,8 +282,10 @@ GOAL screen) and jack-o'-lanterns flank the clock. The week of Thanksgiving
 (US, or Canadian if you tick it), a turkey walks along the bottom instead,
 with autumn leaves beside the clock. Through December 26, Santa walks
 across dropping presents, and snow falls on a pile of presents beside the
-clock. New Year's Eve and Day bring fireworks and champagne, and the week
-up to Valentine's Day, hearts.
+clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
+a groundhog who may or may not see his shadow; and the week up to
+Valentine's Day, hearts. Canadian Thanksgiving (`thanksgiving_ca`) is
+available but not ticked by default.
 
 ## Audio
 

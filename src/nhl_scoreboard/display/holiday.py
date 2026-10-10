@@ -75,7 +75,9 @@ class Flyby:
     def height(self) -> int:
         return len(self.frames[0])
 
-    def draw(self, canvas: Any, elapsed: float, width: int, height: int) -> bool:
+    def draw(
+        self, canvas: Any, elapsed: float, width: int, height: int, day: date | None = None
+    ) -> bool:
         """Draw the pass ``elapsed`` seconds in; False once it's over."""
         travelled = round(elapsed * self.speed)
         x = width - travelled
@@ -141,7 +143,9 @@ class Fireworks:
     def duration(self) -> float:
         return max(r.launch for r in self.rockets) + self.rise_seconds + self.burst_seconds
 
-    def draw(self, canvas: Any, elapsed: float, width: int, height: int) -> bool:
+    def draw(
+        self, canvas: Any, elapsed: float, width: int, height: int, day: date | None = None
+    ) -> bool:
         if elapsed > self.duration:
             return False
         for rocket in self.rockets:
@@ -202,6 +206,81 @@ def _set(canvas: Any, x: int, y: int, colour: RGB, width: int, height: int) -> N
 
 
 @dataclass(frozen=True, slots=True)
+class Popup:
+    """Something that pops up out of a hole and back down (Groundhog Day, #247).
+
+    Same draw contract as Flyby and Fireworks. Unlike them it uses ``day``:
+    whether it "sees its shadow" is decided once per year (seeded by it), so
+    it's the same all day, varies year to year, and stays deterministic.
+    The script, in seconds: rise, look left and right, then either startle
+    at its shadow and duck fast, or keep looking a while and sink slowly.
+    """
+
+    #: Looking left, looking right, startled. All the same size.
+    frames: tuple[tuple[str, ...], ...]
+    palette: tuple[tuple[str, RGB], ...]
+    shadow_colour: RGB
+    mound: tuple[str, ...]
+    mound_colour: RGB
+    rise_seconds: float = 0.6
+    look_seconds: float = 2.4
+    startle_seconds: float = 0.8
+    duck_seconds: float = 0.25
+    stay_seconds: float = 1.6
+    sink_seconds: float = 0.9
+    #: The empty hole stays this long after it's gone back down.
+    linger_seconds: float = 0.5
+
+    def sees_shadow(self, day: date | None) -> bool:
+        return random.Random((day.year if day else 0) * 7919).random() < 0.5
+
+    def duration(self, shadow: bool) -> float:
+        tail = (
+            self.startle_seconds + self.duck_seconds
+            if shadow
+            else self.stay_seconds + self.sink_seconds
+        )
+        return self.rise_seconds + self.look_seconds + tail + self.linger_seconds
+
+    def draw(
+        self, canvas: Any, elapsed: float, width: int, height: int, day: date | None = None
+    ) -> bool:
+        shadow = self.sees_shadow(day)
+        if elapsed > self.duration(shadow):
+            return False
+        sprite_h, sprite_w = len(self.frames[0]), len(self.frames[0][0])
+        mound_w = len(self.mound[0])
+        ground = height - len(self.mound)
+        x = (width - sprite_w) // 2
+        # How far up it is (0 = hidden, 1 = fully out), and which face.
+        t = elapsed - self.rise_seconds
+        frame, up, startled = self.frames[0], min(1.0, elapsed / self.rise_seconds), False
+        if t >= 0:
+            frame = self.frames[int(t / 0.5) % 2]
+            t -= self.look_seconds
+            if t >= 0 and shadow:
+                startled = t < self.startle_seconds + self.duck_seconds
+                frame = self.frames[2]
+                t -= self.startle_seconds
+                up = 1.0 if t < 0 else max(0.0, 1 - t / self.duck_seconds)
+            elif t >= 0:
+                t -= self.stay_seconds
+                up = 1.0 if t < 0 else max(0.0, 1 - t / self.sink_seconds)
+        shown = round(sprite_h * up)
+        top = ground - shown
+        if startled and up == 1.0:
+            # The shadow: its own silhouette, flat dark, just beside it.
+            silhouette = {ch: self.shadow_colour for row in frame for ch in row if ch != "."}
+            draw_sprite(canvas, frame, silhouette, x + sprite_w + 1, top, width, ground)
+        # Clipped at the ground line, so it rises out of the hole rather
+        # than sliding up in front of it.
+        draw_sprite(canvas, frame[:shown], dict(self.palette), x, top, width, ground)
+        mound_x = x + (sprite_w - mound_w) // 2
+        draw_sprite(canvas, self.mound, {"D": self.mound_colour}, mound_x, ground, width, height)
+        return True
+
+
+@dataclass(frozen=True, slots=True)
 class Holiday:
     name: str
     #: Human-readable, for the admin page's checkbox list (#238).
@@ -212,9 +291,10 @@ class Holiday:
     window: str
     is_active: Callable[[date], bool]
     #: What crosses (or, for New Year's, bursts over) the board now and then.
-    flyby: Flyby | Fireworks
-    #: Draws the static decoration on CORNER_SCENES: (canvas, now, width, height).
-    corners: Callable[[Any, float, int, int], None]
+    flyby: Flyby | Fireworks | Popup
+    #: Draws the static decoration on CORNER_SCENES: (canvas, now, width,
+    #: height, local date) -- the date only matters to Groundhog Day (#247).
+    corners: Callable[[Any, float, int, int, date | None], None]
     #: Ticked when [holiday] themes isn't set. False for a holiday most
     #: boards wouldn't want unasked (Canadian Thanksgiving on a US board).
     default_on: bool = True
@@ -314,7 +394,9 @@ PUMPKIN_WIDTH = len(PUMPKIN_SPRITE[0])
 PUMPKIN_HEIGHT = len(PUMPKIN_SPRITE)
 
 
-def _draw_pumpkins(canvas: Any, now: float, width: int, height: int) -> None:
+def _draw_pumpkins(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
     # Candle flicker: mostly bright, briefly dim, the two pumpkins out of
     # step so it doesn't read as one blinking light.
     y = (height - PUMPKIN_HEIGHT) // 2
@@ -406,7 +488,7 @@ GOLD_LEAF = (
 LEAF_SIZE = len(MAPLE_LEAF)
 
 
-def _draw_leaves(canvas: Any, now: float, width: int, height: int) -> None:
+def _draw_leaves(canvas: Any, now: float, width: int, height: int, day: date | None = None) -> None:
     # Static: nothing here needs the fast frame loop.
     del now
     y = (height - LEAF_SIZE) // 2
@@ -522,7 +604,9 @@ SNOWFLAKES = (_snowflakes(9, 1), _snowflakes(9, 2))
 SNOW_BAND = 30
 
 
-def _draw_presents_and_snow(canvas: Any, now: float, width: int, height: int) -> None:
+def _draw_presents_and_snow(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
     for band, flakes in enumerate(SNOWFLAKES):
         left = 1 if band == 0 else width - SNOW_BAND - 1
         for column, offset, speed in flakes:
@@ -597,7 +681,9 @@ CONFETTI_DOTS = tuple(
 del _rng
 
 
-def _draw_champagne_and_confetti(canvas: Any, now: float, width: int, height: int) -> None:
+def _draw_champagne_and_confetti(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
     # Twinkle: each dot is lit two ticks in three, stepping at 2fps, so this
     # never needs the fast loop either.
     tick = int(now * 2)
@@ -686,7 +772,9 @@ HEART = Flyby(
 )
 
 
-def _draw_beating_hearts(canvas: Any, now: float, width: int, height: int) -> None:
+def _draw_beating_hearts(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
     # One beat per second at the normal 2fps -- no fast loop -- with the
     # two hearts out of step, like the pumpkins' flicker.
     tick = int(now * 2)
@@ -697,6 +785,101 @@ def _draw_beating_hearts(canvas: Any, now: float, width: int, height: int) -> No
     ):
         frame = HEART_FRAMES[(tick + phase) % 2]
         draw_sprite(canvas, frame, {"R": colour, "W": HEART_SHINE}, x, y, width, height)
+
+
+# -- Groundhog Day (#247) ------------------------------------------------------
+
+GROUNDHOG_FUR = (170, 105, 50)
+GROUNDHOG_BELLY = (225, 175, 115)
+GROUNDHOG_NOSE = (90, 45, 20)
+GROUNDHOG_SHADOW = (45, 45, 60)
+DIRT = (120, 75, 30)
+SUN = (255, 200, 0)
+CLOUD = (190, 200, 215)
+
+# Front-facing: 'B' fur, 'L' belly, 'e' eye, 'n' nose, 'p' paws. Frames:
+# looking left, looking right, startled (eyes wide).
+_GROUNDHOG_EARS = "..B....B.."
+
+
+def _groundhog(eyes: str) -> tuple[str, ...]:
+    return (
+        _GROUNDHOG_EARS,
+        ".BBBBBBBB.",
+        eyes,
+        "BBBBnnBBBB",
+        "BBBBBBBBBB",
+        ".BBLLLLBB.",
+        ".BpLLLLpB.",
+        ".BBLLLLBB.",
+        ".BBLLLLBB.",
+        ".BBBBBBBB.",
+    )
+
+
+GROUNDHOG = Popup(
+    frames=(
+        _groundhog("BeBBBBeBBB"),
+        _groundhog("BBBeBBBBeB"),
+        _groundhog("BeeBBBBeeB"),
+    ),
+    palette=(
+        ("B", GROUNDHOG_FUR),
+        ("L", GROUNDHOG_BELLY),
+        ("e", EYE),
+        ("n", GROUNDHOG_NOSE),
+        ("p", GROUNDHOG_NOSE),
+    ),
+    shadow_colour=GROUNDHOG_SHADOW,
+    mound=(
+        "..DDDDDDDDDD..",
+        "DDDDDDDDDDDDDD",
+    ),
+    mound_colour=DIRT,
+)
+
+# 'Y' sun, 'W' cloud: the verdict, beside the clock.
+SUN_SPRITE = (
+    "....Y....",
+    ".Y.....Y.",
+    "...YYY...",
+    "..YYYYY..",
+    "Y.YYYYY.Y",
+    "..YYYYY..",
+    "...YYY...",
+    ".Y.....Y.",
+    "....Y....",
+)
+CLOUD_SPRITE = (
+    "...WWW.....",
+    "..WWWWW.WW.",
+    ".WWWWWWWWWW",
+    "WWWWWWWWWWW",
+    ".WWWWWWWWW.",
+)
+
+
+def _draw_burrow_and_verdict(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None
+) -> None:
+    """A burrow with the groundhog peeking out on the left; the verdict on
+    the right -- sun if he saw his shadow (six more weeks), cloud if not."""
+    del now
+    mound = GROUNDHOG.mound
+    ground = (height + 10) // 2
+    peek = _groundhog("BeBBBBeBBB")[:5]
+    draw_sprite(canvas, peek, dict(GROUNDHOG.palette), CORNER_INSET + 2, ground - 5, width, ground)
+    draw_sprite(canvas, mound, {"D": DIRT}, CORNER_INSET, ground, width, height)
+    if GROUNDHOG.sees_shadow(day):
+        sprite, palette = SUN_SPRITE, {"Y": SUN}
+    else:
+        sprite, palette = CLOUD_SPRITE, {"W": CLOUD}
+    x = width - CORNER_INSET - 2 - len(sprite[0])
+    draw_sprite(canvas, sprite, palette, x, (height - len(sprite)) // 2, width, height)
+
+
+def _groundhog_day(day: date) -> bool:
+    return (day.month, day.day) == (2, 2)
 
 
 #: In calendar order: also the order of the admin page's checkboxes.
@@ -739,6 +922,14 @@ HOLIDAYS: dict[str, Holiday] = {
         _new_years,
         FIREWORKS,
         _draw_champagne_and_confetti,
+    ),
+    "groundhog": Holiday(
+        "groundhog",
+        "Groundhog Day",
+        "Feb 2",
+        _groundhog_day,
+        GROUNDHOG,
+        _draw_burrow_and_verdict,
     ),
     "valentines": Holiday(
         "valentines",
@@ -821,8 +1012,12 @@ class HolidayOverlay:
         height: int,
         min_gap_seconds: float,
         max_gap_seconds: float,
+        day: date | None = None,
     ) -> bool:
         """Decorate ``canvas``; returns True while something is moving.
+
+        ``day`` is the board's local date, for decorations that depend on it
+        (Groundhog Day's shadow, #247); None draws them as if in year 0.
 
         The caller uses that to run the frame loop fast only for the few
         seconds a fly-by is on screen, and at its normal 2fps otherwise.
@@ -835,20 +1030,21 @@ class HolidayOverlay:
         if scene_kind in NO_OVERLAY_SCENES:
             return False
         if scene_kind in CORNER_SCENES:
-            holiday.corners(canvas, now, width, height)
+            holiday.corners(canvas, now, width, height, day)
         return self._draw_flyby(
-            canvas, holiday.flyby, now, width, height, min_gap_seconds, max_gap_seconds
+            canvas, holiday.flyby, now, width, height, min_gap_seconds, max_gap_seconds, day
         )
 
     def _draw_flyby(
         self,
         canvas: Any,
-        mover: Flyby | Fireworks,
+        mover: Flyby | Fireworks | Popup,
         now: float,
         width: int,
         height: int,
         min_gap: float,
         max_gap: float,
+        day: date | None,
     ) -> bool:
         if self._flyby_started is None:
             if self._next_flyby_at is None:
@@ -856,7 +1052,7 @@ class HolidayOverlay:
             if now < self._next_flyby_at:
                 return False
             self.start_flyby(now)
-        if mover.draw(canvas, now - self._flyby_started, width, height):
+        if mover.draw(canvas, now - self._flyby_started, width, height, day):
             return True
         self._flyby_started = None
         self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)

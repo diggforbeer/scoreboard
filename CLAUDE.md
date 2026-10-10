@@ -516,7 +516,13 @@ a beating heart floats across (two frames, full and squeezed), and two
 beat out of step beside the clock at 2fps. The flying heart is outlined
 (`_outlined`, pale pink) -- a plain red heart vanished crossing a red team
 logo in a rendered preview; any red/white-on-anything sprite added later
-should get the same check. Holiday *screens* (a Christmas
+should get the same check. Groundhog Day (#247, Feb 2) adds a third
+mover kind, `Popup` (rises out of a mound, looks left/right, then either
+startles at a dark silhouette and ducks, or stays and sinks), and is the
+one holiday that needs the date: shadow-or-not is `random.Random(year)`,
+so `HolidayOverlay.draw(day=...)` threads the board's local date through
+to every mover's `draw` and every `corners` function (ignored by the
+rest); the clock shows a sun (shadow, six more weeks) or a cloud. Holiday *screens* (a Christmas
 tree, as a `[[rotation]]` entry) are #243.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
