@@ -142,6 +142,8 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("clock"), holiday="valentines"),
         DemoStep(Scene("game", live), holiday="st_patricks"),
         DemoStep(Scene("clock"), holiday="st_patricks"),
+        DemoStep(Scene("game", live), holiday="easter"),
+        DemoStep(Scene("clock"), holiday="easter"),
         DemoStep(Scene("no_games")),
         DemoStep(Scene("no_data")),
     ]

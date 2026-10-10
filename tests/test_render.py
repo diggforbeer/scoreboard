@@ -1792,3 +1792,38 @@ def test_st_patricks_shamrocks_frame_the_clock(update_snapshots):
     assert min(leaves) < text.x0 and max(leaves) > text.x1, "one either side"
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_st_patricks_clock", art, update_snapshots)
+
+
+def test_easter_bunny_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import BUNNY, BUNNY_FUR
+
+    game = games["live"]
+    plain = canvas()
+    make_renderer(synthetic_logos).draw_game(plain, game)
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 3.3s in at 18px/s: mid-panel, mid-hop.
+    assert draw_halloween(c, "game", flyby_at=3.3, holiday="easter")
+    art = show("easter bunny over live game", c)
+
+    assert not c.out_of_bounds
+    assert MID_LEFT < bbox_of(c, BUNNY_FUR).center_x < MID_RIGHT
+    top = H - BUNNY.height - BUNNY.hop_pixels
+    above = {p: rgb for p, rgb in plain.pixels.items() if p[1] < top}
+    assert c.lit(0, 0, W - 1, top - 1) == above, "the score untouched, even at the top of a hop"
+    check_snapshot("holiday_easter_bunny", art, update_snapshots)
+
+
+def test_easter_eggs_frame_the_clock(update_snapshots):
+    now = datetime(2027, 3, 27, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="easter") is False
+    art = show("easter eggs, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_easter_clock", art, update_snapshots)

@@ -16,9 +16,11 @@ from nhl_scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, 
 from nhl_scoreboard.config import HolidayConfig, Settings
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.holiday import (
+    BUNNY,
     CLOUD,
     COIN_GOLD,
     CONFETTI,
+    EGGS,
     FIREWORKS,
     FLYBY_SPEED,
     GHOST_BODY,
@@ -45,6 +47,7 @@ from nhl_scoreboard.display.holiday import (
     TURKEY,
     HolidayOverlay,
     active_holiday,
+    easter_sunday,
 )
 from nhl_scoreboard.display.matrix import Backend
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
@@ -224,6 +227,43 @@ def test_st_patricks_is_the_days_up_to_the_seventeenth(day, expected):
     assert (found.name if found else None) == expected
 
 
+@pytest.mark.parametrize(
+    ("year", "expected"),
+    [
+        (2024, date(2024, 3, 31)),
+        (2025, date(2025, 4, 20)),
+        (2026, date(2026, 4, 5)),
+        (2027, date(2027, 3, 28)),
+        (2038, date(2038, 4, 25)),  # the latest Easter can fall
+        (2285, date(2285, 3, 22)),  # the earliest
+    ],
+)
+def test_easter_sunday(year, expected):
+    assert easter_sunday(year) == expected
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2027, 3, 21), None),
+        (date(2027, 3, 22), "easter"),
+        (date(2027, 3, 28), "easter"),
+        (date(2027, 3, 29), None),
+        (date(2025, 4, 14), "easter"),
+        (date(2025, 4, 13), None),
+    ],
+)
+def test_easter_is_the_week_up_to_easter_sunday(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
+def test_st_patricks_wins_the_rare_overlap_with_easter_week():
+    # 2008: Easter Sunday was Mar 23, so its week began on the 17th.
+    assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 17)).name == "st_patricks"
+    assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 18)).name == "easter"
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -246,6 +286,7 @@ def test_off_by_default_with_every_default_on_holiday_ticked():
         "groundhog",
         "valentines",
         "st_patricks",
+        "easter",
     ]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
@@ -556,6 +597,41 @@ def test_leprechaun_collects_a_row_of_gold_coins_with_a_sparkle():
         if not moving:
             break
         t += ANIMATION_FRAME_INTERVAL
+
+
+def test_bunny_hops_along_the_bottom_and_is_outlined_in_black():
+    for rows in BUNNY.frames:
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                if ch in "WPT":
+                    neighbours = [
+                        rows[y + dy][x + dx] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                    ]
+                    assert "." not in neighbours, f"{ch} at {x},{y} touches the background"
+    assert dict(BUNNY.palette)["o"] == (0, 0, 0), "an unlit LED, not a colour"
+
+    overlay = HolidayOverlay()
+    overlay.start_flyby(0.0)
+    t, tops = 0.0, set()
+    while True:
+        moving, canvas = draw(overlay, t, holiday=HOLIDAYS["easter"])
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            break
+        x = W - round(t * BUNNY.speed)
+        if 0 <= x <= W - BUNNY.width:  # whole bunny on-panel, not half-entered
+            tops.add(min(y for _, y in canvas.pixels))
+        t += ANIMATION_FRAME_INTERVAL
+    ground = H - BUNNY.height + 1  # its top row when standing (the outline is unlit)
+    assert max(tops) == ground, "lands on the ground"
+    assert ground - min(tops) >= 4, "and actually leaves it, by a visible amount"
+
+
+def test_eggs_sit_either_side_of_the_clock():
+    _, canvas = draw(HolidayOverlay(), 0.0, kind="clock", holiday=HOLIDAYS["easter"])
+    shells = {shell for _, shell, _ in EGGS}
+    xs = [x for (x, _), c in canvas.pixels.items() if c in shells]
+    assert min(xs) < 20 and max(xs) > W - 20
 
 
 def test_pumpkins_only_on_idle_scenes():

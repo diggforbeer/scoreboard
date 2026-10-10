@@ -1678,6 +1678,7 @@ _DEFAULT_HOLIDAY_DATA = {
         "groundhog",
         "valentines",
         "st_patricks",
+        "easter",
     ],
     "flyby_min_minutes": 5.0,
     "flyby_max_minutes": 20.0,
@@ -1708,6 +1709,7 @@ def test_sends_the_holiday_config_and_every_available_holiday_last(app_dir, conf
         "groundhog",
         "valentines",
         "st_patricks",
+        "easter",
     ]
     assert available[0] == {"name": "halloween", "label": "Halloween", "window": "Oct 1-31"}
 

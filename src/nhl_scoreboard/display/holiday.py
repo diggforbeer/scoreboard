@@ -58,6 +58,10 @@ class Flyby:
     bob_period: float = 1.0
     #: "middle" floats through the centre; "bottom" walks along the bottom edge.
     align: str = "middle"
+    #: Bounding instead of walking (Easter's bunny, #250): with "bottom",
+    #: each ``hop_period`` seconds is one arc up to ``hop_pixels`` and down.
+    hop_pixels: int = 0
+    hop_period: float = 0.6
     #: Things left on the ground behind it (Santa's presents, #240): one
     #: dropped every ``drop_spacing`` px travelled, from sprite column
     #: ``drop_column``, cycling through ``drops``. They stay put until the
@@ -93,7 +97,8 @@ class Flyby:
         if self.drops:
             self._draw_drops(canvas, travelled, width, height, sparkles=False)
         if self.align == "bottom":
-            y = height - self.height
+            arc = abs(math.sin(math.pi * elapsed / self.hop_period)) if self.hop_pixels else 0.0
+            y = height - self.height - round(self.hop_pixels * arc)
         else:
             bob = self.bob_pixels * math.sin(2 * math.pi * elapsed / self.bob_period)
             y = (height - self.height) // 2 + round(bob)
@@ -341,6 +346,30 @@ def nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
     """The ``n``th ``weekday`` (Monday = 0) of a month, e.g. 4th Thursday of November."""
     first = date(year, month, 1)
     return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+
+
+def easter_sunday(year: int) -> date:
+    """Western (Gregorian) Easter: the anonymous Gregorian algorithm."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = divmod(b, 4)
+    g = (b - (b + 8) // 25 + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    weekday = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * weekday) // 451
+    month, day = divmod(h + weekday - 7 * m + 114, 31)
+    return date(year, month, day + 1)
+
+
+def _easter_week(day: date) -> bool:
+    """The 7 days up to and including Easter Sunday (#250).
+
+    Easter falls Mar 22-Apr 25, so in the rare year it's Mar 22 or 23 this
+    week reaches back into St. Patrick's (Mar 14-17); registry order breaks
+    that tie, and St. Patrick's comes first.
+    """
+    sunday = easter_sunday(day.year)
+    return sunday - timedelta(days=6) <= day <= sunday
 
 
 def _us_thanksgiving_week(day: date) -> bool:
@@ -1026,6 +1055,98 @@ def _draw_shamrocks(
     draw_sprite(canvas, THREE_LEAF, palette, x, y, width, height)
 
 
+# -- Easter (#250) -------------------------------------------------------------
+
+BUNNY_FUR = (215, 215, 225)
+BUNNY_EAR = (255, 140, 180)
+BUNNY_TAIL = (255, 255, 255)
+
+# Facing left: 'W' fur, 'P' inner ear, 'e' eye, 'n' nose, 'T' tail.
+BUNNY_SPRITE = (
+    "...WW.WW.....",
+    "...WP.WP.....",
+    "...WP.WP.....",
+    "..WWWWWW.....",
+    ".WeWWWWW.....",
+    "nWWWWWWWWW...",
+    ".WWWWWWWWWWT.",
+    "..WWWWWWWWWTT",
+    "..WWWWWWWWWT.",
+    "...WW...WWW..",
+    "..WW....WW...",
+)
+BUNNY = Flyby(
+    # Outlined in black -- an unlit LED. A white bunny vanished over the
+    # silver/pale-teal logos (LAK, SEA) in a rendered preview; a black ring
+    # cuts it out of any bright logo and is invisible on the dark panel.
+    # (The red heart and green leprechaun needed the opposite: a light ring.)
+    frames=(_outlined(BUNNY_SPRITE),),
+    palette=(
+        ("o", EYE),
+        ("W", BUNNY_FUR),
+        ("P", BUNNY_EAR),
+        ("e", EYE),
+        ("n", BUNNY_EAR),
+        ("T", BUNNY_TAIL),
+    ),
+    speed=18.0,
+    frame_seconds=1.0,
+    align="bottom",
+    hop_pixels=6,
+    hop_period=0.6,
+)
+
+_EGG_SHAPE = (
+    "..XXX..",
+    ".XXXXX.",
+    ".XXXXX.",
+    "XXXXXXX",
+    "XXXXXXX",
+    "XXXXXXX",
+    "XXXXXXX",
+    ".XXXXX.",
+    "..XXX..",
+)
+
+
+def _egg(kind: str) -> tuple[str, ...]:
+    """The egg shape with 'S' marking its decoration."""
+    rows = [list(row) for row in _EGG_SHAPE]
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch != "X":
+                continue
+            if (
+                (kind == "stripes" and y in (3, 6))
+                or (kind == "dots" and (x + y) % 3 == 0 and 2 <= y <= 7)
+                or (kind == "zigzag" and (y, x % 2) in ((4, 0), (5, 1)))
+            ):
+                row[x] = "S"
+    return tuple("".join(row) for row in rows)
+
+
+#: (sprite, shell, decoration). Saturated, not pastel: pastels wash out to
+#: white on an LED (the turkey's browns, #239, taught the same lesson).
+EGGS = (
+    (_egg("stripes"), (255, 110, 180), (255, 230, 80)),
+    (_egg("dots"), (80, 160, 255), (255, 255, 255)),
+    (_egg("zigzag"), (170, 100, 255), (120, 255, 120)),
+    (_egg("stripes"), (255, 215, 50), (255, 90, 160)),
+)
+EGG_WIDTH = len(_EGG_SHAPE[0])
+
+
+def _draw_eggs(canvas: Any, now: float, width: int, height: int, day: date | None = None) -> None:
+    """Two painted eggs nestled at the bottom of each corner."""
+    del now, day
+    y = height - len(_EGG_SHAPE) - 1
+    step = EGG_WIDTH + 1
+    left, right = CORNER_INSET, width - CORNER_INSET - 2 * step + 1
+    for i, x in enumerate((left, left + step, right, right + step)):
+        rows, shell, decoration = EGGS[i]
+        draw_sprite(canvas, rows, {"X": shell, "S": decoration}, x, y, width, height)
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(
@@ -1090,6 +1211,14 @@ HOLIDAYS: dict[str, Holiday] = {
         _between((3, 14), (3, 17)),
         LEPRECHAUN,
         _draw_shamrocks,
+    ),
+    "easter": Holiday(
+        "easter",
+        "Easter",
+        "The week up to Easter Sunday",
+        _easter_week,
+        BUNNY,
+        _draw_eggs,
     ),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)
