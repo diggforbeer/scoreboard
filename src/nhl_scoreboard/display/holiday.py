@@ -75,6 +75,131 @@ class Flyby:
     def height(self) -> int:
         return len(self.frames[0])
 
+    def draw(self, canvas: Any, elapsed: float, width: int, height: int) -> bool:
+        """Draw the pass ``elapsed`` seconds in; False once it's over."""
+        travelled = round(elapsed * self.speed)
+        x = width - travelled
+        if x + self.width + round(self.linger_seconds * self.speed) <= 0:
+            return False
+        if self.drops:
+            self._draw_drops(canvas, travelled, width, height)
+        if self.align == "bottom":
+            y = height - self.height
+        else:
+            bob = self.bob_pixels * math.sin(2 * math.pi * elapsed / self.bob_period)
+            y = (height - self.height) // 2 + round(bob)
+        frame = self.frames[int(elapsed / self.frame_seconds) % len(self.frames)]
+        draw_sprite(canvas, frame, dict(self.palette), x, y, width, height)
+        return True
+
+    def _draw_drops(self, canvas: Any, travelled: int, width: int, height: int) -> None:
+        """Everything dropped so far, each where the sprite was when it fell.
+
+        A pure function of distance travelled, like the sprite itself: drop
+        ``i`` falls once ``(i + 1) * drop_spacing`` px are covered, at the
+        x ``drop_column`` was at that moment, and only while that's on-panel.
+        """
+        i = 0
+        while (distance := (i + 1) * self.drop_spacing) <= travelled:
+            drop = self.drops[i % len(self.drops)]
+            drop_x = width - distance + self.drop_column
+            if 0 <= drop_x <= width - len(drop.rows[0]):
+                y = height - len(drop.rows)
+                draw_sprite(canvas, drop.rows, dict(drop.palette), drop_x, y, width, height)
+            i += 1
+
+
+@dataclass(frozen=True, slots=True)
+class Rocket:
+    """One firework: launched ``launch`` seconds into the show from ``x``
+    (a fraction of the panel width), bursting at row ``burst_y``."""
+
+    launch: float
+    x: float
+    burst_y: int
+    colour: RGB
+
+
+@dataclass(frozen=True, slots=True)
+class Fireworks:
+    """A short show instead of a crossing sprite (New Year's, #241).
+
+    Same contract as Flyby.draw -- a pure function of seconds since the show
+    started, False once it's over -- so the overlay schedules it the same
+    way and the fast loop runs only while it does.
+    """
+
+    rockets: tuple[Rocket, ...]
+    #: Seconds from the ground to the burst.
+    rise_seconds: float = 0.7
+    #: Seconds from burst to the last spark fading out.
+    burst_seconds: float = 1.6
+    sparks: int = 12
+    radius: float = 8.0
+
+    @property
+    def duration(self) -> float:
+        return max(r.launch for r in self.rockets) + self.rise_seconds + self.burst_seconds
+
+    def draw(self, canvas: Any, elapsed: float, width: int, height: int) -> bool:
+        if elapsed > self.duration:
+            return False
+        for rocket in self.rockets:
+            t = elapsed - rocket.launch
+            if t < 0:
+                continue
+            x = round(rocket.x * (width - 1))
+            if t < self.rise_seconds:
+                # A spark climbing from the bottom, with a dimmer one below it.
+                y = round(height - 1 - (height - 1 - rocket.burst_y) * t / self.rise_seconds)
+                _set(canvas, x, y, ROCKET_TRAIL_HEAD, width, height)
+                _set(canvas, x, y + 1, ROCKET_TRAIL, width, height)
+                continue
+            p = (t - self.rise_seconds) / self.burst_seconds
+            # Bright for most of the burst, then a quick fade -- and gone
+            # before it's dim enough to read as a dark hole over a logo
+            # (a linear fade did exactly that in a rendered preview).
+            fade = 1 - p**3
+            if p > 1 or fade < MIN_SPARK_FADE:
+                continue
+            # Ease-out expansion, sagging a little at the end.
+            r = self.radius * (1 - (1 - p) ** 2)
+            sag = round(2 * p * p)
+            outer = _scale(rocket.colour, fade)
+            inner = _scale(_tint(rocket.colour), fade)
+            for ring_r, colour, count in (
+                (r, outer, self.sparks),
+                (r * 0.55, inner, self.sparks // 2),
+            ):
+                for k in range(count):
+                    angle = 2 * math.pi * k / count + (math.pi / count if colour is inner else 0)
+                    sx = x + round(ring_r * math.cos(angle))
+                    sy = rocket.burst_y + round(ring_r * math.sin(angle)) + sag
+                    _set(canvas, sx, sy, colour, width, height)
+        return True
+
+
+#: Below this a fading spark is dropped rather than drawn dark.
+MIN_SPARK_FADE = 0.35
+
+
+def _scale(colour: RGB, k: float) -> RGB:
+    return (round(colour[0] * k), round(colour[1] * k), round(colour[2] * k))
+
+
+def _tint(colour: RGB) -> RGB:
+    """Halfway to white: the inner ring, so a burst reads as more than an outline."""
+    return (
+        (colour[0] + 255) // 2,
+        (colour[1] + 255) // 2,
+        (colour[2] + 255) // 2,
+    )
+
+
+def _set(canvas: Any, x: int, y: int, colour: RGB, width: int, height: int) -> None:
+    if 0 <= x < width and 0 <= y < height:
+        canvas.SetPixel(x, y, *colour)
+
 
 @dataclass(frozen=True, slots=True)
 class Holiday:
@@ -86,7 +211,8 @@ class Holiday:
     #: computed per year and has no fixed dates to print.
     window: str
     is_active: Callable[[date], bool]
-    flyby: Flyby
+    #: What crosses (or, for New Year's, bursts over) the board now and then.
+    flyby: Flyby | Fireworks
     #: Draws the static decoration on CORNER_SCENES: (canvas, now, width, height).
     corners: Callable[[Any, float, int, int], None]
     #: Ticked when [holiday] themes isn't set. False for a holiday most
@@ -420,6 +546,77 @@ def _draw_presents_and_snow(canvas: Any, now: float, width: int, height: int) ->
         )
 
 
+# -- New Year's (#241) ---------------------------------------------------------
+
+ROCKET_TRAIL_HEAD = (255, 230, 150)
+ROCKET_TRAIL = (120, 90, 40)
+GLASS = (150, 170, 200)
+CHAMPAGNE = (255, 200, 40)
+BUBBLE = (255, 255, 220)
+CONFETTI = ((255, 40, 40), (40, 220, 80), (60, 120, 255), (255, 210, 0), (255, 60, 200))
+
+#: Spread across the panel and staggered so the bursts overlap a little --
+#: a show, not four separate events.
+FIREWORKS = Fireworks(
+    rockets=(
+        Rocket(0.0, 0.22, 8, (255, 40, 40)),
+        Rocket(0.7, 0.72, 6, (60, 220, 255)),
+        Rocket(1.3, 0.46, 9, (255, 210, 0)),
+        Rocket(2.0, 0.88, 7, (255, 60, 200)),
+        Rocket(2.4, 0.10, 6, (80, 255, 80)),
+    ),
+)
+
+# 'g' glass, 'C' champagne, 'b' a bubble.
+FLUTE = (
+    "g.....g",
+    "gCCCCCg",
+    "gCbCCCg",
+    "gCCCbCg",
+    "gCCCCCg",
+    ".gCbCg.",
+    "..gCg..",
+    "...g...",
+    "...g...",
+    "...g...",
+    "...g...",
+    ".ggggg.",
+)
+FLUTE_WIDTH = len(FLUTE[0])
+FLUTE_HEIGHT = len(FLUTE)
+#: (column within its band, row, colour index, phase), fixed per run like
+#: the snow -- seeded so the corner draw stays a pure function of time.
+_rng = random.Random(41)
+CONFETTI_DOTS = tuple(
+    tuple(
+        (_rng.randrange(SNOW_BAND), _rng.randrange(32), _rng.randrange(len(CONFETTI)), i % 3)
+        for i in range(12)
+    )
+    for _ in range(2)
+)
+del _rng
+
+
+def _draw_champagne_and_confetti(canvas: Any, now: float, width: int, height: int) -> None:
+    # Twinkle: each dot is lit two ticks in three, stepping at 2fps, so this
+    # never needs the fast loop either.
+    tick = int(now * 2)
+    for band, dots in enumerate(CONFETTI_DOTS):
+        left = 1 if band == 0 else width - SNOW_BAND - 1
+        for column, row, colour, phase in dots:
+            if (tick + phase) % 3 and row < height:
+                canvas.SetPixel(left + column, row, *CONFETTI[colour])
+    y = (height - FLUTE_HEIGHT) // 2
+    palette = {"g": GLASS, "C": CHAMPAGNE, "b": BUBBLE}
+    for x in (CORNER_INSET + 6, width - CORNER_INSET - 6 - FLUTE_WIDTH):
+        draw_sprite(canvas, FLUTE, palette, x, y, width, height)
+
+
+def _new_years(day: date) -> bool:
+    """Dec 31 and Jan 1 -- the one window that wraps the year."""
+    return (day.month, day.day) in ((12, 31), (1, 1))
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(
@@ -452,6 +649,14 @@ HOLIDAYS: dict[str, Holiday] = {
         _between((12, 1), (12, 26)),
         SANTA,
         _draw_presents_and_snow,
+    ),
+    "new_year": Holiday(
+        "new_year",
+        "New Year's",
+        "Dec 31-Jan 1",
+        _new_years,
+        FIREWORKS,
+        _draw_champagne_and_confetti,
     ),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)
@@ -548,7 +753,7 @@ class HolidayOverlay:
     def _draw_flyby(
         self,
         canvas: Any,
-        flyby: Flyby,
+        mover: Flyby | Fireworks,
         now: float,
         width: int,
         height: int,
@@ -561,40 +766,8 @@ class HolidayOverlay:
             if now < self._next_flyby_at:
                 return False
             self.start_flyby(now)
-        elapsed = now - self._flyby_started
-        travelled = round(elapsed * flyby.speed)
-        x = width - travelled
-        linger = round(flyby.linger_seconds * flyby.speed)
-        if x + flyby.width + linger <= 0:
-            self._flyby_started = None
-            self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)
-            return False
-        if flyby.drops:
-            self._draw_drops(canvas, flyby, travelled, width, height)
-        if flyby.align == "bottom":
-            y = height - flyby.height
-        else:
-            bob = flyby.bob_pixels * math.sin(2 * math.pi * elapsed / flyby.bob_period)
-            y = (height - flyby.height) // 2 + round(bob)
-        frame = flyby.frames[int(elapsed / flyby.frame_seconds) % len(flyby.frames)]
-        draw_sprite(canvas, frame, dict(flyby.palette), x, y, width, height)
-        return True
-
-    @staticmethod
-    def _draw_drops(canvas: Any, flyby: Flyby, travelled: int, width: int, height: int) -> None:
-        """Everything dropped so far, each where the sprite was when it fell.
-
-        A pure function of distance travelled, like the sprite itself: drop
-        ``i`` falls once ``(i + 1) * drop_spacing`` px are covered, at the
-        x ``drop_column`` was at that moment, and only while that's on-panel.
-        """
-        i = 0
-        while (distance := (i + 1) * flyby.drop_spacing) <= travelled:
-            drop = flyby.drops[i % len(flyby.drops)]
-            drop_x = width - distance + flyby.drop_column
-            if drop_x + len(drop.rows[0]) > width or drop_x < 0:
-                i += 1
-                continue
-            y = height - len(drop.rows)
-            draw_sprite(canvas, drop.rows, dict(drop.palette), drop_x, y, width, height)
-            i += 1
+        if mover.draw(canvas, now - self._flyby_started, width, height):
+            return True
+        self._flyby_started = None
+        self._next_flyby_at = now + self.rng.uniform(min_gap, max_gap)
+        return False

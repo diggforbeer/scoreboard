@@ -16,6 +16,8 @@ from nhl_scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, 
 from nhl_scoreboard.config import HolidayConfig, Settings
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.holiday import (
+    CONFETTI,
+    FIREWORKS,
     FLYBY_SPEED,
     GHOST_BODY,
     GHOST_WIDTH,
@@ -138,6 +140,21 @@ def test_christmas_runs_december_first_to_boxing_day(day, expected):
     assert (found.name if found else None) == expected
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 12, 26), "christmas"),
+        (date(2026, 12, 30), None),
+        (date(2026, 12, 31), "new_year"),
+        (date(2027, 1, 1), "new_year"),
+        (date(2027, 1, 2), None),
+    ],
+)
+def test_new_years_wraps_the_year(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -152,7 +169,7 @@ def test_an_unticked_holiday_never_shows_in_its_window():
 def test_off_by_default_with_every_default_on_holiday_ticked():
     cfg = Settings().holiday
     assert cfg.enabled is False
-    assert cfg.themes == ["halloween", "thanksgiving", "christmas"]
+    assert cfg.themes == ["halloween", "thanksgiving", "christmas", "new_year"]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
 
@@ -305,6 +322,38 @@ def test_snow_alone_never_speeds_up_the_loop():
     overlay = HolidayOverlay()
     moving, _ = draw(overlay, 0.0, kind="clock", holiday=HOLIDAYS["christmas"], gap=(600, 600))
     assert moving is False
+
+
+def test_fireworks_show_bursts_every_rocket_then_schedules_the_next():
+    overlay = HolidayOverlay(random.Random(5))
+    overlay.start_flyby(0.0)
+    new_year = HOLIDAYS["new_year"]
+    t, seen = 0.0, set()
+    while True:
+        moving, canvas = draw(overlay, t, holiday=new_year, gap=(300, 300))
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            break
+        seen |= set(canvas.pixels.values())
+        t += ANIMATION_FRAME_INTERVAL
+    assert t == pytest.approx(FIREWORKS.duration, abs=0.1)
+    for rocket in FIREWORKS.rockets:
+        assert rocket.colour in seen, f"{rocket.colour} never burst at full colour"
+    assert overlay._next_flyby_at == pytest.approx(t + 300)
+
+
+def test_confetti_twinkles_in_the_side_bands_without_the_fast_loop():
+    overlay = HolidayOverlay()
+    new_year = HOLIDAYS["new_year"]
+    frames = []
+    for t in (0.0, 0.5, 1.0):
+        moving, canvas = draw(overlay, t, kind="clock", holiday=new_year, gap=(600, 600))
+        assert moving is False
+        frames.append({p for p, c in canvas.pixels.items() if c in CONFETTI})
+    assert all(frames), "some confetti lit every frame"
+    assert frames[0] != frames[1] != frames[2], "it twinkles"
+    for dots in frames:
+        assert all(x <= SNOW_BAND + 1 or x >= W - SNOW_BAND - 1 for x, _ in dots)
 
 
 def test_pumpkins_only_on_idle_scenes():

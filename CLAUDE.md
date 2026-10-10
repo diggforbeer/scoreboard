@@ -503,7 +503,15 @@ present stacks plus snow. Snow falls only in a `SNOW_BAND` at each edge:
 the real panel can't report which pixels the clock text lit, so flakes
 can't weave around it, and they're slow enough (1.5-3 px/s) for the
 normal 2fps loop -- a month of snow never holds the fast loop on.
-New Year's and Valentine's are #241-#242; holiday *screens* (a Christmas
+New Year's (#241, Dec 31-Jan 1, the one window that wraps the year) is
+the first mover that isn't a sprite crossing: `Fireworks` (staggered
+`Rocket`s that rise, then burst into an outer ring plus a lighter inner
+one) implements the same `draw(canvas, elapsed, w, h) -> bool` contract as
+`Flyby`, so `HolidayOverlay` schedules either without knowing which.
+Sparks stop drawing below `MIN_SPARK_FADE` rather than fading to near-
+black -- a linear fade left dark holes over logos in a rendered preview.
+Corners are champagne flutes plus confetti that twinkles at 2fps (no fast
+loop), in the same edge bands as the snow. Valentine's is #242; holiday *screens* (a Christmas
 tree, as a `[[rotation]]` entry) #243.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic

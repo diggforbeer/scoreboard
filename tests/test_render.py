@@ -1645,3 +1645,35 @@ def test_christmas_presents_and_snow_frame_the_clock(update_snapshots):
     assert all(not (text.x0 <= x <= text.x1) for (x, _), rgb in c.pixels.items() if rgb == SNOW)
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_christmas_clock", art, update_snapshots)
+
+
+def test_new_year_fireworks_over_live_game(games, synthetic_logos, update_snapshots):
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 2.3s in: one rocket mid-burst, one just bursting, one still climbing.
+    assert draw_halloween(c, "game", flyby_at=2.3, holiday="new_year")
+    art = show("new year fireworks over live game", c)
+
+    assert not c.out_of_bounds
+    check_snapshot("holiday_new_year_fireworks", art, update_snapshots)
+
+
+def test_new_year_champagne_and_confetti_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import CHAMPAGNE, CONFETTI
+
+    now = datetime(2026, 12, 31, 23, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="new_year") is False
+    art = show("new year champagne and confetti, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    glass = [x for (x, _), rgb in c.pixels.items() if rgb == CHAMPAGNE]
+    assert min(glass) < text.x0 and max(glass) > text.x1, "a flute either side"
+    assert all(not (text.x0 <= x <= text.x1) for (x, _), rgb in c.pixels.items() if rgb in CONFETTI)
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_new_year_clock", art, update_snapshots)
