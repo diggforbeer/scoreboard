@@ -93,10 +93,10 @@ async def _serve_and_get(path):
         return await asyncio.to_thread(_get)
 
 
-async def _skip_initial(client, n=11):
+async def _skip_initial(client, n=12):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update/horn_list/snapshot messages every connection opens
-    with."""
+    rotation/update/horn_list/snapshot/holiday messages every connection
+    opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -1206,6 +1206,7 @@ def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch
                 async with connect(f"ws://localhost:{port}/") as client:
                     await _skip_initial(client, n=10)  # up to but not including the first snapshot
                     first = json.loads(await client.recv())
+                    await client.recv()  # holiday, sent after the snapshot
                     state["scene"] = "game"
                     second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
                     return first, second
@@ -1247,7 +1248,7 @@ def test_admin_server_class_sets_config_path_and_snapshot_provider(app_dir, conf
     server.start()
     try:
         with sync_connect(f"ws://localhost:{server.port}/", open_timeout=5) as ws:
-            messages = [json.loads(ws.recv(timeout=5)) for _ in range(11)]
+            messages = [json.loads(ws.recv(timeout=5)) for _ in range(12)]
         audio = next(m for m in messages if m.get("section") == "audio")
         assert audio["data"]["device"] == "hw:9,0"
         snapshot = next(m for m in messages if m["type"] == "snapshot")
@@ -1402,7 +1403,8 @@ def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
     async def scenario(client):
         await _skip_initial(client, n=9)  # up to but not including horn_list
         before = json.loads(await client.recv())  # horn_list
-        await client.recv()  # snapshot, the 11th and last initial message
+        await client.recv()  # snapshot
+        await client.recv()  # holiday, the 12th and last initial message
         await client.send(json.dumps({"type": "upload_horn", "team": "NSH", "data": _wav_b64()}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1579,7 +1581,8 @@ def test_delete_horn_removes_the_file_and_broadcasts_the_updated_list(
     async def scenario(client):
         await _skip_initial(client, n=9)  # up to but not including horn_list
         before = json.loads(await client.recv())  # horn_list
-        await client.recv()  # snapshot, the 11th and last initial message
+        await client.recv()  # snapshot
+        await client.recv()  # holiday, the 12th and last initial message
         await client.send(json.dumps({"type": "delete_horn", "team": "NSH"}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1604,7 +1607,8 @@ def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_pat
     async def scenario(client):
         await _skip_initial(client, n=9)  # up to but not including horn_list
         await client.recv()  # the list with the override still present
-        await client.recv()  # snapshot, the 11th and last initial message
+        await client.recv()  # snapshot
+        await client.recv()  # holiday, the 12th and last initial message
         await client.send(json.dumps({"type": "delete_horn", "team": "default"}))
         return await client.recv()
 
@@ -1637,7 +1641,7 @@ def test_demo_mode_message_calls_setter_and_broadcasts_snapshot(app_dir, config_
     monkeypatch.setattr(admin_server, "SNAPSHOT_PROVIDER", lambda: dict(state))
 
     async def scenario(client):
-        await _skip_initial(client, n=11)
+        await _skip_initial(client)
         await client.send(json.dumps({"type": "demo_mode", "enabled": True}))
         return await client.recv()
 
@@ -1650,7 +1654,7 @@ def test_demo_mode_message_rejects_non_boolean_and_missing_app(app_dir, config_p
     monkeypatch.setattr(admin_server, "DEMO_SETTER", None)
 
     async def scenario(client):
-        await _skip_initial(client, n=11)
+        await _skip_initial(client)
         await client.send(json.dumps({"type": "demo_mode", "enabled": "yes"}))
         first = await client.recv()
         await client.send(json.dumps({"type": "demo_mode", "enabled": True}))
@@ -1659,3 +1663,82 @@ def test_demo_mode_message_rejects_non_boolean_and_missing_app(app_dir, config_p
     first, second = asyncio.run(_serve_and_run(scenario))
     assert json.loads(first)["type"] == "error"
     assert json.loads(second)["type"] == "error"
+
+
+# -- #238: the Holidays tab ---------------------------------------------------
+
+
+_DEFAULT_HOLIDAY_DATA = {
+    "enabled": False,
+    "themes": ["halloween"],
+    "flyby_min_minutes": 5.0,
+    "flyby_max_minutes": 20.0,
+}
+
+
+async def _save_holiday(client, data):
+    await _skip_initial(client)
+    await client.send(json.dumps({"type": "save", "section": "holiday", "data": data}))
+    return json.loads(await client.recv())
+
+
+def test_sends_the_holiday_config_and_every_available_holiday_last(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client, n=11)
+        return await client.recv()
+
+    received = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert received["section"] == "holiday"
+    assert received["data"] == _DEFAULT_HOLIDAY_DATA
+    assert received["available"] == [
+        {"name": "halloween", "label": "Halloween", "window": "Oct 1-31"}
+    ]
+
+
+def test_holiday_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
+    data = {**_DEFAULT_HOLIDAY_DATA, "enabled": True, "flyby_min_minutes": 2}
+
+    async def scenario(client):
+        saved = await _save_holiday(client, data)
+        return saved, json.loads(await client.recv())
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "holiday"}
+    assert fresh["data"]["enabled"] is True
+    assert fresh["data"]["flyby_min_minutes"] == 2
+    text = config_path.read_text()
+    assert "enabled = true" in text
+    assert 'themes = ["halloween"]' in text
+
+
+def test_holiday_save_can_untick_every_holiday(app_dir, config_path):
+    async def scenario(client):
+        saved = await _save_holiday(client, {**_DEFAULT_HOLIDAY_DATA, "themes": []})
+        return saved, json.loads(await client.recv())
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert saved["type"] == "saved"
+    assert fresh["data"]["themes"] == []
+
+
+@pytest.mark.parametrize(
+    ("change", "field"),
+    [
+        ({"themes": ["halloween", "arbor_day"]}, "arbor_day"),
+        ({"themes": "halloween"}, "themes"),
+        ({"flyby_min_minutes": 0.5}, "flyby_min_minutes"),
+        ({"flyby_min_minutes": 30, "flyby_max_minutes": 10}, "flyby_min_minutes"),
+        ({"enabled": "yes"}, "enabled"),
+        ({"bogus": 1}, "bogus"),
+    ],
+)
+def test_holiday_save_rejects_bad_values_without_writing_the_file(
+    app_dir, config_path, change, field
+):
+    received = asyncio.run(
+        _serve_and_run(lambda client: _save_holiday(client, {**_DEFAULT_HOLIDAY_DATA, **change}))
+    )
+    assert received["type"] == "error"
+    assert received["section"] == "holiday"
+    assert field in received["message"]
+    assert config_path.read_text() == ""

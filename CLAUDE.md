@@ -478,9 +478,14 @@ only go on `clock`/`no_games` -- the 32px logos fill both edges of every
 game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
 (50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
 otherwise. Demo steps carry an optional `holiday`, forced on with an
-immediate fly-by and redrawn every frame for the step. Admin-page
-checkboxes are #238; other holidays #239-#242; holiday *screens* (a
-Christmas tree, as a `[[rotation]]` entry) #243.
+immediate fly-by and redrawn every frame for the step. The admin page's
+own Holidays tab (#238) edits `[holiday]`: its checkbox list comes from
+`HOLIDAYS` (sent as `available`, each with a human `window` string), so a
+new holiday needs no frontend change; `_coerce_holiday` rejects unknown
+themes and a min-over-max gap rather than repairing them like the TOML
+loader does, and the section is sent last on connect, after the snapshot.
+Other holidays are #239-#242; holiday *screens* (a Christmas tree, as a
+`[[rotation]]` entry) #243.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.

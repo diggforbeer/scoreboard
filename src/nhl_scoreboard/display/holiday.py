@@ -28,6 +28,10 @@ class Holiday:
     name: str
     #: Human-readable, for the admin page's checkbox list (#238).
     label: str
+    #: When it shows, in words, next to its admin-page checkbox (#238). Text
+    #: rather than derived from is_active: Thanksgiving's window (#239) is
+    #: computed per year and has no fixed dates to print.
+    window: str
     is_active: Callable[[date], bool]
 
 
@@ -43,7 +47,7 @@ def _between(start: tuple[int, int], end: tuple[int, int]) -> Callable[[date], b
 #: Registry order is also precedence if two enabled windows ever overlap --
 #: none do yet; #241 (New Year's) is where that gets decided properly.
 HOLIDAYS: dict[str, Holiday] = {
-    "halloween": Holiday("halloween", "Halloween", _between((10, 1), (10, 31))),
+    "halloween": Holiday("halloween", "Halloween", "Oct 1-31", _between((10, 1), (10, 31))),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)
 
