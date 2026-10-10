@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import qrcode
 
+from . import april_fools
 from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
@@ -1181,7 +1182,13 @@ class ScoreboardApp:
         favourite_row = next((r for r in rows if r.abbrev == favourite), None)
         if favourite_row is None or favourite_row.games_played <= 0:
             return None
-        window = standings_window(conference_standings(rows, favourite_row.conference), favourite)
+        ranked = conference_standings(rows, favourite_row.conference)
+        if self.april_fools_active():
+            # Relabelled here, not in draw_scene: moving them to the bottom
+            # needs the whole conference, not just the drawn window (#248).
+            ranked = april_fools.prank_conference(ranked)
+            favourite = april_fools.PRANK_AS
+        window = standings_window(ranked, favourite)
         if not window:
             return None
         return Scene("standings", standings=tuple(window))
@@ -1744,8 +1751,18 @@ class ScoreboardApp:
             self.renderer.logos = self._demo_real_logos
         self.draw_scene(self.select_scene())
 
+    def april_fools_active(self) -> bool:
+        """April 1 before noon on a Preds board (#248) -- see april_fools.py."""
+        local = self.clock().astimezone(self.tz)
+        return april_fools.active(self.settings.scoreboard.favourite_team, local)
+
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
+        favourite = self.settings.scoreboard.favourite_team
+        if scene.kind in april_fools.PRANK_SCENES and self.april_fools_active():
+            favourite = april_fools.PRANK_AS
+            if scene.game is not None:
+                scene = dataclasses.replace(scene, game=april_fools.swap_game(scene.game))
         if scene.kind == "game":
             r.draw_game(self.canvas, self.with_situation(scene.game))
         elif scene.kind == "goal":
@@ -1763,17 +1780,17 @@ class ScoreboardApp:
                 self.canvas, scene.standings, self.settings.scoreboard.favourite_team
             )
         elif scene.kind == "standings":
-            r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
+            r.draw_standings(self.canvas, scene.standings, favourite)
         elif scene.kind == "matchup":
             r.draw_matchup(self.canvas, scene.game, scene.season_series)
         elif scene.kind == "leaders":
-            r.draw_leaders(self.canvas, scene.leaders, self.settings.scoreboard.favourite_team)
+            r.draw_leaders(self.canvas, scene.leaders, favourite)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "clock":
-            r.draw_clock(self.canvas, self.clock(), self.settings.scoreboard.favourite_team)
+            r.draw_clock(self.canvas, self.clock(), favourite)
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":
