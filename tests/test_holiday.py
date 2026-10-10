@@ -20,7 +20,6 @@ from nhl_scoreboard.display.holiday import (
     CLOUD,
     COIN_GOLD,
     CONFETTI,
-    EGGS,
     FIREWORKS,
     FLYBY_SPEED,
     GHOST_BODY,
@@ -48,8 +47,10 @@ from nhl_scoreboard.display.holiday import (
     HolidayOverlay,
     active_holiday,
     easter_sunday,
+    egg_teams,
 )
 from nhl_scoreboard.display.matrix import Backend
+from nhl_scoreboard.display.teams import TEAM_COLORS, team_color, team_secondary_color
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
 
 W, H = 128, 32
@@ -627,11 +628,40 @@ def test_bunny_hops_along_the_bottom_and_is_outlined_in_black():
     assert ground - min(tops) >= 4, "and actually leaves it, by a visible amount"
 
 
-def test_eggs_sit_either_side_of_the_clock():
-    _, canvas = draw(HolidayOverlay(), 0.0, kind="clock", holiday=HOLIDAYS["easter"])
-    shells = {shell for _, shell, _ in EGGS}
-    xs = [x for (x, _), c in canvas.pixels.items() if c in shells]
-    assert min(xs) < 20 and max(xs) > W - 20
+def test_easter_basket_is_the_favourite_plus_three_teams_that_change_daily():
+    days = [date(2027, 3, d) for d in range(22, 29)]
+    baskets = [egg_teams("NSH", d) for d in days]
+    for basket in baskets:
+        assert basket[0] == "NSH", "the favourite's egg comes first"
+        assert len(set(basket)) == 4 and "NSH" not in basket[1:]
+        assert all(team in TEAM_COLORS for team in basket)
+    assert len({b[1:] for b in baskets}) > 1, "a different trio on different days"
+    assert egg_teams("NSH", days[0]) == egg_teams("NSH", days[0]), "steady within a day"
+    assert len(set(egg_teams("", days[0]))) == 4, "no favourite: four teams, no repeats"
+
+
+def test_eggs_are_drawn_in_team_colours_either_side_of_the_clock():
+    day = date(2027, 3, 27)
+    overlay = HolidayOverlay()
+    canvas = AsciiCanvas(W, H)
+    overlay.draw(
+        canvas,
+        scene_kind="clock",
+        holiday=HOLIDAYS["easter"],
+        now=0.0,
+        width=W,
+        height=H,
+        min_gap_seconds=600,
+        max_gap_seconds=600,
+        day=day,
+        favourite="NSH",
+    )
+    nsh = [x for (x, _), c in canvas.pixels.items() if c == team_color("NSH")]
+    assert nsh and max(nsh) < 20, "the Preds egg, gold, on the far left"
+    assert team_secondary_color("NSH") in canvas.pixels.values(), "with its blue pattern"
+    others = egg_teams("NSH", day)[1:]
+    right = {c for (x, _), c in canvas.pixels.items() if x > W - 20}
+    assert {team_color(t) for t in others[1:]} <= right
 
 
 def test_pumpkins_only_on_idle_scenes():

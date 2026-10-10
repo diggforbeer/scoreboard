@@ -1802,7 +1802,7 @@ class ScoreboardApp:
             r.draw_wifi_join(self.canvas, scene.wifi_join_status, scene.wifi_join_ssid)
         else:
             r.draw_message(self.canvas, "NO GAMES")
-        self._draw_holiday_overlay(scene)
+        self._draw_holiday_overlay(scene, favourite)
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
     def active_holiday(self) -> Holiday | None:
@@ -1812,7 +1812,7 @@ class ScoreboardApp:
             return None
         return active_holiday(cfg.themes, self.clock().astimezone(self.tz).date())
 
-    def _draw_holiday_overlay(self, scene: Scene) -> None:
+    def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
         cfg = self.settings.holiday
         self._overlay_animating = self.holiday_overlay.draw(
@@ -1825,4 +1825,5 @@ class ScoreboardApp:
             min_gap_seconds=cfg.flyby_min_minutes * 60,
             max_gap_seconds=cfg.flyby_max_minutes * 60,
             day=self.clock().astimezone(self.tz).date(),
+            favourite=favourite,
         )

@@ -530,7 +530,11 @@ walker in an |sin| arc. Its white bunny vanished over silver/pale-teal
 logos, so its outline is black -- an unlit LED, which cuts it out of a
 bright logo and is invisible on the dark panel; red/green sprites need the
 opposite, a light ring. In the rare years Easter week reaches back to
-Mar 17, St. Patrick's wins by registry order. Groundhog Day (#247, Feb 2) adds a third
+Mar 17, St. Patrick's wins by registry order. Its eggs are team-coloured (owner's
+idea): the favourite's first, then three other teams picked afresh each day
+(`egg_teams()`, seeded by the date) -- so `corners` functions also take the
+favourite, threaded through `HolidayOverlay.draw(favourite=...)` from
+`draw_scene()`'s possibly-relabelled favourite. Groundhog Day (#247, Feb 2) adds a third
 mover kind, `Popup` (rises out of a mound, looks left/right, then either
 startles at a dark silhouette and ducks, or stays and sinks), and is the
 one holiday that needs the date: shadow-or-not is `random.Random(year)`,

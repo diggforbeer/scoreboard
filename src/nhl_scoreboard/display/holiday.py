@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
+from .teams import TEAM_COLORS, team_color, team_secondary_color
+
 RGB = tuple[int, int, int]
 
 
@@ -324,8 +326,9 @@ class Holiday:
     #: What crosses (or, for New Year's, bursts over) the board now and then.
     flyby: Flyby | Fireworks | Popup
     #: Draws the static decoration on CORNER_SCENES: (canvas, now, width,
-    #: height, local date) -- the date only matters to Groundhog Day (#247).
-    corners: Callable[[Any, float, int, int, date | None], None]
+    #: height, local date, favourite team) -- the date matters to Groundhog
+    #: Day (#247), the favourite to Easter's team-coloured eggs (#250).
+    corners: Callable[[Any, float, int, int, date | None, str], None]
     #: Ticked when [holiday] themes isn't set. False for a holiday most
     #: boards wouldn't want unasked (Canadian Thanksgiving on a US board).
     default_on: bool = True
@@ -450,7 +453,7 @@ PUMPKIN_HEIGHT = len(PUMPKIN_SPRITE)
 
 
 def _draw_pumpkins(
-    canvas: Any, now: float, width: int, height: int, day: date | None = None
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
 ) -> None:
     # Candle flicker: mostly bright, briefly dim, the two pumpkins out of
     # step so it doesn't read as one blinking light.
@@ -543,7 +546,9 @@ GOLD_LEAF = (
 LEAF_SIZE = len(MAPLE_LEAF)
 
 
-def _draw_leaves(canvas: Any, now: float, width: int, height: int, day: date | None = None) -> None:
+def _draw_leaves(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
+) -> None:
     # Static: nothing here needs the fast frame loop.
     del now
     y = (height - LEAF_SIZE) // 2
@@ -660,7 +665,7 @@ SNOW_BAND = 30
 
 
 def _draw_presents_and_snow(
-    canvas: Any, now: float, width: int, height: int, day: date | None = None
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
 ) -> None:
     for band, flakes in enumerate(SNOWFLAKES):
         left = 1 if band == 0 else width - SNOW_BAND - 1
@@ -737,7 +742,7 @@ del _rng
 
 
 def _draw_champagne_and_confetti(
-    canvas: Any, now: float, width: int, height: int, day: date | None = None
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
 ) -> None:
     # Twinkle: each dot is lit two ticks in three, stepping at 2fps, so this
     # never needs the fast loop either.
@@ -828,7 +833,7 @@ HEART = Flyby(
 
 
 def _draw_beating_hearts(
-    canvas: Any, now: float, width: int, height: int, day: date | None = None
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
 ) -> None:
     # One beat per second at the normal 2fps -- no fast loop -- with the
     # two hearts out of step, like the pumpkins' flicker.
@@ -915,7 +920,7 @@ CLOUD_SPRITE = (
 
 
 def _draw_burrow_and_verdict(
-    canvas: Any, now: float, width: int, height: int, day: date | None = None
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
 ) -> None:
     """A burrow with the groundhog peeking out on the left; the verdict on
     the right -- sun if he saw his shadow (six more weeks), cloud if not."""
@@ -1043,7 +1048,7 @@ LEPRECHAUN = Flyby(
 
 
 def _draw_shamrocks(
-    canvas: Any, now: float, width: int, height: int, day: date | None = None
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
 ) -> None:
     """A lucky four-leaf clover on the left, a shamrock on the right."""
     del now, day
@@ -1125,26 +1130,35 @@ def _egg(kind: str) -> tuple[str, ...]:
     return tuple("".join(row) for row in rows)
 
 
-#: (sprite, shell, decoration). Saturated, not pastel: pastels wash out to
-#: white on an LED (the turkey's browns, #239, taught the same lesson).
-EGGS = (
-    (_egg("stripes"), (255, 110, 180), (255, 230, 80)),
-    (_egg("dots"), (80, 160, 255), (255, 255, 255)),
-    (_egg("zigzag"), (170, 100, 255), (120, 255, 120)),
-    (_egg("stripes"), (255, 215, 50), (255, 90, 160)),
-)
+#: One egg per pattern, left to right: the favourite's egg first.
+EGG_PATTERNS = (_egg("stripes"), _egg("dots"), _egg("zigzag"), _egg("stripes"))
 EGG_WIDTH = len(_EGG_SHAPE[0])
 
 
-def _draw_eggs(canvas: Any, now: float, width: int, height: int, day: date | None = None) -> None:
-    """Two painted eggs nestled at the bottom of each corner."""
-    del now, day
+def egg_teams(favourite: str, day: date | None) -> tuple[str, ...]:
+    """The basket (owner's idea, #250): the favourite's egg, then three other
+    NHL teams picked afresh each day -- seeded by the date, so it holds all
+    day and the snapshot is deterministic. No favourite: four random teams.
+    """
+    others = sorted(t for t in TEAM_COLORS if t != favourite)
+    picks = random.Random(day.toordinal() if day else 0).sample(others, 4)
+    return (favourite, *picks[:3]) if favourite else tuple(picks)
+
+
+def _draw_eggs(
+    canvas: Any, now: float, width: int, height: int, day: date | None = None, favourite: str = ""
+) -> None:
+    """Two team-coloured eggs nestled at the bottom of each corner: the
+    shell in the team's colour, the pattern in its second colour (both the
+    LED-tuned values the rest of the board uses)."""
+    del now
     y = height - len(_EGG_SHAPE) - 1
     step = EGG_WIDTH + 1
     left, right = CORNER_INSET, width - CORNER_INSET - 2 * step + 1
-    for i, x in enumerate((left, left + step, right, right + step)):
-        rows, shell, decoration = EGGS[i]
-        draw_sprite(canvas, rows, {"X": shell, "S": decoration}, x, y, width, height)
+    xs = (left, left + step, right, right + step)
+    for x, rows, team in zip(xs, EGG_PATTERNS, egg_teams(favourite, day), strict=True):
+        palette = {"X": team_color(team), "S": team_secondary_color(team)}
+        draw_sprite(canvas, rows, palette, x, y, width, height)
 
 
 #: In calendar order: also the order of the admin page's checkboxes.
@@ -1294,11 +1308,13 @@ class HolidayOverlay:
         min_gap_seconds: float,
         max_gap_seconds: float,
         day: date | None = None,
+        favourite: str = "",
     ) -> bool:
         """Decorate ``canvas``; returns True while something is moving.
 
         ``day`` is the board's local date, for decorations that depend on it
         (Groundhog Day's shadow, #247); None draws them as if in year 0.
+        ``favourite`` is the team the board follows, for Easter's eggs (#250).
 
         The caller uses that to run the frame loop fast only for the few
         seconds a fly-by is on screen, and at its normal 2fps otherwise.
@@ -1311,7 +1327,7 @@ class HolidayOverlay:
         if scene_kind in NO_OVERLAY_SCENES:
             return False
         if scene_kind in CORNER_SCENES:
-            holiday.corners(canvas, now, width, height, day)
+            holiday.corners(canvas, now, width, height, day, favourite)
         return self._draw_flyby(
             canvas, holiday.flyby, now, width, height, min_gap_seconds, max_gap_seconds, day
         )
