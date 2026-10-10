@@ -617,6 +617,88 @@ def _new_years(day: date) -> bool:
     return (day.month, day.day) in ((12, 31), (1, 1))
 
 
+# -- Valentine's Day (#242) ---------------------------------------------------
+
+HEART_RED = (230, 0, 60)
+HEART_PINK = (255, 90, 160)
+HEART_SHINE = (255, 220, 235)
+
+# 'R' heart, 'W' a highlight. Two frames, full and squeezed, so it beats.
+# Both padded to the same 11x10 box so the beat doesn't shift its position.
+HEART_FRAMES = (
+    (
+        ".RRR...RRR.",
+        "RRRRR.RRRRR",
+        "RRWRRRRRRRR",
+        "RWRRRRRRRRR",
+        "RRRRRRRRRRR",
+        ".RRRRRRRRR.",
+        "..RRRRRRR..",
+        "...RRRRR...",
+        "....RRR....",
+        ".....R.....",
+    ),
+    (
+        "...........",
+        "..RR...RR..",
+        ".RRRR.RRRR.",
+        ".RWRRRRRRR.",
+        ".RRRRRRRRR.",
+        "..RRRRRRR..",
+        "...RRRRR...",
+        "....RRR....",
+        ".....R.....",
+        "...........",
+    ),
+)
+HEART_SIZE = len(HEART_FRAMES[0][0])
+
+
+def _outlined(rows: tuple[str, ...], mark: str = "o") -> tuple[str, ...]:
+    """``rows`` padded by one pixel, with ``mark`` on every empty pixel that
+    touches the sprite (4-neighbour)."""
+    padded = ["." * (len(rows[0]) + 2), *(f".{row}." for row in rows), "." * (len(rows[0]) + 2)]
+    out = []
+    for y, row in enumerate(padded):
+        line = []
+        for x, ch in enumerate(row):
+            near = any(
+                0 <= y + dy < len(padded)
+                and 0 <= x + dx < len(row)
+                and padded[y + dy][x + dx] not in ".o"
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            )
+            line.append(mark if ch == "." and near else ch)
+        out.append("".join(line))
+    return tuple(out)
+
+
+#: Outlined for the fly-by: a plain red heart vanished crossing a red team
+#: logo in a rendered preview. The corner hearts sit on black and don't.
+HEART_OUTLINE = (255, 200, 225)
+HEART = Flyby(
+    frames=tuple(_outlined(frame) for frame in HEART_FRAMES),
+    palette=(("R", HEART_RED), ("W", HEART_SHINE), ("o", HEART_OUTLINE)),
+    speed=18.0,
+    frame_seconds=0.4,
+    bob_pixels=2.0,
+    bob_period=1.4,
+)
+
+
+def _draw_beating_hearts(canvas: Any, now: float, width: int, height: int) -> None:
+    # One beat per second at the normal 2fps -- no fast loop -- with the
+    # two hearts out of step, like the pumpkins' flicker.
+    tick = int(now * 2)
+    y = (height - len(HEART_FRAMES[0])) // 2
+    for x, colour, phase in (
+        (CORNER_INSET, HEART_RED, 0),
+        (width - CORNER_INSET - HEART_SIZE, HEART_PINK, 1),
+    ):
+        frame = HEART_FRAMES[(tick + phase) % 2]
+        draw_sprite(canvas, frame, {"R": colour, "W": HEART_SHINE}, x, y, width, height)
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(
@@ -657,6 +739,14 @@ HOLIDAYS: dict[str, Holiday] = {
         _new_years,
         FIREWORKS,
         _draw_champagne_and_confetti,
+    ),
+    "valentines": Holiday(
+        "valentines",
+        "Valentine's Day",
+        "Feb 7-14",
+        _between((2, 7), (2, 14)),
+        HEART,
+        _draw_beating_hearts,
     ),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)

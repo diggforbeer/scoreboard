@@ -21,6 +21,10 @@ from nhl_scoreboard.display.holiday import (
     FLYBY_SPEED,
     GHOST_BODY,
     GHOST_WIDTH,
+    HEART,
+    HEART_OUTLINE,
+    HEART_PINK,
+    HEART_RED,
     HOLIDAY_NAMES,
     HOLIDAYS,
     NO_OVERLAY_SCENES,
@@ -155,6 +159,20 @@ def test_new_years_wraps_the_year(day, expected):
     assert (found.name if found else None) == expected
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2027, 2, 6), None),
+        (date(2027, 2, 7), "valentines"),
+        (date(2027, 2, 14), "valentines"),
+        (date(2027, 2, 15), None),
+    ],
+)
+def test_valentines_is_the_week_up_to_the_fourteenth(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -169,7 +187,7 @@ def test_an_unticked_holiday_never_shows_in_its_window():
 def test_off_by_default_with_every_default_on_holiday_ticked():
     cfg = Settings().holiday
     assert cfg.enabled is False
-    assert cfg.themes == ["halloween", "thanksgiving", "christmas", "new_year"]
+    assert cfg.themes == ["halloween", "thanksgiving", "christmas", "new_year", "valentines"]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 
 
@@ -354,6 +372,46 @@ def test_confetti_twinkles_in_the_side_bands_without_the_fast_loop():
     assert frames[0] != frames[1] != frames[2], "it twinkles"
     for dots in frames:
         assert all(x <= SNOW_BAND + 1 or x >= W - SNOW_BAND - 1 for x, _ in dots)
+
+
+def test_flying_heart_is_outlined_so_it_shows_over_a_red_logo():
+    for frame in HEART.frames:
+        rows = list(frame)
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                if ch == "R":
+                    neighbours = [
+                        rows[y + dy][x + dx] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                    ]
+                    assert "." not in neighbours, f"red pixel at {x},{y} touches the background"
+    assert dict(HEART.palette)["o"] == HEART_OUTLINE
+
+
+def test_heart_floats_across_without_leaving_the_panel():
+    overlay = HolidayOverlay()
+    overlay.start_flyby(0.0)
+    t = 0.0
+    while True:
+        moving, canvas = draw(overlay, t, holiday=HOLIDAYS["valentines"])
+        assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
+        if not moving:
+            break
+        t += ANIMATION_FRAME_INTERVAL
+    assert t == pytest.approx((W + HEART.width) / HEART.speed, abs=0.1)
+
+
+def test_corner_hearts_beat_out_of_step_without_the_fast_loop():
+    overlay = HolidayOverlay()
+    sizes = []
+    for t in (0.0, 0.5):
+        moving, canvas = draw(overlay, t, kind="clock", holiday=HOLIDAYS["valentines"])
+        assert moving is False
+        red = sum(1 for c in canvas.pixels.values() if c == HEART_RED)
+        pink = sum(1 for c in canvas.pixels.values() if c == HEART_PINK)
+        sizes.append((red, pink))
+    (red0, pink0), (red1, pink1) = sizes
+    assert red0 != red1 and pink0 != pink1, "both beat"
+    assert (red0 > red1) != (pink0 > pink1), "out of step"
 
 
 def test_pumpkins_only_on_idle_scenes():

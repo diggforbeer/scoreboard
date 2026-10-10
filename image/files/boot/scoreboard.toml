@@ -209,8 +209,10 @@ cooldown_minutes = 15
 #                    and presents with gentle snow flank the clock.
 #   new_year         Dec 31-Jan 1: a short fireworks show now and then, and
 #                    champagne with twinkling confetti flanks the clock.
+#   valentines       Feb 7-14: a beating heart floats across now and then,
+#                    and two beating hearts flank the clock.
 enabled = false
-themes = ["halloween", "thanksgiving", "christmas", "new_year"]
+themes = ["halloween", "thanksgiving", "christmas", "new_year", "valentines"]
 
 # Random gap, in minutes, between fly-bys (the Halloween ghost).
 flyby_min_minutes = 5

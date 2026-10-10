@@ -511,8 +511,13 @@ one) implements the same `draw(canvas, elapsed, w, h) -> bool` contract as
 Sparks stop drawing below `MIN_SPARK_FADE` rather than fading to near-
 black -- a linear fade left dark holes over logos in a rendered preview.
 Corners are champagne flutes plus confetti that twinkles at 2fps (no fast
-loop), in the same edge bands as the snow. Valentine's is #242; holiday *screens* (a Christmas
-tree, as a `[[rotation]]` entry) #243.
+loop), in the same edge bands as the snow. Valentine's (#242, Feb 7-14):
+a beating heart floats across (two frames, full and squeezed), and two
+beat out of step beside the clock at 2fps. The flying heart is outlined
+(`_outlined`, pale pink) -- a plain red heart vanished crossing a red team
+logo in a rendered preview; any red/white-on-anything sprite added later
+should get the same check. Holiday *screens* (a Christmas
+tree, as a `[[rotation]]` entry) are #243.
 
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.

@@ -1677,3 +1677,37 @@ def test_new_year_champagne_and_confetti_frame_the_clock(update_snapshots):
     assert all(not (text.x0 <= x <= text.x1) for (x, _), rgb in c.pixels.items() if rgb in CONFETTI)
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_new_year_clock", art, update_snapshots)
+
+
+def test_valentines_heart_over_live_game(games, synthetic_logos, update_snapshots):
+    from nhl_scoreboard.display.holiday import HEART_RED
+
+    game = games["live"]
+    c = canvas()
+    make_renderer(synthetic_logos).draw_game(c, game)
+    # 3.7s in at 18px/s: in the score column.
+    assert draw_halloween(c, "game", flyby_at=3.7, holiday="valentines")
+    art = show("valentines heart over live game", c)
+
+    assert not c.out_of_bounds
+    assert MID_LEFT < bbox_of(c, HEART_RED).center_x < MID_RIGHT
+    check_snapshot("holiday_valentines_heart", art, update_snapshots)
+
+
+def test_valentines_hearts_frame_the_clock(update_snapshots):
+    from nhl_scoreboard.display.holiday import HEART_PINK, HEART_RED
+
+    now = datetime(2027, 2, 14, 1, 5, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=None, holiday="valentines") is False
+    art = show("valentines hearts, clock", c)
+
+    assert not c.out_of_bounds
+    text = plain.bbox()
+    assert bbox_of(c, HEART_RED).x1 < text.x0, "red heart left of the text"
+    assert bbox_of(c, HEART_PINK).x0 > text.x1, "pink heart right of the text"
+    assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
+    check_snapshot("holiday_valentines_clock", art, update_snapshots)
