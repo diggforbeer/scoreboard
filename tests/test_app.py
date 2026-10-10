@@ -586,6 +586,31 @@ def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     assert snapshot["last error at"] != ""
 
 
+def test_status_snapshot_marks_a_score_error_recovered(fake_backend, games):
+    """A blip hours ago must not read as a current problem on the admin page."""
+    app = build_app(fake_backend, games, favourite_team="TOR")
+    app.client.fail = True
+    app.refresh()
+    assert "recovered" not in app.status_snapshot()["last error at"]
+
+    app.client.fail = False
+    app.refresh()
+    snapshot = app.status_snapshot()
+    assert "score refresh" in snapshot["last error"], "the error itself is still shown"
+    assert "(recovered " in snapshot["last error at"]
+
+    app.client.fail = True
+    app.refresh()
+    assert "recovered" not in app.status_snapshot()["last error at"], "a new error resets it"
+
+
+def test_a_good_score_poll_does_not_mark_another_fetch_recovered(fake_backend, games):
+    app = build_app(fake_backend, games, favourite_team="TOR")
+    app._record_error("standings fetch: boom")
+    app.refresh()
+    assert "recovered" not in app.status_snapshot()["last error at"]
+
+
 def test_status_snapshot_shows_the_installed_version(fake_backend, games, tmp_path, monkeypatch):
     """A factory image (never hot-updated) has no VERSION file at all --
     installed_version() reads it fresh every call, so this must never go

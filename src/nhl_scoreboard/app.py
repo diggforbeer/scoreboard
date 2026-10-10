@@ -260,6 +260,10 @@ class ScoreboardApp:
         self.last_success_at: datetime | None = None
         self.last_error: str | None = None
         self.last_error_at: datetime | None = None
+        #: When a later score poll succeeded after a score-poll error, so the
+        #: admin page doesn't show a long-past blip as if it were current.
+        self.last_error_recovered_at: datetime | None = None
+        self._last_error_from_scores = False
         if admin_server is not None:
             self.admin_server = admin_server
         elif settings.status.enabled:
@@ -531,11 +535,13 @@ class ScoreboardApp:
             games = self.client.scores()
         except NHLApiError as exc:
             log.warning("Score refresh failed: %s", exc)
-            self._record_error(f"score refresh: {exc}")
+            self._record_error(f"score refresh: {exc}", from_scores=True)
             return
         self.games = self.order(games)
         self.last_success = self.monotonic()
         self.last_success_at = self.clock()
+        if self._last_error_from_scores and self.last_error_recovered_at is None:
+            self.last_error_recovered_at = self.last_success_at
         self._detect_goals(self.games)
         now = self.clock()
         for game in self.games:
@@ -589,10 +595,16 @@ class ScoreboardApp:
                 del self._three_stars_pending[game_id]
         self._three_stars_shown &= current_ids
 
-    def _record_error(self, message: str) -> None:
-        """Track the most recent fetch failure, for the status page (#48)."""
+    def _record_error(self, message: str, *, from_scores: bool = False) -> None:
+        """Track the most recent fetch failure, for the status page (#48).
+
+        Only a score-poll error can be marked recovered: the next good score
+        poll says nothing about whether, say, the standings fetch works now.
+        """
         self.last_error = message
         self.last_error_at = self.clock()
+        self.last_error_recovered_at = None
+        self._last_error_from_scores = from_scores
 
     # -- config reload (#51) ----------------------------------------------
 
@@ -1709,8 +1721,17 @@ class ScoreboardApp:
             "favourite team": cfg.favourite_team or "(none)",
             "last successful poll": self._format_time(self.last_success_at),
             "last error": self.last_error or "(none)",
-            "last error at": self._format_time(self.last_error_at) if self.last_error_at else "",
+            "last error at": self._error_time_label(),
         }
+
+    def _error_time_label(self) -> str:
+        if self.last_error_at is None:
+            return ""
+        label = self._format_time(self.last_error_at)
+        if self.last_error_recovered_at is not None:
+            recovered = self.last_error_recovered_at.astimezone(self.tz).strftime("%H:%M:%S")
+            label += f" (recovered {recovered})"
+        return label
 
     @staticmethod
     def _scene_game_label(scene: Scene) -> str:
