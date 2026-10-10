@@ -175,6 +175,15 @@ class PanelConfig:
 #: can't drift out of sync with each other.
 PANEL_HARDWARE_MAPPING_CHOICES = ("regular", "adafruit-hat", "adafruit-hat-pwm")
 
+#: What each of those is in words a hobbyist recognises from the board in
+#: their hand -- the driver's names mean nothing until you already know
+#: them (#172). Matches the boot template's own hardware_mapping comment.
+PANEL_HARDWARE_MAPPING_LABELS = {
+    "regular": "Standard HUB75 adapter (Seengreat, XICOOLEE, WatangTech)",
+    "adafruit-hat": "Adafruit RGB Matrix Bonnet or HAT",
+    "adafruit-hat-pwm": "Adafruit Bonnet or HAT with the GPIO4-GPIO18 solder mod",
+}
+
 
 def next_hardware_mapping(current: str) -> str:
     """The next candidate after ``current`` in ``PANEL_HARDWARE_MAPPING_CHOICES``, cycling.

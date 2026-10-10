@@ -2274,6 +2274,31 @@ def test_restart_scoreboard_service_logs_instead_of_raising(monkeypatch, caplog)
     assert "Could not restart nhl-scoreboard.service" in caplog.text
 
 
+def test_on_panel_next_can_jump_straight_to_a_chosen_board(fake_backend, games, tmp_path):
+    restarted = []
+    app, config_path = _panel_app(
+        fake_backend, games, tmp_path, restart_service=lambda: restarted.append(1)
+    )
+    assert app._on_panel_next("adafruit-hat-pwm") == "adafruit-hat-pwm"
+    assert Settings.from_toml(config_path).panel.hardware_mapping == "adafruit-hat-pwm"
+    assert json.loads((tmp_path / "trial.json").read_text()) == ["regular", "adafruit-hat-pwm"]
+    assert restarted == [1]
+
+
+def test_on_panel_next_rejects_a_board_outside_the_documented_choices(
+    fake_backend, games, tmp_path
+):
+    """The form is the only thing that sends this, but it's still a POST body."""
+    restarted = []
+    app, config_path = _panel_app(
+        fake_backend, games, tmp_path, restart_service=lambda: restarted.append(1)
+    )
+    assert app._on_panel_next("rm -rf") is None
+    assert Settings.from_toml(config_path).panel.hardware_mapping == "regular"
+    assert not (tmp_path / "trial.json").exists()
+    assert restarted == []
+
+
 def test_on_panel_confirm_clears_the_trial_marker(fake_backend, games, tmp_path):
     trial_path = tmp_path / "trial.json"
     trial_path.write_text("")

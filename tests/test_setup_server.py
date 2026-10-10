@@ -282,14 +282,14 @@ def test_panel_next_calls_the_callback_and_shows_the_restarting_page():
         on_submit=lambda ssid, password: None,
         port=0,
         host="127.0.0.1",
-        on_panel_next=lambda: calls.append(1) or "adafruit-hat",
+        on_panel_next=lambda chosen: calls.append(chosen) or "adafruit-hat",
     )
     server.start()
     try:
         status, body = _post(f"http://127.0.0.1:{server.port}/panel/next", "")
         assert status == 200
-        assert calls == [1]
-        assert "adafruit-hat" in body
+        assert calls == [None], "the plain button names no board: try the next one"
+        assert "Adafruit RGB Matrix Bonnet or HAT" in body, "the board's name, not the driver's"
         assert "Restarting" in body
     finally:
         server.stop()
@@ -301,7 +301,7 @@ def test_panel_next_failure_is_reported_without_a_restarting_page():
         on_submit=lambda ssid, password: None,
         port=0,
         host="127.0.0.1",
-        on_panel_next=lambda: None,
+        on_panel_next=lambda chosen: None,
     )
     server.start()
     try:
@@ -348,3 +348,43 @@ def test_panel_card_mid_lap_does_not_blame_the_wiring():
 
     page = _render_page([], panel_mapping="adafruit-hat", panel_in_trial=True).decode()
     assert "ribbon cable" not in page
+
+
+def test_picking_a_board_passes_it_to_the_callback():
+    """#172's original ask: jump straight to the board you know you have."""
+    calls = []
+    server = SetupServer(
+        networks=lambda: [],
+        on_submit=lambda ssid, password: None,
+        port=0,
+        host="127.0.0.1",
+        on_panel_next=lambda chosen: calls.append(chosen) or chosen,
+    )
+    server.start()
+    try:
+        status, body = _post(
+            f"http://127.0.0.1:{server.port}/panel/next", "mapping=adafruit-hat-pwm"
+        )
+        assert status == 200
+        assert calls == ["adafruit-hat-pwm"]
+        assert "solder mod" in body
+    finally:
+        server.stop()
+
+
+def test_page_names_boards_not_driver_settings():
+    from nhl_scoreboard.config import PANEL_HARDWARE_MAPPING_CHOICES
+    from nhl_scoreboard.setup_server import _render_page
+
+    page = _render_page([], panel_mapping="adafruit-hat").decode()
+    assert "Display type is set to <b>Adafruit RGB Matrix Bonnet or HAT</b>" in page
+    for mapping in PANEL_HARDWARE_MAPPING_CHOICES:
+        assert f'<option value="{mapping}"' in page, f"{mapping} missing from the picker"
+    assert '<option value="adafruit-hat" selected>' in page, "current board preselected"
+
+
+def test_a_hand_edited_mapping_still_shows_as_is():
+    from nhl_scoreboard.setup_server import _render_page
+
+    page = _render_page([], panel_mapping="compute-module").decode()
+    assert "<b>compute-module</b>" in page

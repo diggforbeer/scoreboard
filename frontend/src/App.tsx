@@ -1064,7 +1064,7 @@ function App() {
               </h3>
               <div className="mb-3">
                 <label className="form-label" htmlFor="panel-hardware-mapping">
-                  Hardware mapping
+                  Adapter board (hardware mapping)
                 </label>
                 <select
                   className="form-select"
@@ -1073,9 +1073,13 @@ function App() {
                   value={panel.hardware_mapping}
                   onChange={(e) => setPanel({ ...panel, hardware_mapping: e.target.value })}
                 >
-                  <option value="regular">regular</option>
-                  <option value="adafruit-hat">adafruit-hat</option>
-                  <option value="adafruit-hat-pwm">adafruit-hat-pwm</option>
+                  {/* Board names, not driver names (#172) -- same wording as
+                      config.py's PANEL_HARDWARE_MAPPING_LABELS on the setup page. */}
+                  <option value="regular">Standard HUB75 adapter (Seengreat, XICOOLEE, WatangTech)</option>
+                  <option value="adafruit-hat">Adafruit RGB Matrix Bonnet or HAT</option>
+                  <option value="adafruit-hat-pwm">
+                    Adafruit Bonnet or HAT with the GPIO4-GPIO18 solder mod
+                  </option>
                 </select>
               </div>
               <div className="mb-3">

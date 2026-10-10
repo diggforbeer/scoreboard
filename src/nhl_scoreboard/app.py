@@ -1631,9 +1631,10 @@ class ScoreboardApp:
             return [self.settings.panel.hardware_mapping]
         return tried
 
-    def _on_panel_next(self) -> str | None:
-        """ "No, try the next option": save the next candidate mapping and
-        restart so the panel actually picks it up, returning it on success.
+    def _on_panel_next(self, chosen: str | None = None) -> str | None:
+        """ "No, try the next option" (or a board picked by name): save that
+        mapping and restart so the panel actually picks it up, returning it
+        on success. ``chosen`` must be one of the documented choices.
 
         The trial marker is written *before* the mapping changes: if it
         can't be, nothing changes and nothing restarts, rather than leaving
@@ -1649,8 +1650,11 @@ class ScoreboardApp:
         if self.settings.source_path is None:
             log.warning("No config file loaded; cannot try a different hardware_mapping")
             return None
+        if chosen is not None and chosen not in PANEL_HARDWARE_MAPPING_CHOICES:
+            log.warning("Ignoring unknown hardware_mapping %r from the setup page", chosen)
+            return None
         current = self.settings.panel.hardware_mapping
-        new_mapping = next_hardware_mapping(current)
+        new_mapping = chosen or next_hardware_mapping(current)
         previous = self._tried_mappings()
         tried = [*(previous or [current]), new_mapping]
         try:

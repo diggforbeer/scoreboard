@@ -48,6 +48,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs
 
+from .config import PANEL_HARDWARE_MAPPING_CHOICES, PANEL_HARDWARE_MAPPING_LABELS
+
 log = logging.getLogger(__name__)
 
 #: Paths real devices probe to decide whether a network is "captive" (behind
@@ -73,6 +75,30 @@ _CAPTIVE_PROBE_PATHS = frozenset(
 )
 
 
+def _mapping_label(mapping: str) -> str:
+    """The board's name, not the driver's -- a hand-edited value shows as-is."""
+    return PANEL_HARDWARE_MAPPING_LABELS.get(mapping, mapping)
+
+
+def _render_board_picker(current: str) -> str:
+    """Jump straight to a named board instead of stepping through them.
+
+    Posts to the same ``/panel/next`` as "try the next option", with the
+    choice attached, so it gets the same marker, restart and confirm.
+    """
+    options = "".join(
+        f'<option value="{m}"{" selected" if m == current else ""}>'
+        f"{html.escape(_mapping_label(m))}</option>"
+        for m in PANEL_HARDWARE_MAPPING_CHOICES
+    )
+    return (
+        '<form method="POST" action="/panel/next">'
+        '<label for="mapping">Know your adapter board? Pick it:</label><br>'
+        f'<select id="mapping" name="mapping" style="max-width: 100%">{options}</select> '
+        '<button type="submit">Use this board</button></form>'
+    )
+
+
 def _render_panel_card(mapping: str, in_trial: bool, tried_all: bool = False) -> str:
     """The display check (#172): confirm the panel is actually showing this
     page's own SSID/QR scene before assuming setup is otherwise fine.
@@ -85,7 +111,7 @@ def _render_panel_card(mapping: str, in_trial: bool, tried_all: bool = False) ->
     """
     if in_trial:
         prompt = (
-            f"Now trying <b>{html.escape(mapping)}</b>. Is the panel showing this "
+            f"Now trying <b>{html.escape(_mapping_label(mapping))}</b>. Is the panel showing this "
             "network's name, password and a QR code?"
         )
         confirm_html = (
@@ -103,7 +129,7 @@ def _render_panel_card(mapping: str, in_trial: bool, tried_all: bool = False) ->
             )
     else:
         prompt = (
-            f"Display type is set to <b>{html.escape(mapping)}</b>. You should be "
+            f"Display type is set to <b>{html.escape(_mapping_label(mapping))}</b>. You should be "
             "seeing this network's name, password and a QR code on the panel right now."
         )
         confirm_html = ""
@@ -113,6 +139,7 @@ def _render_panel_card(mapping: str, in_trial: bool, tried_all: bool = False) ->
 <p>{prompt}</p>
 {confirm_html}
 <form method="POST" action="/panel/next"><button type="submit">{next_label}</button></form>
+{_render_board_picker(mapping)}
 </fieldset>"""
 
 
@@ -184,7 +211,7 @@ button {{ padding: 0.5rem 1.5rem; }}
 
 
 def _render_restarting_page(mapping: str) -> bytes:
-    """Shown right after "no, try the next option" (#172).
+    """Shown right after "no, try the next option" or a picked board (#172).
 
     No client-side JS (same stdlib-only constraint as the rest of this
     page) -- a plain meta-refresh gives the service time to restart and
@@ -199,7 +226,7 @@ def _render_restarting_page(mapping: str) -> bytes:
 <title>NHL Scoreboard setup</title>
 </head>
 <body style="font-family: sans-serif; background: #111; color: #eee; padding: 1.5rem;">
-<h1>Trying &ldquo;{html.escape(mapping)}&rdquo;</h1>
+<h1>Trying &ldquo;{html.escape(_mapping_label(mapping))}&rdquo;</h1>
 <p>Restarting the display with this setting. Give it about ten seconds and check the
 panel -- this page reloads on its own.</p>
 </body>
@@ -240,7 +267,7 @@ def _make_handler(
     on_submit: Callable[[str, str | None], None],
     panel_state: Callable[[], tuple[str, bool, bool]],
     on_panel_confirm: Callable[[], None],
-    on_panel_next: Callable[[], str | None],
+    on_panel_next: Callable[[str | None], str | None],
 ) -> type[BaseHTTPRequestHandler]:
     class SetupRequestHandler(BaseHTTPRequestHandler):
         server_version = "nhl-scoreboard-setup/1.0"
@@ -261,6 +288,11 @@ def _make_handler(
             self.send_header("Location", "/")
             self.send_header("Content-Length", "0")
             self.end_headers()
+
+        def _read_form(self) -> dict[str, list[str]]:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            body = self.rfile.read(length).decode("utf-8", errors="replace")
+            return parse_qs(body, keep_blank_values=True)
 
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html"):
@@ -284,7 +316,9 @@ def _make_handler(
                 self._redirect_to_setup_page()
                 return
             if self.path == "/panel/next":
-                new_mapping = on_panel_next()
+                # The picker sends a board; the plain button sends nothing.
+                chosen = self._read_form().get("mapping", [""])[0].strip() or None
+                new_mapping = on_panel_next(chosen)
                 if new_mapping is None:
                     mapping, in_trial, _ = panel_state()
                     self._send_html(
@@ -317,9 +351,7 @@ def _make_handler(
                 )
                 return
 
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            body = self.rfile.read(length).decode("utf-8", errors="replace")
-            form = parse_qs(body, keep_blank_values=True)
+            form = self._read_form()
             ssid = _choose_ssid(form)
             if not ssid:
                 self._send_html(
@@ -348,7 +380,7 @@ class SetupServer:
         host: str = "0.0.0.0",  # intentional: reachable only from the board's own AP anyway
         panel_state: Callable[[], tuple[str, bool, bool]] | None = None,
         on_panel_confirm: Callable[[], None] | None = None,
-        on_panel_next: Callable[[], str | None] | None = None,
+        on_panel_next: Callable[[str | None], str | None] | None = None,
     ) -> None:
         self._networks = networks
         self._on_submit = on_submit
@@ -362,7 +394,7 @@ class SetupServer:
         #: same "presentation only" stance as on_submit/wifi.
         self._panel_state = panel_state or (lambda: ("regular", False, False))
         self._on_panel_confirm = on_panel_confirm or (lambda: None)
-        self._on_panel_next = on_panel_next or (lambda: None)
+        self._on_panel_next = on_panel_next or (lambda _chosen: None)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 

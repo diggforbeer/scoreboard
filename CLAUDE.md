@@ -1300,6 +1300,14 @@ once WiFi has already joined and torn the AP down.
   tried with nothing confirmed, the card says so -- power supply, ribbon
   cable -- instead of letting someone cycle forever believing a setting is
   still the problem. They can still go round again.
+- **Board names, not driver names.** `PANEL_HARDWARE_MAPPING_LABELS`
+  ("Adafruit RGB Matrix Bonnet or HAT", not `adafruit-hat`) is what both
+  pages show; the stored value is unchanged. Someone who knows their board
+  can pick it directly from a dropdown on the card ("Use this board"),
+  which posts the choice to the same `/panel/next` -- same marker, restart
+  and confirm as stepping through, and anything outside the documented
+  choices is refused. The admin page's Panel dropdown carries the same
+  wording, hardcoded in `App.tsx` like its other selects.
 - **`PANEL_HARDWARE_MAPPING_CHOICES` is shared**, not duplicated: the
   admin page's Panel picker (`admin_server.py`'s `_PANEL_FIELDS`) reads the
   same tuple, so the two pages can't drift.
