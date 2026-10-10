@@ -891,9 +891,9 @@ LEP_BEARD = (255, 110, 0)
 SHAMROCK = (0, 200, 60)
 SHAMROCK_VEIN = (0, 110, 30)
 SHAMROCK_STEM = (0, 140, 40)
-#: Pale gold outline on everything that crosses a game: green on green
-#: (DAL/MIN/SEA logos, the green live-status text) all but vanished in a
-#: rendered preview -- the Valentine's heart's red-on-red lesson again.
+#: Pale gold outline on the leprechaun: green on green (DAL/MIN/SEA logos,
+#: the green live-status text) all but vanished in a rendered preview --
+#: the Valentine's heart's red-on-red lesson again.
 LEP_OUTLINE = (255, 225, 120)
 
 # Facing left: 'H' hat, 'K' band/belt/boots, 'Y' buckles, 'F' face and
@@ -919,28 +919,7 @@ LEPRECHAUN_FRAMES = (
 # 'G' leaf, 'v' vein, 's' stem.
 _SHAMROCK_PALETTE = (("G", SHAMROCK), ("v", SHAMROCK_VEIN), ("s", SHAMROCK_STEM))
 # Three separate round leaves around a centre, with gaps between them: the
-# first versions were one solid notched V -- read as a heart, not a clover.
-SMALL_SHAMROCK = (
-    "...GGG...",
-    "..GGGGG..",
-    "..GGGGG..",
-    "...GvG...",
-    ".GGGvGGG.",
-    "GGGG.GGGG",
-    ".GGG.GGG.",
-    "....s....",
-    "....s....",
-)
-#: The dropped ones' colours. Not outlined -- at this size an outline
-#: closes the gaps between the leaves and they read as acorns -- so instead
-#: a yellow-green that stands apart from the green team logos and the green
-#: live-status text they land on.
-DROPPED_SHAMROCK = (150, 255, 50)
-_DROPPED_SHAMROCK_PALETTE = (
-    ("G", DROPPED_SHAMROCK),
-    ("v", (60, 150, 20)),
-    ("s", (90, 170, 30)),
-)
+# first version was one solid notched V -- read as a heart, not a clover.
 FOUR_LEAF = (
     "..GGG.GGG...",
     ".GGGGvGGGG..",
@@ -968,6 +947,21 @@ THREE_LEAF = (
     "......s....",
     "......s....",
 )
+# Dropped as he walks: 'Y' gold, 'D' rim, 'W' shine. The owner swapped
+# these in for small shamrocks, which never read well at drop size -- solid
+# ones looked like hearts, outlined ones like acorns. Gold stands out
+# against green with no outline.
+COIN_GOLD = (255, 190, 0)
+COIN_RIM = (190, 120, 0)
+COIN_SHINE = (255, 250, 200)
+GOLD_COIN = (
+    ".DDDD.",
+    "DYYWYD",
+    "DYYYWD",
+    "DYYYYD",
+    "DYYYYD",
+    ".DDDD.",
+)
 LEPRECHAUN = Flyby(
     frames=tuple(_outlined(frame) for frame in LEPRECHAUN_FRAMES),
     palette=(
@@ -983,9 +977,9 @@ LEPRECHAUN = Flyby(
     speed=14.0,
     frame_seconds=0.3,
     align="bottom",
-    # Shamrocks behind him as he goes (owner's pick, #249) -- Santa's drops.
-    drops=(Drop(SMALL_SHAMROCK, _DROPPED_SHAMROCK_PALETTE),),
-    drop_spacing=24,
+    # Gold coins behind him as he goes (owner's pick, #249) -- Santa's drops.
+    drops=(Drop(GOLD_COIN, (("Y", COIN_GOLD), ("D", COIN_RIM), ("W", COIN_SHINE))),),
+    drop_spacing=20,
     drop_column=9,
     linger_seconds=2.0,
 )

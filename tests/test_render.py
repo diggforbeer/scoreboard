@@ -1761,7 +1761,7 @@ def test_st_patricks_leprechaun_over_live_game(games, synthetic_logos, update_sn
     game = games["live"]
     c = canvas()
     make_renderer(synthetic_logos).draw_game(c, game)
-    # 4.6s in at 14px/s: mid-panel, two shamrocks dropped behind him.
+    # 4.6s in at 14px/s: mid-panel, gold coins dropped behind him.
     assert draw_halloween(c, "game", flyby_at=4.6, holiday="st_patricks")
     art = show("st patricks leprechaun over live game", c)
 

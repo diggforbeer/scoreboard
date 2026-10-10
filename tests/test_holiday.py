@@ -17,8 +17,8 @@ from nhl_scoreboard.config import HolidayConfig, Settings
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.holiday import (
     CLOUD,
+    COIN_GOLD,
     CONFETTI,
-    DROPPED_SHAMROCK,
     FIREWORKS,
     FLYBY_SPEED,
     GHOST_BODY,
@@ -38,7 +38,6 @@ from nhl_scoreboard.display.holiday import (
     PRESENT_COLOURS,
     PUMPKIN,
     SANTA,
-    SHAMROCK,
     SMALL_PRESENT,
     SNOW,
     SNOW_BAND,
@@ -526,20 +525,7 @@ def test_leprechaun_is_outlined_against_green_logos():
     assert len(LEPRECHAUN.frames[0]) == len(LEPRECHAUN_FRAMES[0]) + 2
 
 
-def test_dropped_shamrocks_stand_apart_from_the_greens_they_land_on():
-    """Not outlined (an outline closes the gaps between the leaves), so the
-    colour has to do it: well clear of the green and teal team colours and the
-    live-status green."""
-    from nhl_scoreboard.display.renderer import LIVE
-    from nhl_scoreboard.display.teams import team_color
-
-    leaf = dict(LEPRECHAUN.drops[0].palette)["G"]
-    for green in (LIVE, team_color("DAL"), team_color("MIN"), team_color("SEA"), SHAMROCK):
-        distance = sum((a - b) ** 2 for a, b in zip(leaf, green, strict=True)) ** 0.5
-        assert distance >= 140, f"{leaf} too close to {green}"
-
-
-def test_leprechaun_drops_shamrocks_that_only_accumulate():
+def test_leprechaun_drops_gold_coins_that_only_accumulate():
     overlay = HolidayOverlay()
     overlay.start_flyby(0.0)
     t, counts = 0.0, []
@@ -548,10 +534,10 @@ def test_leprechaun_drops_shamrocks_that_only_accumulate():
         assert canvas.out_of_bounds == [], f"off-panel write at t={t}"
         if not moving:
             break
-        counts.append(sum(1 for c in canvas.pixels.values() if c == DROPPED_SHAMROCK))
+        counts.append(sum(1 for c in canvas.pixels.values() if c == COIN_GOLD))
         t += ANIMATION_FRAME_INTERVAL
     assert counts[0] == 0 and counts[-1] > 0
-    assert counts == sorted(counts), "dropped shamrocks stay put until the pass ends"
+    assert counts == sorted(counts), "dropped coins stay put until the pass ends"
 
 
 def test_pumpkins_only_on_idle_scenes():

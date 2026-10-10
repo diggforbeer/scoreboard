@@ -517,9 +517,11 @@ beat out of step beside the clock at 2fps. The flying heart is outlined
 (`_outlined`, pale pink) -- a plain red heart vanished crossing a red team
 logo in a rendered preview; any red/white-on-anything sprite added later
 should get the same check -- St. Patrick's (#249, Mar 14-17) needed it
-too: the leprechaun and the shamrocks he drops (`Flyby.drops`, as Santa)
-are outlined in pale gold, after green-on-green (DAL/MIN logos, the
-green live-status text) all but vanished in a preview. Groundhog Day (#247, Feb 2) adds a third
+too: the leprechaun is outlined in pale gold, after green-on-green
+(DAL/MIN logos, the green live-status text) all but vanished in a
+preview. He drops gold coins (`Flyby.drops`, as Santa) -- small dropped
+shamrocks were tried and never read at that size (solid: hearts;
+outlined: acorns). Groundhog Day (#247, Feb 2) adds a third
 mover kind, `Popup` (rises out of a mound, looks left/right, then either
 startles at a dark silhouette and ducks, or stays and sinks), and is the
 one holiday that needs the date: shadow-or-not is `random.Random(year)`,

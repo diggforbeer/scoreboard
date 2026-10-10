@@ -214,7 +214,7 @@ cooldown_minutes = 15
 #   valentines       Feb 7-14: a beating heart floats across now and then,
 #                    and two beating hearts flank the clock.
 #   st_patricks      Mar 14-17: a leprechaun walks along the bottom dropping
-#                    shamrocks, and shamrocks flank the clock.
+#                    gold coins, and shamrocks flank the clock.
 enabled = false
 themes = [
   "halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks",
