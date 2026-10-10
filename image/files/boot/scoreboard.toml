@@ -219,10 +219,14 @@ cooldown_minutes = 15
 #                    bunny hops along the bottom, and eggs in your team's
 #                    colours (plus three others, changing daily) flank the
 #                    clock.
+#   canada_day       Jul 1: fireworks in red and white, and a Canadian flag
+#                    either side of the clock. Not listed by default.
+#   july_4th         Jul 4: fireworks in red, white and blue, and a US flag
+#                    either side of the clock.
 enabled = false
 themes = [
   "halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks",
-  "easter",
+  "easter", "july_4th",
 ]
 
 # Random gap, in minutes, between fly-bys (the Halloween ghost).

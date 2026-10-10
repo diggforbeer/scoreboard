@@ -13,6 +13,7 @@ so a test can freeze a fly-by mid-crossing and snapshot it like any scene.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import random
 from collections.abc import Callable, Sequence
@@ -1161,6 +1162,86 @@ def _draw_eggs(
         draw_sprite(canvas, rows, palette, x, y, width, height)
 
 
+# -- Canada Day / July 4th (#251) ----------------------------------------------
+
+FLAG_RED = (220, 0, 30)
+FLAG_WHITE = (255, 255, 255)
+FLAG_BLUE = (40, 70, 220)
+FLAG_POLE = (150, 150, 150)
+
+# 'P' pole, 'R' red, 'W' white, 'B' blue canton, 'w' its stars (sparse: a
+# 50/50 checker read as a checkerboard, not blue with stars).
+US_FLAG = (
+    "PBwBBwBRRRRRRRRR",
+    "PBBBBBBWWWWWWWWW",
+    "PBBwBBwRRRRRRRRR",
+    "PBBBBBBWWWWWWWWW",
+    "PBwBBwBRRRRRRRRR",
+    "PWWWWWWWWWWWWWWW",
+    "PRRRRRRRRRRRRRRR",
+    "PWWWWWWWWWWWWWWW",
+    "PRRRRRRRRRRRRRRR",
+    "P...............",
+    "P...............",
+    "P...............",
+)
+# 'L' the maple leaf, in the white square between the two red bars.
+CANADA_FLAG = (
+    "PRRRRWWWWWWWWWRRRR",
+    "PRRRRWWWWLWWWWRRRR",
+    "PRRRRWWLWLWLWWRRRR",
+    "PRRRRWWLLLLLWWRRRR",
+    "PRRRRWLLLLLLLWRRRR",
+    "PRRRRWWLLLLLWWRRRR",
+    "PRRRRWWWWLWWWWRRRR",
+    "PRRRRWWWWLWWWWRRRR",
+    "PRRRRWWWWWWWWWRRRR",
+    "P.................",
+    "P.................",
+    "P.................",
+)
+_FLAG_PALETTE = {
+    "P": FLAG_POLE,
+    "R": FLAG_RED,
+    "W": FLAG_WHITE,
+    "B": FLAG_BLUE,
+    "w": FLAG_WHITE,
+    "L": FLAG_RED,
+}
+
+
+def _recoloured(show: Fireworks, colours: tuple[RGB, ...]) -> Fireworks:
+    """The New Year's show, same rockets, new colours (#251)."""
+    rockets = tuple(
+        dataclasses.replace(rocket, colour=colours[i % len(colours)])
+        for i, rocket in enumerate(show.rockets)
+    )
+    return dataclasses.replace(show, rockets=rockets)
+
+
+US_FIREWORKS = _recoloured(FIREWORKS, (FLAG_RED, FLAG_WHITE, (60, 110, 255)))
+CANADA_FIREWORKS = _recoloured(FIREWORKS, (FLAG_RED, FLAG_WHITE))
+
+
+def _flags(flag: tuple[str, ...]) -> Callable[..., None]:
+    def draw(
+        canvas: Any,
+        now: float,
+        width: int,
+        height: int,
+        day: date | None = None,
+        favourite: str = "",
+    ) -> None:
+        """A flag either side of the clock, pole on the outside."""
+        del now, day, favourite
+        y = (height - len(flag)) // 2
+        draw_sprite(canvas, flag, _FLAG_PALETTE, CORNER_INSET, y, width, height)
+        x = width - CORNER_INSET - len(flag[0])
+        draw_sprite(canvas, flag, _FLAG_PALETTE, x, y, width, height)
+
+    return draw
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(
@@ -1233,6 +1314,24 @@ HOLIDAYS: dict[str, Holiday] = {
         _easter_week,
         BUNNY,
         _draw_eggs,
+    ),
+    "canada_day": Holiday(
+        "canada_day",
+        "Canada Day",
+        "Jul 1",
+        _between((7, 1), (7, 1)),
+        CANADA_FIREWORKS,
+        _flags(CANADA_FLAG),
+        # Like Canadian Thanksgiving: a US board shouldn't get it unasked.
+        default_on=False,
+    ),
+    "july_4th": Holiday(
+        "july_4th",
+        "July 4th",
+        "Jul 4",
+        _between((7, 4), (7, 4)),
+        US_FIREWORKS,
+        _flags(US_FLAG),
     ),
 }
 HOLIDAY_NAMES = tuple(HOLIDAYS)

@@ -17,10 +17,13 @@ from nhl_scoreboard.config import HolidayConfig, Settings
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.holiday import (
     BUNNY,
+    CANADA_FIREWORKS,
     CLOUD,
     COIN_GOLD,
     CONFETTI,
     FIREWORKS,
+    FLAG_BLUE,
+    FLAG_RED,
     FLYBY_SPEED,
     GHOST_BODY,
     GHOST_WIDTH,
@@ -44,6 +47,7 @@ from nhl_scoreboard.display.holiday import (
     SNOW_BAND,
     SUN,
     TURKEY,
+    US_FIREWORKS,
     HolidayOverlay,
     active_holiday,
     easter_sunday,
@@ -265,6 +269,45 @@ def test_st_patricks_wins_the_rare_overlap_with_easter_week():
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 18)).name == "easter"
 
 
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2027, 6, 30), None),
+        (date(2027, 7, 1), "canada_day"),
+        (date(2027, 7, 2), None),
+        (date(2027, 7, 4), "july_4th"),
+        (date(2027, 7, 5), None),
+    ],
+)
+def test_canada_day_and_july_4th(day, expected):
+    found = active_holiday(HOLIDAY_NAMES, day)
+    assert (found.name if found else None) == expected
+
+
+def test_canada_day_is_opt_in_like_canadian_thanksgiving():
+    assert "canada_day" not in Settings().holiday.themes
+    assert active_holiday(Settings().holiday.themes, date(2027, 7, 1)) is None
+
+
+def test_flag_fireworks_reuse_the_new_year_show_in_flag_colours():
+    for show in (US_FIREWORKS, CANADA_FIREWORKS):
+        assert [r.x for r in show.rockets] == [r.x for r in FIREWORKS.rockets]
+        assert show.duration == FIREWORKS.duration
+    us = {r.colour for r in US_FIREWORKS.rockets}
+    ca = {r.colour for r in CANADA_FIREWORKS.rockets}
+    assert FLAG_RED in us and any(c[2] > 200 and c[0] < 100 for c in us), "red, white and blue"
+    assert ca == {FLAG_RED, (255, 255, 255)}, "red and white"
+
+
+@pytest.mark.parametrize("name", ["july_4th", "canada_day"])
+def test_a_flag_flies_either_side_of_the_clock(name):
+    _, canvas = draw(HolidayOverlay(), 0.0, kind="clock", holiday=HOLIDAYS[name])
+    reds = [x for (x, _), c in canvas.pixels.items() if c == FLAG_RED]
+    assert min(reds) < 25 and max(reds) > W - 25
+    blue = FLAG_BLUE in canvas.pixels.values()
+    assert blue is (name == "july_4th"), "only the US flag has a blue canton"
+
+
 def test_both_thanksgivings_share_the_turkey():
     assert HOLIDAYS["thanksgiving"].flyby is HOLIDAYS["thanksgiving_ca"].flyby is TURKEY
 
@@ -288,6 +331,7 @@ def test_off_by_default_with_every_default_on_holiday_ticked():
         "valentines",
         "st_patricks",
         "easter",
+        "july_4th",
     ]
     assert "thanksgiving_ca" in HOLIDAY_NAMES, "known, just not ticked unasked"
 

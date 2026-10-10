@@ -144,6 +144,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("clock"), holiday="st_patricks"),
         DemoStep(Scene("game", live), holiday="easter"),
         DemoStep(Scene("clock"), holiday="easter"),
+        # July is the off-season: the clock is what these holidays decorate.
+        DemoStep(Scene("clock"), holiday="canada_day"),
+        DemoStep(Scene("clock"), holiday="july_4th"),
         DemoStep(Scene("no_games")),
         DemoStep(Scene("no_data")),
     ]

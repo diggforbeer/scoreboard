@@ -534,7 +534,11 @@ Mar 17, St. Patrick's wins by registry order. Its eggs are team-coloured (owner'
 idea): the favourite's first, then three other teams picked afresh each day
 (`egg_teams()`, seeded by the date) -- so `corners` functions also take the
 favourite, threaded through `HolidayOverlay.draw(favourite=...)` from
-`draw_scene()`'s possibly-relabelled favourite. Groundhog Day (#247, Feb 2) adds a third
+`draw_scene()`'s possibly-relabelled favourite. Canada Day and July 4th
+(#251, Jul 1 / Jul 4; `canada_day` off by default like `thanksgiving_ca`)
+are the New Year's show recoloured (`_recoloured()`: same rockets, flag
+colours) plus a flag either side of the clock -- July is the off-season,
+so the clock is where they're actually seen. Groundhog Day (#247, Feb 2) adds a third
 mover kind, `Popup` (rises out of a mound, looks left/right, then either
 startles at a dark silhouette and ducks, or stays and sinks), and is the
 one holiday that needs the date: shadow-or-not is `random.Random(year)`,

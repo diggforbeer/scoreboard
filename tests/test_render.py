@@ -1827,3 +1827,18 @@ def test_easter_eggs_frame_the_clock(update_snapshots):
     text = plain.bbox()
     assert c.lit(text.x0, 0, text.x1, H - 1) == plain.pixels, "the clock itself untouched"
     check_snapshot("holiday_easter_clock", art, update_snapshots)
+
+
+@pytest.mark.parametrize("name", ["july_4th", "canada_day"])
+def test_flag_holidays_fireworks_and_flags_over_the_clock(name, update_snapshots):
+    # July is the off-season: the clock is where these are actually seen.
+    now = datetime(2027, 7, 5, 2, 30, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_clock(plain, now)
+    c = canvas()
+    make_renderer().draw_clock(c, now)
+    assert draw_halloween(c, "clock", flyby_at=2.3, holiday=name)
+    art = show(f"{name} fireworks and flags, clock", c)
+
+    assert not c.out_of_bounds
+    check_snapshot(f"holiday_{name}_clock", art, update_snapshots)

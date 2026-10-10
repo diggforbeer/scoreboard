@@ -206,7 +206,7 @@ cooldown_minutes = 15        # how long after that game ends before dimming resu
 
 [holiday]
 enabled = false              # seasonal decorations; each holiday only shows during its own dates
-themes = ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks", "easter"]
+themes = ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks", "easter", "july_4th"]
 flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
 flyby_max_minutes = 20
 
@@ -286,7 +286,8 @@ clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
 a groundhog who may or may not see his shadow; and the week up to
 Valentine's Day, hearts; St. Patrick's, a leprechaun collecting
 gold coins; and the week before Easter, a hopping bunny and eggs painted in
-team colours. Canadian Thanksgiving (`thanksgiving_ca`) is
+team colours; and Canada Day and July 4th, fireworks and flags. Canadian
+Thanksgiving (`thanksgiving_ca`) and Canada Day (`canada_day`) are
 available but not ticked by default.
 
 ## Audio
