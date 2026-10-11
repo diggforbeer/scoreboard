@@ -260,9 +260,10 @@ class Renderer:
     def draw_goal(self, canvas: Any, game: Game) -> None:
         """A goal celebration: GOAL in big amber type, current score below.
 
-        Fires only for the favourite's own goal (the app never calls this
-        otherwise), so there is no separate "who scored" to thread through --
-        the whole frame is the celebration, not a variant of the normal one.
+        Fires for a followed team's own goal (the favourite's, or an
+        ``also_follow`` team's, #260). There is no separate "who scored" to
+        thread through -- the whole frame is the celebration, not a variant
+        of the normal one.
         """
         if self.logos is not None:
             away = self.logos.get(game.away.abbrev)
@@ -300,9 +301,9 @@ class Renderer:
     def draw_goal_detail(self, canvas: Any, game: Game, event: GoalEvent) -> None:
         """Who scored: name, season goal total, assist(s) -- #122 phase 2.
 
-        Only ever fires for the favourite's own goal (the app never calls
-        this otherwise, see ScoreboardApp.refresh_goal_details), so
-        ``event.team_abbrev`` is always one of ``game``'s two sides. Reuses
+        Only ever fires for a followed team's own goal (see
+        ScoreboardApp.refresh_goal_details), so ``event.team_abbrev`` is
+        always one of ``game``'s two sides. Reuses
         draw_goal's own two-logo layout and its narrow-panel crop
         (_logo_span, #38) rather than a new single-logo layout with no such
         guarantee: the reserved middle column (_LOGO_MIN_MIDDLE, 32px even
