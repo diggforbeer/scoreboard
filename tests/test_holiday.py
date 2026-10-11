@@ -348,19 +348,48 @@ def test_a_bare_string_theme_is_treated_as_a_one_item_list():
     assert HolidayConfig(themes="halloween").themes == ["halloween"]
 
 
-def test_flyby_gap_is_floored_and_ordered(caplog):
+def test_flyby_frequency_defaults_to_occasional():
+    assert HolidayConfig().flyby_frequency == "occasional"
+    assert HolidayConfig().flyby_gap_minutes == (10.0, 30.0)
+
+
+@pytest.mark.parametrize(
+    ("frequency", "gap"),
+    [("rare", (30.0, 90.0)), ("occasional", (10.0, 30.0)), ("frequent", (5.0, 15.0))],
+)
+def test_each_flyby_frequency_is_half_to_one_and_a_half_times_its_average(frequency, gap):
+    cfg = HolidayConfig(flyby_frequency=frequency)
+    assert cfg.flyby_gap_minutes == gap
+    low, high = gap
+    assert high == 3 * low
+
+
+def test_unknown_flyby_frequency_warns_and_falls_back(caplog):
     with caplog.at_level(logging.WARNING):
-        cfg = HolidayConfig(flyby_min_minutes=30, flyby_max_minutes=0)
-    assert (cfg.flyby_min_minutes, cfg.flyby_max_minutes) == (1.0, 30.0)
-    assert "swapping" in caplog.text
+        cfg = HolidayConfig(flyby_frequency="constantly")
+    assert cfg.flyby_frequency == "occasional"
+    assert "constantly" in caplog.text
+
+
+def test_flyby_frequency_is_case_insensitive():
+    assert HolidayConfig(flyby_frequency=" Rare ").flyby_frequency == "rare"
 
 
 def test_parsed_from_toml_section():
     settings = Settings.from_dict(
-        {"holiday": {"enabled": True, "themes": ["halloween"], "flyby_min_minutes": 2}}
+        {"holiday": {"enabled": True, "themes": ["halloween"], "flyby_frequency": "rare"}}
     )
     assert settings.holiday.enabled
-    assert settings.holiday.flyby_min_minutes == 2
+    assert settings.holiday.flyby_frequency == "rare"
+
+
+def test_old_flyby_minute_keys_are_ignored_with_a_warning(caplog):
+    with caplog.at_level(logging.WARNING):
+        settings = Settings.from_dict(
+            {"holiday": {"flyby_min_minutes": 5, "flyby_max_minutes": 20}}
+        )
+    assert settings.holiday.flyby_frequency == "occasional"
+    assert "flyby_min_minutes" in caplog.text
 
 
 # -- fly-by timing ------------------------------------------------------------
@@ -768,6 +797,26 @@ def test_loop_speeds_up_only_while_a_flyby_is_crossing(holiday_app):
     src.sleep(CROSSING_SECONDS + 1)
     app.draw_scene(Scene("no_games"))
     assert app.frame_interval() == FRAME_INTERVAL
+
+
+@pytest.mark.parametrize(
+    ("frequency", "gap_seconds"),
+    [("rare", (1800, 5400)), ("occasional", (600, 1800)), ("frequent", (300, 900))],
+)
+def test_overlay_gets_the_chosen_frequencys_gap(holiday_app, frequency, gap_seconds):
+    app, _src, _now = holiday_app
+    app.renderer.draw_message = lambda *a: None
+    app.settings.holiday.flyby_frequency = frequency
+    seen = {}
+    real_draw = app.holiday_overlay.draw
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real_draw(*args, **kwargs)
+
+    app.holiday_overlay.draw = spy
+    app.draw_scene(Scene("no_games"))
+    assert (seen["min_gap_seconds"], seen["max_gap_seconds"]) == gap_seconds
 
 
 def test_night_blanking_drops_back_to_the_slow_loop(holiday_app):

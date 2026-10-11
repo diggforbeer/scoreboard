@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from datetime import datetime, time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import tomlkit
@@ -463,6 +463,25 @@ class ButtonConfig:
             self.hold_seconds = MIN_HOLD_SECONDS
 
 
+class FlybyFrequency(NamedTuple):
+    label: str
+    #: Shown under the choice on the admin page, so "Rare" isn't a guess.
+    description: str
+    #: Each gap is drawn uniformly from this range: half to one-and-a-half
+    #: times the average, so passes never fall on a regular beat.
+    gap_minutes: tuple[float, float]
+
+
+#: ``[holiday] flyby_frequency`` choices, rarest first. The default
+#: (occasional) is rarer than the old 5-20 minute gap on purpose -- a fly-by
+#: is an Easter egg, not the main event; frequent is roughly that old gap.
+FLYBY_FREQUENCIES: dict[str, FlybyFrequency] = {
+    "rare": FlybyFrequency("Rare", "about once an hour", (30.0, 90.0)),
+    "occasional": FlybyFrequency("Occasional", "about every 20 minutes", (10.0, 30.0)),
+    "frequent": FlybyFrequency("Frequent", "about every 10 minutes", (5.0, 15.0)),
+}
+
+
 @dataclass(slots=True)
 class HolidayConfig:
     """Seasonal decorations over the normal scenes (#236, #237).
@@ -476,10 +495,10 @@ class HolidayConfig:
     #: Every holiday but the ones marked default_on=False (Canadian
     #: Thanksgiving), so a US board doesn't sprout October turkeys unasked.
     themes: list[str] = field(default_factory=lambda: list(DEFAULT_THEMES))
-    #: Random gap between fly-bys (the Halloween ghost). Generic names, not
-    #: ghost_*: every later holiday's fly-by (#239-#242) reuses them.
-    flyby_min_minutes: float = 5.0
-    flyby_max_minutes: float = 20.0
+    #: How often a fly-by (the Halloween ghost, Santa...) crosses the board:
+    #: a key of FLYBY_FREQUENCIES. Presets rather than raw minutes: it's a
+    #: "did you see that?" moment, so how it feels matters, not exact gaps.
+    flyby_frequency: str = "occasional"
 
     def __post_init__(self) -> None:
         if isinstance(self.themes, str):
@@ -496,19 +515,20 @@ class HolidayConfig:
             elif name not in themes:
                 themes.append(name)
         self.themes = themes
-        # A sub-minute floor: back-to-back ghosts stop being a surprise.
-        self.flyby_min_minutes = max(1.0, float(self.flyby_min_minutes))
-        self.flyby_max_minutes = max(1.0, float(self.flyby_max_minutes))
-        if self.flyby_min_minutes > self.flyby_max_minutes:
+        frequency = str(self.flyby_frequency).strip().lower()
+        if frequency not in FLYBY_FREQUENCIES:
             log.warning(
-                "holiday.flyby_min_minutes (%s) > flyby_max_minutes (%s); swapping",
-                self.flyby_min_minutes,
-                self.flyby_max_minutes,
+                "Ignoring unknown holiday.flyby_frequency %r (must be one of %s)",
+                self.flyby_frequency,
+                ", ".join(FLYBY_FREQUENCIES),
             )
-            self.flyby_min_minutes, self.flyby_max_minutes = (
-                self.flyby_max_minutes,
-                self.flyby_min_minutes,
-            )
+            frequency = "occasional"
+        self.flyby_frequency = frequency
+
+    @property
+    def flyby_gap_minutes(self) -> tuple[float, float]:
+        """The (shortest, longest) random gap between fly-bys, in minutes."""
+        return FLYBY_FREQUENCIES[self.flyby_frequency].gap_minutes
 
 
 def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
