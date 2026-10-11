@@ -212,6 +212,9 @@ class ScoreboardConfig:
     rotate_seconds: float = 8.0
     poll_seconds: float = 60.0
     live_poll_seconds: float = 15.0
+    #: Poll cadence while a game is in a shootout (#259): shots land every
+    #: 20-30 s, so a few seconds keeps the grid current.
+    shootout_poll_seconds: float = 5.0
     show_clock_when_idle: bool = True
     prefer_favourite: bool = True
     show_logos: bool = True
@@ -248,6 +251,9 @@ class ScoreboardConfig:
         self.poll_seconds = _clamp_interval("scoreboard", "poll_seconds", self.poll_seconds)
         self.live_poll_seconds = _clamp_interval(
             "scoreboard", "live_poll_seconds", self.live_poll_seconds
+        )
+        self.shootout_poll_seconds = _clamp_interval(
+            "scoreboard", "shootout_poll_seconds", self.shootout_poll_seconds
         )
         self.rotate_seconds = _clamp_interval("scoreboard", "rotate_seconds", self.rotate_seconds)
 

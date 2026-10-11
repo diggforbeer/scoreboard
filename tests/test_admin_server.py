@@ -608,6 +608,7 @@ _DEFAULT_SCOREBOARD_DATA = {
     "rotate_seconds": 8.0,
     "poll_seconds": 60.0,
     "live_poll_seconds": 15.0,
+    "shootout_poll_seconds": 5.0,
     "show_clock_when_idle": True,
     "prefer_favourite": True,
     "show_logos": True,

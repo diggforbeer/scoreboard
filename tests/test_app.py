@@ -132,6 +132,9 @@ class FakeClient:
             raise NHLApiError("boom")
         return self.situations.get(game_id)
 
+    def shootout(self, game_id: int):
+        return None
+
     def goal_scoring(self, game_id: int) -> tuple[GoalEvent, ...]:
         self.goal_scoring_calls.append(game_id)
         if self.fail:
