@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import itertools
+import logging
 import random
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
+
+log = logging.getLogger(__name__)
 
 # gameState values observed from api-web.nhle.com/v1/score/{date}
 LIVE_STATES = frozenset({"LIVE", "CRIT"})
@@ -291,6 +295,152 @@ def three_stars_from_landing(raw: dict[str, Any] | None) -> tuple[Star, ...]:
 
 
 @dataclass(frozen=True, slots=True)
+class ShootoutAttempt:
+    """One shot from ``summary.shootout.events`` (#259).
+
+    Only a goal counts as a score; any other ``result`` (``save`` seen live,
+    ``miss``/``post``/... presumed) is drawn as a miss.
+    """
+
+    sequence: int
+    team_abbrev: str
+    scored: bool
+    game_winner: bool = False
+
+
+#: Rounds each team shoots before sudden death.
+SHOOTOUT_ROUNDS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class ShootoutState:
+    """``Shootout.state()``'s answer.
+
+    ``kind``: ``open`` (nothing on the line yet), ``must_score`` (``team``
+    is eliminated if its next shot misses), ``sudden_death``, ``decided``
+    (``team`` won) or ``unknown`` (data too incomplete to say).
+    """
+
+    kind: str
+    team: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Shootout:
+    """The shootout so far, from ``gamecenter/{id}/landing`` (#259).
+
+    ``attempts`` are in shot order; which team shoots first varies, so a
+    row is found by ``team_abbrev``, never by position. ``away_goals``/
+    ``home_goals`` are the API's running ``liveScore``, which can lead the
+    matching event by a poll -- callers show it as given.
+    """
+
+    attempts: tuple[ShootoutAttempt, ...]
+    away_goals: int = 0
+    home_goals: int = 0
+
+    def results_for(self, abbrev: str) -> tuple[bool, ...]:
+        """``abbrev``'s attempts in order: True for a goal."""
+        return tuple(a.scored for a in self.attempts if a.team_abbrev == abbrev)
+
+    @property
+    def winner_decided(self) -> bool:
+        return any(a.game_winner for a in self.attempts)
+
+    def state(self, away: str, home: str) -> ShootoutState:
+        """Where the shootout stands, from the attempts alone (#259).
+
+        Rules: three rounds each, ended early once one side can no longer
+        catch up; if still level, sudden death -- a round each, decided only
+        when both have shot. A team ``must_score`` when missing its next shot
+        would let the other side clinch. Anything that doesn't look like a
+        complete, in-order feed (unknown teams, gaps in ``sequence``, teams
+        not alternating, event goals disagreeing with ``liveScore`` because
+        one lags the other) is ``unknown``: callers show nothing special
+        rather than claim a team is on the brink on shaky data.
+        """
+        kind = ShootoutState
+        attempts = self.attempts
+        if not attempts:
+            return kind("open")
+        teams = [a.team_abbrev for a in attempts]
+        if set(teams) - {away, home} or any(x == y for x, y in itertools.pairwise(teams)):
+            return kind("unknown")
+        sequences = [a.sequence for a in attempts]
+        if any(y - x != 1 for x, y in itertools.pairwise(sequences)):
+            return kind("unknown")
+        results = {t: self.results_for(t) for t in (away, home)}
+        goals = {t: sum(r) for t, r in results.items()}
+        if (goals[away], goals[home]) != (self.away_goals, self.home_goals):
+            return kind("unknown")
+
+        shots = {t: len(r) for t, r in results.items()}
+        completed = min(shots.values())
+        if completed >= SHOOTOUT_ROUNDS:
+            # Level after the first three: every later round is a sudden-death
+            # round, so compare only rounds both teams have finished.
+            level = {t: sum(r[:completed]) for t, r in results.items()}
+            if level[away] != level[home]:
+                if shots[away] != shots[home]:
+                    return kind("unknown")  # kept shooting after it was decided
+                return kind("decided", away if level[away] > level[home] else home)
+            return kind("sudden_death")
+
+        remaining = {t: SHOOTOUT_ROUNDS - shots[t] for t in (away, home)}
+        if remaining[away] < 0 or remaining[home] < 0:
+            return kind("unknown")
+        for t, other in ((away, home), (home, away)):
+            if goals[t] > goals[other] + remaining[other]:
+                return kind("decided", t)
+        # Whoever has taken fewer shots goes next; level, the first shooter.
+        if shots[away] == shots[home]:
+            nxt = teams[0]
+        else:
+            nxt = away if shots[away] < shots[home] else home
+        other = home if nxt == away else away
+        if goals[other] > goals[nxt] + remaining[nxt] - 1:
+            return kind("must_score", nxt)
+        return kind("open")
+
+
+_KNOWN_SHOOTOUT_RESULTS = frozenset({"goal", "save"})
+
+
+def shootout_from_landing(raw: dict[str, Any] | None) -> Shootout | None:
+    """``summary.shootout``, or None until the shootout has begun.
+
+    One malformed event is skipped rather than losing the rest. A
+    ``result`` other than ``goal`` is a miss; unfamiliar ones are logged
+    once per call so new values show up in the journal.
+    """
+    shootout = ((raw or {}).get("summary") or {}).get("shootout")
+    if not shootout:
+        return None
+    attempts = []
+    for event in shootout.get("events") or []:
+        try:
+            result = str(event.get("result") or "").lower()
+            if result not in _KNOWN_SHOOTOUT_RESULTS:
+                log.warning("Unrecognised shootout result %r; drawing it as a miss", result)
+            attempts.append(
+                ShootoutAttempt(
+                    sequence=int(event["sequence"]),
+                    team_abbrev=_default_str(event.get("teamAbbrev")).upper(),
+                    scored=result == "goal",
+                    game_winner=bool(event.get("gameWinner")),
+                )
+            )
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+    live = shootout.get("liveScore") or {}
+    return Shootout(
+        attempts=tuple(sorted(attempts, key=lambda a: a.sequence)),
+        away_goals=int(live.get("away") or 0),
+        home_goals=int(live.get("home") or 0),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class Game:
     id: int
     state: str
@@ -306,6 +456,8 @@ class Game:
     in_intermission: bool
     #: Filled in separately from the landing endpoint; None at even strength.
     situation: Situation | None = None
+    #: Likewise from landing, only once a shootout has begun (#259).
+    shootout: Shootout | None = None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> Game:
@@ -355,6 +507,15 @@ class Game:
     @property
     def is_pregame(self) -> bool:
         return self.state in PREGAME_STATES
+
+    @property
+    def in_shootout(self) -> bool:
+        return self.period_type == "SO"
+
+    @property
+    def shows_shootout(self) -> bool:
+        """Draw the shootout grid: live SO, or a finished one we have data for."""
+        return self.in_shootout and (self.is_live or self.shootout is not None)
 
     @property
     def special_teams(self) -> bool:

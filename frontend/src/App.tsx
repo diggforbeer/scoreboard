@@ -125,6 +125,7 @@ interface ScoreboardConfig {
   rotate_seconds: number
   poll_seconds: number
   live_poll_seconds: number
+  shootout_poll_seconds: number
   show_clock_when_idle: boolean
   prefer_favourite: boolean
   show_logos: boolean
@@ -999,6 +1000,7 @@ function App() {
                   ['rotate_seconds', 'Seconds per game in rotation'],
                   ['poll_seconds', 'Score poll interval (seconds)'],
                   ['live_poll_seconds', 'Live score poll interval (seconds)'],
+                  ['shootout_poll_seconds', 'Shootout poll interval (seconds)'],
                   ['countdown_hours', 'Countdown window before puck drop (hours)'],
                   ['final_hold_minutes', 'Final score hold time (minutes)'],
                   ['goal_flash_seconds', 'Goal celebration duration (seconds)'],
