@@ -193,3 +193,32 @@ def test_undo_reverts_the_last_save(admin_page):
             assert not box.is_checked()
         finally:
             browser.close()
+
+
+def test_a_cleared_number_box_is_never_saved(admin_page):
+    """Clearing a box to retype it must not save 0 to the live board, even
+    after the pause or on blur (#273, ported from #275)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            frames = _sent_saves(page)
+            page.goto(admin_page.url)
+            field = page.locator("#sb-rotate_seconds")
+            field.wait_for(timeout=15000)
+
+            field.fill("")
+            page.wait_for_timeout(1500)  # past the typing pause
+            field.blur()
+            page.wait_for_timeout(500)
+            assert frames == [], "an empty box was saved"
+            assert "rotate_seconds" not in admin_page.config_path.read_text()
+
+            field.fill("9")
+            page.wait_for_selector("text=saved ✓", timeout=15000)
+            assert len(frames) == 1, frames
+            assert admin_page.config()["scoreboard"]["rotate_seconds"] == 9
+        finally:
+            browser.close()

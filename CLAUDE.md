@@ -1482,6 +1482,10 @@ when it was written; that history is left as-is rather than rewritten.
   at once; typed fields and the volume slider wait for a pause
   (`TYPING_DELAY_MS`, 1s) or a blur, because every save goes live on the
   board and a half-typed value would briefly apply, or fail validation.
+  A number box that's empty or doesn't parse ("", "8e") holds its whole
+  section's save, blur included, until it's a number again (`numberEdit`;
+  ported from the parallel #275, which caught it): clearing a box to
+  retype it otherwise saved 0 to the live board after the pause.
   Panel keeps its Save (a wrong `hardware_mapping` is a silent dark panel;
   the "Keep changes? Reverting in 30s" flow is #276), and so does Status
   (unticking `enabled` turns the admin page itself off, out of Undo's
@@ -1493,7 +1497,8 @@ when it was written; that history is left as-is rather than rewritten.
   acknowledged counts as unsent again after a reconnect and is resent,
   instead of the reconnect's fresh config silently replacing it. The
   `e2e` tests cover autosave, a single save after typing (mutation-checked
-  by setting the delay to 0), and Undo; the hook has no unit tests of its
+  by setting the delay to 0), a cleared box never saving (mutation-checked
+  too), and Undo; the hook has no unit tests of its
   own, since the frontend has no JS test runner.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing

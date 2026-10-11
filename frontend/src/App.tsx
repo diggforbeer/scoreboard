@@ -644,6 +644,18 @@ function App() {
     return true
   }
 
+  // A typed number box: waits for the pause, and an empty or unparseable
+  // box ("", "8e") holds its section's save until it's a number again.
+  function numberEdit<T>(
+    section: { edit(value: T, delayMs: number, field: string, invalid: boolean): void },
+    event: React.ChangeEvent<HTMLInputElement>,
+    next: T,
+    field = event.target.id,
+  ) {
+    const input = event.target
+    section.edit(next, TYPING_DELAY_MS, field, input.value === '' || input.validity.badInput)
+  }
+
   // Enter in a typed field saves now instead of waiting for the pause.
   function flushOnSubmit(section: { flush(): void }) {
     return (event: React.FormEvent) => {
@@ -687,12 +699,9 @@ function App() {
     holidaySave.edit({ ...holiday, themes })
   }
 
-  function updateRow(index: number, row: RotationRow, delayMs = 0) {
+  function updateRow(index: number, row: RotationRow) {
     if (!rotation) return
-    rotationSave.edit(
-      rotation.map((r, i) => (i === index ? row : r)),
-      delayMs,
-    )
+    rotationSave.edit(rotation.map((r, i) => (i === index ? row : r)))
   }
 
   function removeRow(index: number) {
@@ -1045,10 +1054,7 @@ function App() {
                     step="any"
                     value={scoreboard[key]}
                     onChange={(e) =>
-                      scoreboardSave.edit(
-                        { ...scoreboard, [key]: Number(e.target.value) },
-                        TYPING_DELAY_MS,
-                      )
+                      numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
                     }
                     onBlur={scoreboardSave.flush}
                   />
@@ -1345,7 +1351,14 @@ function App() {
                     min="0"
                     value={row.seconds}
                     onChange={(e) =>
-                      updateRow(i, { ...row, seconds: Number(e.target.value) }, TYPING_DELAY_MS)
+                      numberEdit(
+                        rotationSave,
+                        e,
+                        rotation.map((r, j) =>
+                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                        ),
+                        `rotation-seconds-${i}`,
+                      )
                     }
                     onBlur={rotationSave.flush}
                   />
@@ -1513,10 +1526,10 @@ function App() {
                   max="100"
                   value={nightMode.dim_brightness}
                   onChange={(e) =>
-                    nightModeSave.edit(
-                      { ...nightMode, dim_brightness: Number(e.target.value) },
-                      TYPING_DELAY_MS,
-                    )
+                    numberEdit(nightModeSave, e, {
+                      ...nightMode,
+                      dim_brightness: Number(e.target.value),
+                    })
                   }
                   onBlur={nightModeSave.flush}
                 />
@@ -1551,10 +1564,10 @@ function App() {
                   min="0"
                   value={nightMode.cooldown_minutes}
                   onChange={(e) =>
-                    nightModeSave.edit(
-                      { ...nightMode, cooldown_minutes: Number(e.target.value) },
-                      TYPING_DELAY_MS,
-                    )
+                    numberEdit(nightModeSave, e, {
+                      ...nightMode,
+                      cooldown_minutes: Number(e.target.value),
+                    })
                   }
                   onBlur={nightModeSave.flush}
                 />
@@ -1588,10 +1601,10 @@ function App() {
                   min="0"
                   value={wifi.connect_timeout_seconds}
                   onChange={(e) =>
-                    wifiSave.edit(
-                      { ...wifi, connect_timeout_seconds: Number(e.target.value) },
-                      TYPING_DELAY_MS,
-                    )
+                    numberEdit(wifiSave, e, {
+                      ...wifi,
+                      connect_timeout_seconds: Number(e.target.value),
+                    })
                   }
                   onBlur={wifiSave.flush}
                 />

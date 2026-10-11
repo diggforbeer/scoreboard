@@ -19,8 +19,12 @@ export type AutosaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'reverted
 // Stable across renders: the WebSocket's onmessage closure is created once
 // and calls these, so they can't close over render-time state.
 export interface AutosaveHandlers<T> {
-  /** A local edit. ``delayMs`` 0 saves now; otherwise it waits for a pause. */
-  edit(value: T, delayMs?: number): void
+  /**
+   * A local edit. ``delayMs`` 0 saves now; otherwise it waits for a pause.
+   * ``field``/``invalid`` mark a number box that's empty or doesn't parse yet
+   * ("8e"): the section sends nothing, not even on blur, until it's valid.
+   */
+  edit(value: T, delayMs?: number, field?: string, invalid?: boolean): void
   /** Save any pending edit now (a blur, or Enter in the form). */
   flush(): void
   /** Re-save the values from before the last save. */
@@ -76,6 +80,9 @@ export function useAutosave<T>(
     let burstBase: T | null = null
     let undoTarget: T | null = null
     let nextIsUndo = false
+    // Fields currently holding something that isn't a number yet. Ported
+    // from #275: clearing a box to retype it used to save 0 after the pause.
+    const invalidFields = new Set<string>()
     let saveTimer: ReturnType<typeof setTimeout> | undefined
     let fadeTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -98,7 +105,7 @@ export function useAutosave<T>(
 
     const flush = () => {
       clearTimeout(saveTimer)
-      if (!dirty || current === null) return
+      if (!dirty || current === null || invalidFields.size > 0) return
       if (!send(current)) {
         setStatus('error')
         setError(notConnected)
@@ -111,15 +118,23 @@ export function useAutosave<T>(
       setError(null)
     }
 
-    const edit = (next: T, delayMs = 0) => {
+    const edit = (next: T, delayMs = 0, field?: string, invalid = false) => {
       if (!dirty && inFlight.length === 0) burstBase = confirmed
       current = next
       dirty = true
       setValue(next)
       setChangedAt(Date.now())
-      setStatus('pending')
       dropUndo()
       clearTimeout(saveTimer)
+      if (field !== undefined) {
+        if (invalid) invalidFields.add(field)
+        else invalidFields.delete(field)
+      }
+      if (invalidFields.size > 0) {
+        setStatus('idle') // nothing will be sent until it parses
+        return
+      }
+      setStatus('pending')
       if (delayMs <= 0) flush()
       else saveTimer = setTimeout(flush, delayMs)
     }
@@ -131,6 +146,7 @@ export function useAutosave<T>(
         if (undoTarget === null) return
         const target = undoTarget
         nextIsUndo = true
+        invalidFields.clear() // every field shows the restored value again
         edit(target)
       },
       receiveConfig(next) {
