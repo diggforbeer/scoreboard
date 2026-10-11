@@ -1890,12 +1890,12 @@ def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, game
 def test_draw_scene_dispatches_goal_without_the_horn(fake_backend, games):
     app, _src = demo_app(fake_backend, games)
     drawn = []
-    app.renderer.draw_goal = lambda canvas, game: drawn.append(game)
+    app.renderer.draw_goal = lambda canvas, game, team: drawn.append((game, team))
     live = next(g for g in games if g.is_live)
 
-    app.draw_scene(Scene("goal", live))
+    app.draw_scene(Scene("goal", live, goal_team="SEA"))
 
-    assert drawn == [live]
+    assert drawn == [(live, "SEA")]
     assert app.horn.calls == []
     assert app.matrix.swaps == 1
 

@@ -254,7 +254,13 @@ another's turn), and never interrupts a countdown, preview, idle screen,
 or an unfollowed game in today's-games rotation. `goal_detail` (the
 scorer, #122) follows the same rule and is polled for every live followed
 game; a change to who's followed clears its per-game counts so a newly
-followed team's existing goals re-baseline instead of firing. The baseline
+followed team's existing goals re-baseline instead of firing. The goal
+screen says who scored (#265): `last_goal` carries the scoring team,
+`Scene.goal_team` hands it to `Renderer.draw_goal`, which draws "GOAL"
+and the team's `TEAM_NAMES` city name (`display/teams.py`; the New York
+pair as `NY RANGERS`/`NY ISLANDERS`) in `team_color`, the score below in
+white -- falling back to the abbreviation where the name won't fit (a
+single 64px panel's 32px middle column). The baseline
 score for a game is recorded on first sighting *without* firing, so a game
 already 3-1 at startup does not celebrate.
 
