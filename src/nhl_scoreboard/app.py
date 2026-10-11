@@ -902,6 +902,17 @@ class ScoreboardApp:
         """Does ``game`` involve the favourite or an ``also_follow`` team (#260)?"""
         return any(game.involves(team) for team in self.settings.scoreboard.followed_teams)
 
+    def _celebrated_teams(self, game: Game) -> list[str]:
+        """The teams in ``game`` whose goals get the goal screen (#260).
+
+        In the favourite's own game that's only the favourite, even against a
+        followed team: a goal against the favourite is never celebrated.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if favourite and game.involves(favourite):
+            return [favourite]
+        return [t for t in self.settings.scoreboard.also_follow if game.involves(t)]
+
     def _detect_goals(self, games: list[Game]) -> None:
         """A followed team's goal: their own score increased since we last saw it.
 
@@ -909,12 +920,11 @@ class ScoreboardApp:
         ``also_follow`` (#260) -- never their opponents' or other games',
         same reasoning as the power-play indicator (situation_targets):
         this is a your-teams board, not a "celebrate every goal in every
-        game" one.
+        game" one. A followed team playing the favourite is an opponent
+        there (``_celebrated_teams``).
         """
         for game in games:
-            for team in self.settings.scoreboard.followed_teams:
-                if not game.involves(team):
-                    continue
+            for team in self._celebrated_teams(game):
                 score = game.home.score if game.home.abbrev == team else game.away.score
                 previous = self._known_scores.get((game.id, team))
                 self._known_scores[(game.id, team)] = score
@@ -984,12 +994,11 @@ class ScoreboardApp:
         a new endpoint), on the same ``live_poll_seconds`` cadence, skipped
         during intermission for the same reason situation is.
         """
-        followed = self.settings.scoreboard.followed_teams
         for game in self.games:
             if game.is_live and self._is_followed(game):
-                self._refresh_goal_detail(game, followed)
+                self._refresh_goal_detail(game, self._celebrated_teams(game))
 
-    def _refresh_goal_detail(self, game: Game, followed: list[str]) -> None:
+    def _refresh_goal_detail(self, game: Game, teams: list[str]) -> None:
         now = self.monotonic()
         interval = self.settings.scoreboard.live_poll_seconds
         fetched_at, events = self._goal_events.get(game.id, (None, ()))
@@ -1003,9 +1012,9 @@ class ScoreboardApp:
         except NHLApiError as exc:
             log.debug("Goal scoring fetch for %s failed: %s", game.id, exc)
             all_events = events
-        followed_events = tuple(e for e in all_events if e.team_abbrev in followed)
-        self._goal_events[game.id] = (now, followed_events)
-        self._detect_goal_detail(game.id, followed_events)
+        team_events = tuple(e for e in all_events if e.team_abbrev in teams)
+        self._goal_events[game.id] = (now, team_events)
+        self._detect_goal_detail(game.id, team_events)
 
     def _detect_goal_detail(self, game_id: int, events: tuple[GoalEvent, ...]) -> None:
         """A followed team's scoring array grew by one entry: show it, once.

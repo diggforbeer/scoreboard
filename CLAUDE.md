@@ -231,7 +231,11 @@ asking; it was an explicit decision.
 Goal detection (`_detect_goals`) fires **only** for a followed team's own
 score increasing in a game they're playing (`_known_scores`, keyed by
 game *and* team since two followed teams can meet) -- never their
-opponent's, never an unfollowed game's; same scoping precedent as the
+opponent's, never an unfollowed game's. In the favourite's own game only
+the favourite counts (`_celebrated_teams`), by the owner's call: a
+followed team scoring *on* the favourite is an opponent there, so it gets
+no goal screen and no scorer screen; two `also_follow` teams meeting each
+other both count; same scoping precedent as the
 power-play indicator above, deliberate, don't widen without asking. It
 drives two independent things off one detection: `GoalHornPlayer.play()`
 (fires immediately, regardless of what's on screen -- **the favourite's

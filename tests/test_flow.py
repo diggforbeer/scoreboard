@@ -1438,20 +1438,51 @@ def test_a_followed_teams_opponent_scoring_does_not_interrupt(followed):
     assert app.last_goal is None
 
 
-def test_two_followed_teams_meeting_each_fire_their_own_goals(day):
+def test_a_followed_team_scoring_on_the_favourite_is_not_celebrated(day):
     app, clock, client = day
     app.settings.scoreboard.also_follow = ["TBL"]
     client.today[1] = _live(client.today[1])
     tick(app, clock, hours=6)
 
-    client.today[1] = _live(client.today[1], away=1)  # TBL
+    client.today[1] = _live(client.today[1], away=1)  # TBL scores on NSH
     tick(app, clock, seconds=1)
-    assert scene(app) == ("goal", 1)
-    assert app.horn.calls == []
+    assert scene(app) == ("game", 1)
+    assert app.last_goal is None
 
     client.today[1] = _live(client.today[1], away=1, home=1)  # NSH
     tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 1)
     assert app.horn.calls == [FAV]
+
+
+def test_two_followed_teams_meeting_each_fire_their_own_goals(day):
+    """Neither is the favourite, so both sides' goals interrupt."""
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["SEA", "CGY"]
+    tick(app, clock, seconds=1)
+
+    client.today[0] = _live(client.today[0], away=1)  # SEA
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    app.last_goal = None
+
+    client.today[0] = _live(client.today[0], away=1, home=1)  # CGY
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    assert app.horn.calls == []
+
+
+def test_no_scorer_screen_for_a_followed_teams_goal_on_the_favourite(day):
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["TBL"]
+    app.settings.scoreboard.live_poll_seconds = 0
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    app.refresh_goal_details()  # baseline
+
+    client.goal_events[1] = (goal_event(team="TBL", scorer="N. KUCHEROV"),)
+    app.refresh_goal_details()
+    assert app._goal_detail is None
 
 
 def test_goals_already_on_the_board_when_a_team_is_followed_do_not_fire(day):

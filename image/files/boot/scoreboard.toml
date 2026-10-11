@@ -31,8 +31,9 @@ favourite_team = "NSH"
 
 # More teams to follow. While any followed team (favourite included) is
 # live, their games take turns on screen, rotate_seconds each, and a goal
-# by any of them jumps straight to that game's GOAL screen. The horn only
-# plays for favourite_team. Example: also_follow = ["DAL", "TOR"]
+# by any of them jumps straight to that game's GOAL screen -- except against
+# favourite_team, whose own game only celebrates its own goals. The horn
+# only plays for favourite_team. Example: also_follow = ["DAL", "TOR"]
 also_follow = []
 
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones

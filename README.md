@@ -278,7 +278,9 @@ them (or your favourite) is live, those games take turns on screen,
 `rotate_seconds` each, ahead of the idle rotation; your favourite's final
 joins the turns while it's held. When a followed team scores, the board
 jumps straight to that game's GOAL screen (and the scorer after it) from
-whichever game was up. The horn still only plays for your favourite.
+whichever game was up. The horn still only plays for your favourite, and
+in your favourite's own game only its goals count: a followed team scoring
+against your favourite is never celebrated.
 Standings, leaders, the matchup and three stars stay your favourite's.
 
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
