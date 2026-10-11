@@ -338,9 +338,17 @@ the pass (not shown blank) with no upcoming game, before the first fetch
 lands, or when the API had no usable tally; `0-0` is a real answer and
 does render. This is the first scene showing opponent-specific data;
 that precedent covers exactly this win tally and nothing broader
-(opponent leaders, injuries, etc. each need their own decision). Only the
-tally ships -- individual past-meeting scores (#168) and team/player
-stat leaders (#169) are separate follow-ups.
+(opponent leaders, injuries, etc. each need their own decision). The
+finished meetings behind the tally (#168) share that same slot rather than
+being a second screen, by the owner's choice: `_split_matchup` turns the
+second half of the matchup entry's dwell into `matchup_meetings` (one
+tiny-face row per meeting from the favourite's side, oldest first --
+`OCT 14 W 4-1`, `OT`/`SO` suffixed; the date, then the suffix, drop on a
+64px panel), and the tally keeps the whole slot while no meeting has
+finished. Same `right-rail` fetch, no extra request; results are oriented
+in `_matchup_scene` (`SeriesMeeting.result_for`), so the renderer never
+needs the favourite. Team/player stat leaders (#169) are still a separate
+follow-up.
 
 `top_west`/`top_east` (#200) are two more opt-in `[[rotation]]` screens
 (also absent from `_default_rotation`): the top five teams of one
@@ -526,8 +534,12 @@ exit; with `show_logos = false` every step is just text.
   abbreviations on that object; pair it with the `Game` it was fetched
   for. `seasonSeries[]` lists every meeting: completed ones carry
   `awayTeam.score`/`homeTeam.score` and `gameOutcome.lastPeriodType`
-  (`REG`/`OT`, plus `otPeriods`), future ones have no scores -- verified
-  against real 2025-26 responses but not parsed or shown yet (#168). No stat
+  (`REG`/`OT`, plus `otPeriods`), future ones have no scores but still
+  read `lastPeriodType: REG` -- verified against real 2025-26 responses,
+  parsed by `series_meetings_from_api` (#168), which keys "played" off
+  the state (`OFF`/`FINAL`) and real scores, never the outcome. A
+  shootout's `lastPeriodType` (presumably `SO`) has not been seen live;
+  whatever non-`REG` value arrives is shown as the suffix as-is. No stat
   leaders here: `teamGameStats` is per-game aggregates (shots, PP,
   penalties), not leaders.
 - `clock.inIntermission` lags the period actually ending -- confirmed

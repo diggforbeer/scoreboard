@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import requests
@@ -27,6 +28,7 @@ from .models import (
     Star,
     goal_events_from_landing,
     player_details_from_api,
+    series_meetings_from_api,
     three_stars_from_landing,
 )
 
@@ -133,7 +135,9 @@ class NHLClient:
         record = SeasonSeriesRecord.from_api(payload.get("seasonSeriesWins"))
         if record is None:
             log.warning("No usable seasonSeriesWins for game %s", game_id)
-        return record
+            return None
+        # Same payload, so the meetings (#168) cost no extra request.
+        return replace(record, meetings=series_meetings_from_api(payload.get("seasonSeries")))
 
     def three_stars(self, game_id: int) -> tuple[Star, ...]:
         """The three stars of a finished game (#156), or ``()`` until they're named.
