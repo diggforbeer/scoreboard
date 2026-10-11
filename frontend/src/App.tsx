@@ -292,6 +292,126 @@ function saveFeedback(status: SaveStatus, error: string | null) {
   return null
 }
 
+const AUTOSAVE_DEBOUNCE_MS = 1000
+
+// Autosave for one admin-page section (#273). The server's `save` message
+// is unchanged: this only decides *when* to send it. Discrete controls
+// (checkbox, select) send on the next render; text and number fields wait
+// for blur or AUTOSAVE_DEBOUNCE_MS of quiet, so typing "15" never applies
+// "1" to the live board or wears the SD card once per keystroke. A number
+// box that is empty or mid-edit ("8e") blocks the send until it parses.
+// `baseline` is what the server last had: echoes of our own save are
+// adopted, but never over newer local edits. `previous` backs Undo.
+function useAutosave<T>(opts: {
+  value: T | null
+  setValue: (value: T) => void
+  send: () => void
+  setStatus: (status: SaveStatus) => void
+}) {
+  const optsRef = useRef(opts)
+  optsRef.current = opts
+  const baseline = useRef<{ json: string; value: T } | null>(null)
+  const previous = useRef<T | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const delay = useRef(AUTOSAVE_DEBOUNCE_MS)
+  const invalid = useRef(new Set<string>())
+  const [canUndo, setCanUndo] = useState(false)
+
+  function fire() {
+    clearTimeout(timer.current)
+    timer.current = undefined
+    const current = optsRef.current.value
+    if (current === null || invalid.current.size > 0) return
+    previous.current = baseline.current?.value ?? null
+    baseline.current = { json: JSON.stringify(current), value: current }
+    setCanUndo(previous.current !== null)
+    optsRef.current.send()
+  }
+
+  const { value } = opts
+  useEffect(() => {
+    if (value === null) return
+    const json = JSON.stringify(value)
+    if (baseline.current === null) {
+      baseline.current = { json, value }
+      return
+    }
+    clearTimeout(timer.current)
+    timer.current = undefined
+    if (json === baseline.current.json) return
+    setCanUndo(false)
+    optsRef.current.setStatus('idle') // a stale "Saved" must not outlive a later edit
+    timer.current = setTimeout(fire, delay.current)
+    delay.current = AUTOSAVE_DEBOUNCE_MS
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  return {
+    canUndo,
+    // Take the server's copy of the section unless the user has edited
+    // past what we last sent; returns whether the caller should apply it.
+    adopt(data: T): boolean {
+      const current = optsRef.current.value
+      if (current !== null && baseline.current && JSON.stringify(current) !== baseline.current.json)
+        return false
+      baseline.current = { json: JSON.stringify(data), value: data }
+      return true
+    },
+    // The next change saves now: add/remove/reorder buttons.
+    immediate() {
+      delay.current = 0
+    },
+    undo() {
+      const back = previous.current
+      if (back === null) return
+      previous.current = null
+      setCanUndo(false)
+      delay.current = 0
+      optsRef.current.setValue(back)
+    },
+    formProps: {
+      onSubmit: (event: React.FormEvent) => event.preventDefault(),
+      onChangeCapture: (event: React.ChangeEvent<HTMLFormElement>) => {
+        const target = event.target as unknown as HTMLInputElement
+        if (target.tagName === 'SELECT' || target.type === 'checkbox' || target.type === 'radio')
+          delay.current = 0
+        const key = target.id || target.name
+        if (target.type === 'number' && (target.value === '' || target.validity?.badInput))
+          invalid.current.add(key)
+        else invalid.current.delete(key)
+      },
+      onBlur: () => {
+        if (timer.current) fire()
+      },
+    },
+  }
+}
+
+function autosaveFeedback(
+  status: SaveStatus,
+  error: string | null,
+  canUndo: boolean,
+  undo: () => void,
+) {
+  if (status === 'saving') return <span className="text-body-secondary">Saving…</span>
+  if (status === 'saved')
+    return (
+      <span className="text-success">
+        Saved ✓
+        {canUndo && (
+          <>
+            {' · '}
+            <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={undo}>
+              Undo
+            </button>
+          </>
+        )}
+      </span>
+    )
+  if (status === 'error') return <span className="text-danger">{error}</span>
+  return null
+}
+
 function teamName(abbrev: string) {
   const team = NHL_TEAMS.find(([code]) => code === abbrev)
   return team ? team[1] : '(none)'
@@ -392,6 +512,49 @@ function App() {
   // hornActionBusy directly without going stale -- a ref tracks "which
   // team's action is in flight" for the one case that needs it (the
   // generic horn_action error, which carries no team of its own).
+  const audioAuto = useAutosave({
+    value: audio,
+    setValue: setAudio,
+    send: () => saveAudio(),
+    setStatus: setAudioSaveStatus,
+  })
+  const scoreboardAuto = useAutosave({
+    value: scoreboard,
+    setValue: setScoreboard,
+    send: () => saveScoreboard(),
+    setStatus: setScoreboardSaveStatus,
+  })
+  const statusAuto = useAutosave({
+    value: status,
+    setValue: setStatus,
+    send: () => saveStatus(),
+    setStatus: setStatusSaveStatus,
+  })
+  const nightModeAuto = useAutosave({
+    value: nightMode,
+    setValue: setNightMode,
+    send: () => saveNightMode(),
+    setStatus: setNightModeSaveStatus,
+  })
+  const wifiAuto = useAutosave({
+    value: wifi,
+    setValue: setWifi,
+    send: () => saveWifi(),
+    setStatus: setWifiSaveStatus,
+  })
+  const rotationAuto = useAutosave({
+    value: rotation,
+    setValue: setRotation,
+    send: () => saveRotation(),
+    setStatus: setRotationSaveStatus,
+  })
+  const holidayAuto = useAutosave({
+    value: holiday,
+    setValue: setHoliday,
+    send: () => saveHoliday(),
+    setStatus: setHolidaySaveStatus,
+  })
+
   const hornActionTeamRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -431,15 +594,27 @@ function App() {
             setVersion(message.value)
             break
           case 'config':
-            if (message.section === 'audio') setAudio(message.data)
-            else if (message.section === 'scoreboard') setScoreboard(message.data)
-            else if (message.section === 'status') setStatus(message.data)
+            if (message.section === 'audio') {
+              if (audioAuto.adopt(message.data)) setAudio(message.data)
+            }
+            else if (message.section === 'scoreboard') {
+              if (scoreboardAuto.adopt(message.data)) setScoreboard(message.data)
+            }
+            else if (message.section === 'status') {
+              if (statusAuto.adopt(message.data)) setStatus(message.data)
+            }
             else if (message.section === 'panel') setPanel(message.data)
-            else if (message.section === 'night_mode') setNightMode(message.data)
-            else if (message.section === 'wifi') setWifi(message.data)
-            else if (message.section === 'rotation') setRotation(message.data)
+            else if (message.section === 'night_mode') {
+              if (nightModeAuto.adopt(message.data)) setNightMode(message.data)
+            }
+            else if (message.section === 'wifi') {
+              if (wifiAuto.adopt(message.data)) setWifi(message.data)
+            }
+            else if (message.section === 'rotation') {
+              if (rotationAuto.adopt(message.data)) setRotation(message.data)
+            }
             else if (message.section === 'holiday') {
-              setHoliday(message.data)
+              if (holidayAuto.adopt(message.data)) setHoliday(message.data)
               setHolidayOptions(message.available)
               setFlybyFrequencies(message.frequencies)
             } else if (message.section === 'update') {
@@ -618,8 +793,7 @@ function App() {
     return true
   }
 
-  function saveAudio(event: React.FormEvent) {
-    event.preventDefault()
+  function saveAudio() {
     if (!audio) return
     setAudioSaveStatus('saving')
     setAudioSaveError(null)
@@ -629,8 +803,7 @@ function App() {
     }
   }
 
-  function saveScoreboard(event: React.FormEvent) {
-    event.preventDefault()
+  function saveScoreboard() {
     if (!scoreboard) return
     setScoreboardSaveStatus('saving')
     setScoreboardSaveError(null)
@@ -648,8 +821,7 @@ function App() {
     }
   }
 
-  function saveStatus(event: React.FormEvent) {
-    event.preventDefault()
+  function saveStatus() {
     if (!status) return
     setStatusSaveStatus('saving')
     setStatusSaveError(null)
@@ -674,8 +846,7 @@ function App() {
     }
   }
 
-  function saveNightMode(event: React.FormEvent) {
-    event.preventDefault()
+  function saveNightMode() {
     if (!nightMode) return
     setNightModeSaveStatus('saving')
     setNightModeSaveError(null)
@@ -685,8 +856,7 @@ function App() {
     }
   }
 
-  function saveWifi(event: React.FormEvent) {
-    event.preventDefault()
+  function saveWifi() {
     if (!wifi) return
     setWifiSaveStatus('saving')
     setWifiSaveError(null)
@@ -696,8 +866,7 @@ function App() {
     }
   }
 
-  function saveRotation(event: React.FormEvent) {
-    event.preventDefault()
+  function saveRotation() {
     if (!rotation) return
     setRotationSaveStatus('saving')
     setRotationSaveError(null)
@@ -707,8 +876,7 @@ function App() {
     }
   }
 
-  function saveHoliday(event: React.FormEvent) {
-    event.preventDefault()
+  function saveHoliday() {
     if (!holiday) return
     setHolidaySaveStatus('saving')
     setHolidaySaveError(null)
@@ -734,11 +902,13 @@ function App() {
 
   function removeRow(index: number) {
     if (!rotation) return
+    rotationAuto.immediate()
     setRotation(rotation.filter((_, i) => i !== index))
   }
 
   function addRow() {
     if (!rotation || rotation.length >= ROTATION_MAX_ROWS) return
+    rotationAuto.immediate()
     setRotation([...rotation, { screen: ROTATION_SCREENS[0], seconds: 8 }])
   }
 
@@ -746,6 +916,7 @@ function App() {
     if (!rotation) return
     const target = index + delta
     if (target < 0 || target >= rotation.length) return
+    rotationAuto.immediate()
     const next = [...rotation]
     ;[next[index], next[target]] = [next[target], next[index]]
     setRotation(next)
@@ -969,7 +1140,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Scoreboard</h2>
           {scoreboard ? (
-            <form onSubmit={saveScoreboard}>
+            <form {...scoreboardAuto.formProps}>
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-favourite-team">
                   Favourite team
@@ -1126,14 +1297,7 @@ function App() {
               </div>
 
               <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={scoreboardSaveStatus === 'saving'}
-                >
-                  Save Scoreboard
-                </button>
-                {saveFeedback(scoreboardSaveStatus, scoreboardSaveError)}
+                {autosaveFeedback(scoreboardSaveStatus, scoreboardSaveError, scoreboardAuto.canUndo, scoreboardAuto.undo)}
               </div>
             </form>
           ) : (
@@ -1354,7 +1518,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Idle rotation</h2>
           {rotation ? (
-            <form onSubmit={saveRotation}>
+            <form {...rotationAuto.formProps}>
               <p className="text-body-secondary small">
                 Screens shown when the favourite is not live, in this order. Up to{' '}
                 {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
@@ -1420,14 +1584,7 @@ function App() {
                 >
                   Add row
                 </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={rotationSaveStatus === 'saving'}
-                >
-                  Save idle rotation
-                </button>
-                {saveFeedback(rotationSaveStatus, rotationSaveError)}
+                {autosaveFeedback(rotationSaveStatus, rotationSaveError, rotationAuto.canUndo, rotationAuto.undo)}
               </div>
             </form>
           ) : (
@@ -1440,7 +1597,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Status page</h2>
           {status ? (
-            <form onSubmit={saveStatus}>
+            <form {...statusAuto.formProps}>
               <div className="form-check mb-3">
                 <input
                   className="form-check-input"
@@ -1468,14 +1625,7 @@ function App() {
                 />
               </div>
               <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={statusSaveStatus === 'saving'}
-                >
-                  Save Status page
-                </button>
-                {saveFeedback(statusSaveStatus, statusSaveError)}
+                {autosaveFeedback(statusSaveStatus, statusSaveError, statusAuto.canUndo, statusAuto.undo)}
               </div>
             </form>
           ) : (
@@ -1488,7 +1638,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Night mode</h2>
           {nightMode ? (
-            <form onSubmit={saveNightMode}>
+            <form {...nightModeAuto.formProps}>
               <div className="form-check mb-3">
                 <input
                   className="form-check-input"
@@ -1580,14 +1730,7 @@ function App() {
                 />
               </div>
               <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={nightModeSaveStatus === 'saving'}
-                >
-                  Save Night mode
-                </button>
-                {saveFeedback(nightModeSaveStatus, nightModeSaveError)}
+                {autosaveFeedback(nightModeSaveStatus, nightModeSaveError, nightModeAuto.canUndo, nightModeAuto.undo)}
               </div>
             </form>
           ) : (
@@ -1604,7 +1747,7 @@ function App() {
             only tunes how long a join attempt waits before deciding it failed.
           </p>
           {wifi ? (
-            <form onSubmit={saveWifi}>
+            <form {...wifiAuto.formProps}>
               <div className="mb-3">
                 <label className="form-label" htmlFor="wifi-connect-timeout-seconds">
                   Join attempt timeout (seconds)
@@ -1623,14 +1766,7 @@ function App() {
                 />
               </div>
               <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={wifiSaveStatus === 'saving'}
-                >
-                  Save Wi-Fi
-                </button>
-                {saveFeedback(wifiSaveStatus, wifiSaveError)}
+                {autosaveFeedback(wifiSaveStatus, wifiSaveError, wifiAuto.canUndo, wifiAuto.undo)}
               </div>
             </form>
           ) : (
@@ -1731,7 +1867,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Audio</h2>
           {audio ? (
-            <form onSubmit={saveAudio}>
+            <form {...audioAuto.formProps}>
               <div className="form-check mb-3">
                 <input
                   className="form-check-input"
@@ -1784,14 +1920,7 @@ function App() {
                 />
               </div>
               <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={audioSaveStatus === 'saving'}
-                >
-                  Save Audio
-                </button>
-                {saveFeedback(audioSaveStatus, audioSaveError)}
+                {autosaveFeedback(audioSaveStatus, audioSaveError, audioAuto.canUndo, audioAuto.undo)}
               </div>
               <div className="d-flex align-items-center gap-3 mt-3">
                 <button
@@ -1932,7 +2061,7 @@ function App() {
               holiday only shows during its own dates, so leaving them all ticked is fine.
             </p>
             {holiday ? (
-              <form onSubmit={saveHoliday}>
+              <form {...holidayAuto.formProps}>
                 <div className="form-check form-switch mb-3">
                   <input
                     className="form-check-input"
@@ -1993,14 +2122,7 @@ function App() {
                 </fieldset>
 
                 <div className="d-flex align-items-center gap-3">
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={holidaySaveStatus === 'saving'}
-                  >
-                    Save Holiday Cheer
-                  </button>
-                  {saveFeedback(holidaySaveStatus, holidaySaveError)}
+                  {autosaveFeedback(holidaySaveStatus, holidaySaveError, holidayAuto.canUndo, holidayAuto.undo)}
                 </div>
               </form>
             ) : (

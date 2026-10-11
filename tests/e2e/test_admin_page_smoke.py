@@ -94,12 +94,39 @@ def admin_page_url(tmp_path):
             print(proc.stdout.read())
 
 
-def test_admin_page_loads_and_saves_a_real_change(admin_page_url):
+def test_rapid_number_edits_send_one_save(admin_page_url):
+    """Typing into a number box must not save per keystroke (#273): a
+    saved value goes live on the board immediately."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            sent: list[str] = []
+            page.on("websocket", lambda ws: ws.on("framesent", lambda m: sent.append(str(m))))
+            page.goto(admin_page_url)
+            page.wait_for_selector("#sb-rotate_seconds", timeout=15000)
+
+            field = page.locator("#sb-rotate_seconds")
+            field.click()
+            field.press("Control+a")
+            field.press_sequentially("15", delay=50)
+            page.wait_for_selector("text=Saved ✓", timeout=15000)
+
+            saves = [m for m in sent if '"type":"save"' in m and '"favourite_team"' in m]
+            assert len(saves) == 1
+            assert '"rotate_seconds":15' in saves[0]
+        finally:
+            browser.close()
+
+
+def test_admin_page_autosaves_a_real_change(admin_page_url, tmp_path):
     """The actual point of this test: a real browser can load the built
-    page from admin_server.py's own static serving, and a save genuinely
-    round-trips over its WebSocket on that same port -- the two halves
-    of story 10's "one port serves both" design, exercised together
-    exactly the way a real board would be used.
+    page from admin_server.py's own static serving, and a change genuinely
+    round-trips over its WebSocket on that same port with no Save button
+    (#273) -- the two halves of story 10's "one port serves both" design,
+    exercised together exactly the way a real board would be used.
     """
     from playwright.sync_api import sync_playwright
 
@@ -108,15 +135,16 @@ def test_admin_page_loads_and_saves_a_real_change(admin_page_url):
         try:
             page = browser.new_page()
             page.goto(admin_page_url)
-            page.wait_for_selector("text=Save Scoreboard", timeout=15000)
+            page.wait_for_selector("#sb-favourite-team", timeout=15000)
 
             connection_value = page.locator(".card-body", has_text="Connection").locator(".fs-5")
             assert connection_value.inner_text() == "open"
+            assert page.locator("text=Save Scoreboard").count() == 0
 
             page.select_option("#sb-favourite-team", "TOR")
-            page.click("text=Save Scoreboard")
-            page.wait_for_selector("text=Saved.", timeout=15000)
+            page.wait_for_selector("text=Saved ✓", timeout=15000)
 
             assert page.input_value("#sb-favourite-team") == "TOR"
+            assert 'favourite_team = "TOR"' in (tmp_path / "scoreboard.toml").read_text()
         finally:
             browser.close()

@@ -1458,6 +1458,15 @@ when it was written; that history is left as-is rather than rewritten.
   in this session) -- flagged the same way every other real-hardware-only
   gap in this project is (see `image/layer/nhl-scoreboard.yaml`'s own
   `python3-websockets` addition and CLAUDE.md's Image build facts).
+- **Autosave (#273).** Every section except Panel saves without a Save
+  button: `useAutosave` (`App.tsx`) sends the unchanged `save` message
+  on the next render for checkboxes/selects/add-remove-reorder, and on
+  blur or 1s of quiet for text/number fields. An empty or half-typed
+  number box blocks the send. Server echoes of the section are adopted
+  only if the user hasn't edited past what was last sent, so typing is
+  never overwritten. "Saved ✓ · Undo" re-saves the previous values.
+  Panel keeps an explicit Save (owner's call); its keep/revert flow is a
+  follow-up needing persisted state on the server.
 - **Follow-up, same day: the manual verification above is now a real CI
   job.** `tests/e2e/test_admin_page_smoke.py` + `ci.yml`'s `e2e` job do
   the same "browser against a built page + a save round trip" check on
