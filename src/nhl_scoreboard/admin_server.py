@@ -649,18 +649,24 @@ async def _send_version(connection: ServerConnection) -> None:
     await connection.send(json.dumps({"type": "version", "value": value}))
 
 
-async def _send_audio_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_audio_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_audio_payload(settings)))
 
 
-async def _send_rotation_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_rotation_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_rotation_payload(settings)))
 
 
-async def _send_scoreboard_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_scoreboard_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_scoreboard_payload(settings)))
 
 
@@ -668,23 +674,29 @@ async def _send_horn_list(connection: ServerConnection) -> None:
     await connection.send(json.dumps(_horn_list_payload()))
 
 
-async def _send_status_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_status_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_status_payload(settings)))
 
 
-async def _send_panel_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_panel_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_panel_payload(settings)))
 
 
-async def _send_night_mode_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_night_mode_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_night_mode_payload(settings)))
 
 
-async def _send_wifi_config(connection: ServerConnection) -> None:
-    settings = Settings.load(CONFIG_PATH)
+async def _send_wifi_config(connection: ServerConnection, settings: Settings | None = None) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_wifi_payload(settings)))
 
 
@@ -1103,14 +1115,17 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
 async def _handle(connection: ServerConnection) -> None:
     _clients.add(connection)
     try:
+        # One read for every section, not one each: seven identical
+        # "Loaded configuration" lines per page visit, otherwise.
+        settings = Settings.load(CONFIG_PATH)
         await _send_version(connection)
-        await _send_audio_config(connection)
-        await _send_scoreboard_config(connection)
-        await _send_status_config(connection)
-        await _send_panel_config(connection)
-        await _send_night_mode_config(connection)
-        await _send_wifi_config(connection)
-        await _send_rotation_config(connection)
+        await _send_audio_config(connection, settings)
+        await _send_scoreboard_config(connection, settings)
+        await _send_status_config(connection, settings)
+        await _send_panel_config(connection, settings)
+        await _send_night_mode_config(connection, settings)
+        await _send_wifi_config(connection, settings)
+        await _send_rotation_config(connection, settings)
         await _send_update_config(connection)
         await _send_horn_list(connection)
         await _send_snapshot(connection)
@@ -1199,6 +1214,11 @@ async def _handle(connection: ServerConnection) -> None:
             else:
                 error = {"type": "error", "message": "unknown message type"}
                 await connection.send(json.dumps(error))
+    except websockets.exceptions.ConnectionClosed:
+        # A phone locking or a tab closing drops the socket without a close
+        # frame. Normal, and not worth the ERROR + traceback websockets
+        # would log for a handler that raised.
+        log.info("Admin page %s disconnected", connection.remote_address)
     finally:
         _clients.discard(connection)
         await _unsubscribe_logs(connection)
@@ -1258,12 +1278,26 @@ async def _process_request(connection: ServerConnection, request: Request) -> Re
     return _static_response(request.path)
 
 
+#: websockets' own per-connection logger, quietened: at INFO it logs every
+#: static page served as "connection rejected (200 OK)" and every socket as
+#: "connection open" -- noise in the admin page's own Logs tab. Warnings
+#: and errors still come through; "Sent initial state" and "disconnected"
+#: above already say who connected.
+_WS_LOG = logging.getLogger(f"{__name__}.websockets")
+_WS_LOG.setLevel(logging.WARNING)
+
+
 async def run(host: str = HOST, port: int = PORT) -> None:
     watcher = asyncio.create_task(_watch_update_state())
     snapshot_watcher = asyncio.create_task(_watch_snapshot())
     try:
         async with serve(
-            _handle, host, port, process_request=_process_request, max_size=WS_MAX_SIZE
+            _handle,
+            host,
+            port,
+            process_request=_process_request,
+            max_size=WS_MAX_SIZE,
+            logger=_WS_LOG,
         ) as server:
             log.info("Admin server listening on http://%s:%d/ (page + WebSocket)", host, port)
             await server.serve_forever()
@@ -1344,6 +1378,7 @@ class AdminServer:
                 self._port,
                 process_request=_process_request,
                 max_size=WS_MAX_SIZE,
+                logger=_WS_LOG,
             ) as server:
                 self._bound_port = server.sockets[0].getsockname()[1]
                 log.info(
