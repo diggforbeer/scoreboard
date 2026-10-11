@@ -483,6 +483,28 @@ left like `standings`, tiny-font title + up to four rows. Not yet seen
 against a real in-season payload; the layout snapshots (`leaders_logo`,
 `leaders_text`) still need generating with `pytest --update-snapshots`.
 
+The `scores` grid (#269) shows several of today's games on one frame:
+one 32px column per game (`Renderer.SCORES_COLUMN_WIDTH`, so four at
+128px and two at 64px). Each column has the away and home abbreviation
+(team colour) and score in `5x7`, the status in the state's colour, and
+the period in tiny text under it. A short last page is centred. It draws
+no PP/SOG indicator. It comes in two opt-in forms, by the owner's call:
+a `"scores"` `[[rotation]]` screen (absent from `_default_rotation`;
+`_page_scores` shares the slot's seconds evenly between the pages;
+skipped with no games today), and `scoreboard.scores_grid` (default
+off), which replaces `_select_base_scene`'s one-game-at-a-time fallback
+with grid pages. There, `self.index` is the first game of the current
+page and `advance()` steps a page at a time. A single game still gets
+the full game scene. The grid fetches nothing new: it reads only
+`score/now` (`self.games`). While the grid fallback is up,
+`situation_targets()`/`shootout_targets()` drop the index-based
+"on-screen" game, since nothing on screen would use it; followed teams'
+live games (#260) are still polled. That narrows the power-play scoping
+rather than widening it. #260 (follow more teams) is complementary:
+`_followed_turns()` runs first and decides which games preempt the
+rotation, so the grid only ever covers what's left, and decides how many
+fit on a frame.
+
 **A live favourite-team switch used to leave this (and the countdown/
 preview screen) stuck on the previous team's opponent for up to an
 hour**, found live via the admin page (#178): the upcoming game handed

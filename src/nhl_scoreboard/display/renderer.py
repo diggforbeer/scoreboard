@@ -926,6 +926,70 @@ class Renderer:
             room = stat_x - 3 - name_x
             self.text(canvas, font, name_x, y, color, self._fit_name(font, name, room))
 
+    #: Width of one game's column on the scores grid (#269): four across the
+    #: default 128px chain, two on a single 64px panel.
+    SCORES_COLUMN_WIDTH = 32
+    _SCORES_AWAY_BASELINE = 7
+    _SCORES_HOME_BASELINE = 15
+    _SCORES_STATUS_BASELINE = 24
+    _SCORES_DETAIL_BASELINE = 31
+
+    def scores_per_page(self) -> int:
+        """How many games one frame of the scores grid holds."""
+        return max(1, self.width // self.SCORES_COLUMN_WIDTH)
+
+    def draw_scores(self, canvas: Any, games: Sequence[Game]) -> None:
+        """Several games at once (#269): one 32px column each, away over home.
+
+        ``5x7`` face so it reads across a room: abbreviation (team colour)
+        and score per row, then the status in the state's colour with the
+        period in tiny text under it. A short last page is centred rather
+        than left-aligned. No situation or SOG -- those stay scoped to the
+        single-game scene.
+        """
+        canvas.Clear()
+        games = list(games)[: self.scores_per_page()]
+        if not games:
+            return
+        width = self.SCORES_COLUMN_WIDTH
+        left = (self.width - len(games) * width) // 2
+        for i, game in enumerate(games):
+            x0 = left + i * width
+            if i:
+                self.vline(canvas, x0 - 1, 1, self.height - 2, DIM)
+            # One blank column each side of the divider.
+            self._draw_scores_column(canvas, game, x0, x0 + width - 2)
+
+    def _draw_scores_column(self, canvas: Any, game: Game, x0: int, right: int) -> None:
+        font = self.fonts.small
+        for side, baseline in (
+            (game.away, self._SCORES_AWAY_BASELINE),
+            (game.home, self._SCORES_HOME_BASELINE),
+        ):
+            self.text(canvas, font, x0 + 1, baseline, team_color(side.abbrev), side.abbrev)
+            if not game.is_pregame:
+                self.text_right(canvas, font, right, baseline, WHITE, str(side.score))
+        status, detail = self._scores_status(game)
+        color = self._status_color(game)
+        cx = (x0 + right) // 2
+        self.text_center(canvas, font, cx, self._SCORES_STATUS_BASELINE, color, status)
+        if detail:
+            self.text_center(
+                canvas, self.fonts.tiny, cx, self._SCORES_DETAIL_BASELINE, self._dim(color), detail
+            )
+
+    def _scores_status(self, game: Game) -> tuple[str, str]:
+        """``(status, detail)`` sized for a 32px column; ``status_label`` is too wide."""
+        if game.is_pregame:
+            return game.start_label(self.tz), ""
+        if game.is_final:
+            return "FINAL", game.period_label() if game.period_type in ("OT", "SO") else ""
+        if game.period_type == "SO":
+            return "SO", ""
+        if game.in_intermission:
+            return "INT", game.period_label()
+        return game.clock_time, game.period_label()
+
     def draw_clock(self, canvas: Any, now: datetime, favourite: str | None = None) -> None:
         """Idle scene: the time, for when there is no hockey to show.
 
