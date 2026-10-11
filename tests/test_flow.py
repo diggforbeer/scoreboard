@@ -1372,17 +1372,48 @@ def test_unfollowed_live_games_never_displace_the_favourites_idle_rotation(day):
     assert scene(app) == ("preview", 1), "SEA @ CGY is live but nobody follows it"
 
 
-def test_live_followed_games_take_equal_turns(followed):
+def _seconds_on_screen(app, clock, seconds: int) -> dict:
+    """Sample the scene once a second for ``seconds``: game id -> seconds shown."""
+    shown: dict = {}
+    for _ in range(seconds):
+        kind, gid = scene(app)
+        shown[(kind, gid)] = shown.get((kind, gid), 0) + 1
+        clock.advance(seconds=1)
+    return shown
+
+
+def test_the_favourite_in_play_holds_the_screen_while_others_are_live(followed):
     app, clock, client = followed
     app.settings.scoreboard.rotate_seconds = 10
     client.today[1] = _live(client.today[1])
     tick(app, clock, hours=6)
-    seen = []
-    for _ in range(4):
-        seen.append(scene(app)[1])
-        clock.advance(seconds=10)
-    assert sorted(seen) == [1, 1, 9, 9]
-    assert seen[0] != seen[1] and seen[1] != seen[2], "alternates every rotate_seconds"
+    assert _seconds_on_screen(app, clock, 60) == {("game", 1): 60}
+
+
+def test_the_favourites_intermission_gives_others_turns_and_itself_a_quick_one(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
+    tick(app, clock, hours=6)
+    assert _seconds_on_screen(app, clock, 60) == {("game", 1): 20, ("game", 9): 40}
+
+
+def test_the_favourites_intermission_stays_up_with_nothing_else_live(day):
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["SEA"]
+    client.today[0] = dataclasses.replace(client.today[0], state="OFF")
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
+    tick(app, clock, hours=6)
+    assert _seconds_on_screen(app, clock, 30) == {("game", 1): 30}
+
+
+def test_followed_games_take_equal_turns_while_the_favourite_is_not_playing(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    app.settings.scoreboard.also_follow = ["SEA", "DAL"]
+    client.today.append(game(7, "DAL", "COL", PUCK_DROP - timedelta(hours=1), "LIVE", period=1))
+    tick(app, clock, seconds=1)
+    assert _seconds_on_screen(app, clock, 60) == {("game", 9): 30, ("game", 7): 30}
 
 
 def test_once_the_followed_game_ends_the_favourite_rotation_returns(followed):
@@ -1392,17 +1423,14 @@ def test_once_the_followed_game_ends_the_favourite_rotation_returns(followed):
     assert scene(app) == ("preview", 1), "only the favourite's final is held"
 
 
-def test_the_favourites_held_final_shares_turns_with_a_live_followed_game(followed):
+def test_the_favourites_held_final_gets_a_quick_turn_beside_a_live_followed_game(followed):
     app, clock, client = followed
     app.settings.scoreboard.rotate_seconds = 10
     client.today[1] = _live(client.today[1])
     tick(app, clock, hours=6)
     client.today[1] = dataclasses.replace(client.today[1], state="OFF")
     tick(app, clock, hours=3)
-    shown = {scene(app)[1]}
-    clock.advance(seconds=10)
-    shown.add(scene(app)[1])
-    assert shown == {1, 9}
+    assert _seconds_on_screen(app, clock, 60) == {("game", 1): 20, ("game", 9): 40}
 
 
 def test_a_followed_teams_goal_interrupts_whichever_game_is_up_without_the_horn(followed):

@@ -212,10 +212,17 @@ it was deleted rather than built on top of).
 **Followed teams (#260).** `[scoreboard] also_follow` lists extra teams
 beside the favourite (`ScoreboardConfig.followed_teams` is favourite
 first, then these; unknown abbreviations and the favourite itself are
-dropped at load). By the owner's decisions in #260: while any followed
-team is live, `_followed_games_on_now()` -- every live followed game, plus
-the favourite's held final -- takes the screen ahead of the idle rotation,
-equal turns of `rotate_seconds` (by monotonic time, not `self.index`); an
+dropped at load). By the owner's decisions in #260, `_followed_turns()`
+takes the screen ahead of the idle rotation, **primary-first** (a revision
+of #260's original "equal turns"): while the favourite is live and in
+play, its game holds the screen alone and other followed teams appear
+only when they score. During its intermission or held final, the other
+live followed games take `rotate_seconds` turns and the favourite's own
+screen drops in for `FAVOURITE_QUICK_TURN` (half) of that each cycle, so
+its score stays in view without hogging time from games actually being
+played. With the favourite not playing, live followed games take equal
+turns (intermissions included -- skipping them was considered and not
+chosen). Timed by monotonic time, not `self.index`. An
 `also_follow` team's final is not held; the favourite's three stars
 interrupt a followed game's turn like a goal does (below), so the turns
 can't swallow them. Everything else stays

@@ -69,6 +69,10 @@ FRAME_INTERVAL = 0.5
 #: FRAME_INTERVAL a sprite would jump ~10px a frame; this is ~1px. Only for
 #: the few seconds something is moving -- the board idles at 2fps otherwise.
 ANIMATION_FRAME_INTERVAL = 0.05
+#: The favourite's share of ``rotate_seconds`` while other followed games take
+#: turns during its intermission or held final (#260): long enough to read
+#: the score, short enough that the games actually being played get the time.
+FAVOURITE_QUICK_TURN = 0.5
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
@@ -1672,11 +1676,14 @@ class ScoreboardApp:
 
     def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         cfg = self.settings.scoreboard
-        turns = self._followed_games_on_now()
+        turns = self._followed_turns()
         if turns:
-            # Equal turns (#260): one game holds the screen, several cycle.
-            turn = int(self.monotonic() // cfg.rotate_seconds) % len(turns)
-            return Scene("game", turns[turn])
+            position = self.monotonic() % sum(seconds for _, seconds in turns)
+            for game, seconds in turns:
+                if position < seconds:
+                    return Scene("game", game)
+                position -= seconds
+            return Scene("game", turns[-1][0])
         if not cfg.favourite_team:
             return None
         today = self.favourite_game_today()
@@ -1688,24 +1695,42 @@ class ScoreboardApp:
         standings = self._standings_scene(allow_fetch=allow_fetch)
         return self._rotate_idle_scenes(upcoming, standings, allow_fetch=allow_fetch)
 
-    def _followed_games_on_now(self) -> list[Game]:
-        """Followed teams' live games, plus the favourite's held final, in slate order.
+    def _followed_turns(self) -> list[tuple[Game, float]]:
+        """Which followed games are on screen now, each with its dwell in seconds.
 
-        These take the screen ahead of the favourite's idle rotation. Only
-        the favourite's final is held (``final_hold_minutes``, with its
-        three stars); an ``also_follow`` team's game leaves the cycle the
-        moment it ends.
+        Primary-first, by the owner's call on #260: while the favourite is
+        live and the puck is in play, its game holds the screen alone --
+        other followed teams only appear when they score (the red zone,
+        ``_apply_goal_override``). During the favourite's intermission, or
+        while its final is held (``final_hold_minutes``, with its three
+        stars), the other live followed games take ``rotate_seconds``
+        turns, and the favourite's own screen drops in for a quick
+        ``FAVOURITE_QUICK_TURN`` share of that each cycle so its score stays
+        in view. With the favourite not playing, live followed games take
+        equal turns. An ``also_follow`` team's game leaves the cycle the
+        moment it ends; only the favourite's final is held.
         """
         cfg = self.settings.scoreboard
         today = self.favourite_game_today()
-        held = None
-        if today is not None and today.is_final:
+        favourite_game = None
+        if today is not None and today.is_live:
+            if not today.in_intermission:
+                return [(today, cfg.rotate_seconds)]
+            favourite_game = today
+        elif today is not None and today.is_final:
             ended = self.ended_at.get(today.id)
             if ended is not None and self.clock() - ended < timedelta(
                 minutes=cfg.final_hold_minutes
             ):
-                held = today
-        return [g for g in self.games if g is held or (g.is_live and self._is_followed(g))]
+                favourite_game = today
+        others = [
+            (g, cfg.rotate_seconds)
+            for g in self.games
+            if g.is_live and g is not today and self._is_followed(g)
+        ]
+        if favourite_game is None:
+            return others
+        return [(favourite_game, cfg.rotate_seconds * FAVOURITE_QUICK_TURN), *others]
 
     def situation_targets(self) -> list[Game]:
         """Live games worth a second request: followed teams' and the on-screen one.

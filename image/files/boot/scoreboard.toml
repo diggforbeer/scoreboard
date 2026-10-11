@@ -29,9 +29,10 @@ connect_timeout_seconds = 90
 # today. Examples: NSH, TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
 favourite_team = "NSH"
 
-# More teams to follow. While any followed team (favourite included) is
-# live, their games take turns on screen, rotate_seconds each, and a goal
-# by any of them jumps straight to that game's GOAL screen -- except against
+# More teams to follow. While favourite_team is live and in play its game
+# holds the screen; during its intermissions (or with it not playing) the
+# followed teams' live games take turns, rotate_seconds each. A goal by any
+# of them jumps straight to that game's GOAL screen -- except against
 # favourite_team, whose own game only celebrates its own goals. The horn
 # only plays for favourite_team. Example: also_follow = ["DAL", "TOR"]
 also_follow = []

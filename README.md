@@ -273,10 +273,13 @@ nothing to show right now is skipped, not shown blank. With no
 rotates through every game in the league today, `rotate_seconds` each,
 favourite first (`prefer_favourite`).
 
-**Following more teams.** `also_follow` lists extra teams. While any of
-them (or your favourite) is live, those games take turns on screen,
-`rotate_seconds` each, ahead of the idle rotation; your favourite's final
-joins the turns while it's held. When a followed team scores, the board
+**Following more teams.** `also_follow` lists extra teams. While your
+favourite is live and the puck is in play, its game holds the screen and
+the others only appear when they score. During your favourite's
+intermission (or while its final is held), the other live followed games
+take turns, `rotate_seconds` each, with a quick look back at your
+favourite's score every cycle. When your favourite isn't playing, live
+followed games take equal turns. When a followed team scores, the board
 jumps straight to that game's GOAL screen (and the scorer after it) from
 whichever game was up. The horn still only plays for your favourite, and
 in your favourite's own game only its goals count: a followed team scoring
