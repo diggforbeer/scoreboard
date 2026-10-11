@@ -233,9 +233,10 @@ themes = [
   "easter", "july_4th",
 ]
 
-# Random gap, in minutes, between fly-bys (the Halloween ghost).
-flyby_min_minutes = 5
-flyby_max_minutes = 20
+# How often a fly-by (the Halloween ghost) crosses the board, at a random
+# moment each time: "rare" (about once an hour), "occasional" (about every
+# 20 minutes) or "frequent" (about every 10 minutes).
+flyby_frequency = "occasional"
 
 [button]
 # An optional momentary push-button: one leg to a GPIO pin, the other to

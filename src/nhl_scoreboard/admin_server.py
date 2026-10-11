@@ -269,7 +269,7 @@ from websockets.http11 import Request, Response
 
 from . import updater
 from .audio import DEFAULT_STEM, HORN_EXTENSIONS, GoalHornPlayer, upload_directory
-from .config import VALID_ROTATION_SCREENS, ConfigWriteError, Settings
+from .config import FLYBY_FREQUENCIES, VALID_ROTATION_SCREENS, ConfigWriteError, Settings
 from .display.holiday import HOLIDAYS
 from .display.teams import TEAM_COLORS
 from .updater import installed_version
@@ -502,11 +502,14 @@ def _holiday_payload(settings: Settings) -> dict[str, object]:
         "data": {
             "enabled": cfg.enabled,
             "themes": list(cfg.themes),
-            "flyby_min_minutes": cfg.flyby_min_minutes,
-            "flyby_max_minutes": cfg.flyby_max_minutes,
+            "flyby_frequency": cfg.flyby_frequency,
         },
         "available": [
             {"name": h.name, "label": h.label, "window": h.window} for h in HOLIDAYS.values()
+        ],
+        "frequencies": [
+            {"name": name, "label": f.label, "description": f.description}
+            for name, f in FLYBY_FREQUENCIES.items()
         ],
     }
 
@@ -1109,8 +1112,7 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
 #: _coerce_holiday itself.
 _HOLIDAY_FIELDS: dict[str, _FieldSpec] = {
     "enabled": _FieldSpec("bool"),
-    "flyby_min_minutes": _FieldSpec("float"),
-    "flyby_max_minutes": _FieldSpec("float"),
+    "flyby_frequency": _FieldSpec("select", choices=tuple(FLYBY_FREQUENCIES)),
 }
 
 
@@ -1120,7 +1122,7 @@ def _coerce_holiday(data: object) -> dict[str, object]:
     Stricter than HolidayConfig's own load-time handling, for the same
     reason as _coerce_rotation: a hand-edited TOML typo must not stop the
     board booting, so the loader warns and repairs (drops unknown themes,
-    floors and swaps the gap), but someone editing this page should see
+    falls back to the default frequency), but someone editing this page should see
     the mistake rather than have it quietly rewritten.
     """
     if not isinstance(data, dict):
@@ -1138,12 +1140,6 @@ def _coerce_holiday(data: object) -> dict[str, object]:
                 json.dumps({"themes": f"unknown {', '.join(unknown)} (must be from {choices})"})
             )
         values["themes"] = list(dict.fromkeys(themes))
-    low, high = values.get("flyby_min_minutes"), values.get("flyby_max_minutes")
-    for key, value in (("flyby_min_minutes", low), ("flyby_max_minutes", high)):
-        if value is not None and value < 1:
-            raise ValueError(json.dumps({key: "must be at least 1 minute"}))
-    if low is not None and high is not None and low > high:
-        raise ValueError(json.dumps({"flyby_min_minutes": "must not exceed flyby_max_minutes"}))
     return values
 
 

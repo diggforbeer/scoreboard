@@ -480,9 +480,14 @@ scene knows holidays exist. Each holiday is a date window in `HOLIDAYS`
 (local to `scoreboard.timezone`); `themes` is just the checkbox list, never
 dates. Never drawn on `goal`/`goal_detail`/`three_stars`/`ap_setup`/
 `wifi_join` (`NO_OVERLAY_SCENES`) or under night-mode blanking. A fly-by
-(the ghost) only *starts* on an allowed scene, after a random
-`flyby_min_minutes`-`flyby_max_minutes` gap; static decorations (pumpkins)
-only go on `clock`/`no_games` -- the 32px logos fill both edges of every
+(the ghost) only *starts* on an allowed scene, after a random gap
+set by `flyby_frequency` (`FLYBY_FREQUENCIES`: rare ~1/h, occasional ~3/h,
+frequent ~6/h, each gap uniform over half to 1.5x the average). Presets, not
+minutes, by the owner's call: a fly-by is a "did you see that?" Easter egg,
+not the main event, so the default (occasional) is rarer than the old 5-20
+min gap, which `frequent` roughly matches. The old `flyby_min/max_minutes`
+keys aren't migrated, just warned about and ignored. Static decorations
+(pumpkins) only go on `clock`/`no_games` -- the 32px logos fill both edges of every
 game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
 (50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
 otherwise. Demo steps carry an optional `holiday`, forced on with an
