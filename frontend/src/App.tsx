@@ -195,8 +195,7 @@ interface WifiConfig {
 interface HolidayConfig {
   enabled: boolean
   themes: string[]
-  flyby_min_minutes: number
-  flyby_max_minutes: number
+  flyby_frequency: string
 }
 
 // One entry in display/holiday.py's HOLIDAYS registry.
@@ -204,6 +203,13 @@ interface HolidayOption {
   name: string
   label: string
   window: string
+}
+
+// One entry in config.py's FLYBY_FREQUENCIES.
+interface FlybyFrequencyOption {
+  name: string
+  label: string
+  description: string
 }
 
 interface RotationRow {
@@ -250,7 +256,13 @@ type ServerMessage =
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
   | { type: 'config'; section: 'wifi'; data: WifiConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
-  | { type: 'config'; section: 'holiday'; data: HolidayConfig; available: HolidayOption[] }
+  | {
+      type: 'config'
+      section: 'holiday'
+      data: HolidayConfig
+      available: HolidayOption[]
+      frequencies: FlybyFrequencyOption[]
+    }
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'snapshot'; data: SnapshotData }
   | { type: 'logs'; backlog?: boolean; entries: LogEntry[] }
@@ -341,6 +353,7 @@ function App() {
 
   const [holiday, setHoliday] = useState<HolidayConfig | null>(null)
   const [holidayOptions, setHolidayOptions] = useState<HolidayOption[]>([])
+  const [flybyFrequencies, setFlybyFrequencies] = useState<FlybyFrequencyOption[]>([])
   const [holidaySaveStatus, setHolidaySaveStatus] = useState<SaveStatus>('idle')
   const [holidaySaveError, setHolidaySaveError] = useState<string | null>(null)
 
@@ -425,6 +438,7 @@ function App() {
             else if (message.section === 'holiday') {
               setHoliday(message.data)
               setHolidayOptions(message.available)
+              setFlybyFrequencies(message.frequencies)
             } else if (message.section === 'update') {
               setUpdate(message.data)
               setUpdatePhase('idle') // real data just arrived -- whatever was in flight is done
@@ -1906,32 +1920,26 @@ function App() {
 
                   <h3 className="h6 text-body-secondary mt-4">Fly-bys</h3>
                   <p className="text-body-secondary small mb-2">
-                    How often something crosses the board (e.g. the Halloween ghost): a random
-                    gap between these two, in minutes.
+                    How often something crosses the board (e.g. the Halloween ghost). The
+                    timing is random, so it's always a surprise.
                   </p>
-                  <div className="d-flex gap-3">
-                    {(
-                      [
-                        ['flyby_min_minutes', 'At least'],
-                        ['flyby_max_minutes', 'At most'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <div className="mb-3" key={key}>
-                        <label className="form-label" htmlFor={`holiday-${key}`}>
-                          {label}
-                        </label>
+                  <div className="mb-3">
+                    {flybyFrequencies.map((option) => (
+                      <div className="form-check mb-2" key={option.name}>
                         <input
-                          className="form-control"
-                          style={{ maxWidth: '8rem' }}
-                          id={`holiday-${key}`}
-                          type="number"
-                          step="any"
-                          min="1"
-                          value={holiday[key]}
-                          onChange={(e) =>
-                            setHoliday({ ...holiday, [key]: Number(e.target.value) })
-                          }
+                          className="form-check-input"
+                          type="radio"
+                          name="holiday-flyby-frequency"
+                          id={`holiday-flyby-${option.name}`}
+                          checked={holiday.flyby_frequency === option.name}
+                          onChange={() => setHoliday({ ...holiday, flyby_frequency: option.name })}
                         />
+                        <label className="form-check-label" htmlFor={`holiday-flyby-${option.name}`}>
+                          {option.label}{' '}
+                          <span className="text-body-secondary small">
+                            ({option.description})
+                          </span>
+                        </label>
                       </div>
                     ))}
                   </div>
