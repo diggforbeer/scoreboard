@@ -1764,3 +1764,77 @@ def test_holiday_save_rejects_bad_values_without_writing_the_file(
     assert received["section"] == "holiday"
     assert field in received["message"]
     assert config_path.read_text() == ""
+
+
+# -- log noise (#254) ---------------------------------------------------------
+
+
+def test_connect_reads_the_config_once(app_dir, config_path, monkeypatch):
+    """Seven identical "Loaded configuration" lines per page visit, before."""
+    real_load = admin_server.Settings.load
+    calls = []
+
+    def counting_load(path):
+        calls.append(path)
+        return real_load(path)
+
+    monkeypatch.setattr(admin_server.Settings, "load", staticmethod(counting_load))
+
+    async def scenario(client):
+        await _skip_initial(client)
+
+    asyncio.run(_serve_and_run(scenario))
+    assert len(calls) == 1
+
+
+def test_a_dropped_connection_logs_one_line_not_a_traceback(app_dir, config_path, caplog):
+    """A phone locking mid-visit drops the socket with no close frame."""
+
+    async def scenario():
+        async with serve(admin_server._handle, "localhost", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            client = await connect(f"ws://localhost:{port}/")
+            await _skip_initial(client)
+            client.transport.abort()  # no close frame, like a real drop
+            for _ in range(50):
+                if "disconnected" in caplog.text:
+                    break
+                await asyncio.sleep(0.02)
+
+    with caplog.at_level("INFO"):
+        asyncio.run(scenario())
+    assert "Admin page" in caplog.text and "disconnected" in caplog.text
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert "Traceback" not in caplog.text
+
+
+def test_served_pages_are_not_logged_as_rejected_connections(admin_dir, config_path, caplog):
+    with caplog.at_level("INFO"):
+        status, _, _ = asyncio.run(_serve_and_get_quiet("/"))
+    assert status == 200
+    # The board's websockets 15 says "connection rejected (200 OK)"; newer
+    # ones "HTTP response sent (200 OK)". Neither belongs in the Logs tab.
+    assert not [r for r in caplog.records if r.name == admin_server._WS_LOG.name], caplog.text
+
+
+async def _serve_and_get_quiet(path):
+    """_serve_and_get, but with the logger the real servers pass to serve()."""
+    async with serve(
+        admin_server._handle,
+        "localhost",
+        0,
+        process_request=admin_server._process_request,
+        logger=admin_server._WS_LOG,
+    ) as server:
+        port = server.sockets[0].getsockname()[1]
+
+        def _get():
+            conn = http.client.HTTPConnection("localhost", port, timeout=5)
+            try:
+                conn.request("GET", path)
+                resp = conn.getresponse()
+                return resp.status, dict(resp.getheaders()), resp.read()
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(_get)
