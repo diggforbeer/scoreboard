@@ -250,6 +250,10 @@ class ScoreboardConfig:
     #: games left to preview at all". Off by default: existing installs get
     #: the same rotation they always had unless they opt in.
     show_clock_between_games: bool = False
+    #: With no favourite scene up, cycle today's games as pages of the
+    #: several-at-once scores grid instead of one full game at a time
+    #: (#269). Off by default: existing installs keep the one-game cycle.
+    scores_grid: bool = False
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
@@ -284,8 +288,9 @@ class ScoreboardConfig:
 #: countdown_hours, same as always -- which one shows isn't a user choice,
 #: so it isn't split into two separately configurable screens (#150).
 #: "matchup" (#157), "top_west"/"top_east" (#200), "leaders" (#201) and
-#: "holiday" (#243, the active holiday's own screen) are opt-in only: never
-#: part of the derived default list.
+#: "holiday" (#243, the active holiday's own screen) and "scores" (#269,
+#: today's games several to a frame) are opt-in only: never part of the
+#: derived default list.
 VALID_ROTATION_SCREENS = (
     "countdown_preview",
     "standings",
@@ -295,6 +300,7 @@ VALID_ROTATION_SCREENS = (
     "top_east",
     "leaders",
     "holiday",
+    "scores",
 )
 
 

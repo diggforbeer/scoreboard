@@ -1985,3 +1985,99 @@ def test_christmas_tree_screen_on_a_single_panel_is_just_the_tree():
     assert not c.out_of_bounds
     tree = bbox_of(c, TREE_GREEN)
     assert abs(tree.center_x - 31.5) <= 1, "centred, no countdown beside it"
+
+
+# --------------------------------------------------------------------------
+# scores grid (#269): several games per frame, one 32px column each
+# --------------------------------------------------------------------------
+
+SCORES_COL = 32
+SCORES_AWAY_ROWS = (1, 8)
+SCORES_HOME_ROWS = (9, 16)
+SCORES_STATUS_ROWS = (18, 25)
+SCORES_DETAIL_ROWS = (26, 31)
+
+
+def scores_page(games) -> list[Game]:
+    return [games[k] for k in ("live", "intermission", "final", "shootout")]
+
+
+def assert_scores_layout(c: AsciiCanvas, page: list[Game], width: int = W) -> None:
+    assert not c.out_of_bounds, f"drew off-panel at {c.out_of_bounds[:5]}"
+    left = (width - len(page) * SCORES_COL) // 2
+    for i, game in enumerate(page):
+        x0, x1 = left + i * SCORES_COL, left + (i + 1) * SCORES_COL - 2
+        # Nothing but the dim divider between columns.
+        if i:
+            assert c.colors(x0 - 1, 0, x0 - 1, H - 1) == {DIM}, f"column {i} divider"
+        for side, (y0, y1) in ((game.away, SCORES_AWAY_ROWS), (game.home, SCORES_HOME_ROWS)):
+            abbrev = c.bbox(x0, y0, x0 + 15, y1)
+            assert abbrev is not None and abbrev.x0 <= x0 + 2, f"{side.abbrev} not left-aligned"
+            assert c.colors(x0, y0, x0 + 15, y1) == {team_color(side.abbrev)}
+            digits = c.bbox(x0 + 17, y0, x1, y1)
+            if game.is_pregame:
+                assert digits is None, "a pregame column shows no score"
+            else:
+                assert digits is not None and x1 - 3 <= digits.x1 <= x1, "score not right-aligned"
+                assert c.colors(x0 + 17, y0, x1, y1) == {WHITE}
+        status = c.bbox(x0, SCORES_STATUS_ROWS[0], x1, SCORES_STATUS_ROWS[1])
+        assert status is not None, f"column {i}: no status"
+        assert abs(status.center_x - (x0 + x1) / 2) <= 1.0, f"column {i} status not centred"
+        expected = Renderer._status_color(game)
+        assert c.colors(x0, SCORES_STATUS_ROWS[0], x1, SCORES_STATUS_ROWS[1]) == {expected}
+
+
+def test_scores_grid_layout(games, update_snapshots):
+    c = canvas()
+    page = scores_page(games)
+    make_renderer().draw_scores(c, page)
+    art = show("scores grid: live / INT / FINAL / FINAL SO", c)
+    assert_scores_layout(c, page)
+    check_snapshot("scores_grid", art, update_snapshots)
+
+
+def test_scores_grid_short_page_is_centred(games, update_snapshots):
+    c = canvas()
+    page = [games["final"], games["pregame"]]
+    make_renderer().draw_scores(c, page)
+    art = show("scores grid, last page of two: FINAL / 6:00P", c)
+    assert_scores_layout(c, page)
+    # Two columns centred on the panel: the divider sits on its middle and
+    # nothing is drawn in the outer quarter either side.
+    assert c.colors(W // 2 - 1, 0, W // 2 - 1, H - 1) == {DIM}
+    assert c.bbox(0, 0, SCORES_COL - 1, H - 1) is None
+    assert c.bbox(W - SCORES_COL, 0, W - 1, H - 1) is None
+    check_snapshot("scores_grid_short_page", art, update_snapshots)
+
+
+def test_scores_grid_narrow_panel_holds_two(games, update_snapshots):
+    renderer = make_narrow_renderer()
+    assert renderer.scores_per_page() == 2
+    c = AsciiCanvas(NARROW_W, H)
+    page = scores_page(games)
+    renderer.draw_scores(c, page)
+    art = show("narrow scores grid: first two of four", c)
+    assert_scores_layout(c, page[:2], width=NARROW_W)
+    check_snapshot("scores_grid_narrow", art, update_snapshots)
+
+
+def test_scores_grid_two_digit_scores_fit(big_score_game):
+    c = canvas()
+    make_renderer().draw_scores(c, [big_score_game] * 4)
+    assert_scores_layout(c, [big_score_game] * 4)
+
+
+@pytest.mark.parametrize(
+    ("key", "status", "detail"),
+    [
+        ("live", "05:05", "1ST"),
+        ("intermission", "INT", "2ND"),
+        ("final", "FINAL", ""),
+        ("shootout", "FINAL", "SO"),
+        ("pregame", "6:00P", ""),
+    ],
+)
+def test_scores_grid_status_fits_a_column(games, key, status, detail):
+    r = make_renderer()
+    assert r._scores_status(games[key]) == (status, detail)
+    assert text_width(r.fonts.small, status) <= SCORES_COL - 2

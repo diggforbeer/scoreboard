@@ -1610,3 +1610,104 @@ def test_a_followed_teams_shootout_is_fetched(followed):
     client.today[0] = dataclasses.replace(_live(client.today[0]), period_type="SO")
     tick(app, clock, seconds=1)
     assert [g.id for g in app.shootout_targets()] == [9]
+
+
+# -- scores grid (#269) ----------------------------------------------------
+
+
+def league_night(fake_backend, *, games: int = 6, **cfg):
+    """A busy night the favourite isn't playing: ``games`` other games, none NSH."""
+    client = FlowClient()
+    teams = ["SEA", "CGY", "TOR", "MTL", "EDM", "VAN", "BOS", "NYR", "DAL", "COL"]
+    client.today = [
+        game(100 + i, teams[2 * i % 10], teams[(2 * i + 1) % 10], PUCK_DROP, "LIVE", period=2)
+        for i in range(games)
+    ]
+    client.season = [game(2, FAV, "CAR", NEXT_DROP)]
+    clock = Clock(PUCK_DROP + timedelta(minutes=30))
+    app = make_app(fake_backend, clock, client, **cfg)
+    app.refresh()
+    return app, clock, client
+
+
+def grid_ids(app) -> list[int]:
+    s = app.select_scene()
+    assert s.kind == "scores", s.kind
+    return [g.id for g in s.games]
+
+
+def test_scores_screen_is_not_in_the_default_rotation(fake_backend):
+    app, clock, _client = league_night(fake_backend)
+    for _ in range(6):
+        assert app.select_scene().kind != "scores"
+        tick(app, clock, seconds=8)
+
+
+def test_scores_screen_pages_across_its_dwell(fake_backend):
+    """One rotation slot shares its seconds between grid pages, four games per page at 128px."""
+    app, clock, _client = league_night(fake_backend)
+    app.settings.rotation = [RotationEntry("scores", 8)]
+    clock.mono = 8000.0  # slot boundary
+    app.refresh()
+
+    assert grid_ids(app) == [100, 101, 102, 103]
+    tick(app, clock, seconds=4)
+    assert grid_ids(app) == [104, 105]
+    tick(app, clock, seconds=4)
+    assert grid_ids(app) == [100, 101, 102, 103]
+
+
+def test_scores_screen_skipped_with_no_games_today(fake_backend):
+    app, _clock, client = league_night(fake_backend)
+    client.today = []
+    app.refresh()
+    app.settings.rotation = [RotationEntry("scores", 8), RotationEntry("clock", 8)]
+    for offset in range(0, 16, 2):
+        assert app._rotate_idle_scenes(None, None).kind == "clock", offset
+
+
+def test_scores_grid_fallback_is_off_by_default(fake_backend):
+    app, _clock, _client = league_night(fake_backend, favourite_team="")
+    assert app.select_scene().kind == "game"
+
+
+def test_scores_grid_fallback_pages_through_todays_games(fake_backend):
+    app, _clock, _client = league_night(fake_backend, favourite_team="", scores_grid=True)
+    assert grid_ids(app) == [100, 101, 102, 103]
+    app.advance()
+    assert grid_ids(app) == [104, 105]
+    app.advance()
+    assert grid_ids(app) == [100, 101, 102, 103]
+
+
+def test_scores_grid_fallback_keeps_the_full_scene_for_a_single_game(fake_backend):
+    app, _clock, _client = league_night(fake_backend, games=1, favourite_team="", scores_grid=True)
+    assert scene(app) == ("game", 100)
+
+
+def test_scores_grid_fallback_never_widens_situation_polling(fake_backend):
+    """The grid draws no PP indicator, so no on-screen game is polled for one."""
+    app, _clock, _client = league_night(fake_backend, favourite_team="", scores_grid=True)
+    assert app.situation_targets() == []
+    assert app.shootout_targets() == []
+
+
+def test_draw_dispatches_scores_scene(fake_backend):
+    app, _clock, _client = league_night(fake_backend, favourite_team="", scores_grid=True)
+    app.draw()
+    assert app.matrix.swaps == 1
+    assert app.status_snapshot()["current game"].startswith("SEA @ CGY, ")
+
+
+def test_scores_grid_fallback_keeps_followed_teams_polling(fake_backend):
+    """The grid drops only the index-based "on-screen" game; followed teams keep theirs (#260)."""
+    app, _clock, _client = league_night(fake_backend, favourite_team="", scores_grid=True)
+    app.settings.scoreboard.also_follow = ["TOR"]
+    assert [g.id for g in app.situation_targets()] == [101]
+
+
+def test_a_live_followed_game_takes_the_screen_over_the_grid(fake_backend):
+    """Which games preempt is #260's call; the grid only covers what's left (#269)."""
+    app, _clock, _client = league_night(fake_backend, scores_grid=True)
+    app.settings.scoreboard.also_follow = ["TOR"]
+    assert scene(app) == ("game", 101)

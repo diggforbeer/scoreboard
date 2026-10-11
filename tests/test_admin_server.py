@@ -621,6 +621,7 @@ _DEFAULT_SCOREBOARD_DATA = {
     "final_hold_minutes": 30.0,
     "show_standings": True,
     "show_clock_between_games": False,
+    "scores_grid": False,
 }
 
 #: show_standings is a real ScoreboardConfig field (and so is in the
