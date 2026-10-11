@@ -495,3 +495,28 @@ def test_next_hardware_mapping_cycles_through_all_documented_choices():
 
 def test_next_hardware_mapping_unknown_value_starts_over_at_the_first_choice():
     assert next_hardware_mapping("some-hand-edited-value") == PANEL_HARDWARE_MAPPING_CHOICES[0]
+
+
+def test_also_follow_defaults_to_nobody():
+    assert Settings().scoreboard.also_follow == []
+    assert Settings().scoreboard.followed_teams == ["NSH"]
+
+
+def test_also_follow_is_normalised_and_drops_unknowns_and_the_favourite(caplog):
+    with caplog.at_level(logging.WARNING):
+        settings = Settings.from_dict(
+            {"scoreboard": {"favourite_team": "nsh", "also_follow": ["dal", "NSH", "ZZZ", "DAL"]}}
+        )
+    assert settings.scoreboard.also_follow == ["DAL"]
+    assert settings.scoreboard.followed_teams == ["NSH", "DAL"]
+    assert "ZZZ" in caplog.text
+
+
+def test_a_bare_also_follow_string_is_one_team():
+    settings = Settings.from_dict({"scoreboard": {"also_follow": "TOR"}})
+    assert settings.scoreboard.also_follow == ["TOR"]
+
+
+def test_followed_teams_without_a_favourite_is_just_also_follow():
+    settings = Settings.from_dict({"scoreboard": {"favourite_team": "", "also_follow": ["TOR"]}})
+    assert settings.scoreboard.followed_teams == ["TOR"]

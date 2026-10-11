@@ -1352,3 +1352,261 @@ def test_leaders_skipped_with_no_favourite(day):
     app.settings.rotation = [RotationEntry("leaders", 5)]
     assert app._leaders_scene() is None
     assert client.club_stats_calls == []
+
+
+# --------------------------------------------------------------------------
+# following more teams: live-game turns and the red zone (#260)
+# --------------------------------------------------------------------------
+
+
+def _live(g: Game, **scores) -> Game:
+    return score(dataclasses.replace(g, state="LIVE", period=1), **scores)
+
+
+@pytest.fixture
+def followed(day):
+    """The day above, also following SEA (live at SEA @ CGY all along)."""
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["SEA"]
+    app.refresh()
+    return app, clock, client
+
+
+def test_a_followed_teams_live_game_shows_while_the_favourite_is_idle(followed):
+    app, _clock, _client = followed
+    assert scene(app) == ("game", 9), "SEA is live: no preview of tonight's NSH game"
+
+
+def test_unfollowed_live_games_never_displace_the_favourites_idle_rotation(day):
+    app, _clock, _client = day
+    assert scene(app) == ("preview", 1), "SEA @ CGY is live but nobody follows it"
+
+
+def _seconds_on_screen(app, clock, seconds: int) -> dict:
+    """Sample the scene once a second for ``seconds``: game id -> seconds shown."""
+    shown: dict = {}
+    for _ in range(seconds):
+        kind, gid = scene(app)
+        shown[(kind, gid)] = shown.get((kind, gid), 0) + 1
+        clock.advance(seconds=1)
+    return shown
+
+
+def test_the_favourite_in_play_holds_the_screen_while_others_are_live(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    assert _seconds_on_screen(app, clock, 60) == {("game", 1): 60}
+
+
+def test_the_favourites_intermission_gives_others_turns_and_itself_a_quick_one(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
+    tick(app, clock, hours=6)
+    assert _seconds_on_screen(app, clock, 60) == {("game", 1): 20, ("game", 9): 40}
+
+
+def test_the_favourites_intermission_stays_up_with_nothing_else_live(day):
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["SEA"]
+    client.today[0] = dataclasses.replace(client.today[0], state="OFF")
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
+    tick(app, clock, hours=6)
+    assert _seconds_on_screen(app, clock, 30) == {("game", 1): 30}
+
+
+def test_followed_games_take_equal_turns_while_the_favourite_is_not_playing(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    app.settings.scoreboard.also_follow = ["SEA", "DAL"]
+    client.today.append(game(7, "DAL", "COL", PUCK_DROP - timedelta(hours=1), "LIVE", period=1))
+    tick(app, clock, seconds=1)
+    assert _seconds_on_screen(app, clock, 60) == {("game", 9): 30, ("game", 7): 30}
+
+
+def test_once_the_followed_game_ends_the_favourite_rotation_returns(followed):
+    app, clock, client = followed
+    client.today[0] = dataclasses.replace(client.today[0], state="OFF")
+    tick(app, clock, minutes=1)
+    assert scene(app) == ("preview", 1), "only the favourite's final is held"
+
+
+def test_the_favourites_held_final_gets_a_quick_turn_beside_a_live_followed_game(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    client.today[1] = dataclasses.replace(client.today[1], state="OFF")
+    tick(app, clock, hours=3)
+    assert _seconds_on_screen(app, clock, 60) == {("game", 1): 20, ("game", 9): 40}
+
+
+def test_a_followed_teams_goal_interrupts_whichever_game_is_up_without_the_horn(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 1000
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    if scene(app) != ("game", 1):
+        tick(app, clock, seconds=1000)
+    assert scene(app) == ("game", 1), "NSH's turn on screen"
+
+    client.today[0] = _live(client.today[0], away=1)  # SEA scores at CGY
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    assert app.select_scene().goal_team == "SEA", "the screen says who scored (#265)"
+    assert app.horn.calls == [], "the horn is the favourite's alone"
+
+
+def test_the_favourites_goal_still_sounds_the_horn_while_following_others(followed):
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    client.today[1] = _live(client.today[1], home=1)
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 1)
+    assert app.select_scene().goal_team == FAV
+    assert app.horn.calls == [FAV]
+
+
+def test_a_followed_teams_opponent_scoring_does_not_interrupt(followed):
+    app, clock, client = followed
+    client.today[0] = _live(client.today[0], home=1)  # CGY, not SEA
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("game", 9)
+    assert app.last_goal is None
+
+
+def test_a_followed_team_scoring_on_the_favourite_is_not_celebrated(day):
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["TBL"]
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+
+    client.today[1] = _live(client.today[1], away=1)  # TBL scores on NSH
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("game", 1)
+    assert app.last_goal is None
+
+    client.today[1] = _live(client.today[1], away=1, home=1)  # NSH
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 1)
+    assert app.horn.calls == [FAV]
+
+
+def test_two_followed_teams_meeting_each_fire_their_own_goals(day):
+    """Neither is the favourite, so both sides' goals interrupt."""
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["SEA", "CGY"]
+    tick(app, clock, seconds=1)
+
+    client.today[0] = _live(client.today[0], away=1)  # SEA
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    app.last_goal = None
+
+    client.today[0] = _live(client.today[0], away=1, home=1)  # CGY
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    assert app.horn.calls == []
+
+
+def test_no_scorer_screen_for_a_followed_teams_goal_on_the_favourite(day):
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["TBL"]
+    app.settings.scoreboard.live_poll_seconds = 0
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    app.refresh_goal_details()  # baseline
+
+    client.goal_events[1] = (goal_event(team="TBL", scorer="N. KUCHEROV"),)
+    app.refresh_goal_details()
+    assert app._goal_detail is None
+
+
+def test_goals_already_on_the_board_when_a_team_is_followed_do_not_fire(day):
+    app, clock, client = day
+    client.today[0] = _live(client.today[0], away=3)
+    tick(app, clock, seconds=1)
+    app.settings.scoreboard.also_follow = ["SEA"]
+    tick(app, clock, seconds=1)
+    assert app.last_goal is None
+
+
+def test_followed_teams_live_games_cycle_with_no_favourite_set(followed):
+    app, _clock, _client = followed
+    app.settings.scoreboard.favourite_team = ""
+    app.settings.scoreboard.also_follow = ["SEA"]
+    assert scene(app) == ("game", 9)
+
+
+def test_a_followed_teams_goal_detail_interrupts_the_other_game(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.live_poll_seconds = 0
+    app.settings.scoreboard.goal_flash_seconds = 0
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    app.refresh_goal_details()  # baseline both live followed games
+
+    client.goal_events[9] = (goal_event(team="SEA", scorer="J. EBERLE"), goal_event(team="CGY"))
+    app.refresh_goal_details()
+    assert app._goal_detail is not None and app._goal_detail[0] == 9
+    assert app._goal_detail[2].team_abbrev == "SEA", "only the followed team's goal"
+
+    from nhl_scoreboard.app import Scene
+
+    assert app._apply_goal_override(Scene("game", client.today[1])).kind == "goal_detail"
+
+
+def test_changing_who_is_followed_rebaselines_goal_detail(followed):
+    app, _clock, _client = followed
+    app.settings.scoreboard.live_poll_seconds = 0
+    app.refresh_goal_details()
+    assert app._shown_goal_events == {9: 0}
+
+    new = Settings.from_dict({"scoreboard": {"favourite_team": FAV, "also_follow": ["CGY"]}})
+    app._apply_reloaded_settings(new)
+    assert app._shown_goal_events == {}
+    assert app._goal_events == {}
+
+
+def test_situation_is_fetched_for_every_live_followed_game(followed):
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    assert {g.id for g in app.situation_targets()} == {1, 9}
+
+
+def test_three_stars_interrupt_a_live_followed_games_turn(followed):
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = 1000
+    app.settings.scoreboard.live_poll_seconds = 0
+    _watch_the_favourite_go_final(app, clock, client)
+    if scene(app) != ("game", 9):
+        tick(app, clock, seconds=1000)
+    assert scene(app) == ("game", 9), "SEA's turn on screen"
+
+    client.stars[1] = STARS
+    app.refresh_three_stars()
+    assert scene(app) == ("three_stars", 1)
+
+
+def test_a_followed_teams_shootout_win_is_not_a_red_zone_goal(followed):
+    """The headline score only moves when a shootout is decided (#259)."""
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    client.today[0] = dataclasses.replace(_live(client.today[0]), period_type="SO")
+    tick(app, clock, seconds=1)
+    client.today[0] = dataclasses.replace(_live(client.today[0], away=1), period_type="SO")
+    tick(app, clock, seconds=1)
+    assert app.last_goal is not None, "still detected"
+    assert scene(app) == ("game", 1), "but no GOAL screen over the favourite's game"
+
+
+def test_a_followed_teams_shootout_is_fetched(followed):
+    app, clock, client = followed
+    client.today[0] = dataclasses.replace(_live(client.today[0]), period_type="SO")
+    tick(app, clock, seconds=1)
+    assert [g.id for g in app.shootout_targets()] == [9]

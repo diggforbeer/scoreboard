@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import tomlkit
 
 from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
+from .display.teams import TEAM_COLORS
 
 log = logging.getLogger(__name__)
 
@@ -208,6 +209,11 @@ class ScoreboardConfig:
     #: Pinned to the front of the rotation and eligible for the special-teams
     #: indicator. Nashville unless the boot-partition config says otherwise.
     favourite_team: str = "NSH"
+    #: More teams to follow (#260): their live games take turns on screen
+    #: with the favourite's, and their goals interrupt that cycle (silently;
+    #: the horn stays the favourite's). Everything else -- standings,
+    #: leaders, matchup, three stars, the countdown -- stays favourite-only.
+    also_follow: list[str] = field(default_factory=list)
     timezone: str = DEFAULT_TIMEZONE
     rotate_seconds: float = 8.0
     poll_seconds: float = 60.0
@@ -247,6 +253,16 @@ class ScoreboardConfig:
 
     def __post_init__(self) -> None:
         self.favourite_team = self.favourite_team.strip().upper()
+        if isinstance(self.also_follow, str):
+            self.also_follow = [self.also_follow]
+        follow: list[str] = []
+        for raw in self.also_follow:
+            team = str(raw).strip().upper()
+            if team not in TEAM_COLORS:
+                log.warning("Ignoring unknown scoreboard.also_follow team %r", raw)
+            elif team != self.favourite_team and team not in follow:
+                follow.append(team)
+        self.also_follow = follow
         self.logo_variant = self.logo_variant.strip().lower() or "dark"
         self.poll_seconds = _clamp_interval("scoreboard", "poll_seconds", self.poll_seconds)
         self.live_poll_seconds = _clamp_interval(
@@ -256,6 +272,11 @@ class ScoreboardConfig:
             "scoreboard", "shootout_poll_seconds", self.shootout_poll_seconds
         )
         self.rotate_seconds = _clamp_interval("scoreboard", "rotate_seconds", self.rotate_seconds)
+
+    @property
+    def followed_teams(self) -> list[str]:
+        """The favourite (if any) first, then ``also_follow``."""
+        return [self.favourite_team, *self.also_follow] if self.favourite_team else self.also_follow
 
 
 #: The only screens ``_rotate_idle_scenes`` (app.py) knows how to show.

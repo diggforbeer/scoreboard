@@ -351,7 +351,7 @@ WS_MAX_SIZE = HORN_MAX_BYTES * 4 // 3 + 4096
 
 @dataclasses.dataclass(frozen=True)
 class _FieldSpec:
-    kind: str  # "bool" | "str" | "float" | "int" | "select"
+    kind: str  # "bool" | "str" | "float" | "int" | "select" | "teams"
     choices: tuple[str, ...] = ()
     #: Mirrors status_server.py's own per-field flag (#178 story 7) -- a
     #: value that only takes effect after nhl-scoreboard.service restarts,
@@ -375,6 +375,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
 _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
     "favourite_team": _FieldSpec("str"),
+    "also_follow": _FieldSpec("teams"),
     "timezone": _FieldSpec("str"),
     "rotate_seconds": _FieldSpec("float"),
     "poll_seconds": _FieldSpec("float"),
@@ -1080,6 +1081,10 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             errors[key] = "must be a whole number"
         elif spec.kind == "select" and value not in spec.choices:
             errors[key] = f"must be one of {', '.join(spec.choices)}"
+        elif spec.kind == "teams" and (
+            not isinstance(value, list) or not all(t in TEAM_COLORS for t in value)
+        ):
+            errors[key] = "must be a list of team abbreviations"
     if errors:
         raise ValueError(json.dumps(errors))
     return data
