@@ -31,6 +31,7 @@ from nhl_scoreboard.nhl.models import (
     PlayerSeasonDetail,
     SeasonSeriesRecord,
     SeriesMeeting,
+    Shootout,
     SkaterLine,
     StandingsRow,
     Star,
@@ -117,6 +118,9 @@ class FlowClient:
         self.stars: dict[int, tuple[Star, ...]] = {}
         self.three_stars_calls: list[int] = []
         self.fail_three_stars = False
+        self.shootouts: dict[int, Shootout | None] = {}
+        self.shootout_calls: list[int] = []
+        self.fail_shootout = False
 
     def club_stats(self, team, date="now"):
         self.club_stats_calls.append(team)
@@ -135,6 +139,12 @@ class FlowClient:
 
     def situation(self, game_id):
         return None
+
+    def shootout(self, game_id):
+        self.shootout_calls.append(game_id)
+        if self.fail_shootout:
+            raise NHLApiError("boom")
+        return self.shootouts.get(game_id)
 
     def goal_scoring(self, game_id):
         return self.goal_events.get(game_id, ())
@@ -1578,3 +1588,23 @@ def test_three_stars_interrupt_a_live_followed_games_turn(followed):
     client.stars[1] = STARS
     app.refresh_three_stars()
     assert scene(app) == ("three_stars", 1)
+
+
+def test_a_followed_teams_shootout_win_is_not_a_red_zone_goal(followed):
+    """The headline score only moves when a shootout is decided (#259)."""
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    client.today[0] = dataclasses.replace(_live(client.today[0]), period_type="SO")
+    tick(app, clock, seconds=1)
+    client.today[0] = dataclasses.replace(_live(client.today[0], away=1), period_type="SO")
+    tick(app, clock, seconds=1)
+    assert app.last_goal is not None, "still detected"
+    assert scene(app) == ("game", 1), "but no GOAL screen over the favourite's game"
+
+
+def test_a_followed_teams_shootout_is_fetched(followed):
+    app, clock, client = followed
+    client.today[0] = dataclasses.replace(_live(client.today[0]), period_type="SO")
+    tick(app, clock, seconds=1)
+    assert [g.id for g in app.shootout_targets()] == [9]

@@ -50,6 +50,8 @@ rotate_seconds = 8
 poll_seconds = 60
 # Faster polling while a game is actually in progress.
 live_poll_seconds = 15
+# Faster still during a shootout, so the grid keeps up with each shot.
+shootout_poll_seconds = 5
 
 # Within this many hours of puck drop the preview becomes a countdown.
 countdown_hours = 2

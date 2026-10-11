@@ -374,6 +374,7 @@ _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
     "rotate_seconds": _FieldSpec("float"),
     "poll_seconds": _FieldSpec("float"),
     "live_poll_seconds": _FieldSpec("float"),
+    "shootout_poll_seconds": _FieldSpec("float"),
     "show_clock_when_idle": _FieldSpec("bool"),
     "prefer_favourite": _FieldSpec("bool"),
     "show_logos": _FieldSpec("bool"),
