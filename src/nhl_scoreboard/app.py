@@ -149,6 +149,9 @@ class Scene:
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
+    #: Set only for ``goal`` -- the scoring team's abbreviation, for the
+    #: screen's colour and name (#265).
+    goal_team: str = ""
     #: Set only for ``three_stars`` -- the NHL's three stars of a finished
     #: favourite game, ranked, per-game stats (#156).
     stars: tuple[Star, ...] | None = None
@@ -325,9 +328,10 @@ class ScoreboardApp:
         #: sighting without firing, so a game already 3-1 at startup does not
         #: fire a goal. Keyed by team too: two followed teams can meet (#260).
         self._known_scores: dict[tuple[int, str], int] = {}
-        #: (game id, monotonic time) of the most recent followed-team goal,
-        #: for how long the goal scene stays up.
-        self.last_goal: tuple[int, float] | None = None
+        #: (game id, monotonic time, scoring team) of the most recent
+        #: followed-team goal, for how long the goal scene stays up and
+        #: whose colour and name it shows (#265).
+        self.last_goal: tuple[int, float, str] | None = None
         #: game id -> (fetched at, followed teams' own GoalEvents seen so far
         #: in that game's scoring array). Followed teams only (#260), same
         #: scoping precedent as goal detection and the PP indicator (#122).
@@ -947,7 +951,7 @@ class ScoreboardApp:
             game.home.score,
             game.home.abbrev,
         )
-        self.last_goal = (game.id, self.monotonic())
+        self.last_goal = (game.id, self.monotonic(), team)
         if team != favourite:
             return
         if self._horn_muted():
@@ -1653,13 +1657,13 @@ class ScoreboardApp:
         if detail is not None:
             return detail
         if self.last_goal is not None:
-            goal_game_id, goal_time = self.last_goal
+            goal_game_id, goal_time, goal_team = self.last_goal
             goal_game = next((g for g in self.games if g.id == goal_game_id), None)
             if (
                 goal_game is not None
                 and self.monotonic() - goal_time < self.settings.scoreboard.goal_flash_seconds
             ):
-                return Scene("goal", goal_game)
+                return Scene("goal", goal_game, goal_team=goal_team)
         stars = self._three_stars_override()
         return stars if stars is not None else scene
 
@@ -1884,6 +1888,8 @@ class ScoreboardApp:
             changes["game"] = april_fools.swap_game(scene.game)
         if scene.goal_event is not None:
             changes["goal_event"] = april_fools.swap_goal(scene.goal_event)
+        if scene.goal_team:
+            changes["goal_team"] = april_fools.rename(scene.goal_team)
         if scene.stars is not None:
             changes["stars"] = tuple(april_fools.swap_star(s) for s in scene.stars)
         if scene.standings is not None:
@@ -1899,7 +1905,7 @@ class ScoreboardApp:
         if scene.kind == "game":
             r.draw_game(self.canvas, self.with_situation(scene.game))
         elif scene.kind == "goal":
-            r.draw_goal(self.canvas, scene.game)
+            r.draw_goal(self.canvas, scene.game, scene.goal_team or favourite)
         elif scene.kind == "goal_detail":
             r.draw_goal_detail(self.canvas, scene.game, scene.goal_event)
         elif scene.kind == "three_stars":

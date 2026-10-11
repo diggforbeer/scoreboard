@@ -155,6 +155,13 @@ def test_goal_detail_and_three_stars_relabel_in_step_with_the_game():
     assert scene.stars[0].team_abbrev == "MIL"
 
 
+def test_the_goal_screens_scoring_team_relabels_too():
+    scene = ScoreboardApp._april_fools_scene(Scene("goal", goal_team="NSH"))
+    assert scene.goal_team == "MIL"
+    other = ScoreboardApp._april_fools_scene(Scene("goal", goal_team="DAL"))
+    assert other.goal_team == "DAL"
+
+
 def test_conference_leaders_relabel_without_moving_anyone():
     rows = tuple(conference(nsh_at=3)[:5])
     scene = ScoreboardApp._april_fools_scene(Scene("conference_leaders", standings=rows))

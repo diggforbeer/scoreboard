@@ -24,7 +24,7 @@ from ..nhl.models import (
 )
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
-from .teams import team_color, team_secondary_color
+from .teams import team_color, team_name, team_secondary_color
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +38,9 @@ ACCENT = (255, 210, 0)
 SUBDUED = (110, 110, 110)
 #: A past meeting lost (#168); a win reuses LIVE's green.
 LOSS = (235, 50, 50)
+#: The GOAL screen's two coloured lines (#265): GOAL, then the scoring team.
+GOAL_BASELINE = 11
+GOAL_TEAM_BASELINE = 19
 
 
 class Renderer:
@@ -257,46 +260,35 @@ class Renderer:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
         self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
 
-    def draw_goal(self, canvas: Any, game: Game) -> None:
-        """A goal celebration: GOAL in big amber type, current score below.
+    def draw_goal(self, canvas: Any, game: Game, scorer: str) -> None:
+        """A goal celebration: GOAL and the scoring team's name in its colour (#265).
 
-        Fires for a followed team's own goal (the favourite's, or an
-        ``also_follow`` team's, #260). There is no separate "who scored" to
-        thread through -- the whole frame is the celebration, not a variant
-        of the normal one.
+        ``scorer`` is the scoring team's abbreviation -- the favourite's, or
+        an ``also_follow`` team's (#260) -- so a red-zone goal from another
+        game says who scored. The current score sits on the bottom line.
         """
         if self.logos is not None:
             away = self.logos.get(game.away.abbrev)
             home = self.logos.get(game.home.abbrev)
             if away is not None and home is not None:
-                self._draw_goal_with_logos(canvas, game, away, home)
+                canvas.Clear()
+                left, right = self._draw_logos(canvas, away, home)
+                score = f"{game.away.score}-{game.home.score}"
+                self._draw_goal_lines(canvas, scorer, left, right, score)
                 return
-        self._draw_goal_text(canvas, game)
-
-    def _draw_goal_with_logos(self, canvas: Any, game: Game, away: Logo, home: Logo) -> None:
         canvas.Clear()
-        goal_baseline = 13
-        score_baseline = self.height - 3
-
-        left, right = self._draw_logos(canvas, away, home)
-        centre = (left + right) // 2
-        self.text_center(canvas, self.fonts.large, centre, goal_baseline, ACCENT, "GOAL")
-        self.text_center(
-            canvas,
-            self.fonts.small,
-            centre,
-            score_baseline,
-            WHITE,
-            f"{game.away.score}-{game.home.score}",
-        )
-
-    def _draw_goal_text(self, canvas: Any, game: Game) -> None:
-        canvas.Clear()
-        goal_baseline = 13
-        score_baseline = self.height - 3
-        self.text_center(canvas, self.fonts.large, self.width // 2, goal_baseline, ACCENT, "GOAL")
         matchup = f"{game.away.abbrev} {game.away.score}-{game.home.score} {game.home.abbrev}"
-        self.text_center(canvas, self.fonts.small, self.width // 2, score_baseline, WHITE, matchup)
+        self._draw_goal_lines(canvas, scorer, 0, self.width, matchup)
+
+    def _draw_goal_lines(self, canvas: Any, scorer: str, left: int, right: int, score: str) -> None:
+        centre = (left + right) // 2
+        rgb = team_color(scorer)
+        self.text_center(canvas, self.fonts.large, centre, GOAL_BASELINE, rgb, "GOAL")
+        name = team_name(scorer)
+        if text_width(self.fonts.small, name) > right - left:
+            name = scorer
+        self.text_center(canvas, self.fonts.small, centre, GOAL_TEAM_BASELINE, rgb, name)
+        self.text_center(canvas, self.fonts.small, centre, self.height - 3, WHITE, score)
 
     def draw_goal_detail(self, canvas: Any, game: Game, event: GoalEvent) -> None:
         """Who scored: name, season goal total, assist(s) -- #122 phase 2.

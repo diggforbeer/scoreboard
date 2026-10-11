@@ -255,7 +255,7 @@ With a `favourite_team` set (the default, `NSH`), the board follows your team's 
 | Morning of a game (or no game today) | **Preview** — logos, `TONIGHT` / `TOMORROW` / `SAT OCT 4`, start time |
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
-| Your team scores | **GOAL** — a celebration screen, for `goal_flash_seconds`, then back to live |
+| Your team scores | **GOAL** — "GOAL" and the team's name (`NASHVILLE`) in its colours, with the score, for `goal_flash_seconds`, then back to live |
 | Game just went final | **3 STARS** — the NHL's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |

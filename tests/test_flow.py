@@ -1445,6 +1445,7 @@ def test_a_followed_teams_goal_interrupts_whichever_game_is_up_without_the_horn(
     client.today[0] = _live(client.today[0], away=1)  # SEA scores at CGY
     tick(app, clock, seconds=1)
     assert scene(app) == ("goal", 9)
+    assert app.select_scene().goal_team == "SEA", "the screen says who scored (#265)"
     assert app.horn.calls == [], "the horn is the favourite's alone"
 
 
@@ -1455,6 +1456,7 @@ def test_the_favourites_goal_still_sounds_the_horn_while_following_others(follow
     client.today[1] = _live(client.today[1], home=1)
     tick(app, clock, seconds=1)
     assert scene(app) == ("goal", 1)
+    assert app.select_scene().goal_team == FAV
     assert app.horn.calls == [FAV]
 
 
