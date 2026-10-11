@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { TYPING_DELAY_MS, useAutosave } from './autosave'
+import { AutosaveToast } from './AutosaveToast'
+
 // Python admin server (nhl_scoreboard.admin_server) -- one port serves both
 // this page's own production build and its WebSocket (#178 story 10); in
 // local dev, run it separately alongside the Vite dev server:
@@ -101,6 +104,8 @@ const US_TIMEZONES = [
   ['America/Anchorage', 'Alaska (America/Anchorage)'],
   ['Pacific/Honolulu', 'Hawaii (Pacific/Honolulu)'],
 ] as const
+
+const NOT_CONNECTED_ERROR = 'Not connected to the board -- wait for reconnect and try again.'
 
 type ConnectionState = 'connecting' | 'open' | 'closed'
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -313,9 +318,14 @@ function App() {
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [version, setVersion] = useState<string | null>(null)
 
-  const [audio, setAudio] = useState<AudioConfig | null>(null)
-  const [audioSaveStatus, setAudioSaveStatus] = useState<SaveStatus>('idle')
-  const [audioSaveError, setAudioSaveError] = useState<string | null>(null)
+  // Sections that autosave (#273). Panel and Status keep a Save button:
+  // a wrong Panel setting can leave the panel dark, and unticking Status
+  // "enabled" turns this very page off, where Undo can't reach it.
+  const [audioState, audioSave] = useAutosave<AudioConfig>(
+    (v) => save('audio', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const audio = audioState.value
   const [hornTesting, setHornTesting] = useState(false)
   const [hornTestMessage, setHornTestMessage] = useState<{ text: string; ok: boolean } | null>(
     null,
@@ -330,9 +340,18 @@ function App() {
     ok: boolean
   } | null>(null)
 
-  const [scoreboard, setScoreboard] = useState<ScoreboardConfig | null>(null)
-  const [scoreboardSaveStatus, setScoreboardSaveStatus] = useState<SaveStatus>('idle')
-  const [scoreboardSaveError, setScoreboardSaveError] = useState<string | null>(null)
+  const [scoreboardState, scoreboardSave] = useAutosave<ScoreboardConfig>((v) => {
+    // show_standings is in the payload the server sends (it's a real
+    // ScoreboardConfig field, still read for the derived-default rotation
+    // on a board with no explicit [[rotation]]) but no longer one this
+    // page edits directly or validates on save -- the Rotation section's
+    // own list is the authoritative, admin-editable control for whether
+    // "standings" appears in the idle rotation now (#150/#151). Same
+    // strip-before-send precedent as savePanel's pitch_mm below.
+    const { show_standings: _showStandings, ...data } = v
+    return save('scoreboard', data)
+  }, NOT_CONNECTED_ERROR)
+  const scoreboard = scoreboardState.value
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
@@ -342,23 +361,28 @@ function App() {
   const [panelSaveStatus, setPanelSaveStatus] = useState<SaveStatus>('idle')
   const [panelSaveError, setPanelSaveError] = useState<string | null>(null)
 
-  const [nightMode, setNightMode] = useState<NightModeConfig | null>(null)
-  const [nightModeSaveStatus, setNightModeSaveStatus] = useState<SaveStatus>('idle')
-  const [nightModeSaveError, setNightModeSaveError] = useState<string | null>(null)
+  const [nightModeState, nightModeSave] = useAutosave<NightModeConfig>(
+    (v) => save('night_mode', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const nightMode = nightModeState.value
 
-  const [wifi, setWifi] = useState<WifiConfig | null>(null)
-  const [wifiSaveStatus, setWifiSaveStatus] = useState<SaveStatus>('idle')
-  const [wifiSaveError, setWifiSaveError] = useState<string | null>(null)
+  const [wifiState, wifiSave] = useAutosave<WifiConfig>((v) => save('wifi', v), NOT_CONNECTED_ERROR)
+  const wifi = wifiState.value
 
-  const [rotation, setRotation] = useState<RotationRow[] | null>(null)
-  const [rotationSaveStatus, setRotationSaveStatus] = useState<SaveStatus>('idle')
-  const [rotationSaveError, setRotationSaveError] = useState<string | null>(null)
+  const [rotationState, rotationSave] = useAutosave<RotationRow[]>(
+    (v) => save('rotation', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const rotation = rotationState.value
 
-  const [holiday, setHoliday] = useState<HolidayConfig | null>(null)
+  const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
+    (v) => save('holiday', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const holiday = holidayState.value
   const [holidayOptions, setHolidayOptions] = useState<HolidayOption[]>([])
   const [flybyFrequencies, setFlybyFrequencies] = useState<FlybyFrequencyOption[]>([])
-  const [holidaySaveStatus, setHolidaySaveStatus] = useState<SaveStatus>('idle')
-  const [holidaySaveError, setHolidaySaveError] = useState<string | null>(null)
 
   const [update, setUpdate] = useState<UpdateConfig | null>(null)
   // 'checking'/'applying' cover the gap between clicking the button and the
@@ -396,6 +420,14 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
+    const autosaved = [
+      audioSave,
+      scoreboardSave,
+      nightModeSave,
+      wifiSave,
+      rotationSave,
+      holidaySave,
+    ]
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
     function connect() {
@@ -411,6 +443,7 @@ function App() {
         // stuck on "Rebooting the board now..." forever, even once the
         // board was demonstrably back and answering again.
         setRebooting(false)
+        for (const section of autosaved) section.retryUnsent()
       }
       // No reconnect loop here originally meant a dropped connection (a
       // backgrounded phone browser tab, a brief WiFi blip) stayed dead
@@ -422,6 +455,7 @@ function App() {
       // delay -- this is a LAN admin page, not worth exponential backoff.
       socket.onclose = () => {
         setConnection('closed')
+        for (const section of autosaved) section.connectionLost()
         if (!cancelled) reconnectTimer = setTimeout(connect, 2000)
       }
       socket.onmessage = (event) => {
@@ -431,15 +465,15 @@ function App() {
             setVersion(message.value)
             break
           case 'config':
-            if (message.section === 'audio') setAudio(message.data)
-            else if (message.section === 'scoreboard') setScoreboard(message.data)
+            if (message.section === 'audio') audioSave.receiveConfig(message.data)
+            else if (message.section === 'scoreboard') scoreboardSave.receiveConfig(message.data)
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
-            else if (message.section === 'night_mode') setNightMode(message.data)
-            else if (message.section === 'wifi') setWifi(message.data)
-            else if (message.section === 'rotation') setRotation(message.data)
+            else if (message.section === 'night_mode') nightModeSave.receiveConfig(message.data)
+            else if (message.section === 'wifi') wifiSave.receiveConfig(message.data)
+            else if (message.section === 'rotation') rotationSave.receiveConfig(message.data)
             else if (message.section === 'holiday') {
-              setHoliday(message.data)
+              holidaySave.receiveConfig(message.data)
               setHolidayOptions(message.available)
               setFlybyFrequencies(message.frequencies)
             } else if (message.section === 'update') {
@@ -463,14 +497,14 @@ function App() {
               })
             break
           case 'saved':
-            if (message.section === 'audio') setAudioSaveStatus('saved')
-            else if (message.section === 'scoreboard') setScoreboardSaveStatus('saved')
+            if (message.section === 'audio') audioSave.receiveSaved()
+            else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
-            else if (message.section === 'night_mode') setNightModeSaveStatus('saved')
-            else if (message.section === 'wifi') setWifiSaveStatus('saved')
-            else if (message.section === 'rotation') setRotationSaveStatus('saved')
-            else if (message.section === 'holiday') setHolidaySaveStatus('saved')
+            else if (message.section === 'night_mode') nightModeSave.receiveSaved()
+            else if (message.section === 'wifi') wifiSave.receiveSaved()
+            else if (message.section === 'rotation') rotationSave.receiveSaved()
+            else if (message.section === 'holiday') holidaySave.receiveSaved()
             break
           case 'horn_uploaded':
             setHornUploading(false)
@@ -508,11 +542,9 @@ function App() {
               const team = hornActionTeamRef.current
               setHornActionMessage(team ? { team, text: message.message, ok: false } : null)
             } else if (message.section === 'audio') {
-              setAudioSaveStatus('error')
-              setAudioSaveError(message.message)
+              audioSave.receiveError(message.message)
             } else if (message.section === 'scoreboard') {
-              setScoreboardSaveStatus('error')
-              setScoreboardSaveError(message.message)
+              scoreboardSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -520,17 +552,13 @@ function App() {
               setPanelSaveStatus('error')
               setPanelSaveError(message.message)
             } else if (message.section === 'night_mode') {
-              setNightModeSaveStatus('error')
-              setNightModeSaveError(message.message)
+              nightModeSave.receiveError(message.message)
             } else if (message.section === 'wifi') {
-              setWifiSaveStatus('error')
-              setWifiSaveError(message.message)
+              wifiSave.receiveError(message.message)
             } else if (message.section === 'rotation') {
-              setRotationSaveStatus('error')
-              setRotationSaveError(message.message)
+              rotationSave.receiveError(message.message)
             } else if (message.section === 'holiday') {
-              setHolidaySaveStatus('error')
-              setHolidaySaveError(message.message)
+              holidaySave.receiveError(message.message)
             }
             break
           case 'checking':
@@ -577,7 +605,7 @@ function App() {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       socketRef.current?.close()
     }
-  }, [])
+  }, [audioSave, scoreboardSave, nightModeSave, wifiSave, rotationSave, holidaySave])
 
   // Logs are opt-in (#197): subscribe only while the tab is showing, and
   // again after a reconnect (`connection` flips back to 'open').
@@ -602,8 +630,6 @@ function App() {
     }
   }, [logLines])
 
-  const NOT_CONNECTED_ERROR = 'Not connected to the board -- wait for reconnect and try again.'
-
   // Returns whether the message actually went out. A closed/reconnecting
   // socket used to fail here silently (a plain `return`, no signal to the
   // caller) -- every saveXxx handler below now surfaces that as a visible
@@ -618,33 +644,23 @@ function App() {
     return true
   }
 
-  function saveAudio(event: React.FormEvent) {
-    event.preventDefault()
-    if (!audio) return
-    setAudioSaveStatus('saving')
-    setAudioSaveError(null)
-    if (!save('audio', audio)) {
-      setAudioSaveStatus('error')
-      setAudioSaveError(NOT_CONNECTED_ERROR)
-    }
+  // A typed number box: waits for the pause, and an empty or unparseable
+  // box ("", "8e") holds its section's save until it's a number again.
+  function numberEdit<T>(
+    section: { edit(value: T, delayMs: number, field: string, invalid: boolean): void },
+    event: React.ChangeEvent<HTMLInputElement>,
+    next: T,
+    field = event.target.id,
+  ) {
+    const input = event.target
+    section.edit(next, TYPING_DELAY_MS, field, input.value === '' || input.validity.badInput)
   }
 
-  function saveScoreboard(event: React.FormEvent) {
-    event.preventDefault()
-    if (!scoreboard) return
-    setScoreboardSaveStatus('saving')
-    setScoreboardSaveError(null)
-    // show_standings is in the payload the server sends (it's a real
-    // ScoreboardConfig field, still read for the derived-default rotation
-    // on a board with no explicit [[rotation]]) but no longer one this
-    // page edits directly or validates on save -- the Rotation section's
-    // own list is the authoritative, admin-editable control for whether
-    // "standings" appears in the idle rotation now (#150/#151). Same
-    // strip-before-send precedent as savePanel's pitch_mm above.
-    const { show_standings: _showStandings, ...data } = scoreboard
-    if (!save('scoreboard', data)) {
-      setScoreboardSaveStatus('error')
-      setScoreboardSaveError(NOT_CONNECTED_ERROR)
+  // Enter in a typed field saves now instead of waiting for the pause.
+  function flushOnSubmit(section: { flush(): void }) {
+    return (event: React.FormEvent) => {
+      event.preventDefault()
+      section.flush()
     }
   }
 
@@ -674,72 +690,28 @@ function App() {
     }
   }
 
-  function saveNightMode(event: React.FormEvent) {
-    event.preventDefault()
-    if (!nightMode) return
-    setNightModeSaveStatus('saving')
-    setNightModeSaveError(null)
-    if (!save('night_mode', nightMode)) {
-      setNightModeSaveStatus('error')
-      setNightModeSaveError(NOT_CONNECTED_ERROR)
-    }
-  }
-
-  function saveWifi(event: React.FormEvent) {
-    event.preventDefault()
-    if (!wifi) return
-    setWifiSaveStatus('saving')
-    setWifiSaveError(null)
-    if (!save('wifi', wifi)) {
-      setWifiSaveStatus('error')
-      setWifiSaveError(NOT_CONNECTED_ERROR)
-    }
-  }
-
-  function saveRotation(event: React.FormEvent) {
-    event.preventDefault()
-    if (!rotation) return
-    setRotationSaveStatus('saving')
-    setRotationSaveError(null)
-    if (!save('rotation', rotation)) {
-      setRotationSaveStatus('error')
-      setRotationSaveError(NOT_CONNECTED_ERROR)
-    }
-  }
-
-  function saveHoliday(event: React.FormEvent) {
-    event.preventDefault()
-    if (!holiday) return
-    setHolidaySaveStatus('saving')
-    setHolidaySaveError(null)
-    if (!save('holiday', holiday)) {
-      setHolidaySaveStatus('error')
-      setHolidaySaveError(NOT_CONNECTED_ERROR)
-    }
-  }
-
   function toggleHolidayTheme(name: string, ticked: boolean) {
     if (!holiday) return
     // Keep registry order, whatever order the boxes were ticked in.
     const themes = holidayOptions
       .map((option) => option.name)
       .filter((n) => (n === name ? ticked : holiday.themes.includes(n)))
-    setHoliday({ ...holiday, themes })
+    holidaySave.edit({ ...holiday, themes })
   }
 
   function updateRow(index: number, row: RotationRow) {
     if (!rotation) return
-    setRotation(rotation.map((r, i) => (i === index ? row : r)))
+    rotationSave.edit(rotation.map((r, i) => (i === index ? row : r)))
   }
 
   function removeRow(index: number) {
     if (!rotation) return
-    setRotation(rotation.filter((_, i) => i !== index))
+    rotationSave.edit(rotation.filter((_, i) => i !== index))
   }
 
   function addRow() {
     if (!rotation || rotation.length >= ROTATION_MAX_ROWS) return
-    setRotation([...rotation, { screen: ROTATION_SCREENS[0], seconds: 8 }])
+    rotationSave.edit([...rotation, { screen: ROTATION_SCREENS[0], seconds: 8 }])
   }
 
   function moveRow(index: number, delta: -1 | 1) {
@@ -748,7 +720,7 @@ function App() {
     if (target < 0 || target >= rotation.length) return
     const next = [...rotation]
     ;[next[index], next[target]] = [next[target], next[index]]
-    setRotation(next)
+    rotationSave.edit(next)
   }
 
   function checkForUpdate() {
@@ -969,7 +941,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Scoreboard</h2>
           {scoreboard ? (
-            <form onSubmit={saveScoreboard}>
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-favourite-team">
                   Favourite team
@@ -979,7 +951,9 @@ function App() {
                   style={{ width: 'auto' }}
                   id="sb-favourite-team"
                   value={scoreboard.favourite_team}
-                  onChange={(e) => setScoreboard({ ...scoreboard, favourite_team: e.target.value })}
+                  onChange={(e) =>
+                    scoreboardSave.edit({ ...scoreboard, favourite_team: e.target.value })
+                  }
                 >
                   <option value="">(none)</option>
                   {NHL_TEAMS.map(([abbrev, name]) => (
@@ -1011,7 +985,7 @@ function App() {
                           id={`sb-follow-${abbrev}`}
                           checked={scoreboard.also_follow.includes(abbrev)}
                           onChange={(e) =>
-                            setScoreboard({
+                            scoreboardSave.edit({
                               ...scoreboard,
                               also_follow: e.target.checked
                                 ? [...scoreboard.also_follow, abbrev]
@@ -1041,7 +1015,7 @@ function App() {
                   style={{ width: 'auto' }}
                   id="sb-timezone"
                   value={scoreboard.timezone}
-                  onChange={(e) => setScoreboard({ ...scoreboard, timezone: e.target.value })}
+                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, timezone: e.target.value })}
                 >
                   {!US_TIMEZONES.some(([zone]) => zone === scoreboard.timezone) && (
                     <option value={scoreboard.timezone}>{scoreboard.timezone}</option>
@@ -1080,8 +1054,9 @@ function App() {
                     step="any"
                     value={scoreboard[key]}
                     onChange={(e) =>
-                      setScoreboard({ ...scoreboard, [key]: Number(e.target.value) })
+                      numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
                     }
+                    onBlur={scoreboardSave.flush}
                   />
                 </div>
               ))}
@@ -1102,7 +1077,9 @@ function App() {
                     type="checkbox"
                     id={`sb-${key}`}
                     checked={scoreboard[key]}
-                    onChange={(e) => setScoreboard({ ...scoreboard, [key]: e.target.checked })}
+                    onChange={(e) =>
+                      scoreboardSave.edit({ ...scoreboard, [key]: e.target.checked })
+                    }
                   />
                   <label className="form-check-label" htmlFor={`sb-${key}`}>
                     {label}
@@ -1118,23 +1095,15 @@ function App() {
                   style={{ width: 'auto' }}
                   id="sb-logo-variant"
                   value={scoreboard.logo_variant}
-                  onChange={(e) => setScoreboard({ ...scoreboard, logo_variant: e.target.value })}
+                  onChange={(e) =>
+                    scoreboardSave.edit({ ...scoreboard, logo_variant: e.target.value })
+                  }
                 >
                   <option value="dark">dark</option>
                   <option value="light">light</option>
                 </select>
               </div>
 
-              <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={scoreboardSaveStatus === 'saving'}
-                >
-                  Save Scoreboard
-                </button>
-                {saveFeedback(scoreboardSaveStatus, scoreboardSaveError)}
-              </div>
             </form>
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
@@ -1358,7 +1327,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Idle rotation</h2>
           {rotation ? (
-            <form onSubmit={saveRotation}>
+            <form onSubmit={flushOnSubmit(rotationSave)}>
               <p className="text-body-secondary small">
                 Screens shown when the favourite is not live, in this order. Up to{' '}
                 {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
@@ -1385,7 +1354,17 @@ function App() {
                     step="any"
                     min="0"
                     value={row.seconds}
-                    onChange={(e) => updateRow(i, { ...row, seconds: Number(e.target.value) })}
+                    onChange={(e) =>
+                      numberEdit(
+                        rotationSave,
+                        e,
+                        rotation.map((r, j) =>
+                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                        ),
+                        `rotation-seconds-${i}`,
+                      )
+                    }
+                    onBlur={rotationSave.flush}
                   />
                   <span className="text-body-secondary small">seconds</span>
                   <button
@@ -1424,14 +1403,6 @@ function App() {
                 >
                   Add row
                 </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={rotationSaveStatus === 'saving'}
-                >
-                  Save idle rotation
-                </button>
-                {saveFeedback(rotationSaveStatus, rotationSaveError)}
               </div>
             </form>
           ) : (
@@ -1492,14 +1463,14 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Night mode</h2>
           {nightMode ? (
-            <form onSubmit={saveNightMode}>
+            <form onSubmit={flushOnSubmit(nightModeSave)}>
               <div className="form-check mb-3">
                 <input
                   className="form-check-input"
                   type="checkbox"
                   id="night-mode-enabled"
                   checked={nightMode.enabled}
-                  onChange={(e) => setNightMode({ ...nightMode, enabled: e.target.checked })}
+                  onChange={(e) => nightModeSave.edit({ ...nightMode, enabled: e.target.checked })}
                 />
                 <label className="form-check-label" htmlFor="night-mode-enabled">
                   Night mode enabled
@@ -1516,7 +1487,13 @@ function App() {
                     id="night-mode-start-time"
                     type="text"
                     value={nightMode.start_time}
-                    onChange={(e) => setNightMode({ ...nightMode, start_time: e.target.value })}
+                    onChange={(e) =>
+                      nightModeSave.edit(
+                        { ...nightMode, start_time: e.target.value },
+                        TYPING_DELAY_MS,
+                      )
+                    }
+                    onBlur={nightModeSave.flush}
                   />
                 </div>
                 <div className="mb-3">
@@ -1529,7 +1506,13 @@ function App() {
                     id="night-mode-end-time"
                     type="text"
                     value={nightMode.end_time}
-                    onChange={(e) => setNightMode({ ...nightMode, end_time: e.target.value })}
+                    onChange={(e) =>
+                      nightModeSave.edit(
+                        { ...nightMode, end_time: e.target.value },
+                        TYPING_DELAY_MS,
+                      )
+                    }
+                    onBlur={nightModeSave.flush}
                   />
                 </div>
               </div>
@@ -1547,8 +1530,12 @@ function App() {
                   max="100"
                   value={nightMode.dim_brightness}
                   onChange={(e) =>
-                    setNightMode({ ...nightMode, dim_brightness: Number(e.target.value) })
+                    numberEdit(nightModeSave, e, {
+                      ...nightMode,
+                      dim_brightness: Number(e.target.value),
+                    })
                   }
+                  onBlur={nightModeSave.flush}
                 />
               </div>
               <div className="mb-3">
@@ -1560,7 +1547,9 @@ function App() {
                   style={{ width: 'auto' }}
                   id="night-mode-suppress-scope"
                   value={nightMode.suppress_scope}
-                  onChange={(e) => setNightMode({ ...nightMode, suppress_scope: e.target.value })}
+                  onChange={(e) =>
+                    nightModeSave.edit({ ...nightMode, suppress_scope: e.target.value })
+                  }
                 >
                   <option value="tracked">tracked (favourite's game only)</option>
                   <option value="all">all (any live game)</option>
@@ -1579,19 +1568,13 @@ function App() {
                   min="0"
                   value={nightMode.cooldown_minutes}
                   onChange={(e) =>
-                    setNightMode({ ...nightMode, cooldown_minutes: Number(e.target.value) })
+                    numberEdit(nightModeSave, e, {
+                      ...nightMode,
+                      cooldown_minutes: Number(e.target.value),
+                    })
                   }
+                  onBlur={nightModeSave.flush}
                 />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={nightModeSaveStatus === 'saving'}
-                >
-                  Save Night mode
-                </button>
-                {saveFeedback(nightModeSaveStatus, nightModeSaveError)}
               </div>
             </form>
           ) : (
@@ -1608,7 +1591,7 @@ function App() {
             only tunes how long a join attempt waits before deciding it failed.
           </p>
           {wifi ? (
-            <form onSubmit={saveWifi}>
+            <form onSubmit={flushOnSubmit(wifiSave)}>
               <div className="mb-3">
                 <label className="form-label" htmlFor="wifi-connect-timeout-seconds">
                   Join attempt timeout (seconds)
@@ -1622,19 +1605,13 @@ function App() {
                   min="0"
                   value={wifi.connect_timeout_seconds}
                   onChange={(e) =>
-                    setWifi({ ...wifi, connect_timeout_seconds: Number(e.target.value) })
+                    numberEdit(wifiSave, e, {
+                      ...wifi,
+                      connect_timeout_seconds: Number(e.target.value),
+                    })
                   }
+                  onBlur={wifiSave.flush}
                 />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={wifiSaveStatus === 'saving'}
-                >
-                  Save Wi-Fi
-                </button>
-                {saveFeedback(wifiSaveStatus, wifiSaveError)}
               </div>
             </form>
           ) : (
@@ -1735,14 +1712,14 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Audio</h2>
           {audio ? (
-            <form onSubmit={saveAudio}>
+            <form onSubmit={flushOnSubmit(audioSave)}>
               <div className="form-check mb-3">
                 <input
                   className="form-check-input"
                   type="checkbox"
                   id="audio-enabled"
                   checked={audio.enabled}
-                  onChange={(e) => setAudio({ ...audio, enabled: e.target.checked })}
+                  onChange={(e) => audioSave.edit({ ...audio, enabled: e.target.checked })}
                 />
                 <label className="form-check-label" htmlFor="audio-enabled">
                   Goal horn enabled
@@ -1757,7 +1734,10 @@ function App() {
                   id="audio-device"
                   type="text"
                   value={audio.device}
-                  onChange={(e) => setAudio({ ...audio, device: e.target.value })}
+                  onChange={(e) =>
+                    audioSave.edit({ ...audio, device: e.target.value }, TYPING_DELAY_MS)
+                  }
+                  onBlur={audioSave.flush}
                 />
               </div>
               <div className="mb-3">
@@ -1769,7 +1749,10 @@ function App() {
                   id="audio-horn-dir"
                   type="text"
                   value={audio.horn_dir}
-                  onChange={(e) => setAudio({ ...audio, horn_dir: e.target.value })}
+                  onChange={(e) =>
+                    audioSave.edit({ ...audio, horn_dir: e.target.value }, TYPING_DELAY_MS)
+                  }
+                  onBlur={audioSave.flush}
                 />
               </div>
               <div className="mb-3">
@@ -1784,18 +1767,11 @@ function App() {
                   max="100"
                   step="1"
                   value={audio.volume}
-                  onChange={(e) => setAudio({ ...audio, volume: Number(e.target.value) })}
+                  onChange={(e) =>
+                    audioSave.edit({ ...audio, volume: Number(e.target.value) }, TYPING_DELAY_MS)
+                  }
+                  onBlur={audioSave.flush}
                 />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={audioSaveStatus === 'saving'}
-                >
-                  Save Audio
-                </button>
-                {saveFeedback(audioSaveStatus, audioSaveError)}
               </div>
               <div className="d-flex align-items-center gap-3 mt-3">
                 <button
@@ -1936,7 +1912,7 @@ function App() {
               holiday only shows during its own dates, so leaving them all ticked is fine.
             </p>
             {holiday ? (
-              <form onSubmit={saveHoliday}>
+              <form onSubmit={flushOnSubmit(holidaySave)}>
                 <div className="form-check form-switch mb-3">
                   <input
                     className="form-check-input"
@@ -1944,7 +1920,7 @@ function App() {
                     role="switch"
                     id="holiday-enabled"
                     checked={holiday.enabled}
-                    onChange={(e) => setHoliday({ ...holiday, enabled: e.target.checked })}
+                    onChange={(e) => holidaySave.edit({ ...holiday, enabled: e.target.checked })}
                   />
                   <label className="form-check-label" htmlFor="holiday-enabled">
                     Holiday cheer on
@@ -1983,7 +1959,9 @@ function App() {
                           name="holiday-flyby-frequency"
                           id={`holiday-flyby-${option.name}`}
                           checked={holiday.flyby_frequency === option.name}
-                          onChange={() => setHoliday({ ...holiday, flyby_frequency: option.name })}
+                          onChange={() =>
+                            holidaySave.edit({ ...holiday, flyby_frequency: option.name })
+                          }
                         />
                         <label className="form-check-label" htmlFor={`holiday-flyby-${option.name}`}>
                           {option.label}{' '}
@@ -1996,16 +1974,6 @@ function App() {
                   </div>
                 </fieldset>
 
-                <div className="d-flex align-items-center gap-3">
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={holidaySaveStatus === 'saving'}
-                  >
-                    Save Holiday Cheer
-                  </button>
-                  {saveFeedback(holidaySaveStatus, holidaySaveError)}
-                </div>
               </form>
             ) : (
               <p className="text-body-secondary mb-0">waiting for server...</p>
@@ -2042,6 +2010,17 @@ function App() {
           </div>
         </div>
       )}
+
+      <AutosaveToast
+        sections={[
+          { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
+          { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
+          { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
+          { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },
+          { label: 'Audio', state: audioState, onUndo: audioSave.undo },
+          { label: 'Holiday Cheer', state: holidayState, onUndo: holidaySave.undo },
+        ]}
+      />
     </div>
   )
 }

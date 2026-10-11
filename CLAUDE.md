@@ -604,7 +604,8 @@ frequent ~6/h, each gap uniform over half to 1.5x the average). Presets, not
 minutes, by the owner's call: a fly-by is a "did you see that?" Easter egg,
 not the main event, so the default (occasional) is rarer than the old 5-20
 min gap, which `frequent` roughly matches. The old `flyby_min/max_minutes`
-keys aren't migrated, just warned about and ignored. Static decorations
+keys aren't migrated: they're `RETIRED_KEYS` (#277), ignored, logged
+once per process, and dropped the next time `[holiday]` is saved. Static decorations
 (pumpkins) only go on `clock`/`no_games` -- the 32px logos fill both edges of every
 game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
 (50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
@@ -1472,6 +1473,33 @@ when it was written; that history is left as-is rather than rewritten.
   it in by rename with the app tree, and restores the old one on
   rollback. A bundle with no `admin/` leaves the page untouched. One
   version signal for both: they always ship together.
+- **Autosave + Undo (#273).** Every section except Panel and Status saves
+  itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
+  the Save buttons are gone). One `AutosaveToast` bar pinned to the
+  bottom of the screen reports whichever section was edited last
+  ("Scoreboard saved ✓ · Undo"): a line at the foot of each section sat a
+  long scroll away from the field just changed, on a phone. Clicks (checkboxes, selects, rotation row buttons) save
+  at once; typed fields and the volume slider wait for a pause
+  (`TYPING_DELAY_MS`, 1s) or a blur, because every save goes live on the
+  board and a half-typed value would briefly apply, or fail validation.
+  A number box that's empty or doesn't parse ("", "8e") holds its whole
+  section's save, blur included, until it's a number again (`numberEdit`;
+  ported from the parallel #275, which caught it): clearing a box to
+  retype it otherwise saved 0 to the live board after the pause.
+  Panel keeps its Save (a wrong `hardware_mapping` is a silent dark panel;
+  the "Keep changes? Reverting in 30s" flow is #276), and so does Status
+  (unticking `enabled` turns the admin page itself off, out of Undo's
+  reach). Undo re-saves the confirmed values from before the latest burst
+  of edits, offered for `UNDO_WINDOW_MS` (10s). Two non-obvious rules in
+  the hook: the server echoes a section's config after every save, so an
+  echo is ignored while a newer local edit is unsent or in flight (or it
+  would clobber what you're typing); and a save the socket never
+  acknowledged counts as unsent again after a reconnect and is resent,
+  instead of the reconnect's fresh config silently replacing it. The
+  `e2e` tests cover autosave, a single save after typing (mutation-checked
+  by setting the delay to 0), a cleared box never saving (mutation-checked
+  too), and Undo; the hook has no unit tests of its
+  own, since the frontend has no JS test runner.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing
   WebSocket connection rather than a separate HTTP endpoint -- worth
@@ -1690,7 +1718,12 @@ so a stale one prints the wrong case. So:
 ## Config conventions
 
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
-  a typo must not stop the board booting. Invalid `[[rotation]]` entries
+  a typo must not stop the board booting. A setting a release *retires*
+  goes in `config.py`'s `RETIRED_KEYS` instead (#277): still ignored, but
+  logged once per process rather than warned about on every read (the
+  config is read several times per admin-page save, so an upgraded
+  board's leftover keys flooded the log), and `Settings.save` removes
+  them from the file the next time their section is saved. Invalid `[[rotation]]` entries
   (#150) follow the same convention: dropped with a warning, never fatal,
   never rendered on the panel.
 - Defaults are the Predators, `regular` mapping, 128×32, Central time
