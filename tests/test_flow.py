@@ -31,6 +31,7 @@ from nhl_scoreboard.nhl.models import (
     PlayerSeasonDetail,
     SeasonSeriesRecord,
     SeriesMeeting,
+    Shootout,
     SkaterLine,
     StandingsRow,
     Star,
@@ -117,6 +118,9 @@ class FlowClient:
         self.stars: dict[int, tuple[Star, ...]] = {}
         self.three_stars_calls: list[int] = []
         self.fail_three_stars = False
+        self.shootouts: dict[int, Shootout | None] = {}
+        self.shootout_calls: list[int] = []
+        self.fail_shootout = False
 
     def club_stats(self, team, date="now"):
         self.club_stats_calls.append(team)
@@ -135,6 +139,12 @@ class FlowClient:
 
     def situation(self, game_id):
         return None
+
+    def shootout(self, game_id):
+        self.shootout_calls.append(game_id)
+        if self.fail_shootout:
+            raise NHLApiError("boom")
+        return self.shootouts.get(game_id)
 
     def goal_scoring(self, game_id):
         return self.goal_events.get(game_id, ())

@@ -24,12 +24,14 @@ from .models import (
     GoalEvent,
     PlayerSeasonDetail,
     SeasonSeriesRecord,
+    Shootout,
     Situation,
     StandingsRow,
     Star,
     goal_events_from_landing,
     player_details_from_api,
     series_meetings_from_api,
+    shootout_from_landing,
     three_stars_from_landing,
 )
 
@@ -165,6 +167,19 @@ class NHLClient:
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             log.warning("Skipping malformed three stars for game %s: %s", game_id, exc)
             return ()
+
+    def shootout(self, game_id: int) -> Shootout | None:
+        """The shootout so far (#259), or None while landing has none yet.
+
+        Another request to the landing URL, polled on its own faster
+        schedule (``shootout_poll_seconds``) only during a shootout.
+        """
+        payload = self._get(f"/gamecenter/{game_id}/landing")
+        try:
+            return shootout_from_landing(payload)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Skipping malformed shootout for game %s: %s", game_id, exc)
+            return None
 
     def standings(self, date: str = "now") -> list[StandingsRow]:
         """Every team's current standings line, unsorted across conferences.
