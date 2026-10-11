@@ -96,12 +96,15 @@ show_clock_between_games = false
 # below; once any [[rotation]] table is present, rotate_seconds/
 # show_standings/show_clock_between_games above are no longer read for this
 # purpose. screen is one of "countdown_preview", "standings", "clock",
-# "matchup", "top_west", "top_east", "leaders". "matchup" (your team's
-# head-to-head record this season against its next opponent, then the
-# scores of the meetings so far for the second half of its time), "top_west"/
-# "top_east" (top five of that conference) and "leaders" (your team's top
-# goal scorer, top point getter and top two goalies) are never in the
-# default list -- they only show if you add them here. A screen with
+# "matchup", "top_west", "top_east", "leaders", "holiday". "matchup" (your
+# team's head-to-head record this season against its next opponent, then the
+# scores of the meetings so far for the second half of its time),
+# "top_west"/"top_east" (top five of that conference), "leaders" (your
+# team's top goal scorer, top point getter and top two goalies) and
+# "holiday" (a holiday's own screen: Dec 1-25, a twinkling tree in your
+# team's colours counting down to Christmas, with [holiday] on and
+# "christmas" ticked) are never in the default list -- they only show if
+# you add them here. A screen with
 # nothing to show right now (e.g. standings
 # before your team's season has started) is skipped for that pass, not
 # shown blank.
@@ -199,10 +202,36 @@ cooldown_minutes = 15
 # Seasonal decorations over the normal screens. Each holiday only appears
 # during its own dates, so leaving every one ticked is the normal setting.
 # Never drawn over a GOAL / goal-detail / three-stars screen. Off by default.
-#   halloween  Oct 1-31: a ghost floats across the board now and then
-#              (games included), and jack-o'-lanterns flank the clock.
+#   halloween        Oct 1-31: a ghost floats across the board now and then
+#                    (games included), and jack-o'-lanterns flank the clock.
+#   thanksgiving     The week up to US Thanksgiving: a turkey walks along the
+#                    bottom, and autumn leaves flank the clock.
+#   thanksgiving_ca  Canadian Thanksgiving's long weekend, same turkey. Not
+#                    listed by default; while ticked it takes that weekend
+#                    over from Halloween.
+#   christmas        Dec 1-26: Santa walks along the bottom dropping presents,
+#                    and presents with gentle snow flank the clock.
+#   new_year         Dec 31-Jan 1: a short fireworks show now and then, and
+#                    champagne with twinkling confetti flanks the clock.
+#   groundhog        Feb 2: a groundhog pops up and may see his shadow (decided
+#                    once a year); a sun or a cloud beside the clock says which.
+#   valentines       Feb 7-14: a beating heart floats across now and then,
+#                    and two beating hearts flank the clock.
+#   st_patricks      Mar 14-17: a leprechaun walks along the bottom picking up
+#                    gold coins, and shamrocks flank the clock.
+#   easter           The week up to Easter Sunday (calculated each year): a
+#                    bunny hops along the bottom, and eggs in your team's
+#                    colours (plus three others, changing daily) flank the
+#                    clock.
+#   canada_day       Jul 1: fireworks in red and white, and a Canadian flag
+#                    either side of the clock. Not listed by default.
+#   july_4th         Jul 4: fireworks in red, white and blue, and a US flag
+#                    either side of the clock.
 enabled = false
-themes = ["halloween"]
+themes = [
+  "halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks",
+  "easter", "july_4th",
+]
 
 # Random gap, in minutes, between fly-bys (the Halloween ghost).
 flyby_min_minutes = 5

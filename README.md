@@ -175,11 +175,12 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders, holiday
 # seconds = 10
-# "matchup" (season series vs. the next opponent, then each finished meeting), "top_west"/"top_east" (top five of
-# that conference) and "leaders" (your team's top goal scorer, top point getter and
-# top two goalies) only show if listed here.
+# "matchup" (season series vs. the next opponent, then each finished meeting),
+# "top_west"/"top_east" (top five of that conference), "leaders" (your team's top
+# goal scorer, top point getter and top two goalies) and "holiday" (Dec 1-25: a
+# Christmas tree counting down to the 25th) only show if listed here.
 
 [audio]
 enabled = true
@@ -206,7 +207,7 @@ cooldown_minutes = 15        # how long after that game ends before dimming resu
 
 [holiday]
 enabled = false              # seasonal decorations; each holiday only shows during its own dates
-themes = ["halloween"]       # which holidays to show
+themes = ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks", "easter", "july_4th"]
 flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
 flyby_max_minutes = 20
 
@@ -278,7 +279,17 @@ readable.
 
 `[holiday]` adds seasonal decorations on top. In October, a ghost floats
 across the board every so often (even during games, though never over a
-GOAL screen) and jack-o'-lanterns flank the clock.
+GOAL screen) and jack-o'-lanterns flank the clock. The week of Thanksgiving
+(US, or Canadian if you tick it), a turkey walks along the bottom instead,
+with autumn leaves beside the clock. Through December 26, Santa walks
+across dropping presents, and snow falls on a pile of presents beside the
+clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
+a groundhog who may or may not see his shadow; and the week up to
+Valentine's Day, hearts; St. Patrick's, a leprechaun collecting
+gold coins; and the week before Easter, a hopping bunny and eggs painted in
+team colours; and Canada Day and July 4th, fireworks and flags. Canadian
+Thanksgiving (`thanksgiving_ca`) and Canada Day (`canada_day`) are
+available but not ticked by default.
 
 ## Audio
 

@@ -24,6 +24,7 @@ EVERY_KIND = {
     "matchup_meetings",
     "conference_leaders",
     "leaders",
+    "christmas_tree",
     "clock",
     "no_games",
     "no_data",
@@ -143,14 +144,18 @@ def test_every_step_renders_on_panel(width):
             r.draw_leaders(c, scene.leaders, "NSH")
         elif scene.kind == "clock":
             r.draw_clock(c, NOW)
+        elif scene.kind == "christmas_tree":
+            r.draw_christmas_tree(c, NOW, "NSH")
         else:
             r.draw_message(c, scene.kind.upper())
         assert c.out_of_bounds == [], f"{scene.kind} drew off-panel"
         assert c.lit(), f"{scene.kind} drew nothing"
 
 
-def test_every_holiday_is_shown_and_named_correctly():
-    from nhl_scoreboard.display.holiday import HOLIDAY_NAMES
+def test_every_holidays_art_is_shown():
+    """Per distinct fly-by, not per name: both Thanksgivings share the turkey."""
+    from nhl_scoreboard.display.holiday import HOLIDAYS
 
-    holidays = {s.holiday for s in demo_steps("NSH", NOW) if s.holiday is not None}
-    assert holidays == set(HOLIDAY_NAMES)
+    named = [s.holiday for s in demo_steps("NSH", NOW) if s.holiday is not None]
+    assert all(name in HOLIDAYS for name in named)
+    assert {HOLIDAYS[n].flyby for n in named} == {h.flyby for h in HOLIDAYS.values()}
