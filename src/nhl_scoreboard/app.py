@@ -45,6 +45,7 @@ from .nhl.models import (
     MeetingResult,
     PlayerSeasonDetail,
     SeasonSeriesRecord,
+    Shootout,
     Situation,
     StandingsRow,
     Star,
@@ -290,6 +291,9 @@ class ScoreboardApp:
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
+        #: game id -> (fetched at, shootout, fetched after the game ended).
+        #: Same targets as situations, but for games in a shootout (#259).
+        self.shootouts: dict[int, tuple[float, Shootout | None, bool]] = {}
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
         #: if we watched it finish; estimated from the start time otherwise.
         self.ended_at: dict[int, datetime] = {}
@@ -427,6 +431,7 @@ class ScoreboardApp:
                 self.refresh_brightness()
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
             self.refresh_situations()
+            self.refresh_shootouts()
             self.refresh_goal_details()
             self.refresh_three_stars()
             self._sync_setup_server()
@@ -1694,7 +1699,8 @@ class ScoreboardApp:
             fetched_at = self.situations.get(game_id, (None, None))[0]
             if fetched_at is not None and now - fetched_at < interval:
                 continue
-            if game.in_intermission:
+            if game.in_intermission or game.in_shootout:
+                # No special teams in a shootout; refresh_shootouts() owns it.
                 self.situations[game_id] = (now, None)
                 continue
             try:
@@ -1704,11 +1710,63 @@ class ScoreboardApp:
                 situation = self.situations.get(game_id, (None, None))[1]
             self.situations[game_id] = (now, situation)
 
+    def shootout_targets(self) -> list[Game]:
+        """Shootout games to track: the favourite's and the on-screen one (#259).
+
+        Same scoping as situation_targets. A finished game stays a target
+        until one fetch has landed after it ended, so the grid ends on the
+        deciding shot rather than the last poll before the final horn.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        candidates = [g for g in self.games if favourite and g.involves(favourite)]
+        if self.games:
+            candidates.append(self.games[self.index])
+        targets: list[Game] = []
+        for game in candidates:
+            if game in targets or not game.in_shootout:
+                continue
+            if game.is_live or (game.is_final and not self._shootout_settled(game)):
+                targets.append(game)
+        return targets
+
+    def _shootout_settled(self, game: Game) -> bool:
+        entry = self.shootouts.get(game.id)
+        return entry is not None and entry[2]
+
+    def refresh_shootouts(self) -> None:
+        """Fetch each tracked shootout every ``shootout_poll_seconds`` (#259).
+
+        A failed fetch keeps the last good grid on screen, like situations.
+        """
+        now = self.monotonic()
+        interval = self.settings.scoreboard.shootout_poll_seconds
+        current = {g.id for g in self.games}
+        for game_id in list(self.shootouts):
+            if game_id not in current:
+                del self.shootouts[game_id]
+        for game in self.shootout_targets():
+            previous = self.shootouts.get(game.id, (None, None, False))
+            if previous[0] is not None and now - previous[0] < interval:
+                continue
+            try:
+                shootout = self.client.shootout(game.id)
+            except NHLApiError as exc:
+                log.debug("Shootout fetch for %s failed: %s", game.id, exc)
+                self.shootouts[game.id] = (now, previous[1], previous[2])
+                continue
+            self.shootouts[game.id] = (now, shootout, game.is_final)
+
     def with_situation(self, game: Game) -> Game:
         entry = self.situations.get(game.id)
-        if entry is None or entry[1] is None:
-            return game
-        return dataclasses.replace(game, situation=entry[1])
+        if entry is not None and entry[1] is not None:
+            game = dataclasses.replace(game, situation=entry[1])
+        shootout = self.shootouts.get(game.id)
+        if shootout is not None and shootout[1] is not None and game.shootout is None:
+            data = shootout[1]
+            if self.april_fools_active():
+                data = april_fools.swap_shootout(data)
+            game = dataclasses.replace(game, shootout=data)
+        return game
 
     def order(self, games: list[Game]) -> list[Game]:
         """Sort live-first, then optionally pin the favourite team to the front.
@@ -1727,6 +1785,8 @@ class ScoreboardApp:
     def poll_interval(self) -> float:
         """Poll harder while a game is actually in progress."""
         cfg = self.settings.scoreboard
+        if any(g.is_live and g.in_shootout for g in self.games):
+            return min(cfg.shootout_poll_seconds, cfg.live_poll_seconds)
         if any(g.is_live and not g.in_intermission for g in self.games):
             return cfg.live_poll_seconds
         return cfg.poll_seconds
@@ -1834,7 +1894,11 @@ class ScoreboardApp:
             favourite = april_fools.PRANK_AS
             scene = self._april_fools_scene(scene)
         if scene.kind == "game":
-            r.draw_game(self.canvas, self.with_situation(scene.game))
+            game = self.with_situation(scene.game)
+            if game.shows_shootout:
+                r.draw_shootout(self.canvas, game)
+            else:
+                r.draw_game(self.canvas, game)
         elif scene.kind == "goal":
             r.draw_goal(self.canvas, scene.game)
         elif scene.kind == "goal_detail":

@@ -17,6 +17,8 @@ from .nhl.models import (
     GoalieLine,
     MeetingResult,
     SeasonSeriesRecord,
+    Shootout,
+    ShootoutAttempt,
     Situation,
     SkaterLine,
     StandingsRow,
@@ -114,6 +116,20 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         9, other_away, other_home, "OFF", now, away_score=3, home_score=2, period=5, ot="SO"
     )
 
+    # Rounds are (away, home): g = goal, x = miss, - = not taken yet.
+    so_live = dataclasses.replace(
+        _game(10, away, home, "LIVE", now, away_score=2, home_score=2, period=5, ot="SO"),
+        shootout=_shootout(away, home, ["gx", "g-"]),
+    )
+    so_sudden = dataclasses.replace(
+        _game(11, away, home, "LIVE", now, away_score=3, home_score=3, period=5, ot="SO"),
+        shootout=_shootout(away, home, ["gx", "xg", "gg", "xx", "gx", "gg", "x-"]),
+    )
+    so_final = dataclasses.replace(
+        _game(12, away, home, "OFF", now, away_score=3, home_score=4, period=5, ot="SO"),
+        shootout=_shootout(away, home, ["xg", "gx", "xg"]),
+    )
+
     return [
         DemoStep(Scene("connecting")),
         DemoStep(Scene("preview", upcoming)),
@@ -136,6 +152,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("game", final)),
         DemoStep(Scene("game", final), use_logos=False),
         DemoStep(Scene("game", shootout)),
+        DemoStep(Scene("game", so_live)),
+        DemoStep(Scene("game", so_sudden)),
+        DemoStep(Scene("game", so_final)),
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
         DemoStep(Scene("conference_leaders", standings=_standings("")[:5])),
@@ -196,6 +215,17 @@ def _game(
         },
     }
     return Game.from_api(raw)
+
+
+def _shootout(away: str, home: str, rounds: list[str]) -> Shootout:
+    """A shootout from (away, home) rounds; the away team shoots first."""
+    attempts: list[ShootoutAttempt] = []
+    for pair in rounds:
+        for abbrev, mark in zip((away, home), pair, strict=True):
+            if mark != "-":
+                attempts.append(ShootoutAttempt(len(attempts) + 1, abbrev, mark == "g"))
+    goals = [sum(1 for a in attempts if a.scored and a.team_abbrev == t) for t in (away, home)]
+    return Shootout(tuple(attempts), away_goals=goals[0], home_goals=goals[1])
 
 
 def _situation(

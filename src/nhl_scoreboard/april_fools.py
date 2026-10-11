@@ -24,7 +24,7 @@ from __future__ import annotations
 import dataclasses
 from datetime import datetime
 
-from .nhl.models import Game, GoalEvent, StandingsRow, Star
+from .nhl.models import Game, GoalEvent, Shootout, StandingsRow, Star
 
 PRANK_TEAM = "NSH"
 PRANK_AS = "MIL"
@@ -42,7 +42,16 @@ def swap_game(game: Game) -> Game:
     """The same game with NSH's side relabelled -- scores, time, opponent untouched."""
     away = dataclasses.replace(game.away, abbrev=rename(game.away.abbrev))
     home = dataclasses.replace(game.home, abbrev=rename(game.home.abbrev))
-    return dataclasses.replace(game, away=away, home=home)
+    shootout = None if game.shootout is None else swap_shootout(game.shootout)
+    return dataclasses.replace(game, away=away, home=home, shootout=shootout)
+
+
+def swap_shootout(shootout: Shootout) -> Shootout:
+    """Shootout rows are found by abbreviation, so they follow the relabel (#259)."""
+    attempts = tuple(
+        dataclasses.replace(a, team_abbrev=rename(a.team_abbrev)) for a in shootout.attempts
+    )
+    return dataclasses.replace(shootout, attempts=attempts)
 
 
 def swap_goal(event: GoalEvent) -> GoalEvent:

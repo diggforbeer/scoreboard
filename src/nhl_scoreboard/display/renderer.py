@@ -257,6 +257,82 @@ class Renderer:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
         self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
 
+    #: Shootout grid (#259): a row per team (away on top), a column per
+    #: attempt. Cells are 9px discs/crosses on an 11px pitch.
+    _SO_ROW_CENTRES = (8, 20)
+    _SO_CELL_RADIUS = 4
+    _SO_CELL_PITCH = 11
+    _SO_CELLS_LEFT = 34
+    _SO_MIN_CELLS = 3
+
+    def draw_shootout(self, canvas: Any, game: Game) -> None:
+        """Away row over home row, one cell per attempt: green disc = goal, red X = miss.
+
+        Cells not yet taken are dim rings; the grid grows past three in
+        sudden death and, once it outgrows the panel, shows the most recent
+        attempts that fit. Rows are found by abbreviation (the first shooter
+        varies), so a team with one more attempt than the other just has one
+        more filled cell. No logos: the grid needs the width.
+        """
+        canvas.Clear()
+        shootout = game.shootout
+        finished = game.is_final
+        winner = None
+        if finished and shootout is not None and shootout.away_goals != shootout.home_goals:
+            winner = "away" if shootout.away_goals > shootout.home_goals else "home"
+
+        sides = (("away", game.away), ("home", game.home))
+        results = [
+            shootout.results_for(side.abbrev) if shootout is not None else () for _, side in sides
+        ]
+        goals = (shootout.away_goals, shootout.home_goals) if shootout is not None else (0, 0)
+        capacity = max(1, (self.width - self._SO_CELLS_LEFT - 2) // self._SO_CELL_PITCH)
+        rounds = max(self._SO_MIN_CELLS, *(len(r) for r in results))
+        first = max(0, rounds - capacity)
+
+        for (key, side), row, total, centre_y in zip(
+            sides, results, goals, self._SO_ROW_CENTRES, strict=True
+        ):
+            font = self.fonts.small
+            baseline = centre_y + 3
+            self.text(canvas, font, 2, baseline, team_color(side.abbrev), side.abbrev)
+            tally_colour = ACCENT if winner == key else WHITE
+            self.text_right(
+                canvas, font, self._SO_CELLS_LEFT - 5, baseline, tally_colour, str(total)
+            )
+            for column, index in enumerate(range(first, min(rounds, first + capacity))):
+                cx = self._SO_CELLS_LEFT + self._SO_CELL_RADIUS + column * self._SO_CELL_PITCH
+                if index >= len(row):
+                    self._draw_cell_pending(canvas, cx, centre_y)
+                elif row[index]:
+                    self._draw_cell_goal(canvas, cx, centre_y)
+                else:
+                    self._draw_cell_miss(canvas, cx, centre_y)
+
+        label = "FINAL/SO" if finished else "SHOOTOUT"
+        colour = FINAL if finished else LIVE
+        self.text_center(canvas, self.fonts.tiny, self.width // 2, self.height - 1, colour, label)
+
+    def _draw_cell_goal(self, canvas: Any, cx: int, cy: int) -> None:
+        r = self._SO_CELL_RADIUS
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dx * dx + dy * dy <= r * r + 2:
+                    canvas.SetPixel(cx + dx, cy + dy, *LIVE)
+
+    def _draw_cell_pending(self, canvas: Any, cx: int, cy: int) -> None:
+        r = self._SO_CELL_RADIUS
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if (r - 1) ** 2 <= dx * dx + dy * dy <= r * r + 2:
+                    canvas.SetPixel(cx + dx, cy + dy, *SUBDUED)
+
+    def _draw_cell_miss(self, canvas: Any, cx: int, cy: int) -> None:
+        reach = self._SO_CELL_RADIUS - 1
+        for i in range(-reach, reach + 1):
+            canvas.SetPixel(cx + i, cy + i, *LOSS)
+            canvas.SetPixel(cx + i, cy - i, *LOSS)
+
     def draw_goal(self, canvas: Any, game: Game) -> None:
         """A goal celebration: GOAL in big amber type, current score below.
 

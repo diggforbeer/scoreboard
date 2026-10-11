@@ -254,6 +254,21 @@ between the two logos like `goal_detail`; a name that doesn't fit drops
 to the surname, then truncates. The one-star-per-frame alternative wasn't
 needed at 128px -- only 12+ letter surnames truncate between logos.
 
+The shootout screen (#259) replaces the game scene while `periodType ==
+"SO"` and the game is live (or final, once we hold shootout data):
+`Game.shows_shootout` -> `Renderer.draw_shootout`, a horizontal grid, away
+row over home row, one column per attempt (green disc goal, red X anything
+else, dim ring still to come), no shooter names (owner's call). Data is
+`summary.shootout` from `gamecenter/{id}/landing` (`NHLClient.shootout()`),
+absent until the shootout begins -- the screen then shows empty rings. Rows
+are matched by `teamAbbrev`, never by order. Polled by `refresh_shootouts()`
+every `shootout_poll_seconds` (default 5), which also lowers
+`poll_interval()` while an SO game is live; same favourite/on-screen scoping
+as the power-play indicator, and one last fetch after the game ends so the
+deciding shot lands. Unknown `result` values are drawn as misses and logged.
+Past 8 columns (sudden death) the latest attempts scroll in. Not verified
+against a live sudden-death payload.
+
 The `standings` scene (#40) is the favourite's conference playoff picture:
 `conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
 favourite's conference by `conferenceSequence` and trim it to the
