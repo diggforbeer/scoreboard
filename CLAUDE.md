@@ -227,8 +227,9 @@ startup does not celebrate.
 
 The `three_stars` scene (#156) is the NHL's three stars of the favourite's
 game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
-present on a real final game; `NHLClient.three_stars()`, a third separate
-fetch of the same URL `situation()`/`goal_scoring()` already hit). The
+present on a real final game; `NHLClient.three_stars()`, a third reader
+of the same URL `situation()`/`goal_scoring()` use -- one shared request,
+#263). The
 trigger is **not** a detector of its own: it's `refresh()`'s existing
 first-time-final branch (the one that records `ended_at`), filtered to the
 favourite's game and to one we actually watched go live -- a game already
@@ -604,6 +605,13 @@ exit; with `show_logos = false` every step is just text.
   timed-out connect or read is retried once (quick 429/5xx answers keep
   three), so one stalled poll costs ~10s. Moving fetches off the render
   thread would remove the stall entirely; not done, not yet needed.
+- **One `gamecenter/{id}/landing` request per game per poll (#263).**
+  `situation()`, `goal_scoring()` and `three_stars()` all read that URL,
+  and the run loop calls them back to back; `NHLClient._landing` reuses a
+  payload fetched in the last `LANDING_REUSE_SECONDS` (5s) for the same
+  game, so they share one request instead of making two or three. A failed
+  fetch caches nothing. Each feature still keeps its own polling schedule
+  in `app.py`; only the HTTP request is shared.
 - `gamecenter/{id}/right-rail` (#157, a different endpoint from
   `landing`) has `seasonSeriesWins: {awayTeamWins, homeTeamWins}` --
   oriented to *that game's own* away/home (verified: the same NSH-CGY

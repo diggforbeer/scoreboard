@@ -9,6 +9,7 @@ is not contractual -- every call is wrapped so that a bad response degrades to
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
@@ -45,6 +46,14 @@ USER_AGENT = "nhl-scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
 TIMEOUT = (5.0, 5.0)
 
 
+#: How long a fetched ``gamecenter/{id}/landing`` payload is reused (#263).
+#: situation(), goal_scoring() and three_stars() all read that one URL and
+#: the run loop calls them back to back, so a few seconds covers one loop
+#: pass -- including a slow first request -- without letting the data get
+#: meaningfully staler than live_poll_seconds.
+LANDING_REUSE_SECONDS = 5.0
+
+
 class NHLApiError(RuntimeError):
     """Raised when the API could not be reached or returned unusable data."""
 
@@ -55,10 +64,14 @@ class NHLClient:
         base_url: str = BASE_URL,
         timeout: float | tuple[float, float] = TIMEOUT,
         session: requests.Session | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or _build_session()
+        self.monotonic = monotonic
+        #: game id -> (fetched at, landing payload), see LANDING_REUSE_SECONDS.
+        self._landings: dict[int, tuple[float, dict[str, Any]]] = {}
 
     def close(self) -> None:
         self.session.close()
@@ -87,7 +100,7 @@ class NHLClient:
 
     def situation(self, game_id: int) -> Situation | None:
         """Special-teams state for one live game; None at even strength."""
-        payload = self._get(f"/gamecenter/{game_id}/landing")
+        payload = self._landing(game_id)
         try:
             return Situation.from_api(payload.get("situation"))
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
@@ -97,11 +110,11 @@ class NHLClient:
     def goal_scoring(self, game_id: int) -> tuple[GoalEvent, ...]:
         """Every goal scored so far in ``game_id``, for the goal-detail screen (#122).
 
-        Same landing payload ``situation()`` already fetches for the
-        power-play indicator -- this is a second request to that same URL,
-        not a new endpoint, since the two features poll independently.
+        Same landing payload ``situation()`` reads for the power-play
+        indicator; the two poll independently but share one request
+        (``_landing``, #263).
         """
-        payload = self._get(f"/gamecenter/{game_id}/landing")
+        payload = self._landing(game_id)
         try:
             return goal_events_from_landing(payload)
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
@@ -142,11 +155,11 @@ class NHLClient:
     def three_stars(self, game_id: int) -> tuple[Star, ...]:
         """The three stars of a finished game (#156), or ``()`` until they're named.
 
-        A third request to the same landing URL ``situation()`` and
-        ``goal_scoring()`` already fetch, for the same reason those two are
-        separate: each feature polls on its own schedule.
+        The same landing payload ``situation()`` and ``goal_scoring()``
+        read, shared through ``_landing`` (#263); each feature still polls
+        on its own schedule.
         """
-        payload = self._get(f"/gamecenter/{game_id}/landing")
+        payload = self._landing(game_id)
         try:
             return three_stars_from_landing(payload)
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
@@ -174,6 +187,25 @@ class NHLClient:
         return ClubStats.from_api(payload)
 
     # -- plumbing --------------------------------------------------------
+
+    def _landing(self, game_id: int) -> dict[str, Any]:
+        """``gamecenter/{id}/landing``, reused for LANDING_REUSE_SECONDS (#263).
+
+        A failed fetch raises as before and caches nothing, so the next
+        call retries. Entries for other games are dropped as they age out,
+        so this never holds more than the few games polled together.
+        """
+        now = self.monotonic()
+        self._landings = {
+            gid: entry
+            for gid, entry in self._landings.items()
+            if now - entry[0] < LANDING_REUSE_SECONDS
+        }
+        if game_id in self._landings:
+            return self._landings[game_id][1]
+        payload = self._get(f"/gamecenter/{game_id}/landing")
+        self._landings[game_id] = (now, payload)
+        return payload
 
     def _get(self, path: str) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
