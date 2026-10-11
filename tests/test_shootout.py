@@ -177,11 +177,11 @@ def cell_colours(c, row: int) -> list[set]:
 
 def test_grid_places_goals_and_misses_in_the_right_rows():
     c = canvas()
-    # Away NSH: goal, miss, goal. Home OTT: miss, goal, (pending).
-    make_renderer().draw_shootout(c, so_game(shootout=rounds(["gx", "xg", "g-"])))
+    # Away NSH: goal, miss, miss. Home OTT: miss, goal, (pending).
+    make_renderer().draw_shootout(c, so_game(shootout=rounds(["gx", "xg", "x-"])))
     assert not c.out_of_bounds
     away, home = cell_colours(c, 0), cell_colours(c, 1)
-    assert away[0] == {LIVE} and away[1] == {LOSS} and away[2] == {LIVE}
+    assert away[0] == {LIVE} and away[1] == {LOSS} and away[2] == {LOSS}
     assert home[0] == {LOSS} and home[1] == {LIVE} and home[2] == {SUBDUED}
     assert away[3] == set()  # nothing beyond the first three rounds
 
@@ -197,7 +197,7 @@ def test_empty_live_shootout_shows_three_pending_cells_per_team():
 
 def test_uneven_attempt_counts_do_not_break_the_grid():
     c = canvas()
-    make_renderer().draw_shootout(c, so_game(shootout=rounds(["gx", "g-"])))
+    make_renderer().draw_shootout(c, so_game(shootout=rounds(["xx", "g-"])))
     assert not c.out_of_bounds
     assert cell_colours(c, 0)[1] == {LIVE}
     assert cell_colours(c, 1)[1] == {SUBDUED}
@@ -205,7 +205,7 @@ def test_uneven_attempt_counts_do_not_break_the_grid():
 
 def test_sudden_death_grows_the_grid_then_scrolls_to_the_latest():
     c = canvas()
-    spec = ["gx", "xg", "gg", "xx", "gx", "gg", "xx", "gx", "xg", "gg"]
+    spec = ["gx", "xg", "gg", "xx", "gg", "xx", "gg", "xx", "gg", "gx"]
     make_renderer().draw_shootout(c, so_game(shootout=rounds(spec)))
     assert not c.out_of_bounds
     away = cell_colours(c, 0)
@@ -230,8 +230,9 @@ def test_winner_tally_is_highlighted_once_final():
     ("name", "state", "spec"),
     [
         ("shootout_start", "LIVE", []),
-        ("shootout_live", "LIVE", ["gx", "g-"]),
-        ("shootout_sudden_death", "LIVE", ["gx", "xg", "gg", "xx", "gx", "gg", "x-"]),
+        ("shootout_live", "LIVE", ["gx", "xg"]),
+        ("shootout_sudden_death", "LIVE", ["gx", "xg", "gg", "xx", "gg", "xx", "g-"]),
+        ("shootout_must_score", "LIVE", ["gx", "gg", "x-"]),
         ("shootout_final", "OFF", ["xg", "gx", "xg"]),
     ],
 )

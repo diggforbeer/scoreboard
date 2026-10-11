@@ -269,6 +269,47 @@ deciding shot lands. Unknown `result` values are drawn as misses and logged.
 Past 8 columns (sudden death) the latest attempts scroll in. Not verified
 against a live sudden-death payload.
 
+The headline score stays tied through a shootout and only moves when it is
+decided, so `_detect_goals` sees the favourite's win as a "goal". The horn
+still plays (and still respects the button mute), but
+`_apply_goal_override` returns the plain `game` scene whenever
+`Game.in_shootout` (`period_type == "SO"`, live or final) -- no `goal` or
+`goal_detail` over the grid; three-stars still applies. That one predicate
+is the only definition; goal detection itself is not widened.
+
+The newest attempt pops in for `Renderer.SHOOTOUT_ANIM_SECONDS` (1.5s): a
+goal grows from a dot to the disc (0-0.9s) then flashes a white ring (to
+1.3s); a miss draws its X as two strokes (0-1.2s); the scoring team's tally
+blinks for 1s. Ages come from the app, not the renderer:
+`_note_shootout_attempts` stamps each attempt's `sequence` with the
+injectable `monotonic()` the first time a fetch shows it, and
+`draw_scene` passes `now - stamp` to `draw_shootout(canvas, game, now,
+ages)`. The first successful fetch for a game is a baseline whose attempts
+never animate (same rule as goal detection), so a restart mid-shootout
+doesn't replay. Stamps are poll arrival, so the animation can start up to
+`shootout_poll_seconds` late, but frames are driven by the clock, not by
+polls; the loop uses `ANIMATION_FRAME_INTERVAL` only while a cell is
+animating (`_shootout_animating`). Past the window the frame is the static
+look.
+
+`Shootout.state(away, home)` (pure, `nhl/models.py`) returns a
+`ShootoutState`: `open`, `must_score` (team), `sudden_death`, `decided`
+(winner) or `unknown`. Three rounds each; it ends early once one side's
+goals exceed the other's plus its remaining shots; once both have shot
+three it is `decided` if goals differ, else `sudden_death`, judged only
+over rounds both teams have finished. A team `must_score` when the other
+side would clinch if its next shot (the team with fewer shots, else the
+first shooter) missed. Anything that doesn't look like a complete in-order
+feed -- unknown teams, gaps in `sequence`, teams not alternating, event
+goals disagreeing with `liveScore`, shooting on past a decision -- is
+`unknown`, and the screen then shows plain `SHOOTOUT` with no outline. The
+label is `MUST SCORE` (amber, with that team's next pending cell ringed in
+a slow 3s breathe off the injected clock), `SUDDEN DEATH`, `SHOOTOUT`, and
+`FINAL/SO` once the game is final. The demo (`animate_shootout` steps)
+covers a live shootout, a must-score moment, sudden death and the final,
+each popping in its newest attempt. None of this is verified on hardware
+(#4) or against a live sudden-death payload.
+
 The `standings` scene (#40) is the favourite's conference playoff picture:
 `conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
 favourite's conference by `conferenceSequence` and trim it to the

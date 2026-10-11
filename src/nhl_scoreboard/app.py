@@ -294,6 +294,15 @@ class ScoreboardApp:
         #: game id -> (fetched at, shootout, fetched after the game ended).
         #: Same targets as situations, but for games in a shootout (#259).
         self.shootouts: dict[int, tuple[float, Shootout | None, bool]] = {}
+        #: game id -> {attempt sequence -> monotonic time it first showed up,
+        #: None for attempts already there at our first sighting}, so a
+        #: restart mid-shootout doesn't replay every cell (#259).
+        self._shootout_seen: dict[int, dict[int, float | None]] = {}
+        #: Whether the last shootout frame had a cell mid-animation, which
+        #: speeds the loop up the way a moving holiday sprite does.
+        self._shootout_animating = False
+        #: Demo only: when the current step's newest attempt "appeared".
+        self._demo_shootout_started: float | None = None
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
         #: if we watched it finish; estimated from the start time otherwise.
         self.ended_at: dict[int, datetime] = {}
@@ -442,7 +451,8 @@ class ScoreboardApp:
         self.shutdown()
 
     def frame_interval(self) -> float:
-        return ANIMATION_FRAME_INTERVAL if self._overlay_animating else FRAME_INTERVAL
+        animating = self._overlay_animating or self._shootout_animating
+        return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
     def run_demo(self) -> None:
         """Loop every scene with synthetic data until stopped (#47).
@@ -470,7 +480,8 @@ class ScoreboardApp:
                     break
                 self._set_demo_logos(step.use_logos)
                 self._start_demo_holiday(step)
-                if self._demo_holiday is not None:
+                self._start_demo_shootout(step)
+                if self._demo_holiday is not None or step.animate_shootout:
                     self._play_animated_demo_step(step.scene)
                     continue
                 self.draw_scene(step.scene)
@@ -490,6 +501,10 @@ class ScoreboardApp:
         self._demo_holiday = HOLIDAYS.get(step.holiday) if step.holiday else None
         if self._demo_holiday is not None:
             self.holiday_overlay.start_flyby(self.monotonic())
+
+    def _start_demo_shootout(self, step: DemoStep) -> None:
+        """Make a step's newest shootout attempt pop in as the step starts (#259)."""
+        self._demo_shootout_started = self.monotonic() if step.animate_shootout else None
 
     def _play_animated_demo_step(self, scene: Scene) -> None:
         """Redraw every frame for DEMO_SCENE_SECONDS, so the fly-by actually moves."""
@@ -517,6 +532,7 @@ class ScoreboardApp:
             self._demo_next_step_at = now + DEMO_SCENE_SECONDS
             self._set_demo_logos(step.use_logos)
             self._start_demo_holiday(step)
+            self._start_demo_shootout(step)
             self._demo_scene = step.scene
         self._demo_drawing = True
         try:
@@ -1625,6 +1641,12 @@ class ScoreboardApp:
         """
         if scene.kind != "game":
             return scene
+        if scene.game.in_shootout:
+            # The headline score only moves when a shootout is decided, so a
+            # favourite "goal" here is really the win: the horn already
+            # played (_on_goal), but GOAL would cover the final grid.
+            stars = self._three_stars_override(scene.game.id)
+            return stars if stars is not None else scene
         detail = self._goal_detail_override(scene.game.id)
         if detail is not None:
             return detail
@@ -1744,6 +1766,9 @@ class ScoreboardApp:
         for game_id in list(self.shootouts):
             if game_id not in current:
                 del self.shootouts[game_id]
+        for game_id in list(self._shootout_seen):
+            if game_id not in current:
+                del self._shootout_seen[game_id]
         for game in self.shootout_targets():
             previous = self.shootouts.get(game.id, (None, None, False))
             if previous[0] is not None and now - previous[0] < interval:
@@ -1755,6 +1780,34 @@ class ScoreboardApp:
                 self.shootouts[game.id] = (now, previous[1], previous[2])
                 continue
             self.shootouts[game.id] = (now, shootout, game.is_final)
+            self._note_shootout_attempts(game.id, shootout, now)
+
+    def _note_shootout_attempts(self, game_id: int, shootout: Shootout | None, now: float) -> None:
+        """Stamp each attempt with when we first saw it (#259).
+
+        The first successful fetch for a game is the baseline: whatever is
+        already there is marked ``None`` and never animates, same rule as
+        goal detection. The stamp is poll arrival, but the animation is
+        driven by the age against the clock at render time, so the 5s poll
+        cadence doesn't show up as stutter.
+        """
+        seen = self._shootout_seen.get(game_id)
+        baseline = seen is None
+        if seen is None:
+            seen = self._shootout_seen[game_id] = {}
+        for attempt in shootout.attempts if shootout is not None else ():
+            if attempt.sequence not in seen:
+                seen[attempt.sequence] = None if baseline else now
+
+    def shootout_ages(self, game_id: int) -> dict[int, float]:
+        """Seconds since each still-animating attempt first appeared."""
+        now = self.monotonic()
+        window = self.renderer.SHOOTOUT_ANIM_SECONDS
+        ages = {}
+        for sequence, stamp in self._shootout_seen.get(game_id, {}).items():
+            if stamp is not None and 0 <= now - stamp < window:
+                ages[sequence] = now - stamp
+        return ages
 
     def with_situation(self, game: Game) -> Game:
         entry = self.situations.get(game.id)
@@ -1855,6 +1908,7 @@ class ScoreboardApp:
             self.canvas.Clear()
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
             self._overlay_animating = False
+            self._shootout_animating = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -1889,6 +1943,7 @@ class ScoreboardApp:
 
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
+        self._shootout_animating = False
         favourite = self.settings.scoreboard.favourite_team
         if self.april_fools_active():
             favourite = april_fools.PRANK_AS
@@ -1896,7 +1951,9 @@ class ScoreboardApp:
         if scene.kind == "game":
             game = self.with_situation(scene.game)
             if game.shows_shootout:
-                r.draw_shootout(self.canvas, game)
+                ages = self._shootout_frame_ages(game)
+                self._shootout_animating = bool(ages)
+                r.draw_shootout(self.canvas, game, self.monotonic(), ages)
             else:
                 r.draw_game(self.canvas, game)
         elif scene.kind == "goal":
@@ -1935,6 +1992,18 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NO GAMES")
         self._draw_holiday_overlay(scene, favourite)
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
+
+    def _shootout_frame_ages(self, game: Game) -> dict[int, float]:
+        if self._demo_drawing:
+            # The demo has no polls: its newest attempt "appears" when the
+            # step starts, so the animation is visible on every pass.
+            started = self._demo_shootout_started
+            if started is None or game.shootout is None or not game.shootout.attempts:
+                return {}
+            age = self.monotonic() - started
+            newest = game.shootout.attempts[-1].sequence
+            return {newest: age} if age < self.renderer.SHOOTOUT_ANIM_SECONDS else {}
+        return self.shootout_ages(game.id)
 
     def active_holiday(self) -> Holiday | None:
         """The configured holiday in season today (local date), if any."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 import random
 from dataclasses import dataclass
@@ -307,6 +308,23 @@ class ShootoutAttempt:
     game_winner: bool = False
 
 
+#: Rounds each team shoots before sudden death.
+SHOOTOUT_ROUNDS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class ShootoutState:
+    """``Shootout.state()``'s answer.
+
+    ``kind``: ``open`` (nothing on the line yet), ``must_score`` (``team``
+    is eliminated if its next shot misses), ``sudden_death``, ``decided``
+    (``team`` won) or ``unknown`` (data too incomplete to say).
+    """
+
+    kind: str
+    team: str | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class Shootout:
     """The shootout so far, from ``gamecenter/{id}/landing`` (#259).
@@ -328,6 +346,61 @@ class Shootout:
     @property
     def winner_decided(self) -> bool:
         return any(a.game_winner for a in self.attempts)
+
+    def state(self, away: str, home: str) -> ShootoutState:
+        """Where the shootout stands, from the attempts alone (#259).
+
+        Rules: three rounds each, ended early once one side can no longer
+        catch up; if still level, sudden death -- a round each, decided only
+        when both have shot. A team ``must_score`` when missing its next shot
+        would let the other side clinch. Anything that doesn't look like a
+        complete, in-order feed (unknown teams, gaps in ``sequence``, teams
+        not alternating, event goals disagreeing with ``liveScore`` because
+        one lags the other) is ``unknown``: callers show nothing special
+        rather than claim a team is on the brink on shaky data.
+        """
+        kind = ShootoutState
+        attempts = self.attempts
+        if not attempts:
+            return kind("open")
+        teams = [a.team_abbrev for a in attempts]
+        if set(teams) - {away, home} or any(x == y for x, y in itertools.pairwise(teams)):
+            return kind("unknown")
+        sequences = [a.sequence for a in attempts]
+        if any(y - x != 1 for x, y in itertools.pairwise(sequences)):
+            return kind("unknown")
+        results = {t: self.results_for(t) for t in (away, home)}
+        goals = {t: sum(r) for t, r in results.items()}
+        if (goals[away], goals[home]) != (self.away_goals, self.home_goals):
+            return kind("unknown")
+
+        shots = {t: len(r) for t, r in results.items()}
+        completed = min(shots.values())
+        if completed >= SHOOTOUT_ROUNDS:
+            # Level after the first three: every later round is a sudden-death
+            # round, so compare only rounds both teams have finished.
+            level = {t: sum(r[:completed]) for t, r in results.items()}
+            if level[away] != level[home]:
+                if shots[away] != shots[home]:
+                    return kind("unknown")  # kept shooting after it was decided
+                return kind("decided", away if level[away] > level[home] else home)
+            return kind("sudden_death")
+
+        remaining = {t: SHOOTOUT_ROUNDS - shots[t] for t in (away, home)}
+        if remaining[away] < 0 or remaining[home] < 0:
+            return kind("unknown")
+        for t, other in ((away, home), (home, away)):
+            if goals[t] > goals[other] + remaining[other]:
+                return kind("decided", t)
+        # Whoever has taken fewer shots goes next; level, the first shooter.
+        if shots[away] == shots[home]:
+            nxt = teams[0]
+        else:
+            nxt = away if shots[away] < shots[home] else home
+        other = home if nxt == away else away
+        if goals[other] > goals[nxt] + remaining[nxt] - 1:
+            return kind("must_score", nxt)
+        return kind("open")
 
 
 _KNOWN_SHOOTOUT_RESULTS = frozenset({"goal", "save"})
