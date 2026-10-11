@@ -208,8 +208,7 @@ cooldown_minutes = 15        # how long after that game ends before dimming resu
 [holiday]
 enabled = false              # seasonal decorations; each holiday only shows during its own dates
 themes = ["halloween", "thanksgiving", "christmas", "new_year", "groundhog", "valentines", "st_patricks", "easter", "july_4th"]
-flyby_min_minutes = 5        # random gap between fly-bys (e.g. the Halloween ghost)
-flyby_max_minutes = 20
+flyby_frequency = "occasional"  # fly-bys (e.g. the Halloween ghost): "rare" ~1/hour, "occasional" ~every 20 min, "frequent" ~every 10 min
 
 [panel]
 rows = 32

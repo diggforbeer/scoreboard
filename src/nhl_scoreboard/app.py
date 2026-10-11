@@ -2166,7 +2166,7 @@ class ScoreboardApp:
 
     def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
-        cfg = self.settings.holiday
+        min_gap, max_gap = self.settings.holiday.flyby_gap_minutes
         self._overlay_animating = self.holiday_overlay.draw(
             self.canvas,
             scene_kind=scene.kind,
@@ -2174,8 +2174,8 @@ class ScoreboardApp:
             now=self.monotonic(),
             width=self.renderer.width,
             height=self.renderer.height,
-            min_gap_seconds=cfg.flyby_min_minutes * 60,
-            max_gap_seconds=cfg.flyby_max_minutes * 60,
+            min_gap_seconds=min_gap * 60,
+            max_gap_seconds=max_gap * 60,
             day=self.clock().astimezone(self.tz).date(),
             favourite=favourite,
         )
