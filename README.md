@@ -24,13 +24,13 @@
 | src/nhl\_scoreboard/display/teams.py        |       12 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/light\_sensor.py        |       38 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/nhl/\_\_init\_\_.py     |        3 |        0 |        0 |        0 |    100% |           |
-| src/nhl\_scoreboard/nhl/api.py              |      110 |       14 |        6 |        0 |     88% |109-111, 154-156, 164-169, 201-202 |
+| src/nhl\_scoreboard/nhl/api.py              |      122 |       14 |        8 |        0 |     89% |122-124, 167-169, 177-182, 233-234 |
 | src/nhl\_scoreboard/nhl/models.py           |      490 |        3 |      116 |        1 |     99% |234-235, 391 |
 | src/nhl\_scoreboard/setup\_server.py        |       87 |        1 |       16 |        3 |     96% |209, 222-\>226, 226-\>exit |
 | src/nhl\_scoreboard/updater.py              |      215 |       24 |       48 |        8 |     88% |98-99, 117, 126, 144-148, 152-157, 197-202, 206-212, 223, 290-\>292, 311-\>313, 333-\>336, 337, 341 |
 | src/nhl\_scoreboard/wifi.py                 |      140 |      109 |       28 |        0 |     18% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/nhl\_scoreboard/wifi\_join.py           |       86 |        7 |       10 |        0 |     93% |112-114, 117-118, 201-202 |
-| **TOTAL**                                   | **4789** |  **273** | **1298** |   **67** | **94%** |           |
+| **TOTAL**                                   | **4801** |  **273** | **1300** |   **67** | **94%** |           |
 
 
 ## Setup coverage badge
