@@ -97,7 +97,8 @@ show_clock_between_games = false
 # show_standings/show_clock_between_games above are no longer read for this
 # purpose. screen is one of "countdown_preview", "standings", "clock",
 # "matchup", "top_west", "top_east", "leaders", "holiday". "matchup" (your
-# team's head-to-head record this season against its next opponent),
+# team's head-to-head record this season against its next opponent, then the
+# scores of the meetings so far for the second half of its time),
 # "top_west"/"top_east" (top five of that conference), "leaders" (your
 # team's top goal scorer, top point getter and top two goalies) and
 # "holiday" (a holiday's own screen: Dec 1-25, a twinkling tree in your

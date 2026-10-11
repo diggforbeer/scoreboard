@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -497,6 +497,8 @@ class SeasonSeriesRecord:
 
     away_wins: int
     home_wins: int
+    #: The completed meetings behind the tally, oldest first (#168).
+    meetings: tuple[SeriesMeeting, ...] = ()
 
     @classmethod
     def from_api(cls, raw: Any) -> SeasonSeriesRecord | None:
@@ -508,6 +510,109 @@ class SeasonSeriesRecord:
         if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (away, home)):
             return None
         return cls(away_wins=away, home_wins=home)
+
+
+#: Game states a finished meeting can be in; ``FUT``/``LIVE`` ones carry no result.
+_FINISHED_STATES = frozenset({"FINAL", "OFF"})
+
+
+def _count(value: Any) -> int | None:
+    """A non-negative int, or None -- bool is an int subclass, and malformed here."""
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class MeetingResult:
+    """One past meeting from one team's side: ``W 4-1``, ``L 2-3 OT`` (#168)."""
+
+    game_date: date
+    won: bool
+    score_for: int
+    score_against: int
+    #: ``""`` for regulation, else the API's own ``lastPeriodType`` (``OT``,
+    #: and presumably ``SO`` -- not yet seen live).
+    decided_in: str
+
+    def score_label(self) -> str:
+        return f"{self.score_for}-{self.score_against}"
+
+
+@dataclass(frozen=True, slots=True)
+class SeriesMeeting:
+    """A completed regular-season meeting from right-rail's ``seasonSeries[]`` (#168).
+
+    Verified against real 2025-26 responses: a finished entry carries
+    ``awayTeam.score``/``homeTeam.score`` and ``gameOutcome.lastPeriodType``.
+    A future entry has no scores but still reads ``lastPeriodType: REG``, so
+    only the game state and real scores mark one as played.
+    """
+
+    game_id: int
+    game_date: date
+    away_abbrev: str
+    home_abbrev: str
+    away_score: int
+    home_score: int
+    last_period_type: str
+
+    @classmethod
+    def from_api(cls, raw: Any) -> SeriesMeeting | None:
+        """None for anything but a finished regular-season game; never raises."""
+        if not isinstance(raw, dict):
+            return None
+        if raw.get("gameType") != 2 or raw.get("gameState") not in _FINISHED_STATES:
+            return None
+        away, home = raw.get("awayTeam"), raw.get("homeTeam")
+        if not isinstance(away, dict) or not isinstance(home, dict):
+            return None
+        away_score, home_score = _count(away.get("score")), _count(home.get("score"))
+        away_abbrev, home_abbrev = away.get("abbrev"), home.get("abbrev")
+        if away_score is None or home_score is None or away_score == home_score:
+            return None
+        if not isinstance(away_abbrev, str) or not isinstance(home_abbrev, str):
+            return None
+        try:
+            game_date = date.fromisoformat(str(raw.get("gameDate")))
+        except ValueError:
+            return None
+        outcome = raw.get("gameOutcome")
+        period = outcome.get("lastPeriodType") if isinstance(outcome, dict) else None
+        return cls(
+            game_id=int(raw.get("id") or 0),
+            game_date=game_date,
+            away_abbrev=away_abbrev.upper(),
+            home_abbrev=home_abbrev.upper(),
+            away_score=away_score,
+            home_score=home_score,
+            last_period_type=period if isinstance(period, str) and period else "REG",
+        )
+
+    def result_for(self, team: str) -> MeetingResult | None:
+        """This meeting from ``team``'s side, or None if they didn't play in it."""
+        team = team.strip().upper()
+        if team == self.away_abbrev:
+            score_for, score_against = self.away_score, self.home_score
+        elif team == self.home_abbrev:
+            score_for, score_against = self.home_score, self.away_score
+        else:
+            return None
+        return MeetingResult(
+            game_date=self.game_date,
+            won=score_for > score_against,
+            score_for=score_for,
+            score_against=score_against,
+            decided_in="" if self.last_period_type == "REG" else self.last_period_type,
+        )
+
+
+def series_meetings_from_api(raw: Any) -> tuple[SeriesMeeting, ...]:
+    """The finished meetings in ``seasonSeries[]``, oldest first; bad entries skipped."""
+    if not isinstance(raw, list):
+        return ()
+    meetings = [m for entry in raw if (m := SeriesMeeting.from_api(entry)) is not None]
+    return tuple(sorted(meetings, key=lambda m: (m.game_date, m.game_id)))
 
 
 @dataclass(frozen=True, slots=True)

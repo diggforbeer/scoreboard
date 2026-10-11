@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -27,8 +27,10 @@ from nhl_scoreboard.nhl.models import (
     ClubStats,
     Game,
     GoalEvent,
+    MeetingResult,
     PlayerSeasonDetail,
     SeasonSeriesRecord,
+    SeriesMeeting,
     SkaterLine,
     StandingsRow,
     Star,
@@ -1128,6 +1130,71 @@ def test_matchup_cached_for_its_ttl(day):
     tick(app, clock, seconds=SEASON_SERIES_TTL_SECONDS + 1)
     assert app.select_scene().season_series == SeasonSeriesRecord(3, 1)
     assert client.season_series_calls == [1, 1]
+
+
+def _series_with_meetings() -> SeasonSeriesRecord:
+    """TBL @ NSH tonight; NSH won one at home, lost one in OT away (#168)."""
+    return SeasonSeriesRecord(
+        away_wins=1,
+        home_wins=1,
+        meetings=(
+            SeriesMeeting(11, date(2025, 10, 14), "TBL", "NSH", 1, 4, "REG"),
+            SeriesMeeting(12, date(2025, 12, 2), "NSH", "TBL", 2, 3, "OT"),
+        ),
+    )
+
+
+def test_matchup_slot_gives_its_second_half_to_the_meetings(day):
+    app, clock, client = day
+    client.series[1] = _series_with_meetings()
+    app.settings.rotation = [RotationEntry("countdown_preview", 10), RotationEntry("matchup", 10)]
+
+    assert scene(app) == ("preview", 1)
+    tick(app, clock, seconds=10)
+    assert scene(app) == ("matchup", 1)
+    tick(app, clock, seconds=4)
+    assert scene(app) == ("matchup", 1)
+    tick(app, clock, seconds=1)
+    s = app.select_scene()
+    assert (s.kind, s.game.id) == ("matchup_meetings", 1)
+    assert s.season_series == _series_with_meetings(), "still the same fetch, just re-labelled"
+    tick(app, clock, seconds=5)
+    assert scene(app) == ("preview", 1)
+    assert client.season_series_calls == [1]
+
+
+def test_meetings_are_from_the_favourites_side_oldest_first(day):
+    app, clock, client = day
+    client.series[1] = _series_with_meetings()
+    app.settings.rotation = [RotationEntry("matchup", 10)]
+    tick(app, clock, seconds=5)
+    s = app.select_scene()
+    assert s.kind == "matchup_meetings"
+    assert s.meetings == (
+        MeetingResult(date(2025, 10, 14), True, 4, 1, ""),
+        MeetingResult(date(2025, 12, 2), False, 2, 3, "OT"),
+    )
+
+
+def test_matchup_alone_in_the_rotation_still_alternates(day):
+    app, clock, client = day
+    client.series[1] = _series_with_meetings()
+    app.settings.rotation = [RotationEntry("matchup", 10)]
+    kinds = []
+    for _ in range(4):
+        kinds.append(scene(app)[0])
+        tick(app, clock, seconds=5)
+    assert kinds == ["matchup", "matchup_meetings"] * 2
+
+
+def test_no_finished_meeting_keeps_the_tally_for_the_whole_slot(day):
+    """0-0 with nothing played yet: there's no second frame to show."""
+    app, clock, client = day
+    client.series[1] = SeasonSeriesRecord(0, 0)
+    app.settings.rotation = [RotationEntry("matchup", 10)]
+    for _ in range(4):
+        assert scene(app)[0] == "matchup"
+        tick(app, clock, seconds=5)
 
 
 def test_matchup_failure_backs_off_instead_of_polling_every_frame(day):

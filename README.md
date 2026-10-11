@@ -177,10 +177,10 @@ show_clock_between_games = false  # also cycle the clock into the preview/standi
 # [[rotation]]
 # screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders, holiday
 # seconds = 10
-# "matchup" (season series vs. the next opponent), "top_west"/"top_east" (top five of
-# that conference), "leaders" (your team's top goal scorer, top point getter and
-# top two goalies) and "holiday" (Dec 1-25: a Christmas tree counting down to the 25th)
-# only show if listed here.
+# "matchup" (season series vs. the next opponent, then each finished meeting),
+# "top_west"/"top_east" (top five of that conference), "leaders" (your team's top
+# goal scorer, top point getter and top two goalies) and "holiday" (Dec 1-25: a
+# Christmas tree counting down to the 25th) only show if listed here.
 
 [audio]
 enabled = true
