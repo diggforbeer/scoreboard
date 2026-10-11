@@ -8,7 +8,8 @@ sensibly -- just with less or more breathing room.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+import math
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -18,6 +19,8 @@ from ..nhl.models import (
     GoalEvent,
     MeetingResult,
     SeasonSeriesRecord,
+    Shootout,
+    ShootoutState,
     StandingsRow,
     Star,
     TeamLeaders,
@@ -256,6 +259,182 @@ class Renderer:
     def _draw_side(self, canvas: Any, abbrev: str, score: int, x0: int, span: int, y: int) -> None:
         self.text(canvas, self.fonts.large, x0 + 3, y, team_color(abbrev), abbrev)
         self.text_right(canvas, self.fonts.large, x0 + span - 3, y, WHITE, str(score))
+
+    #: Shootout grid (#259): a row per team (away on top), a column per
+    #: attempt. Cells are 9px discs/crosses on an 11px pitch.
+    _SO_ROW_CENTRES = (8, 20)
+    _SO_CELL_RADIUS = 4
+    _SO_CELL_PITCH = 11
+    _SO_CELLS_LEFT = 34
+    _SO_MIN_CELLS = 3
+    #: Newest-attempt animation, in seconds since the attempt first showed
+    #: up. SHOOTOUT_ANIM_SECONDS is the whole window (the app runs its fast
+    #: loop for exactly that long); a goal grows 0-0.9s then flashes a
+    #: white ring until 1.3s, a miss draws its two strokes over 0-1.2s.
+    SHOOTOUT_ANIM_SECONDS = 1.5
+    _SO_GROW_SECONDS = 0.9
+    _SO_FLASH_SECONDS = 1.3
+    _SO_STROKE_SECONDS = 0.6
+    #: How long, and how fast, a changed tally blinks.
+    _SO_TALLY_FLASH_SECONDS = 1.0
+    _SO_TALLY_BLINK_SECONDS = 0.25
+    #: Period of the "must score" outline's slow breathe.
+    _SO_PULSE_SECONDS = 3.0
+
+    def draw_shootout(
+        self,
+        canvas: Any,
+        game: Game,
+        now: float = 0.0,
+        ages: Mapping[int, float] | None = None,
+    ) -> None:
+        """Away row over home row, one cell per attempt: green disc = goal, red X = miss.
+
+        Cells not yet taken are dim rings; the grid grows past three in
+        sudden death and, once it outgrows the panel, shows the most recent
+        attempts that fit. Rows are found by abbreviation (the first shooter
+        varies), so a team with one more attempt than the other just has one
+        more filled cell. No logos: the grid needs the width.
+
+        ``ages`` maps an attempt's ``sequence`` to seconds since it first
+        appeared; attempts younger than ``SHOOTOUT_ANIM_SECONDS`` animate,
+        everything else (and ``ages=None``) is the static look. ``now`` is a
+        monotonic time that only drives the "must score" outline's breathe.
+        The bottom label follows ``Shootout.state()``: ``MUST SCORE`` /
+        ``SUDDEN DEATH``, else ``SHOOTOUT``, or ``FINAL/SO`` once over.
+        """
+        canvas.Clear()
+        shootout = game.shootout
+        finished = game.is_final
+        ages = ages or {}
+        winner = None
+        if finished and shootout is not None and shootout.away_goals != shootout.home_goals:
+            winner = "away" if shootout.away_goals > shootout.home_goals else "home"
+        state = (
+            shootout.state(game.away.abbrev, game.home.abbrev)
+            if shootout is not None
+            else ShootoutState("open")
+        )
+
+        sides = (("away", game.away), ("home", game.home))
+        results = [
+            shootout.results_for(side.abbrev) if shootout is not None else () for _, side in sides
+        ]
+        goals = (shootout.away_goals, shootout.home_goals) if shootout is not None else (0, 0)
+        capacity = max(1, (self.width - self._SO_CELLS_LEFT - 2) // self._SO_CELL_PITCH)
+        rounds = max(self._SO_MIN_CELLS, *(len(r) for r in results))
+        first = max(0, rounds - capacity)
+
+        for (key, side), row, total, centre_y in zip(
+            sides, results, goals, self._SO_ROW_CENTRES, strict=True
+        ):
+            font = self.fonts.small
+            baseline = centre_y + 3
+            row_ages = self._attempt_ages(shootout, side.abbrev, ages)
+            self.text(canvas, font, 2, baseline, team_color(side.abbrev), side.abbrev)
+            tally_colour = ACCENT if winner == key else WHITE
+            if self._tally_flashing(shootout, side.abbrev, ages):
+                tally_colour = ACCENT if winner != key else WHITE
+            self.text_right(
+                canvas, font, self._SO_CELLS_LEFT - 5, baseline, tally_colour, str(total)
+            )
+            for column, index in enumerate(range(first, min(rounds, first + capacity))):
+                cx = self._SO_CELLS_LEFT + self._SO_CELL_RADIUS + column * self._SO_CELL_PITCH
+                if index >= len(row):
+                    self._draw_cell_pending(canvas, cx, centre_y)
+                    if (
+                        state.kind == "must_score"
+                        and state.team == side.abbrev
+                        and index == len(row)
+                    ):
+                        self._draw_cell_outline(canvas, cx, centre_y, now)
+                    continue
+                age = row_ages[index]
+                if row[index]:
+                    self._draw_cell_goal(canvas, cx, centre_y, age)
+                else:
+                    self._draw_cell_miss(canvas, cx, centre_y, age)
+
+        if finished:
+            label, colour = "FINAL/SO", FINAL
+        elif state.kind == "must_score":
+            label, colour = "MUST SCORE", INTERMISSION
+        elif state.kind == "sudden_death":
+            label, colour = "SUDDEN DEATH", INTERMISSION
+        else:
+            label, colour = "SHOOTOUT", LIVE
+        self.text_center(canvas, self.fonts.tiny, self.width // 2, self.height - 1, colour, label)
+
+    @staticmethod
+    def _attempt_ages(
+        shootout: Shootout | None, abbrev: str, ages: Mapping[int, float]
+    ) -> list[float | None]:
+        """Age of each of ``abbrev``'s attempts in order, None once static."""
+        if shootout is None:
+            return []
+        return [ages.get(a.sequence) for a in shootout.attempts if a.team_abbrev == abbrev]
+
+    def _tally_flashing(
+        self, shootout: Shootout | None, abbrev: str, ages: Mapping[int, float]
+    ) -> bool:
+        """Blink the tally while ``abbrev``'s newest goal is still fresh."""
+        if shootout is None:
+            return False
+        for a in shootout.attempts:
+            age = ages.get(a.sequence)
+            fresh = age is not None and 0 <= age < self._SO_TALLY_FLASH_SECONDS
+            if a.team_abbrev == abbrev and a.scored and fresh:
+                return int(age / self._SO_TALLY_BLINK_SECONDS) % 2 == 0
+        return False
+
+    def _draw_cell_goal(self, canvas: Any, cx: int, cy: int, age: float | None = None) -> None:
+        r = self._SO_CELL_RADIUS
+        if age is None or age >= self.SHOOTOUT_ANIM_SECONDS:
+            grow = 1.0
+        else:
+            grow = min(1.0, max(0.0, age) / self._SO_GROW_SECONDS)
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dx * dx + dy * dy <= (r * grow) ** 2 + 2 * grow:
+                    canvas.SetPixel(cx + dx, cy + dy, *LIVE)
+        if age is not None and self._SO_GROW_SECONDS <= age < self._SO_FLASH_SECONDS:
+            self._draw_ring(canvas, cx, cy, r + 1, WHITE)
+
+    def _draw_ring(self, canvas: Any, cx: int, cy: int, radius: int, rgb) -> None:
+        lo, hi = (radius - 0.5) ** 2, (radius + 0.5) ** 2
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                if lo <= dx * dx + dy * dy <= hi:
+                    canvas.SetPixel(cx + dx, cy + dy, *rgb)
+
+    def _draw_cell_outline(self, canvas: Any, cx: int, cy: int, now: float) -> None:
+        """The "must score" ring around a pending cell, breathing slowly."""
+        phase = (now % self._SO_PULSE_SECONDS) / self._SO_PULSE_SECONDS
+        level = 0.55 + 0.45 * (0.5 + 0.5 * math.sin(2 * math.pi * phase))
+        rgb = tuple(round(c * level) for c in INTERMISSION)
+        self._draw_ring(canvas, cx, cy, self._SO_CELL_RADIUS + 1, rgb)
+
+    def _draw_cell_pending(self, canvas: Any, cx: int, cy: int) -> None:
+        r = self._SO_CELL_RADIUS
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if (r - 1) ** 2 <= dx * dx + dy * dy <= r * r + 2:
+                    canvas.SetPixel(cx + dx, cy + dy, *SUBDUED)
+
+    def _draw_cell_miss(self, canvas: Any, cx: int, cy: int, age: float | None = None) -> None:
+        """The red X; while fresh its two strokes are drawn one after the other."""
+        reach = self._SO_CELL_RADIUS - 1
+        span = 2 * reach + 1
+        if age is None or age >= self.SHOOTOUT_ANIM_SECONDS:
+            first = second = 1.0
+        else:
+            stroke = self._SO_STROKE_SECONDS
+            first = min(1.0, max(0.0, age) / stroke)
+            second = min(1.0, max(0.0, age - stroke) / stroke)
+        for i in range(-reach, -reach + math.ceil(span * first)):
+            canvas.SetPixel(cx + i, cy + i, *LOSS)
+        for i in range(-reach, -reach + math.ceil(span * second)):
+            canvas.SetPixel(cx + i, cy - i, *LOSS)
 
     def draw_goal(self, canvas: Any, game: Game) -> None:
         """A goal celebration: GOAL in big amber type, current score below.
