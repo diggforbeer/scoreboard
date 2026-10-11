@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import tomlkit
 
-from .display.holiday import HOLIDAY_NAMES
+from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 
 log = logging.getLogger(__name__)
 
@@ -256,8 +256,9 @@ class ScoreboardConfig:
 #: "countdown_preview" auto-switches between countdown/preview based on
 #: countdown_hours, same as always -- which one shows isn't a user choice,
 #: so it isn't split into two separately configurable screens (#150).
-#: "matchup" (#157), "top_west"/"top_east" (#200) and "leaders" (#201) are
-#: opt-in only: never part of the derived default list.
+#: "matchup" (#157), "top_west"/"top_east" (#200), "leaders" (#201) and
+#: "holiday" (#243, the active holiday's own screen) are opt-in only: never
+#: part of the derived default list.
 VALID_ROTATION_SCREENS = (
     "countdown_preview",
     "standings",
@@ -266,6 +267,7 @@ VALID_ROTATION_SCREENS = (
     "top_west",
     "top_east",
     "leaders",
+    "holiday",
 )
 
 
@@ -499,7 +501,9 @@ class HolidayConfig:
     """
 
     enabled: bool = False
-    themes: list[str] = field(default_factory=lambda: list(HOLIDAY_NAMES))
+    #: Every holiday but the ones marked default_on=False (Canadian
+    #: Thanksgiving), so a US board doesn't sprout October turkeys unasked.
+    themes: list[str] = field(default_factory=lambda: list(DEFAULT_THEMES))
     #: Random gap between fly-bys (the Halloween ghost). Generic names, not
     #: ghost_*: every later holiday's fly-by (#239-#242) reuses them.
     flyby_min_minutes: float = 5.0

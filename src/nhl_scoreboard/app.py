@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import qrcode
 
+from . import april_fools
 from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
@@ -35,7 +36,13 @@ from .config import (
     resolve_timezone,
 )
 from .display.fonts import FontSet
-from .display.holiday import HOLIDAYS, Holiday, HolidayOverlay, active_holiday
+from .display.holiday import (
+    HOLIDAYS,
+    Holiday,
+    HolidayOverlay,
+    active_holiday,
+    christmas_countdown,
+)
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.renderer import Renderer
@@ -172,7 +179,7 @@ class Scene:
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
     ``conference_leaders``, ``matchup``, ``matchup_meetings``, ``leaders``,
-    ``clock``, ``no_games``,
+    ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
@@ -1421,7 +1428,21 @@ class ScoreboardApp:
         if screen == "leaders":
             # Resolved lazily like matchup: club-stats is never called unless listed.
             return self._leaders_scene(allow_fetch=allow_fetch)
+        if screen == "holiday":
+            return self._holiday_screen_scene()
         return None
+
+    def _holiday_screen_scene(self) -> Scene | None:
+        """The active holiday's own screen (#243), or None to skip the slot.
+
+        Only Christmas has one: the tree, Dec 1-25, and only with Holiday
+        Cheer on and Christmas ticked -- the same switches as its overlay.
+        """
+        cfg = self.settings.holiday
+        if not cfg.enabled or "christmas" not in cfg.themes:
+            return None
+        today = self.clock().astimezone(self.tz).date()
+        return Scene("christmas_tree") if christmas_countdown(today) else None
 
     def _rotate_idle_scenes(
         self, upcoming: Game | None, standings: Scene | None, *, allow_fetch: bool = True
@@ -1939,8 +1960,31 @@ class ScoreboardApp:
             self.renderer.logos = self._demo_real_logos
         self.draw_scene(self.select_scene())
 
+    def april_fools_active(self) -> bool:
+        """April 1 on a Preds board (#248) -- see april_fools.py."""
+        local = self.clock().astimezone(self.tz)
+        return april_fools.active(self.settings.scoreboard.favourite_team, local)
+
+    @staticmethod
+    def _april_fools_scene(scene: Scene) -> Scene:
+        """Every NSH label in ``scene`` as MIL; nothing else changes (#248)."""
+        changes: dict[str, object] = {}
+        if scene.game is not None:
+            changes["game"] = april_fools.swap_game(scene.game)
+        if scene.goal_event is not None:
+            changes["goal_event"] = april_fools.swap_goal(scene.goal_event)
+        if scene.stars is not None:
+            changes["stars"] = tuple(april_fools.swap_star(s) for s in scene.stars)
+        if scene.standings is not None:
+            changes["standings"] = april_fools.swap_rows(scene.standings)
+        return dataclasses.replace(scene, **changes) if changes else scene
+
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
+        favourite = self.settings.scoreboard.favourite_team
+        if self.april_fools_active():
+            favourite = april_fools.PRANK_AS
+            scene = self._april_fools_scene(scene)
         if scene.kind == "game":
             r.draw_game(self.canvas, self.with_situation(scene.game))
         elif scene.kind == "goal":
@@ -1954,30 +1998,30 @@ class ScoreboardApp:
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "conference_leaders":
-            r.draw_conference_leaders(
-                self.canvas, scene.standings, self.settings.scoreboard.favourite_team
-            )
+            r.draw_conference_leaders(self.canvas, scene.standings, favourite)
         elif scene.kind == "standings":
-            r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
+            r.draw_standings(self.canvas, scene.standings, favourite)
         elif scene.kind == "matchup":
             r.draw_matchup(self.canvas, scene.game, scene.season_series)
         elif scene.kind == "matchup_meetings":
             r.draw_matchup_meetings(self.canvas, scene.game, scene.meetings)
         elif scene.kind == "leaders":
-            r.draw_leaders(self.canvas, scene.leaders, self.settings.scoreboard.favourite_team)
+            r.draw_leaders(self.canvas, scene.leaders, favourite)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "clock":
-            r.draw_clock(self.canvas, self.clock(), self.settings.scoreboard.favourite_team)
+            r.draw_clock(self.canvas, self.clock(), favourite)
+        elif scene.kind == "christmas_tree":
+            r.draw_christmas_tree(self.canvas, self.clock(), favourite)
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":
             r.draw_wifi_join(self.canvas, scene.wifi_join_status, scene.wifi_join_ssid)
         else:
             r.draw_message(self.canvas, "NO GAMES")
-        self._draw_holiday_overlay(scene)
+        self._draw_holiday_overlay(scene, favourite)
         self.canvas = self.matrix.SwapOnVSync(self.canvas)
 
     def active_holiday(self) -> Holiday | None:
@@ -1987,7 +2031,7 @@ class ScoreboardApp:
             return None
         return active_holiday(cfg.themes, self.clock().astimezone(self.tz).date())
 
-    def _draw_holiday_overlay(self, scene: Scene) -> None:
+    def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
         cfg = self.settings.holiday
         self._overlay_animating = self.holiday_overlay.draw(
@@ -1999,4 +2043,6 @@ class ScoreboardApp:
             height=self.renderer.height,
             min_gap_seconds=cfg.flyby_min_minutes * 60,
             max_gap_seconds=cfg.flyby_max_minutes * 60,
+            day=self.clock().astimezone(self.tz).date(),
+            favourite=favourite,
         )
