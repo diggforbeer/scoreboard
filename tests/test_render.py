@@ -31,6 +31,7 @@ from nhl_scoreboard.display.renderer import (
     FINAL,
     INTERMISSION,
     LIVE,
+    LOSS,
     PREGAME,
     SUBDUED,
     WHITE,
@@ -42,6 +43,7 @@ from nhl_scoreboard.nhl.models import (
     Game,
     GoalEvent,
     GoalieLine,
+    MeetingResult,
     SeasonSeriesRecord,
     Situation,
     SkaterLine,
@@ -813,6 +815,84 @@ def test_matchup_missing_logo_falls_back_to_text(synthetic_logos):
     make_renderer(logos=synthetic_logos).draw_matchup(c, game, SeasonSeriesRecord(1, 1))
     assert not c.out_of_bounds
     assert c.row_is_solid(RULE_Y), "text layout's full-width rule"
+
+
+# --------------------------------------------------------------------------
+# matchup_meetings: the finished meetings behind the tally (#168)
+# --------------------------------------------------------------------------
+
+#: From the favourite's side: a regulation win, an OT loss, a shootout win.
+MEETINGS = (
+    MeetingResult(datetime(2025, 10, 4).date(), True, 4, 1, ""),
+    MeetingResult(datetime(2025, 11, 18).date(), False, 2, 3, "OT"),
+    MeetingResult(datetime(2026, 1, 9).date(), True, 3, 2, "SO"),
+)
+MEETING_COLORS = {ACCENT, SUBDUED, LIVE, LOSS, WHITE}
+
+
+def meeting_rows(c: AsciiCanvas, x0: int, x1: int) -> list:
+    """Bounding boxes of the title and each meeting line, top to bottom."""
+    bands = ((1, 5), (8, 12), (14, 18), (20, 24), (26, 30))
+    return [c.bbox(x0, y0, x1, y1) for y0, y1 in bands]
+
+
+def test_matchup_meetings_logo_layout(synthetic_logos, update_snapshots):
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_matchup_meetings(c, UPCOMING, MEETINGS)
+    art = show("logos, matchup meetings: OCT 4 W 4-1 / NOV 18 L 2-3 OT / JAN 9 W 3-2 SO", c)
+
+    assert not c.out_of_bounds
+    for x0, side in ((0, UPCOMING.away), (MID_RIGHT, UPCOMING.home)):
+        assert team_color(side.abbrev) in c.colors(x0, 0, x0 + LOGO - 1, H - 1)
+    middle = c.colors(MID_LEFT, 0, MID_RIGHT - 1, H - 1)
+    assert middle == MEETING_COLORS, "date, W/L, score and suffix each in their colour"
+    title, *rows = meeting_rows(c, MID_LEFT, MID_RIGHT - 1)
+    assert title and abs(title.center_x - (W - 1) / 2) <= 1, "title centred between the logos"
+    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, 5) == {ACCENT}
+    assert [r is not None for r in rows] == [True, True, True, False], "one row per meeting"
+    assert len({r.x0 for r in rows if r}) == 1, "rows share a left edge"
+    assert LOSS in c.colors(MID_LEFT, 14, MID_RIGHT - 1, 18), "the OT loss is the second row"
+    check_snapshot("logo_matchup_meetings", art, update_snapshots)
+
+
+def test_matchup_meetings_text_layout(update_snapshots):
+    c = canvas()
+    make_renderer().draw_matchup_meetings(c, UPCOMING, MEETINGS)
+    art = show("text, matchup meetings", c)
+
+    assert not c.out_of_bounds
+    assert c.colors(0, 0, W - 1, H - 1) == MEETING_COLORS
+    title, *rows = meeting_rows(c, 0, W - 1)
+    assert title and abs(title.center_x - (W - 1) / 2) <= 1
+    block = [r for r in rows if r]
+    assert len(block) == 3 and len({r.x0 for r in block}) == 1
+    check_snapshot("text_matchup_meetings", art, update_snapshots)
+
+
+def test_matchup_meetings_shows_the_latest_four(synthetic_logos):
+    """A fifth meeting can't happen in one regular season, but never overflows."""
+    oldest_loss = MeetingResult(datetime(2025, 10, 1).date(), False, 1, 5, "")
+    wins = tuple(MeetingResult(datetime(2025, 11, d).date(), True, 3, 1, "") for d in (1, 2, 3, 4))
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_matchup_meetings(c, UPCOMING, (oldest_loss, *wins))
+    assert not c.out_of_bounds
+    assert all(meeting_rows(c, MID_LEFT, MID_RIGHT - 1))
+    assert LOSS not in c.colors(0, 0, W - 1, H - 1), "the oldest meeting is the one dropped"
+
+
+def test_matchup_meetings_narrow_panel_drops_the_date(synthetic_logos, update_snapshots):
+    c = AsciiCanvas(NARROW_W, H)
+    make_narrow_renderer(synthetic_logos).draw_matchup_meetings(c, UPCOMING, MEETINGS)
+    art = show("narrow logos, matchup meetings: W 4-1 / L 2-3 / W 3-2", c)
+
+    assert not c.out_of_bounds
+    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(UPCOMING.away.abbrev)}
+    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
+    content = c.colors(NARROW_LEFT, 0, NARROW_RIGHT - 1, H - 1)
+    assert SUBDUED not in content, "no room for the date or the OT/SO suffix"
+    assert {LIVE, LOSS, WHITE, ACCENT} <= content
+    assert all(r is not None for r in meeting_rows(c, NARROW_LEFT, NARROW_RIGHT - 1)[:4])
+    check_snapshot("logo_narrow_matchup_meetings", art, update_snapshots)
 
 
 # --------------------------------------------------------------------------

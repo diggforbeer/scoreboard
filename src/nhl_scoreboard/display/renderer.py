@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 from ..nhl.models import (
     Game,
     GoalEvent,
+    MeetingResult,
     SeasonSeriesRecord,
     StandingsRow,
     Star,
@@ -35,6 +36,8 @@ FINAL = (150, 150, 150)
 PREGAME = (90, 180, 255)
 ACCENT = (255, 210, 0)
 SUBDUED = (110, 110, 110)
+#: A past meeting lost (#168); a win reuses LIVE's green.
+LOSS = (235, 50, 50)
 
 
 class Renderer:
@@ -522,8 +525,8 @@ class Renderer:
         Same frame as ``_draw_upcoming`` -- the big line above the rule, a
         caption below it -- so it reads as a sibling of the preview it
         rotates with. The tally is away-home, matching the game scene's own
-        left/right order. Only the win tally: individual past meetings'
-        scores are a deferred follow-up, not drawn here.
+        left/right order. Only the win tally: the meetings behind it are
+        ``draw_matchup_meetings``, the other half of the slot (#168).
         """
         canvas.Clear()
         rule_y = 19
@@ -560,6 +563,62 @@ class Renderer:
         self.hline(canvas, 0, self.width - 1, rule_y, DIM)
         font, caption = self._series_caption(max_w)
         self.text_center(canvas, font, self.width // 2, bottom_baseline, SUBDUED, caption)
+
+    #: Tiny-face baselines: the title, then up to four meetings -- the most
+    #: one regular season schedules between two teams.
+    _MEETINGS_TITLE_BASELINE = 6
+    _MEETINGS_BASELINES = (13, 19, 25, 31)
+
+    def draw_matchup_meetings(
+        self, canvas: Any, game: Game, meetings: Sequence[MeetingResult]
+    ) -> None:
+        """This season's finished meetings, from the favourite's side (#168).
+
+        The second half of the matchup slot, after the tally: same two logos
+        (or none, full width), one tiny-face row per meeting, oldest first --
+        ``OCT 14 W 4-1``, with ``OT``/``SO`` after a non-regulation finish.
+        Every row drops the same parts when the column is narrow (the date,
+        then the suffix) so the rows still line up.
+        """
+        canvas.Clear()
+        left, right = 0, self.width
+        if self.logos is not None:
+            away, home = self.logos.get(game.away.abbrev), self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                left, right = self._draw_logos(canvas, away, home)
+        font = self.fonts.tiny
+        room = right - left - 2
+        cx = (left + right) // 2
+        title = next(
+            (t for t in ("THIS SEASON", "SERIES") if text_width(font, t) <= room), "SERIES"
+        )
+        self.text_center(canvas, font, cx, self._MEETINGS_TITLE_BASELINE, ACCENT, title)
+
+        shown = list(meetings)[-len(self._MEETINGS_BASELINES) :]
+        for with_date, with_suffix in ((True, True), (False, True), (False, False)):
+            rows = [self._meeting_parts(m, with_date, with_suffix) for m in shown]
+            width = max((sum(text_width(font, t) for t, _ in r) for r in rows), default=0)
+            if width <= room:
+                break
+        x0 = cx - width // 2
+        for baseline, parts in zip(self._MEETINGS_BASELINES, rows, strict=False):
+            x = x0
+            for text, color in parts:
+                x += self.text(canvas, font, x, baseline, color, text)
+
+    @staticmethod
+    def _meeting_parts(
+        meeting: MeetingResult, with_date: bool, with_suffix: bool
+    ) -> list[tuple[str, tuple[int, int, int]]]:
+        parts: list[tuple[str, tuple[int, int, int]]] = []
+        if with_date:
+            day = meeting.game_date
+            parts.append((f"{day.strftime('%b').upper()} {day.day:>2} ", SUBDUED))
+        parts.append(("W " if meeting.won else "L ", LIVE if meeting.won else LOSS))
+        parts.append((meeting.score_label(), WHITE))
+        if with_suffix and meeting.decided_in:
+            parts.append((f" {meeting.decided_in}", SUBDUED))
+        return parts
 
     def _series_caption(self, max_width: int) -> tuple[Any, str]:
         """The widest "season series" label that fits: small face, then tiny, then short."""

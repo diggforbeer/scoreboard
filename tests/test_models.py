@@ -558,3 +558,59 @@ def test_goalie_save_pct_label():
     assert GoalieLine(1, "G", 1, 0, 0, 0, 0.915).save_pct_label() == ".915"
     assert GoalieLine(1, "G", 1, 0, 0, 0, 1.0).save_pct_label() == "1.000"
     assert GoalieLine(1, "G", 0, 0, 0, 0, 0.0).save_pct_label() == ".000"
+
+
+# -- season series meetings (#168) -----------------------------------------
+
+from datetime import date  # noqa: E402
+
+from nhl_scoreboard.nhl.models import MeetingResult, SeriesMeeting  # noqa: E402
+
+MEETING = SeriesMeeting(1, date(2026, 1, 10), "MIN", "NSH", 2, 3, "OT")
+
+
+def test_meeting_result_from_each_side():
+    assert MEETING.result_for("NSH") == MeetingResult(date(2026, 1, 10), True, 3, 2, "OT")
+    assert MEETING.result_for(" min ") == MeetingResult(date(2026, 1, 10), False, 2, 3, "OT")
+    assert MEETING.result_for("NSH").score_label() == "3-2"
+
+
+def test_meeting_result_none_for_a_team_not_in_it():
+    assert MEETING.result_for("DAL") is None
+
+
+def test_regulation_meeting_has_no_suffix():
+    regulation = SeriesMeeting(1, date(2026, 1, 10), "MIN", "NSH", 4, 1, "REG")
+    assert regulation.result_for("NSH").decided_in == ""
+    assert not regulation.result_for("NSH").won
+
+
+def test_unseen_period_type_passes_through_as_the_suffix():
+    """SO is presumed, not seen live (#168): whatever the API says is shown as-is."""
+    shootout = SeriesMeeting.from_api(
+        {
+            "id": 1,
+            "gameDate": "2026-01-10",
+            "gameType": 2,
+            "gameState": "FINAL",
+            "awayTeam": {"abbrev": "min", "score": 3},
+            "homeTeam": {"abbrev": "nsh", "score": 2},
+            "gameOutcome": {"lastPeriodType": "SO"},
+        }
+    )
+    assert shootout.result_for("NSH").decided_in == "SO"
+    assert shootout.result_for("MIN").won
+
+
+def test_missing_game_outcome_reads_as_regulation():
+    meeting = SeriesMeeting.from_api(
+        {
+            "id": 1,
+            "gameDate": "2026-01-10",
+            "gameType": 2,
+            "gameState": "OFF",
+            "awayTeam": {"abbrev": "MIN", "score": 3},
+            "homeTeam": {"abbrev": "NSH", "score": 2},
+        }
+    )
+    assert meeting.last_period_type == "REG"

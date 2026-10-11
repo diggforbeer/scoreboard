@@ -44,6 +44,7 @@ from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
     Game,
     GoalEvent,
+    MeetingResult,
     PlayerSeasonDetail,
     SeasonSeriesRecord,
     Situation,
@@ -170,7 +171,8 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``matchup``, ``leaders``, ``clock``, ``no_games``,
+    ``conference_leaders``, ``matchup``, ``matchup_meetings``, ``leaders``,
+    ``clock``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
@@ -180,6 +182,9 @@ class Scene:
     #: Set only for ``matchup`` (#157) -- oriented to ``game``'s own
     #: away/home sides, as the API returns it.
     season_series: SeasonSeriesRecord | None = None
+    #: Set only for ``matchup``/``matchup_meetings`` (#168) -- the finished
+    #: meetings from the favourite's side, oldest first.
+    meetings: tuple[MeetingResult, ...] = ()
     #: Set only for ``leaders`` (#201) -- the favourite's own top players.
     leaders: TeamLeaders | None = None
     #: Set only for ``goal_detail`` -- who scored, and their/their
@@ -1310,7 +1315,23 @@ class ScoreboardApp:
         record = self._refresh_season_series(upcoming.id, allow_fetch=allow_fetch)
         if record is None:
             return None
-        return Scene("matchup", upcoming, season_series=record)
+        favourite = self.settings.scoreboard.favourite_team
+        meetings = tuple(
+            result for m in record.meetings if (result := m.result_for(favourite)) is not None
+        )
+        return Scene("matchup", upcoming, season_series=record, meetings=meetings)
+
+    @staticmethod
+    def _split_matchup(scene: Scene, offset: float, seconds: float) -> Scene:
+        """The second half of a matchup slot shows the meetings behind the tally (#168).
+
+        One rotation entry, by the owner's choice, rather than a second
+        screen to configure. With no finished meeting yet (a 0-0 tally) the
+        tally keeps the whole slot.
+        """
+        if scene.kind != "matchup" or not scene.meetings or offset < seconds / 2:
+            return scene
+        return dataclasses.replace(scene, kind="matchup_meetings")
 
     def _refresh_leaders(self, team: str, *, allow_fetch: bool = True) -> TeamLeaders | None:
         """The favourite's stat leaders, cached ``LEADERS_TTL_SECONDS`` like standings.
@@ -1426,14 +1447,15 @@ class ScoreboardApp:
         if not slots:
             return None
         if len(slots) == 1:
-            return slots[0][0]
+            scene, seconds = slots[0]
+            return self._split_matchup(scene, self.monotonic() % seconds, seconds)
         total = sum(seconds for _, seconds in slots)
         position = self.monotonic() % total
-        elapsed = 0.0
+        start = 0.0
         for scene, seconds in slots:
-            elapsed += seconds
-            if position < elapsed:
-                return scene
+            if position < start + seconds:
+                return self._split_matchup(scene, position - start, seconds)
+            start += seconds
         return slots[-1][0]
 
     def select_scene(self, *, allow_fetch: bool = True) -> Scene:
@@ -1939,6 +1961,8 @@ class ScoreboardApp:
             r.draw_standings(self.canvas, scene.standings, self.settings.scoreboard.favourite_team)
         elif scene.kind == "matchup":
             r.draw_matchup(self.canvas, scene.game, scene.season_series)
+        elif scene.kind == "matchup_meetings":
+            r.draw_matchup_meetings(self.canvas, scene.game, scene.meetings)
         elif scene.kind == "leaders":
             r.draw_leaders(self.canvas, scene.leaders, self.settings.scoreboard.favourite_team)
         elif scene.kind == "no_data":
