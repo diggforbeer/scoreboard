@@ -316,21 +316,22 @@ class ScoreboardApp:
         self._leaders: tuple[str, float, TeamLeaders | None] | None = None
         self._leaders_retry_after: float = 0.0
         self._rng = random.Random()
-        #: game id -> the favourite's own score last seen in that game, so a
-        #: goal can be detected as an increase. Set on first sighting without
-        #: firing, so a game already 3-1 at startup does not fire a goal.
-        self._known_favourite_score: dict[int, int] = {}
-        #: (game id, monotonic time) of the most recent favourite goal, for
-        #: how long the goal scene stays up.
+        #: (game id, followed team) -> that team's own score last seen in that
+        #: game, so a goal can be detected as an increase. Set on first
+        #: sighting without firing, so a game already 3-1 at startup does not
+        #: fire a goal. Keyed by team too: two followed teams can meet (#260).
+        self._known_scores: dict[tuple[int, str], int] = {}
+        #: (game id, monotonic time) of the most recent followed-team goal,
+        #: for how long the goal scene stays up.
         self.last_goal: tuple[int, float] | None = None
-        #: game id -> (fetched at, favourite's own GoalEvents seen so far in
-        #: that game's scoring array). Favourite-only, same scoping
-        #: precedent as goal detection and the PP indicator (#122).
+        #: game id -> (fetched at, followed teams' own GoalEvents seen so far
+        #: in that game's scoring array). Followed teams only (#260), same
+        #: scoping precedent as goal detection and the PP indicator (#122).
         self._goal_events: dict[int, tuple[float, tuple[GoalEvent, ...]]] = {}
         #: game id -> how many of the favourite's goal_events already had a
         #: goal_detail screen shown, so a late scorer/assist correction never
         #: re-fires for the same goal. Set to the full count on first
-        #: sighting without firing, same precedent as _known_favourite_score.
+        #: sighting without firing, same precedent as _known_scores.
         self._shown_goal_events: dict[int, int] = {}
         #: (game id, monotonic time, event) of the most recent goal_detail
         #: screen, for how long it stays up.
@@ -581,7 +582,7 @@ class ScoreboardApp:
     def _prune_game_state(self) -> None:
         """Drop bookkeeping for games no longer in today's slate.
 
-        ``_seen_live``, ``ended_at``, ``_known_favourite_score`` and the
+        ``_seen_live``, ``ended_at``, ``_known_scores`` and the
         goal-detail/three-stars bookkeeping are keyed by game id and
         otherwise never cleared, growing by one entry per game for as long
         as the process runs (#64). ``self.games`` is
@@ -593,9 +594,9 @@ class ScoreboardApp:
         for game_id in list(self.ended_at):
             if game_id not in current_ids:
                 del self.ended_at[game_id]
-        for game_id in list(self._known_favourite_score):
-            if game_id not in current_ids:
-                del self._known_favourite_score[game_id]
+        for key in list(self._known_scores):
+            if key[0] not in current_ids:
+                del self._known_scores[key]
         for game_id in list(self._goal_events):
             if game_id not in current_ids:
                 del self._goal_events[game_id]
@@ -693,6 +694,7 @@ class ScoreboardApp:
         favourite_team_changed = (
             old.scoreboard.favourite_team != new_settings.scoreboard.favourite_team
         )
+        followed_changed = old.scoreboard.followed_teams != new_settings.scoreboard.followed_teams
         auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
         status_changed = (old.status.enabled, old.status.port) != (
             new_settings.status.enabled,
@@ -734,6 +736,13 @@ class ScoreboardApp:
             self._schedule_retry_after = 0.0
             self._leaders = None
             self._leaders_retry_after = 0.0
+
+        if followed_changed:
+            # _goal_events counts only followed teams' goals, so a team
+            # added mid-game would read as its whole tally scoring at once.
+            # Forget both, and the next poll re-baselines without firing.
+            self._goal_events.clear()
+            self._shown_goal_events.clear()
 
         if audio_changed:
             # volume is carried on the rebuilt object but deliberately not
@@ -861,17 +870,17 @@ class ScoreboardApp:
     def _night_mode_suppressed(self) -> bool:
         """A relevant game is live, or finished less than cooldown_minutes ago.
 
-        "tracked" with no favourite_team has nothing to track, so it
-        behaves as "all" -- a normal combination (no favourite_team
+        "tracked" means every followed team's games (#260), the favourite's
+        included. With no team followed at all it has nothing to track, so
+        it behaves as "all" -- a normal combination (no favourite_team
         configured, with night mode on), not a misconfiguration worth a
         warning.
         """
         cfg = self.settings.night_mode
-        favourite = self.settings.scoreboard.favourite_team
-        if cfg.suppress_scope == "all" or not favourite:
+        if cfg.suppress_scope == "all" or not self.settings.scoreboard.followed_teams:
             candidates = self.games
         else:
-            candidates = [g for g in self.games if g.involves(favourite)]
+            candidates = [g for g in self.games if self._is_followed(g)]
         if any(g.is_live for g in candidates):
             return True
         ended = [self.ended_at[g.id] for g in candidates if g.id in self.ended_at]
@@ -889,39 +898,44 @@ class ScoreboardApp:
 
     # -- goal detection ---------------------------------------------------
 
-    def _favourite_score(self, game: Game) -> int | None:
-        favourite = self.settings.scoreboard.favourite_team
-        if not favourite or not game.involves(favourite):
-            return None
-        return game.home.score if game.home.abbrev == favourite else game.away.score
+    def _is_followed(self, game: Game) -> bool:
+        """Does ``game`` involve the favourite or an ``also_follow`` team (#260)?"""
+        return any(game.involves(team) for team in self.settings.scoreboard.followed_teams)
 
     def _detect_goals(self, games: list[Game]) -> None:
-        """A favourite-team goal: their own score increased since we last saw it.
+        """A followed team's goal: their own score increased since we last saw it.
 
-        Scoped to the favourite only -- same reasoning as the power-play
-        indicator (situation_targets): this is a favourite-team board
-        feature, not a "celebrate every goal in every game" one.
+        Scoped to followed teams' own goals -- the favourite plus
+        ``also_follow`` (#260) -- never their opponents' or other games',
+        same reasoning as the power-play indicator (situation_targets):
+        this is a your-teams board, not a "celebrate every goal in every
+        game" one.
         """
         for game in games:
-            score = self._favourite_score(game)
-            if score is None:
-                continue
-            previous = self._known_favourite_score.get(game.id)
-            self._known_favourite_score[game.id] = score
-            if previous is not None and score > previous:
-                self._on_goal(game)
+            for team in self.settings.scoreboard.followed_teams:
+                if not game.involves(team):
+                    continue
+                score = game.home.score if game.home.abbrev == team else game.away.score
+                previous = self._known_scores.get((game.id, team))
+                self._known_scores[(game.id, team)] = score
+                if previous is not None and score > previous:
+                    self._on_goal(game, team)
 
-    def _on_goal(self, game: Game) -> None:
+    def _on_goal(self, game: Game, team: str | None = None) -> None:
+        """Show the goal scene; sound the horn only for the favourite's own goals (#260)."""
         favourite = self.settings.scoreboard.favourite_team
+        team = team or favourite
         log.info(
             "GOAL: %s %s %d-%d %s",
-            favourite,
+            team,
             game.away.abbrev,
             game.away.score,
             game.home.score,
             game.home.abbrev,
         )
         self.last_goal = (game.id, self.monotonic())
+        if team != favourite:
+            return
         if self._horn_muted():
             log.info("Goal horn muted by button press; not playing")
             return
@@ -963,18 +977,19 @@ class ScoreboardApp:
         entry actually shows up -- possibly well after the ``goal`` scene's
         own flash has already ended.
 
-        Scoped to the favourite's own live game only, same precedent as
-        goal detection and the PP indicator. A separate request to the same
-        landing URL ``refresh_situations()`` already polls (not a new
-        endpoint), on the same ``live_poll_seconds`` cadence, skipped during
-        intermission for the same reason situation is.
+        Scoped to followed teams' live games (the favourite plus
+        ``also_follow``, #260) and their own goals, same precedent as goal
+        detection and the PP indicator: one request per live followed game,
+        to the same landing URL ``refresh_situations()`` already polls (not
+        a new endpoint), on the same ``live_poll_seconds`` cadence, skipped
+        during intermission for the same reason situation is.
         """
-        favourite = self.settings.scoreboard.favourite_team
-        if not favourite:
-            return
-        game = next((g for g in self.games if g.is_live and g.involves(favourite)), None)
-        if game is None:
-            return
+        followed = self.settings.scoreboard.followed_teams
+        for game in self.games:
+            if game.is_live and self._is_followed(game):
+                self._refresh_goal_detail(game, followed)
+
+    def _refresh_goal_detail(self, game: Game, followed: list[str]) -> None:
         now = self.monotonic()
         interval = self.settings.scoreboard.live_poll_seconds
         fetched_at, events = self._goal_events.get(game.id, (None, ()))
@@ -988,12 +1003,12 @@ class ScoreboardApp:
         except NHLApiError as exc:
             log.debug("Goal scoring fetch for %s failed: %s", game.id, exc)
             all_events = events
-        favourite_events = tuple(e for e in all_events if e.team_abbrev == favourite)
-        self._goal_events[game.id] = (now, favourite_events)
-        self._detect_goal_detail(game.id, favourite_events)
+        followed_events = tuple(e for e in all_events if e.team_abbrev in followed)
+        self._goal_events[game.id] = (now, followed_events)
+        self._detect_goal_detail(game.id, followed_events)
 
     def _detect_goal_detail(self, game_id: int, events: tuple[GoalEvent, ...]) -> None:
-        """The favourite's scoring array grew by one entry: show it, once.
+        """A followed team's scoring array grew by one entry: show it, once.
 
         Tracks a count per game rather than matching goals by identity --
         the simplest approach that still can't refire for the same goal on
@@ -1104,15 +1119,13 @@ class ScoreboardApp:
             self._three_stars_shown.add(game_id)
             self._three_stars = (game_id, now, stars)
 
-    def _three_stars_override(self, game_id: int) -> Scene | None:
+    def _three_stars_override(self) -> Scene | None:
         if self._three_stars is None:
             return None
         stars_game_id, shown_at, stars = self._three_stars
-        if stars_game_id != game_id:
-            return None
         if self.monotonic() - shown_at >= self.settings.scoreboard.three_stars_seconds:
             return None
-        game = next((g for g in self.games if g.id == game_id), None)
+        game = next((g for g in self.games if g.id == stars_game_id), None)
         if game is None:
             return None
         return Scene("three_stars", game, stars=stars)
@@ -1603,11 +1616,14 @@ class ScoreboardApp:
         return Scene("clock" if self.settings.scoreboard.show_clock_when_idle else "no_games")
 
     def _apply_goal_override(self, scene: Scene) -> Scene:
-        """Show the goal (or later, goal_detail) screen over the game it happened in.
+        """Show the goal (or later, goal_detail) screen for a followed team's goal.
 
-        Only ever replaces a "game" scene for the exact game the goal
-        belongs to -- it never interrupts a countdown, preview or a
-        different game mid-rotation to force attention to the favourite.
+        Only ever replaces a "game" scene -- never a countdown, preview or
+        other idle screen. The red zone (#260): while followed teams' live
+        games take turns on screen, a goal in any of them jumps straight to
+        that game, whichever one is up -- and so do the favourite's three
+        stars, or a live followed game's turn could swallow them. A game no followed team is in
+        (today's-games rotation) is never interrupted.
         goal_detail wins when both are pending: it fires strictly after the
         goal scene's own score-increase trigger (see refresh_goal_details),
         so by the time it is ready there is no point re-showing the plainer
@@ -1618,47 +1634,43 @@ class ScoreboardApp:
         If a late game-winner's flash does overlap it, the goal screens win
         and three_stars just loses that slice of its own window.
         """
-        if scene.kind != "game":
+        if scene.kind != "game" or not self._is_followed(scene.game):
             return scene
-        detail = self._goal_detail_override(scene.game.id)
+        detail = self._goal_detail_override()
         if detail is not None:
             return detail
         if self.last_goal is not None:
             goal_game_id, goal_time = self.last_goal
+            goal_game = next((g for g in self.games if g.id == goal_game_id), None)
             if (
-                scene.game.id == goal_game_id
+                goal_game is not None
                 and self.monotonic() - goal_time < self.settings.scoreboard.goal_flash_seconds
             ):
-                return Scene("goal", scene.game)
-        stars = self._three_stars_override(scene.game.id)
+                return Scene("goal", goal_game)
+        stars = self._three_stars_override()
         return stars if stars is not None else scene
 
-    def _goal_detail_override(self, game_id: int) -> Scene | None:
+    def _goal_detail_override(self) -> Scene | None:
         if self._goal_detail is None:
             return None
         detail_game_id, detail_time, event = self._goal_detail
-        if detail_game_id != game_id:
-            return None
         if self.monotonic() - detail_time >= self.settings.scoreboard.goal_detail_seconds:
             return None
-        game = next((g for g in self.games if g.id == game_id), None)
+        game = next((g for g in self.games if g.id == detail_game_id), None)
         if game is None:
             return None
         return Scene("goal_detail", game, goal_event=event)
 
     def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         cfg = self.settings.scoreboard
+        turns = self._followed_games_on_now()
+        if turns:
+            # Equal turns (#260): one game holds the screen, several cycle.
+            turn = int(self.monotonic() // cfg.rotate_seconds) % len(turns)
+            return Scene("game", turns[turn])
         if not cfg.favourite_team:
             return None
         today = self.favourite_game_today()
-        if today is not None:
-            if today.is_live:
-                return Scene("game", today)
-            if today.is_final:
-                ended = self.ended_at.get(today.id)
-                hold = timedelta(minutes=cfg.final_hold_minutes)
-                if ended is not None and self.clock() - ended < hold:
-                    return Scene("game", today)
         upcoming = (
             today
             if today is not None and today.is_pregame
@@ -1667,16 +1679,32 @@ class ScoreboardApp:
         standings = self._standings_scene(allow_fetch=allow_fetch)
         return self._rotate_idle_scenes(upcoming, standings, allow_fetch=allow_fetch)
 
+    def _followed_games_on_now(self) -> list[Game]:
+        """Followed teams' live games, plus the favourite's held final, in slate order.
+
+        These take the screen ahead of the favourite's idle rotation. Only
+        the favourite's final is held (``final_hold_minutes``, with its
+        three stars); an ``also_follow`` team's game leaves the cycle the
+        moment it ends.
+        """
+        cfg = self.settings.scoreboard
+        today = self.favourite_game_today()
+        held = None
+        if today is not None and today.is_final:
+            ended = self.ended_at.get(today.id)
+            if ended is not None and self.clock() - ended < timedelta(
+                minutes=cfg.final_hold_minutes
+            ):
+                held = today
+        return [g for g in self.games if g is held or (g.is_live and self._is_followed(g))]
+
     def situation_targets(self) -> list[Game]:
-        """Live games worth a second request: the favourite's and the on-screen one.
+        """Live games worth a second request: followed teams' and the on-screen one.
 
         Everything else shows even strength; that is the trade for not
         hammering the landing endpoint once per live game every poll.
         """
-        targets: list[Game] = []
-        favourite = self.settings.scoreboard.favourite_team
-        if favourite:
-            targets += [g for g in self.games if g.is_live and g.involves(favourite)]
+        targets = [g for g in self.games if g.is_live and self._is_followed(g)]
         if self.games:
             current = self.games[self.index]
             if current.is_live and current not in targets:
@@ -1762,6 +1790,7 @@ class ScoreboardApp:
             "scene": "demo" if self._demo_mode else scene.kind,
             "current game": self._scene_game_label(scene),
             "favourite team": cfg.favourite_team or "(none)",
+            "also following": ", ".join(cfg.also_follow) or "(none)",
             "last successful poll": self._format_time(self.last_success_at),
             "last error": self.last_error or "(none)",
             "last error at": self._error_time_label(),

@@ -29,6 +29,12 @@ connect_timeout_seconds = 90
 # today. Examples: NSH, TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
 favourite_team = "NSH"
 
+# More teams to follow. While any followed team (favourite included) is
+# live, their games take turns on screen, rotate_seconds each, and a goal
+# by any of them jumps straight to that game's GOAL screen. The horn only
+# plays for favourite_team. Example: also_follow = ["DAL", "TOR"]
+also_follow = []
+
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 timezone = "America/Chicago"
 
@@ -189,8 +195,8 @@ end_time = "07:00"
 dim_brightness = 0
 
 # Which games hold off dimming.
-#   "tracked"  Only favourite_team's game (with no favourite_team set, this
-#              behaves like "all").
+#   "tracked"  Only followed teams' games: favourite_team and also_follow
+#              (with no team followed at all, this behaves like "all").
 #   "all"      Any live game in the league today.
 suppress_scope = "tracked"
 

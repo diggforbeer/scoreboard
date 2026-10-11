@@ -604,6 +604,7 @@ def test_watcher_broadcasts_to_every_connected_client(
 
 _DEFAULT_SCOREBOARD_DATA = {
     "favourite_team": "NSH",
+    "also_follow": [],
     "timezone": "America/Chicago",
     "rotate_seconds": 8.0,
     "poll_seconds": 60.0,
@@ -702,6 +703,33 @@ def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
     message = json.loads(received)
     assert message["type"] == "error"
     assert "logo_variant" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_writes_the_also_follow_list(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "also_follow": ["DAL", "TOR"]}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv(), await client.recv()
+
+    saved, fresh = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved)["type"] == "saved"
+    assert json.loads(fresh)["data"]["also_follow"] == ["DAL", "TOR"]
+    assert 'also_follow = ["DAL", "TOR"]' in config_path.read_text()
+
+
+@pytest.mark.parametrize("value", ["DAL", ["DAL", "ZZZ"], [1]])
+def test_scoreboard_save_rejects_a_bad_also_follow(app_dir, config_path, value):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "also_follow": value}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error"
+    assert "also_follow" in message["message"]
     assert config_path.read_text() == ""
 
 

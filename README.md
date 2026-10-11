@@ -156,6 +156,7 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 ```toml
 [scoreboard]
 favourite_team = "NSH"      # "" rotates every game in the league instead
+also_follow = ["DAL"]       # more teams: their live games take turns on screen, goals jump in
 prefer_favourite = true     # with no live/held favourite game, still show it first when rotating
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
@@ -270,8 +271,15 @@ own duration instead (see [Configuration](#configuration)) -- a screen with
 nothing to show right now is skipped, not shown blank. With no
 `favourite_team` set (or nothing left for it to show), the board instead
 rotates through every game in the league today, `rotate_seconds` each,
-favourite first (`prefer_favourite`). The GOAL screen and the horn both
-still only ever fire for your favourite team's own goal.
+favourite first (`prefer_favourite`).
+
+**Following more teams.** `also_follow` lists extra teams. While any of
+them (or your favourite) is live, those games take turns on screen,
+`rotate_seconds` each, ahead of the idle rotation; your favourite's final
+joins the turns while it's held. When a followed team scores, the board
+jumps straight to that game's GOAL screen (and the scorer after it) from
+whichever game was up. The horn still only plays for your favourite.
+Standings, leaders, the matchup and three stars stay your favourite's.
 
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
 a tracked game is live or was held recently, so a late finish stays
