@@ -604,7 +604,8 @@ frequent ~6/h, each gap uniform over half to 1.5x the average). Presets, not
 minutes, by the owner's call: a fly-by is a "did you see that?" Easter egg,
 not the main event, so the default (occasional) is rarer than the old 5-20
 min gap, which `frequent` roughly matches. The old `flyby_min/max_minutes`
-keys aren't migrated, just warned about and ignored. Static decorations
+keys aren't migrated: they're `RETIRED_KEYS` (#277), ignored, logged
+once per process, and dropped the next time `[holiday]` is saved. Static decorations
 (pumpkins) only go on `clock`/`no_games` -- the 32px logos fill both edges of every
 game/countdown/preview scene. `run()` sleeps `ANIMATION_FRAME_INTERVAL`
 (50ms) only while the last frame drew something moving, `FRAME_INTERVAL`
@@ -1641,7 +1642,12 @@ so a stale one prints the wrong case. So:
 ## Config conventions
 
 - Unknown keys in `scoreboard.toml` **warn and are ignored**, never fatal:
-  a typo must not stop the board booting. Invalid `[[rotation]]` entries
+  a typo must not stop the board booting. A setting a release *retires*
+  goes in `config.py`'s `RETIRED_KEYS` instead (#277): still ignored, but
+  logged once per process rather than warned about on every read (the
+  config is read several times per admin-page save, so an upgraded
+  board's leftover keys flooded the log), and `Settings.save` removes
+  them from the file the next time their section is saved. Invalid `[[rotation]]` entries
   (#150) follow the same convention: dropped with a warning, never fatal,
   never rendered on the panel.
 - Defaults are the Predators, `regular` mapping, 128×32, Central time

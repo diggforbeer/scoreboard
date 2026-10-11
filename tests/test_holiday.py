@@ -383,13 +383,56 @@ def test_parsed_from_toml_section():
     assert settings.holiday.flyby_frequency == "rare"
 
 
-def test_old_flyby_minute_keys_are_ignored_with_a_warning(caplog):
-    with caplog.at_level(logging.WARNING):
-        settings = Settings.from_dict(
-            {"holiday": {"flyby_min_minutes": 5, "flyby_max_minutes": 20}}
-        )
+def test_old_flyby_minute_keys_are_ignored_and_logged_once(caplog, monkeypatch):
+    """Retired, not typos (#277): one INFO line per process, never a warning."""
+    from nhl_scoreboard import config
+
+    monkeypatch.setattr(config, "_retired_logged", set())
+    raw = {"holiday": {"flyby_min_minutes": 5, "flyby_max_minutes": 20}}
+    with caplog.at_level(logging.INFO, logger="nhl_scoreboard.config"):
+        settings = Settings.from_dict(raw)
+        Settings.from_dict(raw)
     assert settings.holiday.flyby_frequency == "occasional"
-    assert "flyby_min_minutes" in caplog.text
+    retired = [r for r in caplog.records if "retired config key" in r.getMessage()]
+    assert sorted(r.args[0] for r in retired) == ["flyby_max_minutes", "flyby_min_minutes"]
+    assert all(r.levelno == logging.INFO for r in retired)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_a_holiday_save_drops_the_old_flyby_minute_keys(tmp_path):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        "[holiday]\n"
+        "enabled = true\n"
+        "flyby_min_minutes = 5\n"
+        "flyby_max_minutes = 20\n"
+        "\n"
+        "[scoreboard]\n"
+        'favourite_team = "TOR"\n'
+    )
+    Settings.load(path).save({"holiday": {"flyby_frequency": "rare"}})
+    text = path.read_text()
+    assert "flyby_min_minutes" not in text
+    assert "flyby_max_minutes" not in text
+    reloaded = Settings.load(path)
+    assert reloaded.holiday.enabled
+    assert reloaded.holiday.flyby_frequency == "rare"
+    assert reloaded.scoreboard.favourite_team == "TOR"
+
+
+def test_saving_another_section_leaves_retired_holiday_keys_alone(tmp_path):
+    """Only the section being saved is cleaned; nothing else is touched."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text("[holiday]\nflyby_min_minutes = 5\n")
+    Settings.load(path).save({"scoreboard": {"favourite_team": "TOR"}})
+    assert "flyby_min_minutes = 5" in path.read_text()
+
+
+def test_a_typo_still_warns_every_time(caplog):
+    with caplog.at_level(logging.WARNING):
+        Settings.from_dict({"holiday": {"flyby_frequncy": "rare"}})
+        Settings.from_dict({"holiday": {"flyby_frequncy": "rare"}})
+    assert caplog.text.count("Ignoring unknown config key 'flyby_frequncy'") == 2
 
 
 # -- fly-by timing ------------------------------------------------------------
