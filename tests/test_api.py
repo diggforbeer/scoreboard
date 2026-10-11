@@ -713,3 +713,75 @@ def test_club_stats_wraps_http_errors():
     responses.add(responses.GET, f"{BASE_URL}/club-stats/NSH/now", status=404)
     with NHLClient() as client, pytest.raises(NHLApiError):
         client.club_stats("NSH")
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _landing_calls(game_id: int) -> int:
+    url = f"{BASE_URL}/gamecenter/{game_id}/landing"
+    return sum(1 for call in responses.calls if call.request.url == url)
+
+
+@responses.activate
+def test_situation_scoring_and_stars_share_one_landing_request():
+    """One request per game per poll, not one per feature (#263)."""
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", json={}, status=200)
+    clock = _Clock()
+    with NHLClient(monotonic=clock) as client:
+        client.situation(42)
+        clock.now += 4
+        client.goal_scoring(42)
+        client.three_stars(42)
+    assert _landing_calls(42) == 1
+
+
+@responses.activate
+def test_landing_is_refetched_once_the_reuse_window_passes():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", json={}, status=200)
+    clock = _Clock()
+    with NHLClient(monotonic=clock) as client:
+        client.situation(42)
+        clock.now += 5
+        client.situation(42)
+    assert _landing_calls(42) == 2
+
+
+@responses.activate
+def test_landing_reuse_is_per_game():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/2/landing", json={}, status=200)
+    with NHLClient(monotonic=_Clock()) as client:
+        client.situation(1)
+        client.situation(2)
+        client.goal_scoring(1)
+        client.goal_scoring(2)
+    assert (_landing_calls(1), _landing_calls(2)) == (1, 1)
+
+
+@responses.activate
+def test_a_failed_landing_fetch_is_not_reused():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", status=404)
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", json={}, status=200)
+    with NHLClient(monotonic=_Clock()) as client:
+        with pytest.raises(NHLApiError):
+            client.situation(42)
+        assert client.goal_scoring(42) == ()
+    assert _landing_calls(42) == 2
+
+
+@responses.activate
+def test_stale_landings_for_other_games_are_dropped():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/2/landing", json={}, status=200)
+    clock = _Clock()
+    with NHLClient(monotonic=clock) as client:
+        client.situation(1)
+        clock.now += 60
+        client.situation(2)
+        assert set(client._landings) == {2}
