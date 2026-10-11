@@ -1472,6 +1472,28 @@ when it was written; that history is left as-is rather than rewritten.
   it in by rename with the app tree, and restores the old one on
   rollback. A bundle with no `admin/` leaves the page untouched. One
   version signal for both: they always ship together.
+- **Autosave + Undo (#273).** Every section except Panel and Status saves
+  itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
+  the Save buttons are gone). One `AutosaveToast` bar pinned to the
+  bottom of the screen reports whichever section was edited last
+  ("Scoreboard saved ✓ · Undo"): a line at the foot of each section sat a
+  long scroll away from the field just changed, on a phone. Clicks (checkboxes, selects, rotation row buttons) save
+  at once; typed fields and the volume slider wait for a pause
+  (`TYPING_DELAY_MS`, 1s) or a blur, because every save goes live on the
+  board and a half-typed value would briefly apply, or fail validation.
+  Panel keeps its Save (a wrong `hardware_mapping` is a silent dark panel;
+  the "Keep changes? Reverting in 30s" flow is #276), and so does Status
+  (unticking `enabled` turns the admin page itself off, out of Undo's
+  reach). Undo re-saves the confirmed values from before the latest burst
+  of edits, offered for `UNDO_WINDOW_MS` (10s). Two non-obvious rules in
+  the hook: the server echoes a section's config after every save, so an
+  echo is ignored while a newer local edit is unsent or in flight (or it
+  would clobber what you're typing); and a save the socket never
+  acknowledged counts as unsent again after a reconnect and is resent,
+  instead of the reconnect's fresh config silently replacing it. The
+  `e2e` tests cover autosave, a single save after typing (mutation-checked
+  by setting the delay to 0), and Undo; the hook has no unit tests of its
+  own, since the frontend has no JS test runner.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing
   WebSocket connection rather than a separate HTTP endpoint -- worth

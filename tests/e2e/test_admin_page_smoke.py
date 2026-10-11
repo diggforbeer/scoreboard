@@ -25,7 +25,9 @@ import socket
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -48,10 +50,18 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> None:
     raise TimeoutError(f"admin_server.py never opened {host}:{port}")
 
 
+class AdminPage(NamedTuple):
+    url: str
+    config_path: Path
+
+    def config(self) -> dict:
+        return tomllib.loads(self.config_path.read_text())
+
+
 @pytest.fixture
-def admin_page_url(tmp_path):
+def admin_page(tmp_path):
     """Start a real admin_server.py subprocess serving the real built
-    frontend/dist, and hand back the URL it's listening on. A subprocess,
+    frontend/dist, and hand back its URL and the config file it writes. A subprocess,
     not an in-process thread (the way AdminServer itself runs inside
     ScoreboardApp) -- this test wants the real `python -m
     nhl_scoreboard.admin_server` entry point too, the same thing systemd
@@ -79,7 +89,7 @@ def admin_page_url(tmp_path):
     )
     try:
         _wait_for_port(HOST, PORT)
-        yield f"http://{HOST}:{PORT}/"
+        yield AdminPage(f"http://{HOST}:{PORT}/", config_path)
     finally:
         proc.terminate()
         try:
@@ -94,7 +104,7 @@ def admin_page_url(tmp_path):
             print(proc.stdout.read())
 
 
-def test_admin_page_loads_and_saves_a_real_change(admin_page_url):
+def test_admin_page_loads_and_saves_a_real_change(admin_page):
     """The actual point of this test: a real browser can load the built
     page from admin_server.py's own static serving, and a save genuinely
     round-trips over its WebSocket on that same port -- the two halves
@@ -107,16 +117,79 @@ def test_admin_page_loads_and_saves_a_real_change(admin_page_url):
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
-            page.goto(admin_page_url)
-            page.wait_for_selector("text=Save Scoreboard", timeout=15000)
+            page.goto(admin_page.url)
+            page.wait_for_selector("#sb-favourite-team", timeout=15000)
 
             connection_value = page.locator(".card-body", has_text="Connection").locator(".fs-5")
             assert connection_value.inner_text() == "open"
 
+            # Autosave (#273): picking a team is the whole save, no button.
             page.select_option("#sb-favourite-team", "TOR")
-            page.click("text=Save Scoreboard")
-            page.wait_for_selector("text=Saved.", timeout=15000)
+            page.wait_for_selector("text=saved ✓", timeout=15000)
 
             assert page.input_value("#sb-favourite-team") == "TOR"
+            assert admin_page.config()["scoreboard"]["favourite_team"] == "TOR"
+        finally:
+            browser.close()
+
+
+def _sent_saves(page) -> list[str]:
+    """Every ``save`` frame the page sends over its WebSocket, as raw JSON."""
+    frames: list[str] = []
+    page.on(
+        "websocket",
+        lambda ws: ws.on(
+            "framesent",
+            lambda payload: frames.append(payload) if '"type":"save"' in str(payload) else None,
+        ),
+    )
+    return frames
+
+
+def test_typing_saves_once_after_a_pause(admin_page):
+    """A typed field waits for the pause: every keystroke would apply a
+    half-typed value to the board (#273)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            frames = _sent_saves(page)
+            page.goto(admin_page.url)
+            field = page.locator("#sb-rotate_seconds")
+            field.wait_for(timeout=15000)
+
+            field.click()
+            field.press("Control+a")
+            field.press_sequentially("12", delay=150)
+            assert frames == [], "saved mid-typing"
+
+            page.wait_for_selector("text=saved ✓", timeout=15000)
+            assert len(frames) == 1, frames
+            assert admin_page.config()["scoreboard"]["rotate_seconds"] == 12
+        finally:
+            browser.close()
+
+
+def test_undo_reverts_the_last_save(admin_page):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            box = page.locator("#sb-scores_grid")
+            box.wait_for(timeout=15000)
+
+            box.check()
+            page.wait_for_selector("text=saved ✓", timeout=15000)
+            assert admin_page.config()["scoreboard"]["scores_grid"] is True
+
+            page.get_by_role("button", name="Undo").click()
+            page.wait_for_selector("text=reverted ✓", timeout=15000)
+            assert admin_page.config()["scoreboard"]["scores_grid"] is False
+            assert not box.is_checked()
         finally:
             browser.close()
