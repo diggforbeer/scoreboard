@@ -121,6 +121,7 @@ interface HornEntry {
 
 interface ScoreboardConfig {
   favourite_team: string
+  also_follow: string[]
   timezone: string
   rotate_seconds: number
   poll_seconds: number
@@ -985,6 +986,49 @@ function App() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="mb-3">
+                <label className="form-label">
+                  Also follow
+                </label>
+                <p className="text-body-secondary small mb-2">
+                  Their live games take turns on screen with your favourite's, and their goals
+                  jump to the goal screen. The horn only plays for your favourite.
+                </p>
+                <div
+                  className="border rounded p-2"
+                  id="sb-also-follow"
+                  style={{ maxHeight: '14rem', overflowY: 'auto' }}
+                >
+                  {NHL_TEAMS.filter(([abbrev]) => abbrev !== scoreboard.favourite_team).map(
+                    ([abbrev, name]) => (
+                      <div className="form-check" key={abbrev}>
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id={`sb-follow-${abbrev}`}
+                          checked={scoreboard.also_follow.includes(abbrev)}
+                          onChange={(e) =>
+                            setScoreboard({
+                              ...scoreboard,
+                              also_follow: e.target.checked
+                                ? [...scoreboard.also_follow, abbrev]
+                                : scoreboard.also_follow.filter((t) => t !== abbrev),
+                            })
+                          }
+                        />
+                        <label className="form-check-label" htmlFor={`sb-follow-${abbrev}`}>
+                          {name} ({abbrev})
+                        </label>
+                      </div>
+                    ),
+                  )}
+                </div>
+                <div className="form-text">
+                  {scoreboard.also_follow.length
+                    ? `Following ${scoreboard.also_follow.map(teamName).join(', ')}.`
+                    : 'Nobody else yet.'}
+                </div>
               </div>
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-timezone">

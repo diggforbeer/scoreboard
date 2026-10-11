@@ -54,6 +54,51 @@ GUEST_COLORS: dict[str, tuple[int, int, int]] = {"MIL": (110, 175, 230)}
 GUEST_SECONDARY_COLORS: dict[str, tuple[int, int, int]] = {"MIL": (190, 195, 205)}
 
 
+#: The name the GOAL screen shows under "GOAL" (#265): the city, as a fan
+#: would shout it, except where two teams share one (the New York pair).
+TEAM_NAMES: dict[str, str] = {
+    "ANA": "ANAHEIM",
+    "BOS": "BOSTON",
+    "BUF": "BUFFALO",
+    "CAR": "CAROLINA",
+    "CBJ": "COLUMBUS",
+    "CGY": "CALGARY",
+    "CHI": "CHICAGO",
+    "COL": "COLORADO",
+    "DAL": "DALLAS",
+    "DET": "DETROIT",
+    "EDM": "EDMONTON",
+    "FLA": "FLORIDA",
+    "LAK": "LOS ANGELES",
+    "MIN": "MINNESOTA",
+    "MTL": "MONTREAL",
+    "NJD": "NEW JERSEY",
+    "NSH": "NASHVILLE",
+    "NYI": "NY ISLANDERS",
+    "NYR": "NY RANGERS",
+    "OTT": "OTTAWA",
+    "PHI": "PHILADELPHIA",
+    "PIT": "PITTSBURGH",
+    "SEA": "SEATTLE",
+    "SJS": "SAN JOSE",
+    "STL": "ST. LOUIS",
+    "TBL": "TAMPA BAY",
+    "TOR": "TORONTO",
+    "UTA": "UTAH",
+    "VAN": "VANCOUVER",
+    "VGK": "VEGAS",
+    "WPG": "WINNIPEG",
+    "WSH": "WASHINGTON",
+    "MIL": "MILWAUKEE",
+}
+
+
+def team_name(abbrev: str) -> str:
+    """``TEAM_NAMES``' display name, or the abbreviation for anyone unlisted."""
+    key = abbrev.strip().upper()
+    return TEAM_NAMES.get(key, key)
+
+
 def team_color(abbrev: str) -> tuple[int, int, int]:
     key = abbrev.strip().upper()
     return TEAM_COLORS.get(key) or GUEST_COLORS.get(key, DEFAULT_COLOR)

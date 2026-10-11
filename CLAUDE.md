@@ -209,21 +209,60 @@ multi-favourite "red-zone" feature needs "which game(s) currently preempt
 the rotation" to be a richer question than that toggle could express, so
 it was deleted rather than built on top of).
 
+**Followed teams (#260).** `[scoreboard] also_follow` lists extra teams
+beside the favourite (`ScoreboardConfig.followed_teams` is favourite
+first, then these; unknown abbreviations and the favourite itself are
+dropped at load). By the owner's decisions in #260, `_followed_turns()`
+takes the screen ahead of the idle rotation, **primary-first** (a revision
+of #260's original "equal turns"): while the favourite is live and in
+play, its game holds the screen alone and other followed teams appear
+only when they score. During its intermission or held final, the other
+live followed games take `rotate_seconds` turns and the favourite's own
+screen drops in for `FAVOURITE_QUICK_TURN` (half) of that each cycle, so
+its score stays in view without hogging time from games actually being
+played. With the favourite not playing, live followed games take equal
+turns (intermissions included -- skipping them was considered and not
+chosen). Timed by monotonic time, not `self.index`. An
+`also_follow` team's final is not held; the favourite's three stars
+interrupt a followed game's turn like a goal does (below), so the turns
+can't swallow them. Everything else stays
+favourite-only: standings, leaders, matchup, three stars, the countdown/
+preview, holiday team colours. With only `also_follow` and no favourite,
+the turns still run, then today's-games rotation as before.
+
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
-**only** for the favourite's game and the on-screen game, at
+**only** for followed teams' live games and the on-screen game, at
 `live_poll_seconds`, never during intermission. Do not widen this without
 asking; it was an explicit decision.
 
-Goal detection (`_detect_goals`) fires **only** for the favourite's own
-score increasing in a game they're playing -- same scoping precedent as the
+Goal detection (`_detect_goals`) fires **only** for a followed team's own
+score increasing in a game they're playing (`_known_scores`, keyed by
+game *and* team since two followed teams can meet) -- never their
+opponent's, never an unfollowed game's. In the favourite's own game only
+the favourite counts (`_celebrated_teams`), by the owner's call: a
+followed team scoring *on* the favourite is an opponent there, so it gets
+no goal screen and no scorer screen; two `also_follow` teams meeting each
+other both count; same scoping precedent as the
 power-play indicator above, deliberate, don't widen without asking. It
 drives two independent things off one detection: `GoalHornPlayer.play()`
-(fires immediately, regardless of what's on screen) and a `Scene("goal", …)`
-override in `select_scene()` that replaces only the exact game's normal
-`"game"` scene, for `goal_flash_seconds`, and never interrupts a countdown,
-preview, or a different game mid-rotation. The baseline score for a game is
-recorded on first sighting *without* firing, so a game already 3-1 at
-startup does not celebrate.
+(fires immediately, regardless of what's on screen -- **the favourite's
+goals only**; followed teams' goals are silent) and a `Scene("goal", …)`
+override in `select_scene()` for `goal_flash_seconds`. That override is the
+red zone: it replaces any `"game"` scene of a followed game with the
+scoring game's goal screen (so a goal in one live followed game interrupts
+another's turn), and never interrupts a countdown, preview, idle screen,
+or an unfollowed game in today's-games rotation. `goal_detail` (the
+scorer, #122) follows the same rule and is polled for every live followed
+game; a change to who's followed clears its per-game counts so a newly
+followed team's existing goals re-baseline instead of firing. The goal
+screen says who scored (#265): `last_goal` carries the scoring team,
+`Scene.goal_team` hands it to `Renderer.draw_goal`, which draws "GOAL"
+and the team's `TEAM_NAMES` city name (`display/teams.py`; the New York
+pair as `NY RANGERS`/`NY ISLANDERS`) in `team_color`, the score below in
+white -- falling back to the abbreviation where the name won't fit (a
+single 64px panel's 32px middle column). The baseline
+score for a game is recorded on first sighting *without* firing, so a game
+already 3-1 at startup does not celebrate.
 
 The `three_stars` scene (#156) is the NHL's three stars of the favourite's
 game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
@@ -518,10 +557,10 @@ dark TV room would dim a live game, and a lit room would keep a scheduled
 window bright forever -- that's the whole argument of #92. Outside the
 window the sensor behaves exactly as before; with no sensor,
 `panel.brightness` is re-applied each poll, which is what restores the
-panel once the window ends. `suppress_scope` is `tracked` (favourite's
-game only) or `all` (any live game) -- same favourite-vs-all scoping
+panel once the window ends. `suppress_scope` is `tracked` (followed
+teams' games: the favourite plus `also_follow`, #260) or `all` (any live game) -- same favourite-vs-all scoping
 precedent as the power-play indicator, goal detection and standings.
-`tracked` with no `favourite_team` silently behaves as `all`; that's a
+`tracked` with no team followed at all silently behaves as `all`; that's a
 valid combination (no `favourite_team` configured, with night mode on),
 not a misconfiguration, so no warning. `dim_brightness = 0` is zero-power
 blanking: `draw()` clears and swaps the canvas and skips scene selection
