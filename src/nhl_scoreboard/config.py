@@ -620,7 +620,7 @@ class Settings:
             night_mode=_build(NightModeConfig, raw.get("night_mode", {})),
             update=_build(UpdateConfig, raw.get("update", {})),
             button=_build(ButtonConfig, raw.get("button", {})),
-            holiday=_build(HolidayConfig, raw.get("holiday", {})),
+            holiday=_build(HolidayConfig, raw.get("holiday", {}), "holiday"),
         )
 
     def save(self, updates: Mapping[str, Any]) -> None:
@@ -669,6 +669,9 @@ class Settings:
                 doc[section] = table
             for key, value in values.items():
                 table[key] = value
+            for key in RETIRED_KEYS.get(section, {}):
+                if key in table:
+                    del table[key]
 
         tmp_path = self.source_path.with_name(self.source_path.name + ".tmp")
         try:
@@ -691,19 +694,47 @@ class Settings:
         self.holiday = reloaded.holiday
 
 
-def _build(cls: type, raw: dict[str, Any]) -> Any:
+#: Settings a release has retired, by TOML section, with what replaced them
+#: (#277). Unlike a typo they're expected on an upgraded board, so they're
+#: logged once per process instead of warned about on every read, and
+#: ``Settings.save`` drops them the next time their section is saved.
+RETIRED_KEYS: dict[str, dict[str, str]] = {
+    "holiday": {
+        "flyby_min_minutes": "replaced by flyby_frequency",
+        "flyby_max_minutes": "replaced by flyby_frequency",
+    },
+}
+
+#: (section, key) pairs already logged by _build this process.
+_retired_logged: set[tuple[str, str]] = set()
+
+
+def _build(cls: type, raw: dict[str, Any], section: str = "") -> Any:
     """Construct a dataclass from ``raw``, ignoring unknown keys.
 
     Unknown keys are warned about rather than fatal: a user hand-editing the
     file on the boot partition should never end up with a board that refuses
-    to start because of one typo.
+    to start because of one typo. Retired keys (``RETIRED_KEYS``) are
+    ignored too, but logged only once.
     """
     # init=False fields are derived (e.g. NightModeConfig.start), not settable.
     known = {f.name for f in fields(cls) if f.init}
+    retired = RETIRED_KEYS.get(section, {})
     kwargs = {}
     for key, value in raw.items():
         if key in known:
             kwargs[key] = value
+        elif key in retired:
+            if (section, key) not in _retired_logged:
+                _retired_logged.add((section, key))
+                log.info(
+                    "Ignoring retired config key %r in [%s] (%s); safe to delete, "
+                    "and removed the next time [%s] is saved",
+                    key,
+                    section,
+                    retired[key],
+                    section,
+                )
         else:
             log.warning("Ignoring unknown config key %r in [%s]", key, cls.__name__)
     return cls(**kwargs)
