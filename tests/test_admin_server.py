@@ -1710,8 +1710,7 @@ _DEFAULT_HOLIDAY_DATA = {
         "easter",
         "july_4th",
     ],
-    "flyby_min_minutes": 5.0,
-    "flyby_max_minutes": 20.0,
+    "flyby_frequency": "occasional",
 }
 
 
@@ -1744,10 +1743,15 @@ def test_sends_the_holiday_config_and_every_available_holiday_last(app_dir, conf
         "july_4th",
     ]
     assert available[0] == {"name": "halloween", "label": "Halloween", "window": "Oct 1-31"}
+    assert received["frequencies"] == [
+        {"name": "rare", "label": "Rare", "description": "about once an hour"},
+        {"name": "occasional", "label": "Occasional", "description": "about every 20 minutes"},
+        {"name": "frequent", "label": "Frequent", "description": "about every 10 minutes"},
+    ]
 
 
 def test_holiday_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
-    data = {**_DEFAULT_HOLIDAY_DATA, "enabled": True, "flyby_min_minutes": 2}
+    data = {**_DEFAULT_HOLIDAY_DATA, "enabled": True, "flyby_frequency": "rare"}
 
     async def scenario(client):
         saved = await _save_holiday(client, data)
@@ -1756,8 +1760,9 @@ def test_holiday_save_writes_the_file_and_confirms_with_fresh_config(app_dir, co
     saved, fresh = asyncio.run(_serve_and_run(scenario))
     assert saved == {"type": "saved", "section": "holiday"}
     assert fresh["data"]["enabled"] is True
-    assert fresh["data"]["flyby_min_minutes"] == 2
+    assert fresh["data"]["flyby_frequency"] == "rare"
     text = config_path.read_text()
+    assert 'flyby_frequency = "rare"' in text
     assert "enabled = true" in text
     assert "groundhog" in text and 'themes = ["halloween"' in text
 
@@ -1777,8 +1782,9 @@ def test_holiday_save_can_untick_every_holiday(app_dir, config_path):
     [
         ({"themes": ["halloween", "arbor_day"]}, "arbor_day"),
         ({"themes": "halloween"}, "themes"),
-        ({"flyby_min_minutes": 0.5}, "flyby_min_minutes"),
-        ({"flyby_min_minutes": 30, "flyby_max_minutes": 10}, "flyby_min_minutes"),
+        ({"flyby_frequency": "constantly"}, "flyby_frequency"),
+        ({"flyby_frequency": 3}, "flyby_frequency"),
+        ({"flyby_min_minutes": 5}, "flyby_min_minutes"),
         ({"enabled": "yes"}, "enabled"),
         ({"bogus": 1}, "bogus"),
     ],
