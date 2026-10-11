@@ -130,7 +130,7 @@ def test_every_step_renders_on_panel(width):
         if scene.kind == "game":
             r.draw_game(c, scene.game)
         elif scene.kind == "goal":
-            r.draw_goal(c, scene.game)
+            r.draw_goal(c, scene.game, scene.goal_team)
         elif scene.kind in ("preview", "countdown"):
             getattr(r, f"draw_{scene.kind}")(c, scene.game, NOW)
         elif scene.kind == "standings":

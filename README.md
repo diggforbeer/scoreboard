@@ -156,6 +156,7 @@ partition is FAT32, you can edit it from any computer after flashing the card.
 ```toml
 [scoreboard]
 favourite_team = "NSH"      # "" rotates every game in the league instead
+also_follow = ["DAL"]       # more teams: their live games take turns on screen, goals jump in
 prefer_favourite = true     # with no live/held favourite game, still show it first when rotating
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
@@ -255,7 +256,7 @@ With a `favourite_team` set (the default, `NSH`), the board follows your team's 
 | Morning of a game (or no game today) | **Preview** — logos, `TONIGHT` / `TOMORROW` / `SAT OCT 4`, start time |
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
-| Your team scores | **GOAL** — a celebration screen, for `goal_flash_seconds`, then back to live |
+| Your team scores | **GOAL** — "GOAL" and the team's name (`NASHVILLE`) in its colours, with the score, for `goal_flash_seconds`, then back to live |
 | Game just went final | **3 STARS** — the NHL's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |
@@ -273,8 +274,20 @@ nothing to show right now is skipped, not shown blank. With no
 rotates through every game in the league today, `rotate_seconds` each,
 favourite first (`prefer_favourite`) -- or, with `scores_grid` on, four at
 a time (two on a single 64×32 panel), one compact column per game. The
-same grid can also join the idle rotation as a `"scores"` entry. The GOAL screen and the horn both
-still only ever fire for your favourite team's own goal.
+same grid can also join the idle rotation as a `"scores"` entry.
+
+**Following more teams.** `also_follow` lists extra teams. While your
+favourite is live and the puck is in play, its game holds the screen and
+the others only appear when they score. During your favourite's
+intermission (or while its final is held), the other live followed games
+take turns, `rotate_seconds` each, with a quick look back at your
+favourite's score every cycle. When your favourite isn't playing, live
+followed games take equal turns. When a followed team scores, the board
+jumps straight to that game's GOAL screen (and the scorer after it) from
+whichever game was up. The horn still only plays for your favourite, and
+in your favourite's own game only its goals count: a followed team scoring
+against your favourite is never celebrated.
+Standings, leaders, the matchup and three stars stay your favourite's.
 
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while
 a tracked game is live or was held recently, so a late finish stays

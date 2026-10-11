@@ -37,7 +37,13 @@ from nhl_scoreboard.display.renderer import (
     WHITE,
     Renderer,
 )
-from nhl_scoreboard.display.teams import team_color, team_secondary_color
+from nhl_scoreboard.display.teams import (
+    TEAM_COLORS,
+    TEAM_NAMES,
+    team_color,
+    team_name,
+    team_secondary_color,
+)
 from nhl_scoreboard.nhl.models import (
     AssistDetail,
     Game,
@@ -63,6 +69,7 @@ SNAPSHOTS = Path(__file__).parent / "snapshots"
 SCORE_BASELINE = 13
 RULE_Y = 19  # preview/countdown/goal only -- _draw_upcoming/draw_goal, untouched by #70
 STATUS_TOP = RULE_Y + 1
+GOAL_BASELINE = 11  # goal screen's GOAL line; the team name sits below it (#265)
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
 # The live-game rule/indicator band moved to row 20 for #70 (one more blank
@@ -903,8 +910,8 @@ def test_matchup_meetings_narrow_panel_drops_the_date(synthetic_logos, update_sn
 def test_logo_layout_goal(games, synthetic_logos, update_snapshots):
     game = games["live"]  # SEA 2 @ CGY 1
     c = canvas()
-    make_renderer(logos=synthetic_logos).draw_goal(c, game)
-    art = show(f"logos, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+    make_renderer(logos=synthetic_logos).draw_goal(c, game, "SEA")
+    art = show(f"logos, SEA goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
 
     assert not c.out_of_bounds
     for x0, side in ((0, game.away), (MID_RIGHT, game.home)):
@@ -913,7 +920,12 @@ def test_logo_layout_goal(games, synthetic_logos, update_snapshots):
     goal_box = c.bbox(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1)
     assert goal_box is not None, "GOAL text missing"
     assert abs(goal_box.center_x - (W - 1) / 2) <= 1, "GOAL not centred"
-    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1) == {ACCENT}, "GOAL must be amber only"
+    assert c.colors(MID_LEFT, 0, MID_RIGHT - 1, RULE_Y - 1) == {team_color("SEA")}, (
+        "GOAL and the team name in the scorer's colour only (#265)"
+    )
+    name_box = c.bbox(MID_LEFT, GOAL_BASELINE + 2, MID_RIGHT - 1, RULE_Y)
+    assert name_box is not None, "team name missing"
+    assert abs(name_box.center_x - (W - 1) / 2) <= 1, "team name not centred"
     # No rule, no power-play band: this frame owns the whole panel.
     assert not c.row_is_solid(RULE_Y)
     assert_centered(c, STATUS_TOP, H - 1, "score line")
@@ -924,17 +936,36 @@ def test_logo_layout_goal(games, synthetic_logos, update_snapshots):
 def test_text_layout_goal(games, update_snapshots):
     game = games["live"]
     c = canvas()
-    make_renderer().draw_goal(c, game)
-    art = show(f"text, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+    make_renderer().draw_goal(c, game, "CGY")
+    art = show(f"text, CGY goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
 
     assert not c.out_of_bounds
     goal_box = c.bbox(0, 0, W - 1, RULE_Y - 1)
     assert goal_box is not None
-    assert c.colors(0, 0, W - 1, RULE_Y - 1) == {ACCENT}, "GOAL must be amber only"
+    assert c.colors(0, 0, W - 1, RULE_Y - 1) == {team_color("CGY")}, "scorer's colour only"
     assert abs(goal_box.center_x - (W - 1) / 2) <= 1, "GOAL not centred"
     assert_centered(c, STATUS_TOP, H - 1, "score line")
     assert status_color(c) == {WHITE}
     check_snapshot("text_goal", art, update_snapshots)
+
+
+def test_every_team_has_a_goal_screen_name_that_fits_between_the_logos():
+    """#265: the full name on the two-panel board; only a 64px panel abbreviates."""
+    fonts = FontSet(graphics)
+    assert set(TEAM_COLORS) <= set(TEAM_NAMES)
+    for abbrev in TEAM_COLORS:
+        assert text_width(fonts.small, team_name(abbrev)) <= MID_RIGHT - MID_LEFT, abbrev
+
+
+def test_goal_screen_names_the_scoring_team(games, synthetic_logos):
+    game = games["live"]
+    sea, cgy = canvas(), canvas()
+    make_renderer(logos=synthetic_logos).draw_goal(sea, game, "SEA")
+    make_renderer(logos=synthetic_logos).draw_goal(cgy, game, "CGY")
+    middle = (MID_LEFT, GOAL_BASELINE + 2, MID_RIGHT - 1, RULE_Y)
+    assert sea.lit(*middle) != cgy.lit(*middle), "SEATTLE and CALGARY must differ"
+    assert sea.colors(*middle) == {team_color("SEA")}
+    assert cgy.colors(*middle) == {team_color("CGY")}
 
 
 def test_goal_score_reflects_the_current_score(games, synthetic_logos):
@@ -945,12 +976,12 @@ def test_goal_score_reflects_the_current_score(games, synthetic_logos):
         away=dataclasses.replace(games["live"].away, score=7),
     )
     c = canvas()
-    make_renderer(logos=synthetic_logos).draw_goal(c, game)
+    make_renderer(logos=synthetic_logos).draw_goal(c, game, "SEA")
     # "9-7" and "2-1" (the un-doctored score) are different widths/shapes;
     # a bbox-based smoke check that something in the score band changed
     # would be weak, so instead render the real score for comparison.
     c2 = canvas()
-    make_renderer(logos=synthetic_logos).draw_goal(c2, games["live"])
+    make_renderer(logos=synthetic_logos).draw_goal(c2, games["live"], "SEA")
     assert c.pixels != c2.pixels
 
 
@@ -1104,8 +1135,8 @@ def test_goal_scene_ignores_situation(games, synthetic_logos):
     )
     c1, c2 = canvas(), canvas()
     r = make_renderer(logos=synthetic_logos)
-    r.draw_goal(c1, game)
-    r.draw_goal(c2, with_situation)
+    r.draw_goal(c1, game, "SEA")
+    r.draw_goal(c2, with_situation, "SEA")
     assert c1.pixels == c2.pixels
 
 
@@ -1425,16 +1456,19 @@ def test_logo_layout_narrow_panel_two_digit_scores(
 def test_logo_layout_narrow_panel_goal(games, synthetic_logos, update_snapshots):
     game = games["live"]
     c = AsciiCanvas(NARROW_W, H)
-    make_narrow_renderer(synthetic_logos).draw_goal(c, game)
-    art = show(f"narrow logos, goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
+    make_narrow_renderer(synthetic_logos).draw_goal(c, game, "SEA")
+    art = show(f"narrow logos, SEA goal: {game.away.abbrev} {game.away.score}-{game.home.score}", c)
 
     assert not c.out_of_bounds
-    away_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.away.abbrev)}
-    home_px = {xy for xy, rgb in c.pixels.items() if rgb == team_color(game.home.abbrev)}
-    assert away_px and max(x for x, _ in away_px) < NARROW_LEFT
-    assert home_px and min(x for x, _ in home_px) >= NARROW_RIGHT
+    assert team_color(game.away.abbrev) in c.colors(0, 0, NARROW_LEFT - 1, H - 1)
+    assert team_color(game.home.abbrev) in c.colors(NARROW_RIGHT, 0, NARROW_W - 1, H - 1)
+    assert c.colors(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y) == {team_color("SEA")}
     goal_box = c.bbox(NARROW_LEFT, 0, NARROW_RIGHT - 1, RULE_Y - 1)
     assert goal_box is not None, "GOAL text missing"
+    name_box = c.bbox(NARROW_LEFT, GOAL_BASELINE + 2, NARROW_RIGHT - 1, RULE_Y)
+    assert name_box is not None and name_box.width <= NARROW_RIGHT - NARROW_LEFT, (
+        "SEATTLE doesn't fit the 32px column: the abbreviation instead"
+    )
     check_snapshot("logo_narrow_goal", art, update_snapshots)
 
 
