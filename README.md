@@ -170,17 +170,19 @@ three_stars_seconds = 8     # how long the 3 STARS screen stays up once your tea
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
+scores_grid = false         # with no favourite game up, show today's games four at a time instead of one
 
 # Optional: override the idle rotation's order and per-screen timing (see
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders, holiday
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders, holiday, scores
 # seconds = 10
 # "matchup" (season series vs. the next opponent, then each finished meeting),
 # "top_west"/"top_east" (top five of that conference), "leaders" (your team's top
-# goal scorer, top point getter and top two goalies) and "holiday" (Dec 1-25: a
-# Christmas tree counting down to the 25th) only show if listed here.
+# goal scorer, top point getter and top two goalies), "holiday" (Dec 1-25: a
+# Christmas tree counting down to the 25th) and "scores" (every game today, four
+# to a frame, its seconds shared between the pages) only show if listed here.
 
 [audio]
 enabled = true
@@ -269,7 +271,9 @@ own duration instead (see [Configuration](#configuration)) -- a screen with
 nothing to show right now is skipped, not shown blank. With no
 `favourite_team` set (or nothing left for it to show), the board instead
 rotates through every game in the league today, `rotate_seconds` each,
-favourite first (`prefer_favourite`). The GOAL screen and the horn both
+favourite first (`prefer_favourite`) -- or, with `scores_grid` on, four at
+a time (two on a single 64×32 panel), one compact column per game. The
+same grid can also join the idle rotation as a `"scores"` entry. The GOAL screen and the horn both
 still only ever fire for your favourite team's own goal.
 
 Overnight, `[night_mode]` can dim the panel on a schedule — but never while

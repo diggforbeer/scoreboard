@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import math
 import random
 import re
 import signal
@@ -128,7 +129,7 @@ class Scene:
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
     ``conference_leaders``, ``matchup``, ``matchup_meetings``, ``leaders``,
-    ``clock``, ``christmas_tree``, ``no_games``,
+    ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 
@@ -143,6 +144,8 @@ class Scene:
     meetings: tuple[MeetingResult, ...] = ()
     #: Set only for ``leaders`` (#201) -- the favourite's own top players.
     leaders: TeamLeaders | None = None
+    #: Set only for ``scores`` (#269) -- one grid page of today's games.
+    games: tuple[Game, ...] = ()
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
@@ -1292,6 +1295,21 @@ class ScoreboardApp:
         )
         return Scene("matchup", upcoming, season_series=record, meetings=meetings)
 
+    def _split_slot(self, scene: Scene, offset: float, seconds: float) -> Scene:
+        """One rotation slot's scene at ``offset`` seconds into its ``seconds`` dwell."""
+        if scene.kind == "scores":
+            return self._page_scores(scene, offset, seconds)
+        return self._split_matchup(scene, offset, seconds)
+
+    def _page_scores(self, scene: Scene, offset: float, seconds: float) -> Scene:
+        """The ``scores`` slot's dwell is shared evenly by its grid pages (#269)."""
+        per_page = self.renderer.scores_per_page()
+        pages = math.ceil(len(scene.games) / per_page)
+        page = min(pages - 1, int(offset * pages / seconds))
+        return dataclasses.replace(
+            scene, games=scene.games[page * per_page : (page + 1) * per_page]
+        )
+
     @staticmethod
     def _split_matchup(scene: Scene, offset: float, seconds: float) -> Scene:
         """The second half of a matchup slot shows the meetings behind the tally (#168).
@@ -1394,6 +1412,8 @@ class ScoreboardApp:
             return self._leaders_scene(allow_fetch=allow_fetch)
         if screen == "holiday":
             return self._holiday_screen_scene()
+        if screen == "scores":
+            return Scene("scores", games=tuple(self.games)) if self.games else None
         return None
 
     def _holiday_screen_scene(self) -> Scene | None:
@@ -1433,13 +1453,13 @@ class ScoreboardApp:
             return None
         if len(slots) == 1:
             scene, seconds = slots[0]
-            return self._split_matchup(scene, self.monotonic() % seconds, seconds)
+            return self._split_slot(scene, self.monotonic() % seconds, seconds)
         total = sum(seconds for _, seconds in slots)
         position = self.monotonic() % total
         start = 0.0
         for scene, seconds in slots:
             if position < start + seconds:
-                return self._split_matchup(scene, position - start, seconds)
+                return self._split_slot(scene, position - start, seconds)
             start += seconds
         return slots[-1][0]
 
@@ -1619,6 +1639,9 @@ class ScoreboardApp:
         scene = self._favourite_scene(allow_fetch=allow_fetch)
         if scene is not None:
             return scene
+        if self._scores_grid_fallback():
+            per_page = self.renderer.scores_per_page()
+            return Scene("scores", games=tuple(self.games[self.index : self.index + per_page]))
         if self.games:
             return Scene("game", self.games[self.index])
         return Scene("clock" if self.settings.scoreboard.show_clock_when_idle else "no_games")
@@ -1704,7 +1727,8 @@ class ScoreboardApp:
         favourite = self.settings.scoreboard.favourite_team
         if favourite:
             targets += [g for g in self.games if g.is_live and g.involves(favourite)]
-        if self.games:
+        if self.games and not self._scores_grid_fallback():
+            # The grid draws no situation, so it has no "on-screen" game to poll for.
             current = self.games[self.index]
             if current.is_live and current not in targets:
                 targets.append(current)
@@ -1741,7 +1765,7 @@ class ScoreboardApp:
         """
         favourite = self.settings.scoreboard.favourite_team
         candidates = [g for g in self.games if favourite and g.involves(favourite)]
-        if self.games:
+        if self.games and not self._scores_grid_fallback():
             candidates.append(self.games[self.index])
         targets: list[Game] = []
         for game in candidates:
@@ -1844,9 +1868,24 @@ class ScoreboardApp:
             return cfg.live_poll_seconds
         return cfg.poll_seconds
 
+    def _scores_grid_fallback(self) -> bool:
+        """Whether today's games cycle as grid pages rather than one at a time (#269).
+
+        A single game keeps the full game scene: a grid of one is just a
+        smaller version of it.
+        """
+        return self.settings.scoreboard.scores_grid and len(self.games) > 1
+
     def advance(self) -> None:
-        if self.games:
-            self.index = (self.index + 1) % len(self.games)
+        if not self.games:
+            return
+        if self._scores_grid_fallback():
+            # index is the first game of the current page.
+            per_page = self.renderer.scores_per_page()
+            pages = math.ceil(len(self.games) / per_page)
+            self.index = (self.index // per_page + 1) % pages * per_page
+            return
+        self.index = (self.index + 1) % len(self.games)
 
     # -- output ----------------------------------------------------------
 
@@ -1892,7 +1931,7 @@ class ScoreboardApp:
     @staticmethod
     def _scene_game_label(scene: Scene) -> str:
         if scene.game is None:
-            return ""
+            return ", ".join(f"{g.away.abbrev} @ {g.home.abbrev}" for g in scene.games)
         return f"{scene.game.away.abbrev} @ {scene.game.home.abbrev}"
 
     def _format_time(self, value: datetime | None) -> str:
@@ -1939,6 +1978,8 @@ class ScoreboardApp:
             changes["stars"] = tuple(april_fools.swap_star(s) for s in scene.stars)
         if scene.standings is not None:
             changes["standings"] = april_fools.swap_rows(scene.standings)
+        if scene.games:
+            changes["games"] = tuple(april_fools.swap_game(g) for g in scene.games)
         return dataclasses.replace(scene, **changes) if changes else scene
 
     def draw_scene(self, scene: Scene) -> None:
@@ -1976,6 +2017,8 @@ class ScoreboardApp:
             r.draw_matchup_meetings(self.canvas, scene.game, scene.meetings)
         elif scene.kind == "leaders":
             r.draw_leaders(self.canvas, scene.leaders, favourite)
+        elif scene.kind == "scores":
+            r.draw_scores(self.canvas, scene.games)
         elif scene.kind == "no_data":
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":

@@ -90,6 +90,11 @@ show_standings = true
 # at all".
 show_clock_between_games = false
 
+# With no favourite game on screen, cycle today's games as a grid -- four
+# compact columns per frame (two on a single 64x32 panel) -- instead of one
+# full game at a time. A single game still gets the full game screen.
+scores_grid = false
+
 # What shows while there's no live or recently-finished favourite game, by
 # default: derived from rotate_seconds/show_standings/show_clock_between_games
 # above -- countdown/preview, then standings (if shown), then the clock (if
@@ -98,18 +103,19 @@ show_clock_between_games = false
 # below; once any [[rotation]] table is present, rotate_seconds/
 # show_standings/show_clock_between_games above are no longer read for this
 # purpose. screen is one of "countdown_preview", "standings", "clock",
-# "matchup", "top_west", "top_east", "leaders", "holiday". "matchup" (your
-# team's head-to-head record this season against its next opponent, then the
-# scores of the meetings so far for the second half of its time),
+# "matchup", "top_west", "top_east", "leaders", "holiday", "scores".
+# "matchup" (your team's head-to-head record this season against its next
+# opponent, then the scores of the meetings so far for the second half of
+# its time),
 # "top_west"/"top_east" (top five of that conference), "leaders" (your
-# team's top goal scorer, top point getter and top two goalies) and
+# team's top goal scorer, top point getter and top two goalies),
 # "holiday" (a holiday's own screen: Dec 1-25, a twinkling tree in your
 # team's colours counting down to Christmas, with [holiday] on and
-# "christmas" ticked) are never in the default list -- they only show if
-# you add them here. A screen with
-# nothing to show right now (e.g. standings
-# before your team's season has started) is skipped for that pass, not
-# shown blank.
+# "christmas" ticked) and "scores" (every game today, four to a frame, its
+# seconds shared between the pages) are never in the default list -- they
+# only show if you add them here. A screen with nothing to show right now
+# (e.g. standings before your team's season has started) is skipped for
+# that pass, not shown blank.
 #
 # [[rotation]]
 # screen = "countdown_preview"

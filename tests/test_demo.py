@@ -24,6 +24,7 @@ EVERY_KIND = {
     "matchup_meetings",
     "conference_leaders",
     "leaders",
+    "scores",
     "christmas_tree",
     "clock",
     "no_games",
@@ -142,6 +143,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_conference_leaders(c, scene.standings, "NSH")
         elif scene.kind == "leaders":
             r.draw_leaders(c, scene.leaders, "NSH")
+        elif scene.kind == "scores":
+            r.draw_scores(c, scene.games)
         elif scene.kind == "clock":
             r.draw_clock(c, NOW)
         elif scene.kind == "christmas_tree":

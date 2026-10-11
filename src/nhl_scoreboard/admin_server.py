@@ -384,6 +384,7 @@ _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
     "countdown_hours": _FieldSpec("float"),
     "final_hold_minutes": _FieldSpec("float"),
     "show_clock_between_games": _FieldSpec("bool"),
+    "scores_grid": _FieldSpec("bool"),
 }
 
 #: Mirrors StatusServerConfig's own fields (config.py), same convention.

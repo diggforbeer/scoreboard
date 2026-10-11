@@ -43,6 +43,7 @@ const ROTATION_SCREENS = [
   'top_east',
   'leaders',
   'holiday',
+  'scores',
 ] as const
 const ROTATION_MAX_ROWS = 8
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
@@ -137,6 +138,7 @@ interface ScoreboardConfig {
   final_hold_minutes: number
   show_standings: boolean
   show_clock_between_games: boolean
+  scores_grid: boolean
 }
 
 interface StatusConfig {
@@ -1045,6 +1047,7 @@ function App() {
                 [
                   ['show_clock_when_idle', 'Show clock when there are no games'],
                   ['show_clock_between_games', "Show clock between favourite's games"],
+                  ['scores_grid', 'Show other games several at a time'],
                   ['show_logos', 'Show team logos'],
                   ['prefer_favourite', 'Prefer favourite when choosing a game'],
                 ] as const
