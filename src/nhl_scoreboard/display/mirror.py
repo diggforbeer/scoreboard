@@ -1,8 +1,9 @@
-"""A copy of each frame for the admin page's live view (#268).
+"""Snapshots of the panel for the admin page's live view (#268).
 
 The real ``rgbmatrix`` binding can't read pixels back, and its text and
 lines are drawn in C++, so a frame can't be recovered after the fact or
-caught at ``SetPixel`` alone. Instead, while someone is watching:
+caught at ``SetPixel`` alone. Instead, for each frame the app decides to
+snapshot:
 
 - ``MirrorCanvas`` wraps the panel's canvas. ``SetPixel``/``Clear`` pass
   straight through and also land in a ``width*height*3`` framebuffer.
@@ -12,17 +13,21 @@ caught at ``SetPixel`` alone. Instead, while someone is watching:
   framebuffer -- from the same vendored BDF files, placed the way the C++
   ``Font::DrawGlyph`` places them.
 
-With nobody watching, the app never wraps its canvas, so the panel is
-drawn exactly as before: the only cost is one ``isinstance`` per text or
-line call. ``Mirror`` is shared between the render thread (which
-publishes) and the admin server's thread (which reads and toggles), so
-both sides only ever swap whole values: ``active`` is a plain bool, and a
-published frame is an immutable ``Frame``.
+Snapshots, not a stream, so the Pi isn't recording 2-20 frames a second
+for a page left open: the app snapshots a frame only when what it draws
+changes (``ScoreboardApp._begin_frame``), and every other frame goes on
+the panel's own canvas, unwrapped -- the standing cost is one
+``isinstance`` per text or line call. ``Mirror`` is shared between the
+render thread (which publishes) and the admin server's thread (which
+reads and sets the flags), so both sides only ever swap whole values:
+``watching``/``requested`` are plain bools, and a published frame is an
+immutable ``Frame``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,15 +43,19 @@ class Frame:
     #: The panel brightness (percent) the frame was shown at. ``pixels`` are
     #: what was drawn, at full brightness; this is for the page to note.
     brightness: int
+    captured_at: datetime
 
 
 class Mirror:
     def __init__(self, width: int, height: int) -> None:
         self.width = width
         self.height = height
-        #: Set from the admin server's thread while it has a live-view
-        #: subscriber; read once per frame by the render thread.
-        self.active = False
+        #: Set from the admin server's thread while the live view is open:
+        #: the render thread then snapshots each change of scene.
+        self.watching = False
+        #: Set from the admin server's thread for a snapshot of the very
+        #: next frame, changed or not (a new viewer, or Refresh).
+        self.requested = False
         self.buffer = bytearray(width * height * 3)
         self._frame: Frame | None = None
         self._seq = 0
@@ -59,17 +68,14 @@ class Mirror:
             i = (y * self.width + x) * 3
             self.buffer[i : i + 3] = bytes((r & 0xFF, g & 0xFF, b & 0xFF))
 
-    def publish(self, brightness: int) -> None:
+    def publish(self, brightness: int, captured_at: datetime) -> None:
         self._seq += 1
-        self._frame = Frame(self._seq, self.width, self.height, bytes(self.buffer), brightness)
+        self._frame = Frame(
+            self._seq, self.width, self.height, bytes(self.buffer), brightness, captured_at
+        )
 
     def latest(self) -> Frame | None:
         return self._frame
-
-    def discard(self) -> None:
-        """Forget the last frame, so a viewer who opens the live view later
-        never gets one from before it was switched off."""
-        self._frame = None
 
 
 class MirrorCanvas:

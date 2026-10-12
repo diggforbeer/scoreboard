@@ -239,16 +239,19 @@ thing:
   ``_coerce_rotation``, where the TOML loader would silently repair them.
   Sent last on connect, after the snapshot.
 
-* Live view (#268): the panel's current frame, for a board nobody can see.
-  Opt-in per connection like the Logs tab (``frame_subscribe``/
-  ``frame_unsubscribe``): the first subscriber sets ``Mirror.active`` so the
-  render thread starts recording (``display/mirror.py``), the last one to
-  leave clears it, and with nobody watching nothing is recorded at all.
-  ``_watch_frames`` sends a frame only when it differs from the last one
-  sent, at most every ``FRAME_POLL_SECONDS``: ``{"type": "frame", width,
-  height, brightness, data}``, ``data`` being base64 RGB, row-major. Pixels
-  are what was drawn (full brightness); ``brightness`` is the panel's
-  current setting, for the page to note, by the recommendation in #268.
+* Live view (#268): a snapshot of the panel, re-taken whenever the scene
+  changes. Snapshots, not a stream, by the owner's call: a page left open
+  shouldn't have the Pi recording every frame, and every reason for the
+  view (a panel dark when it shouldn't be, a layout, what a save did) needs
+  a still picture, not animation. Opt-in per connection like the Logs tab
+  (``frame_subscribe``/``frame_unsubscribe``): while anyone subscribes,
+  ``Mirror.watching`` has the render thread snapshot each change of scene
+  (``display/mirror.py``, ``ScoreboardApp._begin_frame``); ``frame_refresh``
+  sets ``Mirror.requested`` for the next frame regardless (the clock's time,
+  a fly-by). ``_watch_frames`` sends each new snapshot to every subscriber:
+  ``{"type": "frame", width, height, brightness, captured_at, data}``,
+  ``data`` being base64 RGB, row-major. Pixels are what was drawn (full
+  brightness); ``brightness`` is the panel's setting, for the page to note.
 
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
@@ -327,9 +330,8 @@ UPDATE_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_UPDATE_POLL", "
 #: pushed straight off the main loop -- this process has no other way to
 #: know ScoreboardApp's state changed except asking again.
 SNAPSHOT_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_SNAPSHOT_POLL", "2"))
-#: The live view's frame rate cap (#268): ~3fps is plenty to see what the
-#: panel shows, and a 128x32 frame is 12KB raw (16KB as base64).
-FRAME_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_FRAME_POLL", "0.33"))
+#: How often to look for a new live-view snapshot (#268) while anyone watches.
+FRAME_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_FRAME_POLL", "0.25"))
 
 #: Every currently-open connection -- the update-state/snapshot watchers
 #: broadcast to all of them, unlike everything else here, which only ever
@@ -354,10 +356,10 @@ _log_task: asyncio.Task[None] | None = None
 SNAPSHOT_PROVIDER: Callable[[], dict[str, str]] | None = None
 #: The running app's panel mirror (#268); None with no live app.
 MIRROR: Mirror | None = None
-#: Connections watching the live view, and the last frame sent to them as
-#: (pixels, brightness), so an unchanged frame isn't sent again.
+#: Connections watching the live view, and the seq of the last snapshot
+#: sent to them.
 _frame_subscribers: set[ServerConnection] = set()
-_last_frame_sent: tuple[bytes, int] | None = None
+_last_frame_sent = 0
 #: Turns the live demo (#204) on/off on the running ScoreboardApp; None with no live app.
 DEMO_SETTER: Callable[[bool], None] | None = None
 #: A goal horn is a few seconds long; 2 MB is generous for that and still
@@ -718,6 +720,7 @@ def _frame_payload(frame: Frame) -> dict[str, object]:
         "width": frame.width,
         "height": frame.height,
         "brightness": frame.brightness,
+        "captured_at": frame.captured_at.isoformat(),
         "data": base64.b64encode(frame.pixels).decode("ascii"),
     }
 
@@ -729,28 +732,34 @@ async def _subscribe_frames(connection: ServerConnection) -> None:
         await connection.send(json.dumps(error))
         return
     frame = MIRROR.latest()
-    if not _frame_subscribers:
-        # The watcher's "already sent" is about whoever watched last time;
-        # the frame sent just below is the one this viewer has now.
-        _last_frame_sent = None if frame is None else (frame.pixels, frame.brightness)
-    _frame_subscribers.add(connection)
-    MIRROR.active = True
-    if frame is not None:
+    if _frame_subscribers and frame is not None:
+        # Someone's already watching, so the last snapshot is current.
         await connection.send(json.dumps(_frame_payload(frame)))
+    else:
+        # Nobody was: whatever snapshot is left over may be long stale.
+        _last_frame_sent = frame.seq if frame is not None else 0
+        MIRROR.requested = True
+    _frame_subscribers.add(connection)
+    MIRROR.watching = True
+
+
+def _refresh_frame() -> None:
+    if MIRROR is not None:
+        MIRROR.requested = True
 
 
 def _unsubscribe_frames(connection: ServerConnection) -> None:
     _frame_subscribers.discard(connection)
     if not _frame_subscribers and MIRROR is not None:
-        MIRROR.active = False
+        MIRROR.watching = False
 
 
 async def _watch_frames() -> None:
     global _last_frame_sent
     while True:
         frame = MIRROR.latest() if MIRROR is not None and _frame_subscribers else None
-        if frame is not None and (frame.pixels, frame.brightness) != _last_frame_sent:
-            _last_frame_sent = (frame.pixels, frame.brightness)
+        if frame is not None and frame.seq > _last_frame_sent:
+            _last_frame_sent = frame.seq
             raw = json.dumps(_frame_payload(frame))
             for client in list(_frame_subscribers):
                 with contextlib.suppress(websockets.exceptions.ConnectionClosed):
@@ -1367,6 +1376,8 @@ async def _handle(connection: ServerConnection) -> None:
                 await _subscribe_frames(connection)
             elif msg_type == "frame_unsubscribe":
                 _unsubscribe_frames(connection)
+            elif msg_type == "frame_refresh":
+                _refresh_frame()
             elif msg_type == "demo_mode":
                 enabled = message.get("enabled")
                 if not isinstance(enabled, bool):

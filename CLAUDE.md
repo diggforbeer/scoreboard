@@ -1500,28 +1500,40 @@ when it was written; that history is left as-is rather than rewritten.
   by setting the delay to 0), a cleared box never saving (mutation-checked
   too), and Undo; the hook has no unit tests of its
   own, since the frontend has no JS test runner.
-- **Live view (#268).** A "Live view" card on the Home tab mirrors the
-  panel's current frame as round LED dots on a `<canvas>`
-  (`frontend/src/LiveView.tsx`). The real `rgbmatrix` binding can't read
-  pixels back, and its `DrawText`/`DrawLine` run in C++ (they never reach
-  a Python `SetPixel`), so the frame is recorded at draw time instead:
-  `display/mirror.py`'s `MirrorGraphics` wraps the backend's `graphics`
-  module (always), and `MirrorCanvas` wraps the panel's canvas (only while
-  someone watches -- `ScoreboardApp.swap_canvas()` decides at each swap
-  from `Mirror.active`). Text is re-rasterised for the mirror from the same
-  vendored BDF files, placed the way the C++ `Font::DrawGlyph` places glyphs
-  (BBX x offset ignored; all four fonts have it 0). Nobody watching means
-  the panel's own canvas is used unwrapped and no BDF is parsed twice.
-  `tests/test_mirror.py` walks every demo scene, both layouts, and asserts
-  the mirror equals what the `AsciiCanvas` panel got, pixel and colour.
-  Opt-in streaming like the Logs tab (`frame_subscribe`/`frame_unsubscribe`,
-  `admin_server._watch_frames`, at most every `FRAME_POLL_SECONDS` and only
-  when the frame changed). It also stops while the browser tab is hidden or
-  off the Home tab. By #268's recommendations, colours are as drawn (full
-  brightness) with the panel's brightness noted under the picture, and the
-  view sits behind a toggle. Not verified on hardware (#4): that the C++
-  glyph placement matches this reading of `bdf-font.cc`, and the render
-  loop's cost on a Pi 4 while it's open.
+- **Live view (#268).** A "Live view" card on the Home tab shows a
+  snapshot of the panel as round LED dots on a `<canvas>`
+  (`frontend/src/LiveView.tsx`), re-taken whenever the scene changes.
+  **Snapshots, not a stream, by the owner's call** (a first version
+  streamed every frame at up to 3fps): the Pi shouldn't record every frame
+  for a page left open, and every reason for the view (a panel dark when it
+  shouldn't be, a layout, what a save did) needs a still, not animation.
+  `ScoreboardApp._begin_frame` compares a key for each frame -- the scene
+  (with its power-play/shootout data), favourite, logos on/off, brightness
+  -- with the last snapshot's, and wraps the canvas for that one frame only
+  when it differs, or when the page asks (`Mirror.requested`: a new viewer,
+  or Refresh). The clock's ticking time isn't in the key, so the clock
+  screen doesn't re-snapshot each minute; Refresh covers it. A change in
+  the middle of an animation (a fly-by, a shootout pop-in) waits until the
+  animation ends, so a sprite isn't frozen half-drawn.
+  How a frame is recorded: the real `rgbmatrix` binding can't read pixels
+  back, and its `DrawText`/`DrawLine` run in C++ (they never reach a
+  Python `SetPixel`). So `display/mirror.py`'s `MirrorGraphics` wraps the
+  backend's `graphics` module (always), and `MirrorCanvas` wraps the
+  panel's canvas for a snapshot frame only. Text is redrawn for the
+  snapshot from the same vendored BDF files, placed the way the C++
+  `Font::DrawGlyph` places glyphs (BBX x offset ignored; all four fonts
+  have it 0). `tests/test_mirror.py` walks every demo scene, both layouts,
+  and asserts a snapshot equals what the `AsciiCanvas` panel got, pixel
+  and colour.
+  Opt-in per connection like the Logs tab (`frame_subscribe`/
+  `frame_unsubscribe`, `frame_refresh`; `admin_server._watch_frames` sends
+  each new snapshot once). With nobody subscribed, `Mirror.watching` is off
+  and nothing is compared or recorded. The page also unsubscribes when the
+  browser tab is hidden or off the Home tab. By #268's recommendations,
+  colours are as drawn (full brightness), with the panel's brightness noted
+  under the picture, and the view sits behind a toggle. Not verified on
+  hardware (#4): that the C++ glyph placement matches this reading of
+  `bdf-font.cc`, and the cost on a Pi 4.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing
   WebSocket connection rather than a separate HTTP endpoint -- worth

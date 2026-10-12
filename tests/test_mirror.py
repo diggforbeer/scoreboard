@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import DEMO_SCENE_SECONDS, ScoreboardApp
+from nhl_scoreboard.app import DEMO_SCENE_SECONDS, Scene, ScoreboardApp
 from nhl_scoreboard.config import Settings
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.logos import LogoLibrary
@@ -81,7 +81,8 @@ def as_pixels(frame_pixels: bytes) -> dict[tuple[int, int], tuple[int, int, int]
 def test_every_demo_scene_mirrors_pixel_for_pixel(app, tmp_path):
     """The acceptance test: every scene the board can show (the demo walks
     them all, both layouts, holidays included), recorded by the mirror and
-    by the panel's canvas, must be the same pixels in the same colours."""
+    by the panel's canvas, must be the same pixels in the same colours.
+    Refresh is pressed before every frame so each one is snapshotted."""
     from PIL import Image, ImageDraw
 
     for abbrev in TEAM_COLORS:
@@ -89,54 +90,98 @@ def test_every_demo_scene_mirrors_pixel_for_pixel(app, tmp_path):
         ImageDraw.Draw(im).ellipse((2, 2, 29, 29), fill=(*team_color(abbrev), 255))
         im.save(tmp_path / f"{abbrev}.png")
     app.renderer.logos = LogoLibrary([tmp_path])
-    app.mirror.active = True
-    app.swap_canvas()
     app.set_demo_mode(True)
 
-    compared = 0
+    compared, last_seq = 0, 0
     for _ in range(80):
+        app.mirror.requested = True
         app.draw()
         frame = app.mirror.latest()
+        if frame is None or frame.seq == last_seq:
+            continue  # held back mid-animation
+        last_seq = frame.seq
         shown = app.matrix.shown
-        assert frame is not None and shown is not None
         assert as_pixels(frame.pixels) == shown.pixels, f"frame {frame.seq} differs"
         compared += bool(shown.pixels)
         app.now[0] += DEMO_SCENE_SECONDS / 2
     assert compared > 40
 
 
-def test_nothing_is_recorded_until_someone_watches(app):
-    app.draw()
-    assert not isinstance(app.canvas, MirrorCanvas)
+def snapshots(app) -> int:
+    frame = app.mirror.latest()
+    return 0 if frame is None else frame.seq
+
+
+def test_nothing_is_recorded_while_nobody_watches(app):
+    for _ in range(3):
+        app.draw_scene(Scene("no_games"))
+        assert not isinstance(app.canvas, MirrorCanvas)
     assert app.mirror.latest() is None
 
-    app.mirror.active = True
-    app.swap_canvas()  # the next canvas is wrapped; nothing drawn yet to publish
-    assert isinstance(app.canvas, MirrorCanvas)
-    assert app.mirror.latest() is None
-    app.draw()
-    assert app.mirror.latest() is not None
 
-    app.mirror.active = False
-    app.draw()
-    assert not isinstance(app.canvas, MirrorCanvas)
-    assert app.mirror.latest() is None, "a stale frame must not greet the next viewer"
+def test_a_snapshot_per_change_of_scene_not_per_frame(app):
+    app.mirror.watching = True
+    app.draw_scene(Scene("no_games"))
+    assert snapshots(app) == 1
+    for _ in range(5):
+        app.draw_scene(Scene("no_games"))
+        assert not isinstance(app.canvas, MirrorCanvas), "an unchanged frame isn't recorded"
+    assert snapshots(app) == 1
+    app.draw_scene(Scene("connecting"))
+    assert snapshots(app) == 2
+    app._applied_brightness = 20  # brightness is part of what the page shows
+    app.draw_scene(Scene("connecting"))
+    assert snapshots(app) == 3
 
 
-def test_frame_carries_the_applied_brightness(app):
+def test_refresh_snapshots_an_unchanged_scene(app):
+    app.mirror.watching = True
+    app.draw_scene(Scene("clock"))
+    app.draw_scene(Scene("clock"))
+    assert snapshots(app) == 1
+    app.mirror.requested = True
+    app.draw_scene(Scene("clock"))
+    assert snapshots(app) == 2
+    assert not app.mirror.requested
+
+
+def test_a_change_mid_animation_waits_for_it_to_finish(app):
+    app.mirror.watching = True
+    app.draw_scene(Scene("no_games"))
+    app._overlay_animating = True
+    app.holiday_overlay.draw = lambda *a, **k: True  # a fly-by still crossing
+    app.draw_scene(Scene("clock"))
+    assert snapshots(app) == 1
+    app.holiday_overlay.draw = lambda *a, **k: False  # gone
+    app.draw_scene(Scene("clock"))  # the flag still says animating from last frame
+    app.draw_scene(Scene("clock"))
+    assert snapshots(app) == 2, "the change is caught once the animation ends"
+
+
+def test_watching_again_starts_fresh(app):
+    app.mirror.watching = True
+    app.draw_scene(Scene("clock"))
+    app.mirror.watching = False
+    app.draw_scene(Scene("clock"))
+    app.mirror.watching = True
+    app.draw_scene(Scene("clock"))
+    assert snapshots(app) == 2
+
+
+def test_frame_carries_brightness_and_capture_time(app):
     app._applied_brightness = 37
-    app.mirror.active = True
-    app.swap_canvas()
+    app.mirror.requested = True
     app.draw()
-    assert app.mirror.latest().brightness == 37
+    frame = app.mirror.latest()
+    assert frame.brightness == 37
+    assert frame.captured_at == datetime(2026, 12, 20, 19, 30, tzinfo=UTC)
 
 
 def test_night_mode_blanking_mirrors_as_black(app):
     app.settings.night_mode.enabled = True
     app.settings.night_mode.dim_brightness = 0
     app._night_mode_active = lambda: True
-    app.mirror.active = True
-    app.swap_canvas()
+    app.mirror.requested = True
     app.draw()
     frame = app.mirror.latest()
     assert frame is not None and not any(frame.pixels)

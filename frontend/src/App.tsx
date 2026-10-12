@@ -398,7 +398,8 @@ function App() {
 
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
-  // Live view (#268): opt-in, like Logs, so nothing streams unless asked.
+  // Live view (#268): opt-in, like Logs. The board sends a new snapshot
+  // whenever the scene changes, never a stream.
   const [liveView, setLiveView] = useState(false)
   const [frame, setFrame] = useState<PanelFrame | null>(null)
   const [liveViewError, setLiveViewError] = useState<string | null>(null)
@@ -633,8 +634,8 @@ function App() {
     }
   }, [page, connection])
 
-  // The live view streams only while it's open, on the Home tab, in a tab
-  // the browser is actually showing -- a phone left on the page in a
+  // The live view is watched only while it's open, on the Home tab, in a
+  // tab the browser is actually showing -- a phone left on the page in a
   // pocket stops it -- and resubscribes after a reconnect.
   useEffect(() => {
     function onVisibility() {
@@ -975,6 +976,12 @@ function App() {
         onToggle={(enabled) => {
           setLiveViewError(null)
           setLiveView(enabled)
+        }}
+        onRefresh={() => {
+          const socket = socketRef.current
+          if (socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'frame_refresh' }))
+          }
         }}
         frame={frame}
         error={liveViewError}

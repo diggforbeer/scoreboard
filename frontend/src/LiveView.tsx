@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
 
-// One frame of the panel (#268): base64 RGB, row-major, 3 bytes a pixel,
-// as drawn (full brightness). `brightness` is the panel's setting, in %.
+// A snapshot of the panel (#268), re-taken by the board whenever the
+// scene changes: base64 RGB, row-major, 3 bytes a pixel, as drawn (full
+// brightness). `brightness` is the panel's setting, in %.
 export type PanelFrame = {
   type: 'frame'
   width: number
   height: number
   brightness: number
+  captured_at: string
   data: string
 }
 
@@ -39,11 +41,12 @@ function drawFrame(canvas: HTMLCanvasElement, frame: PanelFrame) {
 type Props = {
   enabled: boolean
   onToggle: (enabled: boolean) => void
+  onRefresh: () => void
   frame: PanelFrame | null
   error: string | null
 }
 
-export function LiveView({ enabled, onToggle, frame, error }: Props) {
+export function LiveView({ enabled, onToggle, onRefresh, frame, error }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
@@ -57,18 +60,27 @@ export function LiveView({ enabled, onToggle, frame, error }: Props) {
       <div className="card-body">
         <div className="d-flex align-items-center justify-content-between mb-2">
           <h2 className="card-title h5 mb-0">Live view</h2>
-          <button
-            type="button"
-            className={enabled ? 'btn btn-outline-secondary btn-sm' : 'btn btn-outline-primary btn-sm'}
-            onClick={() => onToggle(!enabled)}
-          >
-            {enabled ? 'Hide' : 'Show live view'}
-          </button>
+          <div className="d-flex gap-2">
+            {enabled && frame && (
+              <button type="button" className="btn btn-outline-primary btn-sm" onClick={onRefresh}>
+                Refresh
+              </button>
+            )}
+            <button
+              type="button"
+              className={
+                enabled ? 'btn btn-outline-secondary btn-sm' : 'btn btn-outline-primary btn-sm'
+              }
+              onClick={() => onToggle(!enabled)}
+            >
+              {enabled ? 'Hide' : 'Show live view'}
+            </button>
+          </div>
         </div>
         {!enabled && (
           <p className="text-body-secondary small mb-0">
-            What the panel is showing right now, a few times a second. Off until you open it, so
-            a page left open on a phone doesn't keep a stream running.
+            A snapshot of what the panel is showing, updated each time the screen changes. Clock
+            ticks and animations don't move here; Refresh takes a new one.
           </p>
         )}
         {enabled && error && <p className="text-danger mb-0">{error}</p>}
@@ -80,8 +92,8 @@ export function LiveView({ enabled, onToggle, frame, error }: Props) {
                 width={frame.width * PITCH}
                 height={frame.height * PITCH}
                 className="w-100 rounded"
-                style={{ background: '#000', imageRendering: 'pixelated' }}
-                aria-label="Live view of the LED panel"
+                style={{ background: '#000' }}
+                aria-label="Snapshot of the LED panel"
                 data-testid="live-view"
               />
             ) : (
@@ -89,7 +101,8 @@ export function LiveView({ enabled, onToggle, frame, error }: Props) {
             )}
             {frame && (
               <p className="text-body-secondary small mt-2 mb-0">
-                Colours as drawn, at full brightness; the panel is set to {frame.brightness}%.{' '}
+                Captured {new Date(frame.captured_at).toLocaleTimeString()}. Colours as drawn, at
+                full brightness; the panel is set to {frame.brightness}%.{' '}
                 {allDark
                   ? 'Nothing is lit: the board is drawing a blank frame on purpose (night mode, for one).'
                   : 'If this shows a picture but the panel is dark, check the Panel hardware mapping and the wiring.'}
