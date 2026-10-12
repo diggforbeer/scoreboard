@@ -29,7 +29,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.15";
+case_version = "3.16";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -105,13 +105,23 @@ pi_model = 3;   // 4 or 3 (3 Model B+)
 // the bottom, not the top.
 pi_side = "left";   // "left" or "right"
 pi_on_left = pi_side == "left";
-usb_w = 13.1;  usb_h = 16;     // double-stacked USB-A
-eth_w = 16;    eth_h = 13.5;   // RJ45
-// [centre, width, height] for each port
+// Measured on a real Pi 3 Model B+, shell lip included: each double-stacked
+// USB-A jack is 15 x 16mm with 3.2mm between the two, so they share ONE
+// opening (no pillar), like the Pi 4's; the RJ45 is 16 x 14mm with no lip.
+usb_w = 15;    usb_h = 16;
+usb_gap   = 3.2;
+usb_pitch = usb_w + usb_gap;   // centre to centre, 18.2mm
+eth_w = 16;    eth_h = 14;     // RJ45
+// [centre, width, height] for each port. The merged USB opening stays centred
+// where the official drawing puts the pair (29 and 47, so 38).
 ports = pi_model == 4
     ? [[9.0,   usb_w, usb_h], [27.0, usb_w, usb_h], [45.75, eth_w, eth_h]]
-    : [[10.25, eth_w, eth_h], [29.0, usb_w, usb_h], [47.0,  usb_w, usb_h]];
-port_margin = 0.75;  // clearance around each jack
+    : [[10.25, eth_w, eth_h], [38.0, usb_pitch + usb_w, usb_h]];
+// More forgiving than the Pi 4's 0.75: the first printed 3B+ faceplate was tight
+// on the real jacks, and a printed hole comes out a little small. The pillar
+// between the Ethernet and USB openings is about 1.35mm at this setting, so
+// don't go much higher.
+port_margin = 0.9;   // clearance around each jack
 port_r      = 1;     // corner radius
 
 // ---- speakers (ceiling, firing up) ----------------------------------------

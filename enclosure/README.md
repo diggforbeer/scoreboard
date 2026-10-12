@@ -28,8 +28,9 @@ What changed from v2:
   USB/Ethernet end out through a port
   faceplate -- on the Pi 4, one wide opening spanning both USB jacks (no
   pillar between them, sized from measured jack shells 14.5 and 15.1mm wide,
-  3.72mm apart) and a separate Ethernet opening; the Pi 3B+ still has one
-  rounded opening per jack. An external USB speaker can plug straight in. The board sits 5mm
+  3.72mm apart) and a separate Ethernet opening; the Pi 3B+ is the same
+  idea, sized from its own measured jacks (USB shells 15 x 16mm with 3.2mm
+  between, RJ45 16 x 14mm) with 0.9mm of clearance all round. An external USB speaker can plug straight in. The board sits 5mm
   off the floor (the 3.5mm audio jack overhangs its bottom edge ~3mm).
   Standoffs are cones (10mm base, 6mm top) so they don't snap off.
   Tilted vent slits through the back wall behind it (#49). With the Pi on
