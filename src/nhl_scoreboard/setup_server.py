@@ -22,6 +22,19 @@ text SSID field is always shown alongside it, never hidden behind the
 picker, so a network missing from that stale snapshot (out of range at
 that exact moment, hidden/non-broadcasting, or one that only appeared
 afterward) still has a way in.
+
+Also renders the display check (#172): a wrong `hardware_mapping` is a
+*silent* failure (CLAUDE.md's Hardware facts) -- the service stays healthy
+and this very page still loads, the panel just goes dark with nothing to
+say why. Since this page is the one channel guaranteed reachable even when
+the panel itself can't say anything is wrong, it is also where fixing it
+lives: "no, try the next option" writes the next candidate mapping and
+restarts the service (both done by callables handed in from app.py -- this
+module still never touches config or systemd itself, same stance as never
+touching iwd/iwctl for the WiFi side), gating the WiFi form until it's
+confirmed working. Gating matters here specifically because a successful
+WiFi join tears this AP down (#133) -- an unconfirmed display stranded
+after that point would have no way back in.
 """
 
 from __future__ import annotations
@@ -34,6 +47,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs
+
+from .config import PANEL_HARDWARE_MAPPING_CHOICES, PANEL_HARDWARE_MAPPING_LABELS
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +75,82 @@ _CAPTIVE_PROBE_PATHS = frozenset(
 )
 
 
-def _render_page(networks: list[str], *, error: str | None = None) -> bytes:
+def _mapping_label(mapping: str) -> str:
+    """The board's name, not the driver's -- a hand-edited value shows as-is."""
+    return PANEL_HARDWARE_MAPPING_LABELS.get(mapping, mapping)
+
+
+def _render_board_picker(current: str) -> str:
+    """Jump straight to a named board instead of stepping through them.
+
+    Posts to the same ``/panel/next`` as "try the next option", with the
+    choice attached, so it gets the same marker, restart and confirm.
+    """
+    options = "".join(
+        f'<option value="{m}"{" selected" if m == current else ""}>'
+        f"{html.escape(_mapping_label(m))}</option>"
+        for m in PANEL_HARDWARE_MAPPING_CHOICES
+    )
+    return (
+        '<form method="POST" action="/panel/next">'
+        '<label for="mapping">Know your adapter board? Pick it:</label><br>'
+        f'<select id="mapping" name="mapping" style="max-width: 100%">{options}</select> '
+        '<button type="submit">Use this board</button></form>'
+    )
+
+
+def _render_panel_card(mapping: str, in_trial: bool, tried_all: bool = False) -> str:
+    """The display check (#172): confirm the panel is actually showing this
+    page's own SSID/QR scene before assuming setup is otherwise fine.
+
+    A wrong ``hardware_mapping`` is a *silent* failure -- the service stays
+    healthy, it just drives the wrong GPIO pins, so the panel goes dark with
+    no error anywhere to notice (see CLAUDE.md's Hardware facts). This card
+    is the one place that ever asks "did you actually look at the panel?"
+    instead of assuming a healthy service means a working display.
+    """
+    if in_trial:
+        prompt = (
+            f"Now trying <b>{html.escape(_mapping_label(mapping))}</b>. Is the panel showing this "
+            "network's name, password and a QR code?"
+        )
+        confirm_html = (
+            '<form method="POST" action="/panel/confirm">'
+            '<button type="submit">Yes, it\'s working</button></form>'
+        )
+        next_label = "No, try the next option"
+        if tried_all:
+            # A full lap with nothing lit is wiring, not the setting: say so
+            # instead of cycling forever.
+            prompt += (
+                '</p><p class="hint">That\'s every display type this board supports. '
+                "If none of them lit the panel, check its power supply and the ribbon "
+                "cable to the adapter board — the setting isn't the problem."
+            )
+    else:
+        prompt = (
+            f"Display type is set to <b>{html.escape(_mapping_label(mapping))}</b>. You should be "
+            "seeing this network's name, password and a QR code on the panel right now."
+        )
+        confirm_html = ""
+        next_label = "It's not lighting up — try a different display type"
+    return f"""<fieldset>
+<legend>Display check</legend>
+<p>{prompt}</p>
+{confirm_html}
+<form method="POST" action="/panel/next"><button type="submit">{next_label}</button></form>
+{_render_board_picker(mapping)}
+</fieldset>"""
+
+
+def _render_page(
+    networks: list[str],
+    *,
+    error: str | None = None,
+    panel_mapping: str = "regular",
+    panel_in_trial: bool = False,
+    panel_tried_all: bool = False,
+) -> bytes:
     error_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
     picker_html = "".join(
         f'<label><input type="radio" name="ssid_choice" value="{html.escape(n)}"> '
@@ -69,26 +159,18 @@ def _render_page(networks: list[str], *, error: str | None = None) -> bytes:
     )
     if not networks:
         picker_html = "<p>No nearby networks were seen before setup mode started.</p>"
-    page = f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NHL Scoreboard setup</title>
-<style>
-body {{ font-family: sans-serif; background: #111; color: #eee; padding: 1.5rem; max-width: 28rem }}
-h1 {{ font-size: 1.2rem; }}
-fieldset {{ border: 1px solid #444; margin-bottom: 1rem; }}
-label {{ display: inline-block; margin: 0.25rem 0; }}
-input[type=text], input[type=password] {{ width: 100%; box-sizing: border-box; padding: .4rem }}
-button {{ padding: 0.5rem 1.5rem; }}
-.error {{ color: #f66; }}
-</style>
-</head>
-<body>
-<h1>Join a WiFi network</h1>
-{error_html}
-<form method="POST" action="/">
+    panel_html = _render_panel_card(panel_mapping, panel_in_trial, panel_tried_all)
+    if panel_in_trial:
+        # Gated (also enforced server-side in do_POST, not just hidden here):
+        # confirm the display works before spending a WiFi join on it --
+        # joining tears down this very AP once it succeeds (#133), which
+        # would strand an unconfirmed trial with no way back in.
+        wifi_html = (
+            '<p class="hint">Confirm the display above is working before joining a '
+            "WiFi network.</p>"
+        )
+    else:
+        wifi_html = f"""<form method="POST" action="/">
 <fieldset>
 <legend>Nearby networks</legend>
 {picker_html}
@@ -98,7 +180,55 @@ button {{ padding: 0.5rem 1.5rem; }}
 <p><label>Password (leave blank for an open network):<br>
 <input type="password" name="password"></label></p>
 <button type="submit">Join</button>
-</form>
+</form>"""
+    page = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NHL Scoreboard setup</title>
+<style>
+body {{ font-family: sans-serif; background: #111; color: #eee; padding: 1.5rem; max-width: 28rem }}
+h1, h2 {{ font-size: 1.2rem; }}
+fieldset {{ border: 1px solid #444; margin-bottom: 1rem; }}
+label {{ display: inline-block; margin: 0.25rem 0; }}
+input[type=text], input[type=password] {{ width: 100%; box-sizing: border-box; padding: .4rem }}
+button {{ padding: 0.5rem 1.5rem; }}
+.error {{ color: #f66; }}
+.hint {{ color: #aaa; }}
+</style>
+</head>
+<body>
+<h1>NHL Scoreboard setup</h1>
+{panel_html}
+<h2>Join a WiFi network</h2>
+{error_html}
+{wifi_html}
+</body>
+</html>
+"""
+    return page.encode("utf-8")
+
+
+def _render_restarting_page(mapping: str) -> bytes:
+    """Shown right after "no, try the next option" or a picked board (#172).
+
+    No client-side JS (same stdlib-only constraint as the rest of this
+    page) -- a plain meta-refresh gives the service time to restart and
+    rebuild its RGBMatrix with the new mapping (config.py: [panel] settings
+    never hot-reload) before this page re-checks in on its own.
+    """
+    page = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="8">
+<title>NHL Scoreboard setup</title>
+</head>
+<body style="font-family: sans-serif; background: #111; color: #eee; padding: 1.5rem;">
+<h1>Trying &ldquo;{html.escape(_mapping_label(mapping))}&rdquo;</h1>
+<p>Restarting the display with this setting. Give it about ten seconds and check the
+panel -- this page reloads on its own.</p>
 </body>
 </html>
 """
@@ -135,6 +265,9 @@ def _choose_ssid(form: dict[str, list[str]]) -> str:
 def _make_handler(
     networks: Callable[[], list[str]],
     on_submit: Callable[[str, str | None], None],
+    panel_state: Callable[[], tuple[str, bool, bool]],
+    on_panel_confirm: Callable[[], None],
+    on_panel_next: Callable[[str | None], str | None],
 ) -> type[BaseHTTPRequestHandler]:
     class SetupRequestHandler(BaseHTTPRequestHandler):
         server_version = "nhl-scoreboard-setup/1.0"
@@ -156,18 +289,69 @@ def _make_handler(
             self.send_header("Content-Length", "0")
             self.end_headers()
 
+        def _read_form(self) -> dict[str, list[str]]:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            body = self.rfile.read(length).decode("utf-8", errors="replace")
+            return parse_qs(body, keep_blank_values=True)
+
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html"):
-                self._send_html(_render_page(networks()))
+                mapping, in_trial, tried_all = panel_state()
+                self._send_html(
+                    _render_page(
+                        networks(),
+                        panel_mapping=mapping,
+                        panel_in_trial=in_trial,
+                        panel_tried_all=tried_all,
+                    )
+                )
                 return
             if self.path in _CAPTIVE_PROBE_PATHS:
                 log.debug("Captive-portal probe on %s; redirecting to the setup page", self.path)
             self._redirect_to_setup_page()
 
         def do_POST(self) -> None:
-            length = int(self.headers.get("Content-Length", "0") or "0")
-            body = self.rfile.read(length).decode("utf-8", errors="replace")
-            form = parse_qs(body, keep_blank_values=True)
+            if self.path == "/panel/confirm":
+                on_panel_confirm()
+                self._redirect_to_setup_page()
+                return
+            if self.path == "/panel/next":
+                # The picker sends a board; the plain button sends nothing.
+                chosen = self._read_form().get("mapping", [""])[0].strip() or None
+                new_mapping = on_panel_next(chosen)
+                if new_mapping is None:
+                    mapping, in_trial, _ = panel_state()
+                    self._send_html(
+                        _render_page(
+                            networks(),
+                            error="Could not save the display setting.",
+                            panel_mapping=mapping,
+                            panel_in_trial=in_trial,
+                        ),
+                        status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
+                    return
+                self._send_html(_render_restarting_page(new_mapping))
+                return
+
+            mapping, in_trial, _ = panel_state()
+            if in_trial:
+                # Enforced here too, not just hidden from the rendered form
+                # (#172): a join tears down this AP once it succeeds (#133),
+                # which would stand between an unconfirmed display and any
+                # way back in.
+                self._send_html(
+                    _render_page(
+                        networks(),
+                        error="Confirm the display works before joining a WiFi network.",
+                        panel_mapping=mapping,
+                        panel_in_trial=True,
+                    ),
+                    status=HTTPStatus.CONFLICT,
+                )
+                return
+
+            form = self._read_form()
             ssid = _choose_ssid(form)
             if not ssid:
                 self._send_html(
@@ -194,11 +378,23 @@ class SetupServer:
         on_submit: Callable[[str, str | None], None],
         port: int,
         host: str = "0.0.0.0",  # intentional: reachable only from the board's own AP anyway
+        panel_state: Callable[[], tuple[str, bool, bool]] | None = None,
+        on_panel_confirm: Callable[[], None] | None = None,
+        on_panel_next: Callable[[str | None], str | None] | None = None,
     ) -> None:
         self._networks = networks
         self._on_submit = on_submit
         self._host = host
         self._port = port
+        #: The display check (#172): (configured hardware_mapping, whether a
+        #: trial the "no, try the next option" button started is still
+        #: unconfirmed). Defaults describe a board with nothing wired up --
+        #: only ScoreboardApp's real callables (app.py) ever write config or
+        #: restart the service; this module never touches either itself,
+        #: same "presentation only" stance as on_submit/wifi.
+        self._panel_state = panel_state or (lambda: ("regular", False, False))
+        self._on_panel_confirm = on_panel_confirm or (lambda: None)
+        self._on_panel_next = on_panel_next or (lambda _chosen: None)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -210,7 +406,14 @@ class SetupServer:
 
     def start(self) -> None:
         self._httpd = ThreadingHTTPServer(
-            (self._host, self._port), _make_handler(self._networks, self._on_submit)
+            (self._host, self._port),
+            _make_handler(
+                self._networks,
+                self._on_submit,
+                self._panel_state,
+                self._on_panel_confirm,
+                self._on_panel_next,
+            ),
         )
         self._thread = threading.Thread(
             target=self._httpd.serve_forever, name="setup-server", daemon=True

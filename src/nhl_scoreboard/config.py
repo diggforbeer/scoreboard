@@ -168,6 +168,40 @@ class PanelConfig:
         return (self.width * self.pitch_mm, self.height * self.pitch_mm)
 
 
+#: The hardware_mapping values this project actually documents in the boot
+#: template/README -- not the full ~7-name set the underlying
+#: rpi-rgb-led-matrix driver technically accepts, most of which target
+#: hardware this project doesn't. Shared by admin_server.py's Panel picker
+#: and setup_server.py's AP-setup display check (#172) so the two pages
+#: can't drift out of sync with each other.
+PANEL_HARDWARE_MAPPING_CHOICES = ("regular", "adafruit-hat", "adafruit-hat-pwm")
+
+#: What each of those is in words a hobbyist recognises from the board in
+#: their hand -- the driver's names mean nothing until you already know
+#: them (#172). Matches the boot template's own hardware_mapping comment.
+PANEL_HARDWARE_MAPPING_LABELS = {
+    "regular": "Standard HUB75 adapter (Seengreat, XICOOLEE, WatangTech)",
+    "adafruit-hat": "Adafruit RGB Matrix Bonnet or HAT",
+    "adafruit-hat-pwm": "Adafruit Bonnet or HAT with the GPIO4-GPIO18 solder mod",
+}
+
+
+def next_hardware_mapping(current: str) -> str:
+    """The next candidate after ``current`` in ``PANEL_HARDWARE_MAPPING_CHOICES``, cycling.
+
+    Used by the AP-setup page's display check (#172) to try one candidate
+    at a time on "no, try the next option". A ``current`` outside the 3
+    documented choices (a hand-edited value from the fuller driver-supported
+    set) starts back at the first candidate rather than raising -- same
+    typo-tolerant, never-fatal convention as the rest of this module.
+    """
+    try:
+        index = PANEL_HARDWARE_MAPPING_CHOICES.index(current)
+    except ValueError:
+        index = -1
+    return PANEL_HARDWARE_MAPPING_CHOICES[(index + 1) % len(PANEL_HARDWARE_MAPPING_CHOICES)]
+
+
 @dataclass(slots=True)
 class ScoreboardConfig:
     """Behaviour of the scoreboard itself."""

@@ -9,6 +9,7 @@ import math
 import random
 import re
 import signal
+import subprocess
 import threading
 import time
 import tomllib
@@ -26,7 +27,15 @@ from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
 from .button import Button
-from .config import DEFAULT_CONFIG_PATHS, RotationEntry, Settings, resolve_timezone
+from .config import (
+    DEFAULT_CONFIG_PATHS,
+    PANEL_HARDWARE_MAPPING_CHOICES,
+    ConfigWriteError,
+    RotationEntry,
+    Settings,
+    next_hardware_mapping,
+    resolve_timezone,
+)
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
@@ -116,6 +125,20 @@ AP_SUBMISSION_STATE_PATH = Path("/run/nhl-scoreboard-setup-submission.json")
 #: whatever HTTP request submitted it. /run, same non-surviving-a-reboot
 #: convention as every other AP-setup-mode state file.
 WIFI_JOIN_OUTCOME_PATH = Path("/run/nhl-scoreboard-wifi-join-state.json")
+#: Marker written by _on_panel_next() while the setup page's display check
+#: (#172) has a hardware_mapping trial running -- i.e. it changed
+#: [panel].hardware_mapping and restarted the service to try the new value,
+#: and "yes, it's working" (_on_panel_confirm()) hasn't cleared it yet.
+#: Its existence is the gate; its content is the JSON list of mappings
+#: tried so far this trial, so the page can say when a full lap of the
+#: candidates has gone by with nothing lit (wiring, not the setting). The
+#: current mapping itself is read fresh from self.settings.panel.
+#: hardware_mapping, which the restart this file exists to survive already
+#: reloads from disk. /run, same never-survives-a-reboot
+#: convention as every other AP-setup-mode state file: a full reboot always
+#: starts over at whatever's actually configured, not a half-finished trial
+#: from hours ago.
+HW_MAPPING_TRIAL_PATH = Path("/run/nhl-scoreboard-hw-mapping-trial.json")
 #: Characters the de-facto WIFI: QR-code format requires backslash-escaped
 #: inside SSID/password fields -- unescaped, any of these would end the
 #: field early or corrupt the payload for a strict parser.
@@ -124,6 +147,35 @@ _QR_SPECIAL_CHARS = re.compile(r'([\\;,:"])')
 
 def _qr_escape(value: str) -> str:
     return _QR_SPECIAL_CHARS.sub(r"\\\1", value)
+
+
+def _restart_scoreboard_service() -> None:
+    """Fire-and-forget ``systemctl restart nhl-scoreboard.service`` (#172).
+
+    [panel] settings including hardware_mapping never hot-reload (see
+    config.py's Settings.save() and reload_config_if_changed()'s own
+    docstring) -- an actual process restart is what rebuilds RGBMatrix with
+    a newly-saved mapping. Backgrounded on its own thread, same pattern as
+    admin_server.py's _reboot_board(): the
+    HTTP response announcing "trying <mapping> now" must reach the phone
+    before this process might be torn down to restart, not block on the
+    restart finishing first. Restart=always/RestartSec=10 in the unit file
+    only governs an unplanned crash; an explicit `restart` here stops and
+    starts right away, no 10s delay.
+    """
+
+    def _run() -> None:
+        try:
+            subprocess.run(
+                ["systemctl", "restart", "nhl-scoreboard.service"],
+                check=False,
+                capture_output=True,
+                timeout=30,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            log.warning("Could not restart nhl-scoreboard.service: %s", exc)
+
+    threading.Thread(target=_run, daemon=True, name="hw-mapping-restart").start()
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +245,8 @@ class ScoreboardApp:
         ap_scan_state_path: Path | None = None,
         ap_submission_state_path: Path | None = None,
         wifi_join: WifiJoinAttempt | None = None,
+        hw_mapping_trial_path: Path | None = None,
+        restart_service: Callable[[], None] | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -201,6 +255,9 @@ class ScoreboardApp:
         self.ap_setup_state_path = ap_setup_state_path or AP_SETUP_STATE_PATH
         self.ap_scan_state_path = ap_scan_state_path or AP_SCAN_STATE_PATH
         self.ap_submission_state_path = ap_submission_state_path or AP_SUBMISSION_STATE_PATH
+        #: The setup page's display check (#172) -- see HW_MAPPING_TRIAL_PATH.
+        self.hw_mapping_trial_path = hw_mapping_trial_path or HW_MAPPING_TRIAL_PATH
+        self._restart_service = restart_service or _restart_scoreboard_service
         #: Acts on a submission (#133): tears down the AP, calls
         #: nhl_scoreboard.wifi's shared join/rollback path, reports the
         #: outcome to the panel. A full object, not just a path, since
@@ -1616,11 +1673,20 @@ class ScoreboardApp:
             self.setup_server = None
         self._setup_server_config = desired
         if desired is None:
+            # The AP setup flow is over (WiFi joined, or setup disabled) --
+            # any hardware_mapping trial (#172) belongs to this session
+            # only. A later AP session on the same boot (WiFi drops hours
+            # later) must not inherit a stale "still testing" gate from one
+            # that already ended.
+            self.hw_mapping_trial_path.unlink(missing_ok=True)
             return
         self.setup_server = SetupServer(
             networks=self._cached_setup_networks,
             on_submit=self._on_setup_submission,
             port=cfg.port,
+            panel_state=self._panel_check_state,
+            on_panel_confirm=self._on_panel_confirm,
+            on_panel_next=self._on_panel_next,
         )
         try:
             self.setup_server.start()
@@ -1660,6 +1726,92 @@ class ScoreboardApp:
             tmp_path.replace(self.ap_submission_state_path)
         except OSError as exc:
             log.warning("Could not write WiFi setup submission: %s", exc)
+
+    # -- display check (#172) ----------------------------------------------
+
+    def _panel_check_state(self) -> tuple[str, bool, bool]:
+        """(configured hardware_mapping, whether a trial is unconfirmed,
+        whether every candidate has now been tried) -- read by SetupServer's
+        GET / to render the display check card."""
+        tried = self._tried_mappings()
+        tried_all = tried is not None and set(PANEL_HARDWARE_MAPPING_CHOICES) <= set(tried)
+        return (self.settings.panel.hardware_mapping, tried is not None, tried_all)
+
+    def _tried_mappings(self) -> list[str] | None:
+        """The mappings this trial has tried, or None with no trial running.
+
+        An unreadable marker still counts as a trial (the gate must hold)
+        that has only tried the current mapping.
+        """
+        try:
+            raw = self.hw_mapping_trial_path.read_text()
+        except FileNotFoundError:
+            return None
+        except OSError:
+            return [self.settings.panel.hardware_mapping]
+        try:
+            tried = json.loads(raw)
+        except json.JSONDecodeError:
+            tried = None
+        if not isinstance(tried, list) or not all(isinstance(t, str) for t in tried):
+            return [self.settings.panel.hardware_mapping]
+        return tried
+
+    def _on_panel_next(self, chosen: str | None = None) -> str | None:
+        """ "No, try the next option" (or a board picked by name): save that
+        mapping and restart so the panel actually picks it up, returning it
+        on success. ``chosen`` must be one of the documented choices.
+
+        The trial marker is written *before* the mapping changes: if it
+        can't be, nothing changes and nothing restarts, rather than leaving
+        a new mapping in place with no gate and no "is it working?" card.
+
+        A throwaway Settings instance, not self.settings -- same reasoning
+        as admin_server.py's saves: mutating the live app's Settings from
+        this HTTP-handling thread while the main loop is mid-iteration
+        reading it would be an undefined interleaving, and it is moot anyway
+        once the restart below lands, since the new process loads settings
+        from disk itself.
+        """
+        if self.settings.source_path is None:
+            log.warning("No config file loaded; cannot try a different hardware_mapping")
+            return None
+        if chosen is not None and chosen not in PANEL_HARDWARE_MAPPING_CHOICES:
+            log.warning("Ignoring unknown hardware_mapping %r from the setup page", chosen)
+            return None
+        current = self.settings.panel.hardware_mapping
+        new_mapping = chosen or next_hardware_mapping(current)
+        previous = self._tried_mappings()
+        tried = [*(previous or [current]), new_mapping]
+        try:
+            self.hw_mapping_trial_path.write_text(json.dumps(tried))
+        except OSError as exc:
+            log.warning("Could not write hardware_mapping trial marker: %s", exc)
+            return None
+        try:
+            Settings.from_toml(self.settings.source_path).save(
+                {"panel": {"hardware_mapping": new_mapping}}
+            )
+        except (OSError, tomllib.TOMLDecodeError, ConfigWriteError) as exc:
+            log.warning("Could not save hardware_mapping %r: %s", new_mapping, exc)
+            self._restore_trial_marker(previous)
+            return None
+        self._restart_service()
+        return new_mapping
+
+    def _restore_trial_marker(self, previous: list[str] | None) -> None:
+        """Put the marker back as it was before a save that didn't happen."""
+        try:
+            if previous is None:
+                self.hw_mapping_trial_path.unlink(missing_ok=True)
+            else:
+                self.hw_mapping_trial_path.write_text(json.dumps(previous))
+        except OSError as exc:
+            log.warning("Could not restore hardware_mapping trial marker: %s", exc)
+
+    def _on_panel_confirm(self) -> None:
+        """ "Yes, it's working": end the trial, ungating the WiFi form."""
+        self.hw_mapping_trial_path.unlink(missing_ok=True)
 
     def _select_base_scene(self, *, allow_fetch: bool = True) -> Scene:
         if self.last_success is None:
