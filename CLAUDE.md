@@ -1500,6 +1500,28 @@ when it was written; that history is left as-is rather than rewritten.
   by setting the delay to 0), a cleared box never saving (mutation-checked
   too), and Undo; the hook has no unit tests of its
   own, since the frontend has no JS test runner.
+- **Live view (#268).** A "Live view" card on the Home tab mirrors the
+  panel's current frame as round LED dots on a `<canvas>`
+  (`frontend/src/LiveView.tsx`). The real `rgbmatrix` binding can't read
+  pixels back, and its `DrawText`/`DrawLine` run in C++ (they never reach
+  a Python `SetPixel`), so the frame is recorded at draw time instead:
+  `display/mirror.py`'s `MirrorGraphics` wraps the backend's `graphics`
+  module (always), and `MirrorCanvas` wraps the panel's canvas (only while
+  someone watches -- `ScoreboardApp.swap_canvas()` decides at each swap
+  from `Mirror.active`). Text is re-rasterised for the mirror from the same
+  vendored BDF files, placed the way the C++ `Font::DrawGlyph` places glyphs
+  (BBX x offset ignored; all four fonts have it 0). Nobody watching means
+  the panel's own canvas is used unwrapped and no BDF is parsed twice.
+  `tests/test_mirror.py` walks every demo scene, both layouts, and asserts
+  the mirror equals what the `AsciiCanvas` panel got, pixel and colour.
+  Opt-in streaming like the Logs tab (`frame_subscribe`/`frame_unsubscribe`,
+  `admin_server._watch_frames`, at most every `FRAME_POLL_SECONDS` and only
+  when the frame changed). It also stops while the browser tab is hidden or
+  off the Home tab. By #268's recommendations, colours are as drawn (full
+  brightness) with the panel's brightness noted under the picture, and the
+  view sits behind a toggle. Not verified on hardware (#4): that the C++
+  glyph placement matches this reading of `bdf-font.cc`, and the render
+  loop's cost on a Pi 4 while it's open.
 - Not yet decided or built: the JSON-API-vs-WebSocket-for-everything
   question (every save/action so far has gone straight over the existing
   WebSocket connection rather than a separate HTTP endpoint -- worth

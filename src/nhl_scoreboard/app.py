@@ -46,6 +46,7 @@ from .display.holiday import (
 )
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
+from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
 from .light_sensor import LightSensor
 from .nhl.api import NHLApiError, NHLClient
@@ -319,14 +320,17 @@ class ScoreboardApp:
         self.backend = backend or load_backend()
         self.matrix, self.backend = create_matrix(settings.panel, self.backend)
         self.canvas = self.matrix.CreateFrameCanvas()
+        #: The admin page's live view (#268): recorded only while it's open.
+        self.mirror = Mirror(settings.panel.width, settings.panel.height)
         logos = None
         if settings.scoreboard.show_logos:
             logos = LogoLibrary.default(
                 size=min(settings.panel.height, 32), variant=settings.scoreboard.logo_variant
             )
+        graphics = MirrorGraphics(self.backend.graphics)
         self.renderer = Renderer(
-            graphics=self.backend.graphics,
-            fonts=FontSet(self.backend.graphics),
+            graphics=graphics,
+            fonts=FontSet(graphics),
             width=settings.panel.width,
             height=settings.panel.height,
             tz=self.tz,
@@ -352,6 +356,7 @@ class ScoreboardApp:
                 port=settings.status.port,
                 snapshot=self.status_snapshot,
                 demo_setter=self.set_demo_mode,
+                mirror=self.mirror,
             )
         else:
             self.admin_server = None
@@ -490,7 +495,7 @@ class ScoreboardApp:
         if self.admin_server is not None:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
-        self.canvas = self.matrix.SwapOnVSync(self.canvas)
+        self.swap_canvas()
 
         next_poll = 0.0
         next_rotate = 0.0
@@ -874,6 +879,7 @@ class ScoreboardApp:
                     port=new_settings.status.port,
                     snapshot=self.status_snapshot,
                     demo_setter=self.set_demo_mode,
+                    mirror=self.mirror,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,
@@ -2164,7 +2170,7 @@ class ScoreboardApp:
             # every backend, and there's no point rendering a scene nobody
             # can see.
             self.canvas.Clear()
-            self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            self.swap_canvas()
             self._overlay_animating = False
             self._shootout_animating = False
             return
@@ -2179,6 +2185,19 @@ class ScoreboardApp:
             self._demo_was_on = False
             self.renderer.logos = self._demo_real_logos
         self.draw_scene(self.select_scene())
+
+    def swap_canvas(self) -> None:
+        """Show the frame just drawn. While the live view is open (#268) the
+        next canvas is wrapped so the frame drawn on it is recorded too;
+        otherwise the panel's own canvas is used as is."""
+        if isinstance(self.canvas, MirrorCanvas):
+            self.mirror.publish(self._applied_brightness)
+        swapped = self.matrix.SwapOnVSync(unwrap(self.canvas))
+        if self.mirror.active:
+            self.canvas = MirrorCanvas(swapped, self.mirror)
+        else:
+            self.canvas = swapped
+            self.mirror.discard()
 
     def april_fools_active(self) -> bool:
         """April 1 on a Preds board (#248) -- see april_fools.py."""
@@ -2255,7 +2274,7 @@ class ScoreboardApp:
         else:
             r.draw_message(self.canvas, "NO GAMES")
         self._draw_holiday_overlay(scene, favourite)
-        self.canvas = self.matrix.SwapOnVSync(self.canvas)
+        self.swap_canvas()
 
     def _shootout_frame_ages(self, game: Game) -> dict[int, float]:
         if self._demo_drawing:

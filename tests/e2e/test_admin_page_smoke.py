@@ -222,3 +222,75 @@ def test_a_cleared_number_box_is_never_saved(admin_page):
             assert admin_page.config()["scoreboard"]["rotate_seconds"] == 9
         finally:
             browser.close()
+
+
+@pytest.fixture
+def live_admin_page(tmp_path, monkeypatch):
+    """The admin server the way ScoreboardApp runs it -- in-process, on its
+    own thread, with a panel Mirror (#268) -- plus a stand-in render loop
+    that publishes a frame twice a second while someone watches. The
+    standalone `python -m nhl_scoreboard.admin_server` above has no panel
+    to mirror, so it can't exercise the live view."""
+    if not (DIST_DIR / "index.html").is_file():
+        pytest.skip(f"{DIST_DIR}/index.html missing -- run `npm run build` in frontend/ first")
+    import threading
+
+    from nhl_scoreboard import admin_server
+    from nhl_scoreboard.display.mirror import Mirror
+
+    monkeypatch.setattr(admin_server, "ADMIN_DIR", DIST_DIR)
+    config_path = tmp_path / "scoreboard.toml"
+    config_path.write_text("")
+    mirror = Mirror(128, 32)
+    stop = threading.Event()
+
+    def render_loop():
+        while not stop.wait(0.5):
+            if mirror.active:
+                mirror.clear()
+                mirror.set_pixel(0, 0, 255, 0, 0)
+                mirror.publish(brightness=80)
+            else:
+                mirror.discard()
+
+    loop = threading.Thread(target=render_loop, daemon=True)
+    loop.start()
+    server = admin_server.AdminServer(str(config_path), port=0, mirror=mirror, host=HOST)
+    server.start()
+    try:
+        yield f"http://{HOST}:{server.port}/", mirror
+    finally:
+        server.stop()
+        stop.set()
+        loop.join(timeout=2)
+
+
+def test_live_view_shows_a_frame(live_admin_page):
+    """#268's own acceptance: the page opens the live view and gets a
+    frame -- checked on the canvas itself (the top-left LED is the red one
+    the stand-in loop drew), not just that a canvas element appeared."""
+    from playwright.sync_api import sync_playwright
+
+    url, mirror = live_admin_page
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(url)
+            page.get_by_role("button", name="Show live view").click()
+            canvas = page.get_by_test_id("live-view")
+            canvas.wait_for(timeout=10_000)
+            rgba = canvas.evaluate(
+                "c => Array.from(c.getContext('2d').getImageData(4, 4, 1, 1).data)"
+            )
+            assert rgba[:3] == [255, 0, 0]
+            assert page.get_by_text("the panel is set to 80%").is_visible()
+            assert mirror.active
+
+            page.get_by_role("button", name="Hide").click()
+            deadline = time.monotonic() + 5
+            while mirror.active and time.monotonic() < deadline:
+                time.sleep(0.1)
+            assert not mirror.active, "closing the live view must stop the recording"
+        finally:
+            browser.close()

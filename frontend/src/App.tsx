@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { TYPING_DELAY_MS, useAutosave } from './autosave'
+import { LiveView, type PanelFrame } from './LiveView'
 import { AutosaveToast } from './AutosaveToast'
 
 // Python admin server (nhl_scoreboard.admin_server) -- one port serves both
@@ -285,6 +286,7 @@ type ServerMessage =
   | { type: 'horn_list'; horns: HornEntry[] }
   | { type: 'horn_played'; team: string; played: boolean; reason: string }
   | { type: 'horn_deleted'; team: string }
+  | PanelFrame
 
 function connectionBadge(state: ConnectionState) {
   const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
@@ -396,6 +398,12 @@ function App() {
 
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null)
 
+  // Live view (#268): opt-in, like Logs, so nothing streams unless asked.
+  const [liveView, setLiveView] = useState(false)
+  const [frame, setFrame] = useState<PanelFrame | null>(null)
+  const [liveViewError, setLiveViewError] = useState<string | null>(null)
+  const [pageVisible, setPageVisible] = useState(!document.hidden)
+
   // Two pages don't justify a router (#193): plain view state.
   const [page, setPage] = useState<'home' | 'audio' | 'holidays' | 'logs'>('home')
   const [logLines, setLogLines] = useState<LogEntry[]>([])
@@ -484,6 +492,9 @@ function App() {
           case 'snapshot':
             setSnapshot(message.data)
             break
+          case 'frame':
+            setFrame(message)
+            break
           case 'logs':
             setLogError(null)
             if (message.backlog) setLogLines(message.entries.slice(-LOG_MAX_LINES))
@@ -534,6 +545,8 @@ function App() {
           case 'error':
             if (message.section === 'logs') {
               setLogError(message.message)
+            } else if (message.section === 'live_view') {
+              setLiveViewError(message.message)
             } else if (message.section === 'horn_upload') {
               setHornUploading(false)
               setHornUploadMessage({ text: message.message, ok: false })
@@ -619,6 +632,29 @@ function App() {
       }
     }
   }, [page, connection])
+
+  // The live view streams only while it's open, on the Home tab, in a tab
+  // the browser is actually showing -- a phone left on the page in a
+  // pocket stops it -- and resubscribes after a reconnect.
+  useEffect(() => {
+    function onVisibility() {
+      setPageVisible(!document.hidden)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+
+  useEffect(() => {
+    if (!liveView || page !== 'home' || !pageVisible || connection !== 'open') return
+    const socket = socketRef.current
+    socket?.send(JSON.stringify({ type: 'frame_subscribe' }))
+    return () => {
+      setFrame(null)
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'frame_unsubscribe' }))
+      }
+    }
+  }, [liveView, page, pageVisible, connection])
 
   // Newest line renders at the top (see the reverse() in the Logs card
   // below), so "following the tail" means staying pinned to the top --
@@ -933,6 +969,16 @@ function App() {
           )}
         </div>
       </div>
+
+      <LiveView
+        enabled={liveView}
+        onToggle={(enabled) => {
+          setLiveViewError(null)
+          setLiveView(enabled)
+        }}
+        frame={frame}
+        error={liveViewError}
+      />
 
       <div className="row g-4">
       <div className="col-lg-6">
