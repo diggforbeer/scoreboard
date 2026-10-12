@@ -14,10 +14,13 @@ from pathlib import Path
 import pytest
 
 from nhl_scoreboard.app import (
+    ANIMATION_FRAME_INTERVAL,
+    FRAME_INTERVAL,
     LEADERS_TTL_SECONDS,
     SCHEDULE_TTL_SECONDS,
     SEASON_SERIES_TTL_SECONDS,
     STANDINGS_TTL_SECONDS,
+    Scene,
     ScoreboardApp,
 )
 from nhl_scoreboard.config import RotationEntry, Settings
@@ -1711,3 +1714,113 @@ def test_a_live_followed_game_takes_the_screen_over_the_grid(fake_backend):
     app, _clock, _client = league_night(fake_backend, scores_grid=True)
     app.settings.scoreboard.also_follow = ["TOR"]
     assert scene(app) == ("game", 101)
+
+
+# --------------------------------------------------------------------------
+# full-conference scrolling table -- #280
+# --------------------------------------------------------------------------
+
+
+def conference_table(conference="W", games_played=19):
+    teams = ["WPG", "DAL", "VGK", "COL", FAV, "STL"] if conference == "W" else ["BOS", "TOR", "TBL"]
+    return [
+        standings_row(abbrev, seq, 60 - seq, games_played, conference)
+        for seq, abbrev in enumerate(teams, start=1)
+    ]
+
+
+def test_full_standings_never_in_the_implicit_default_rotation(day):
+    app, clock, client = day
+    client.standings_rows = conference_table()
+    for _ in range(8):
+        tick(app, clock, seconds=7)
+        assert scene(app)[0] != "full_standings"
+
+
+@pytest.mark.parametrize(
+    ("screen", "conference", "expected"),
+    [
+        ("full_west", "W", ["WPG", "DAL", "VGK", "COL", FAV, "STL"]),
+        ("full_east", "E", ["BOS", "TOR", "TBL"]),
+    ],
+)
+def test_full_standings_shows_the_whole_listed_conference(day, screen, conference, expected):
+    """The rotation entry names the conference, not the favourite's side (#280)."""
+    app, _, client = day
+    client.standings_rows = conference_table("W") + conference_table("E")
+    app.settings.rotation = [RotationEntry(screen, 20)]
+    s = app.select_scene()
+    assert s.kind == "full_standings"
+    assert [r.abbrev for r in s.standings] == expected
+    assert {r.conference for r in s.standings} == {conference}
+
+
+def test_full_standings_skipped_before_anyone_in_the_conference_has_played(day):
+    app, _, client = day
+    client.standings_rows = conference_table(games_played=0)
+    app.settings.rotation = [RotationEntry("full_west", 20), RotationEntry("clock", 20)]
+    assert app._full_standings_scene("W") is None
+    assert app.select_scene().kind == "clock"
+
+
+def test_full_standings_skipped_with_no_standings_or_an_empty_conference(day):
+    app, _, client = day
+    assert app._full_standings_scene("W") is None
+    client.standings_rows = conference_table("W")
+    assert app._full_standings_scene("E") is None
+
+
+def test_full_standings_slot_clock_is_stamped_on_the_scene(day):
+    app, clock, client = day
+    client.standings_rows = conference_table()
+    app.settings.rotation = [RotationEntry("full_west", 20)]
+    clock.mono = 8000.0  # slot boundary
+    app.refresh()
+    s = app.select_scene()
+    assert (s.slot_elapsed, s.slot_seconds) == (0.0, 20.0)
+    tick(app, clock, seconds=7)
+    s = app.select_scene()
+    assert (s.slot_elapsed, s.slot_seconds) == (7.0, 20.0)
+
+
+def test_full_standings_slot_clock_follows_its_own_entry_in_a_longer_rotation(day):
+    app, clock, client = day
+    client.standings_rows = conference_table()
+    app.settings.rotation = [RotationEntry("clock", 10), RotationEntry("full_west", 30)]
+    clock.mono = 8000.0
+    app.refresh()
+    assert app.select_scene().kind == "clock"
+    tick(app, clock, seconds=15)
+    s = app.select_scene()
+    assert (s.kind, s.slot_elapsed, s.slot_seconds) == ("full_standings", 5.0, 30.0)
+
+
+def test_full_standings_speeds_up_the_loop_only_while_scrolling(day):
+    app, _, client = day
+    client.standings_rows = conference_table()
+    scenes = iter([True, False])
+    app.renderer.draw_full_standings = lambda *args: next(scenes)
+    scene_ = Scene("full_standings", standings=tuple(conference_table()))
+
+    app.draw_scene(scene_)
+    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
+    app.draw_scene(scene_)  # parked
+    assert app.frame_interval() == FRAME_INTERVAL
+    app.draw_scene(Scene("clock"))
+    assert app.frame_interval() == FRAME_INTERVAL
+
+
+def test_full_standings_highlights_every_followed_team_and_parks_on_the_favourite(day):
+    app, _, _ = day
+    app.settings.scoreboard.also_follow = ["WPG"]
+    seen = []
+    app.renderer.draw_full_standings = lambda *args: seen.append(args[2:]) or False
+    app.draw_scene(
+        Scene(
+            "full_standings",
+            standings=tuple(conference_table()),
+            slot_elapsed=3.0,
+            slot_seconds=20.0,
+        )
+    )
+    assert seen == [(FAV, [FAV, "WPG"], 3.0, 20.0)]

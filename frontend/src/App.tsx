@@ -44,6 +44,8 @@ const ROTATION_SCREENS = [
   'matchup',
   'top_west',
   'top_east',
+  'full_west',
+  'full_east',
   'leaders',
   'holiday',
   'scores',

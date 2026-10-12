@@ -2081,3 +2081,189 @@ def test_scores_grid_status_fits_a_column(games, key, status, detail):
     r = make_renderer()
     assert r._scores_status(games[key]) == (status, detail)
     assert text_width(r.fonts.small, status) <= SCORES_COL - 2
+
+
+# --------------------------------------------------------------------------
+# full-conference scrolling table (#280)
+# --------------------------------------------------------------------------
+
+FULL_TEAMS = [
+    "WPG", "DAL", "VGK", "LAK", "COL", "EDM", "MIN", "STL",
+    "NSH", "CGY", "VAN", "UTA", "ANA", "SEA", "CHI", "SJS",
+]  # fmt: skip
+FULL_SECONDS = 30.0
+#: Mid-park for NSH (9th) with FULL_SECONDS: holds 2s + 3s + 2s, travel 23s,
+#: so the favourite is centred (offset 37 of 67) from ~14.7s to ~17.7s.
+FULL_PARKED = 16.0
+
+
+def full_table() -> list[StandingsRow]:
+    """16 teams; the top 8 are in (rank 7-8 as wild cards), the rest out, 2 points apart."""
+    rows = []
+    for rank, abbrev in enumerate(FULL_TEAMS, start=1):
+        row = standings_row(abbrev, rank, 80 - 2 * rank, record=(12, 5, 3))
+        rows.append(
+            dataclasses.replace(
+                row,
+                division_sequence=(rank + 1) // 2,
+                wildcard_sequence=max(0, rank - 6),
+            )
+        )
+    return rows
+
+
+def draw_full(elapsed: float, followed=("NSH",), renderer=None, c=None, seconds=FULL_SECONDS):
+    c = c or canvas()
+    moving = (renderer or make_renderer()).draw_full_standings(
+        c, full_table(), "NSH", list(followed), elapsed, seconds
+    )
+    return c, moving
+
+
+def only_vertical_clipping(c: AsciiCanvas, width: int = W) -> bool:
+    """Rows run off the top and bottom edges by design; nothing may leave sideways."""
+    return all(0 <= x < width for x, _ in c.out_of_bounds)
+
+
+def test_scroll_offset_holds_at_each_end_and_travels_between():
+    scroll = Renderer.scroll_offset
+    assert scroll(66, None, 0, 30) == (0, False)
+    assert scroll(66, None, 1.9, 30) == (0, False)
+    assert scroll(66, None, 15, 30)[1] is True
+    assert scroll(66, None, 29.9, 30) == (66, False)
+    assert scroll(66, None, 999, 30) == (66, False)
+    assert scroll(66, None, -5, 30) == (0, False)
+
+
+def test_scroll_offset_is_monotonic_and_stays_inside_the_table():
+    last = -1
+    for tenth in range(0, 301):
+        offset, _ = Renderer.scroll_offset(66, 36, tenth / 10, 30)
+        assert last <= offset <= 66
+        last = offset
+
+
+def test_scroll_offset_parks_on_the_favourite_for_a_beat():
+    scroll = Renderer.scroll_offset
+    assert scroll(66, 36, FULL_PARKED, FULL_SECONDS) == (36, False)
+    parked = [t / 10 for t in range(300) if scroll(66, 36, t / 10, 30) == (36, False)]
+    assert 2.5 <= parked[-1] - parked[0] <= 3.5
+
+
+def test_scroll_offset_short_slot_still_reaches_the_bottom():
+    """Holds shrink with the dwell rather than eating it; the table still travels."""
+    assert Renderer.scroll_offset(67, 37, 0, 4) == (0, False)
+    assert any(Renderer.scroll_offset(66, 36, t / 10, 4)[1] for t in range(40))
+    assert Renderer.scroll_offset(66, 36, 3.99, 4) == (66, False)
+
+
+def test_scroll_offset_park_at_either_end_extends_that_hold():
+    assert Renderer.scroll_offset(66, 0, 2.5, 30) == (0, False)  # a 3s park hold, not 2s
+    assert Renderer.scroll_offset(66, 0, 3.5, 30)[1] is True
+    assert Renderer.scroll_offset(66, 66, 29.9, 30) == (66, False)
+
+
+def test_scroll_offset_table_that_fits_never_moves():
+    assert Renderer.scroll_offset(0, None, 10, 30) == (0, False)
+    assert Renderer.scroll_offset(-4, 0, 10, 30) == (0, False)
+
+
+def test_full_standings_starts_at_first_place(update_snapshots):
+    c, moving = draw_full(0)
+    art = show("full standings, top", c)
+    assert not moving
+    assert only_vertical_clipping(c)
+    first = c.colors(32, 0, W - 1, 5)
+    assert team_color("WPG") in first
+    assert {r for _, r in c.out_of_bounds} <= set(range(31, 40))
+    label = c.lit(0, 0, 31, H - 1)
+    assert label and set(label.values()) == {WHITE}, "WEST label missing or wrong colour"
+    check_snapshot("full_standings_top", art, update_snapshots)
+
+
+def test_full_standings_parked_shows_cut_line_gap_and_highlights_followed(update_snapshots):
+    c, moving = draw_full(FULL_PARKED)
+    art = show("full standings, parked on NSH", c)
+    assert not moving
+    assert only_vertical_clipping(c)
+    # offset 37: STL (8th) is the last team in, its glyphs end at y = 9 and the rule
+    # sits on its baseline row, y = 10; NSH (9th) starts a row lower, at y = 12.
+    cut = {x for (x, y), rgb in c.pixels.items() if y == 10 and rgb == Renderer._CUT_LINE}
+    assert cut == set(range(32, W)), "cut line should span the table, not the label column"
+    assert ACCENT in c.colors(32, 12, W - 1, 16), "favourite (9th) row not highlighted"
+    assert ACCENT not in c.colors(32, 5, W - 1, 9), "the team above it is not followed"
+    # the last team in and the first team out carry the points gap, in green and red
+    assert LIVE in c.colors(32, 5, W - 1, 9)
+    assert LOSS in c.colors(32, 12, W - 1, 16)
+    check_snapshot("full_standings_parked", art, update_snapshots)
+
+
+def test_full_standings_bottom_ends_on_last_place(update_snapshots):
+    c, moving = draw_full(FULL_SECONDS)
+    art = show("full standings, bottom", c)
+    assert not moving
+    assert only_vertical_clipping(c)
+    assert team_color("SJS") in c.colors(32, H - 7, W - 1, H - 1)
+    check_snapshot("full_standings_bottom", art, update_snapshots)
+
+
+def test_full_standings_reports_motion_only_between_stops():
+    assert draw_full(0)[1] is False
+    assert draw_full(8)[1] is True
+    assert draw_full(FULL_PARKED)[1] is False
+    assert draw_full(FULL_SECONDS)[1] is False
+
+
+def test_full_standings_every_frame_stays_inside_the_panel_sideways():
+    renderer = make_renderer()
+    for tenth in range(0, 301, 3):
+        c, _ = draw_full(tenth / 10, renderer=renderer)
+        assert only_vertical_clipping(c), f"spilled sideways at {tenth / 10}s"
+        assert c.lit(), f"blank frame at {tenth / 10}s"
+
+
+def test_full_standings_every_followed_team_is_highlighted_but_only_the_favourite_parks():
+    c, _ = draw_full(FULL_PARKED, followed=("NSH", "EDM"))
+    assert ACCENT in c.colors(32, 12, W - 1, 16), "the favourite parks centred"
+    c_top, _ = draw_full(0, followed=("NSH", "EDM"))
+    assert ACCENT in c_top.colors(32, 30, W - 1, 31), "EDM (6th) highlighted without parking"
+
+
+def test_full_standings_without_the_favourite_in_this_conference_does_not_park():
+    renderer = make_renderer()
+    rows = [r for r in full_table() if r.abbrev != "NSH"]
+    c = canvas()
+    # With no park stop the table is simply hold / travel / hold: nothing sits still mid-slot.
+    assert renderer.draw_full_standings(c, rows, "NSH", ["NSH"], 15, FULL_SECONDS) is True
+    assert ACCENT not in c.colors()
+
+
+def test_full_standings_cut_gap_is_skipped_when_there_is_no_room():
+    """The gap sits between the record and GP columns, so a long record squeezes it out."""
+    rows = [
+        dataclasses.replace(r, wins=41, losses=30, ot_losses=11) if r.abbrev == "STL" else r
+        for r in full_table()
+    ]
+    c = canvas()
+    make_renderer().draw_full_standings(c, rows, "NSH", ["NSH"], FULL_PARKED, FULL_SECONDS)
+    assert only_vertical_clipping(c)
+    assert LIVE not in c.colors(32, 5, W - 1, 9), "'+2' would have overlapped the GP column"
+    assert LOSS in c.colors(32, 12, W - 1, 16), "the short-record side still shows its gap"
+
+
+def test_full_standings_no_cut_line_when_everyone_is_in():
+    renderer = make_renderer()
+    rows = [dataclasses.replace(r, division_sequence=1) for r in full_table()]
+    c = canvas()
+    renderer.draw_full_standings(c, rows, "NSH", ["NSH"], FULL_PARKED, FULL_SECONDS)
+    assert Renderer._CUT_LINE not in set(c.pixels.values())
+
+
+def test_full_standings_single_panel_drops_label_and_record(update_snapshots):
+    renderer = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ)
+    c = AsciiCanvas(64, H)
+    renderer.draw_full_standings(c, full_table(), "NSH", ["NSH"], 0, FULL_SECONDS)
+    art = show("full standings, 64px", c)
+    assert only_vertical_clipping(c, 64)
+    assert team_color("WPG") in c.colors(0, 0, 63, 5)
+    check_snapshot("full_standings_narrow", art, update_snapshots)

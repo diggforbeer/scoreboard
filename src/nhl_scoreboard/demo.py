@@ -85,6 +85,9 @@ class DemoStep(NamedTuple):
     holiday: str | None = None
     #: Pop the newest shootout attempt in as the step starts (#259).
     animate_shootout: bool = False
+    #: A dwell longer than ``DEMO_SCENE_SECONDS``, for a scene that moves
+    #: (the scrolling table, #280); the step is then redrawn every frame.
+    seconds: float = 0.0
 
 
 def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
@@ -167,6 +170,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
         DemoStep(Scene("conference_leaders", standings=_standings("")[:5])),
+        DemoStep(
+            Scene("full_standings", standings=tuple(_conference_table(favourite))), seconds=16.0
+        ),
         DemoStep(Scene("leaders", leaders=_LEADERS)),
         DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
         DemoStep(Scene("clock")),
@@ -250,12 +256,12 @@ def _situation(
     )
 
 
-def _standings(favourite: str) -> tuple[StandingsRow, ...]:
-    """The favourite's neighbourhood of a synthetic conference table.
+def _conference_table(favourite: str) -> list[StandingsRow]:
+    """A whole synthetic conference, ranked.
 
-    A favourite outside the canned table takes 6th place in it, so any
-    configured team gets a window centred on itself; with no favourite at
-    all, the top of the table stands in.
+    A favourite outside the canned table takes 6th place in it. Two
+    alternating divisions with the wild cards behind them put the playoff
+    cut after 8th place, as in a real table.
     """
     teams = list(_CONFERENCE)
     if favourite and favourite not in teams:
@@ -265,9 +271,10 @@ def _standings(favourite: str) -> tuple[StandingsRow, ...]:
             {
                 "teamAbbrev": {"default": abbrev},
                 "conferenceAbbrev": "W",
-                "divisionAbbrev": "C",
+                "divisionAbbrev": "C" if rank % 2 else "P",
                 "conferenceSequence": rank,
-                "divisionSequence": rank,
+                "divisionSequence": (rank + 1) // 2,
+                "wildcardSequence": max(0, rank - 6),
                 "points": 2 * (30 - rank) + 4,
                 "gamesPlayed": 40,
                 "wins": 30 - rank,
@@ -277,6 +284,14 @@ def _standings(favourite: str) -> tuple[StandingsRow, ...]:
         )
         for rank, abbrev in enumerate(teams, start=1)
     ]
-    ranked = conference_standings(rows, "W")
+    return conference_standings(rows, "W")
+
+
+def _standings(favourite: str) -> tuple[StandingsRow, ...]:
+    """The favourite's neighbourhood of a synthetic conference table.
+
+    With no favourite at all, the top of the table stands in.
+    """
+    ranked = _conference_table(favourite)
     window = standings_window(ranked, favourite) if favourite else ranked[:5]
     return tuple(window)

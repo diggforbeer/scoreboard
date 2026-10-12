@@ -440,6 +440,22 @@ def test_scores_grid_screen_and_fallback_setting_load(tmp_path):
     assert settings.rotation == [RotationEntry("scores", 12.0)]
 
 
+def test_full_conference_screens_load_and_are_opt_in(tmp_path):
+    """#280: full_west/full_east are valid rotation screens, never in the derived default."""
+    from nhl_scoreboard.config import RotationEntry
+
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(
+        '[[rotation]]\nscreen = "full_west"\nseconds = 25\n\n'
+        '[[rotation]]\nscreen = "full_east"\nseconds = 25\n'
+    )
+    assert Settings.load(path).rotation == [
+        RotationEntry("full_west", 25.0),
+        RotationEntry("full_east", 25.0),
+    ]
+    assert not {"full_west", "full_east"} & {e.screen for e in Settings().rotation}
+
+
 def test_rotation_entry_with_unknown_screen_is_dropped_with_a_warning(tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[[rotation]]\nscreen = "weather"\nseconds = 10\n')

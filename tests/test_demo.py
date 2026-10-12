@@ -23,6 +23,7 @@ EVERY_KIND = {
     "matchup",
     "matchup_meetings",
     "conference_leaders",
+    "full_standings",
     "leaders",
     "scores",
     "christmas_tree",
@@ -141,6 +142,15 @@ def test_every_step_renders_on_panel(width):
             r.draw_matchup_meetings(c, scene.game, scene.meetings)
         elif scene.kind == "conference_leaders":
             r.draw_conference_leaders(c, scene.standings, "NSH")
+        elif scene.kind == "full_standings":
+            # Every frame of the scroll, not just the first: the driver clips
+            # rows running off the top and bottom, but nothing may spill sideways.
+            for t in range(int(step.seconds) + 1):
+                c = AsciiCanvas(width, 32)
+                r.draw_full_standings(c, scene.standings, "NSH", ["NSH"], t, step.seconds)
+                assert all(0 <= x < width for x, _ in c.out_of_bounds), f"scroll spilled at {t}s"
+                assert c.lit(), f"nothing drawn at {t}s"
+            continue
         elif scene.kind == "leaders":
             r.draw_leaders(c, scene.leaders, "NSH")
         elif scene.kind == "scores":

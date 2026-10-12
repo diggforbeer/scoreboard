@@ -469,6 +469,47 @@ worth remembering that a clean `git merge` (no `<<<<<<<` markers) is not
 proof two independently-built features didn't collide on a name; grep for
 duplicate `def`s after merging two features that touch the same area.
 
+`full_west`/`full_east` (#280) are two more opt-in `[[rotation]]` screens:
+the whole conference, first place down, scrolling. **The conference is the
+entry you list, not the favourite's** (by the owner's call: the admin
+Rotation row already says which one), so there's no config-shape change
+and no `conference` key. Same `_refresh_standings()` data as `standings`/
+`top_*`, no new request; gated on *someone in that conference having
+played* (`games_played > 0`), since with no favourite to ask that is the
+same off-season test `standings` uses. Scroll position is a pure function
+of the slot clock: `_split_slot` stamps `Scene.slot_elapsed`/`slot_seconds`
+(as `_page_scores` does for pages), and `Renderer.scroll_offset` turns them
+into pixels -- hold at the top, travel at constant speed, pause with the
+favourite's row centred (`park`; no stop if the favourite is in the other
+conference), hold at the bottom. Holds shrink together to at most 60% of a
+short slot, so the table still moves; the scroll speed comes from the
+dwell, so a longer entry scrolls slower. `draw_full_standings` returns
+whether it is mid-scroll and `_scroll_animating` puts the loop on
+`ANIMATION_FRAME_INTERVAL` only then, dropping back to the slow loop
+during the holds. Rows run off the top and bottom edges on purpose (the
+driver, the emulator and `AsciiCanvas` all clip silently), so tests assert
+"nothing off *sideways*" for this scene, not `out_of_bounds == []`. Layout
+is `draw_conference_leaders`'s columns with the `WEST`/`EAST` label fixed
+while the rows move; below `_CONFERENCE_LABEL_MIN_WIDTH` (a single 64px
+panel) the label and the record column are dropped. The playoff rule uses
+`StandingsRow.in_playoff_position` (the real division/wild-card rule, so
+this is the first screen to draw it; the `standings` window is still a
+straight `conferenceSequence` cut). It is drawn in the free baseline pixel
+row of the last team in (a tiny-face line's glyphs end a row above its
+baseline), and the rows below shift down one pixel to clear it; each cut
+adds one pixel to the table's height. The last team in and first team out
+carry the points gap (`+2`/`-3`, green/red) between their record and GP
+columns, **only when it fits** -- a long record (`41-30-11`) squeezes it
+out, deliberately not worth a re-layout. Every followed team (#260), not
+just the favourite, is highlighted (a purely visual use of
+`followed_teams`; nothing extra is fetched). Demo: one 16-second step
+(`DemoStep.seconds`, played frame by frame like the animated steps). Not
+verified on a Pi 4 with the real HUB75 driver (#4): the scroll runs the
+fast loop for its whole travel. Follow-ups, not built: rank movement since
+yesterday (needs a stored snapshot), streak/L10 (field availability
+unchecked), a division/wild-card layout, `clinchIndicator` badges (still
+unverified, see above).
+
 `leaders` (#201) is another `[[rotation]]` screen, also opt-in (absent from
 `_default_rotation`): the favourite's top goal scorer, top point getter and
 top two goalies by `gamesPlayed`, from `club-stats/{TEAM}/now`

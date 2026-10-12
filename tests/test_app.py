@@ -1738,6 +1738,7 @@ def stub_renderer(app: ScoreboardApp) -> None:
         "draw_matchup",
         "draw_matchup_meetings",
         "draw_conference_leaders",
+        "draw_full_standings",
         "draw_leaders",
         "draw_message",
         "draw_clock",
@@ -1762,13 +1763,27 @@ def run_demo_for_frames(app: ScoreboardApp, src: FakeClockSource, frames: int) -
     app.run_demo()
 
 
-def first_draw_per_step(calls: list[tuple]) -> list[tuple]:
-    """One spy record per demo step: animated holiday steps redraw every frame."""
+def demo_ticks(steps) -> int:
+    """Frames a whole pass takes: scrolling steps run longer than DEMO_SCENE_SECONDS."""
+    return round(sum(max(s.seconds, DEMO_SCENE_SECONDS) for s in steps) / FRAME_INTERVAL)
+
+
+def first_draw_per_step(calls: list[tuple], steps) -> list[tuple]:
+    """One spy record per demo step: animated steps redraw every frame."""
     firsts: list[tuple] = []
     for call in calls:
-        if not firsts or call[2] >= firsts[-1][2] + DEMO_SCENE_SECONDS:
+        if not firsts:
+            firsts.append(call)
+            continue
+        last_step = steps[(len(firsts) - 1) % len(steps)]
+        if call[2] >= firsts[-1][2] + max(last_step.seconds, DEMO_SCENE_SECONDS):
             firsts.append(call)
     return firsts
+
+
+def untimed(scene: Scene) -> Scene:
+    """A scrolling scene as the demo defined it, before its slot clock was stamped on."""
+    return dataclasses.replace(scene, slot_elapsed=0.0, slot_seconds=0.0)
 
 
 def test_demo_draws_each_step_in_order_for_demo_scene_seconds(fake_backend, games):
@@ -1790,10 +1805,10 @@ def test_demo_loops_back_to_the_first_step(fake_backend, games):
     calls = spy_draw_scene(app)
     steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
 
-    run_demo_for_frames(app, src, (len(steps) + 1) * TICKS_PER_SCENE)
+    run_demo_for_frames(app, src, demo_ticks(steps) + TICKS_PER_SCENE)
 
-    firsts = first_draw_per_step(calls)
-    assert [c[0] for c in firsts] == [s.scene for s in steps] + [steps[0].scene]
+    firsts = first_draw_per_step(calls, steps)
+    assert [untimed(c[0]) for c in firsts] == [s.scene for s in steps] + [steps[0].scene]
 
 
 def test_demo_never_touches_the_real_state_machine(fake_backend, games):
@@ -1811,7 +1826,7 @@ def test_demo_never_touches_the_real_state_machine(fake_backend, games):
         setattr(app, name, lambda *a, _name=name, **k: forbidden.append(_name))
     steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
 
-    run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
+    run_demo_for_frames(app, src, demo_ticks(steps))
 
     assert forbidden == []
     assert app.client.calls == 0
@@ -1826,7 +1841,7 @@ def test_demo_goal_scenes_never_play_the_horn(fake_backend, games):
     calls = spy_draw_scene(app)
     steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
 
-    run_demo_for_frames(app, src, 2 * len(steps) * TICKS_PER_SCENE)
+    run_demo_for_frames(app, src, 2 * demo_ticks(steps))
 
     assert any(c[0].kind == "goal" for c in calls), "the cycle should include a goal"
     assert app.horn.calls == []
@@ -1864,9 +1879,9 @@ def test_demo_toggles_logos_per_step_and_restores_them(fake_backend, games):
     calls = spy_draw_scene(app)
     steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
 
-    run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
+    run_demo_for_frames(app, src, demo_ticks(steps))
 
-    calls = first_draw_per_step(calls)
+    calls = first_draw_per_step(calls, steps)
     assert len(calls) == len(steps)
     for step, (_scene, logos, _t) in zip(steps, calls, strict=True):
         assert logos is (library if step.use_logos else None)
@@ -1881,9 +1896,9 @@ def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, game
     calls = spy_draw_scene(app)
     steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
 
-    run_demo_for_frames(app, src, len(steps) * TICKS_PER_SCENE)
+    run_demo_for_frames(app, src, demo_ticks(steps))
 
-    assert len(first_draw_per_step(calls)) == len(steps)
+    assert len(first_draw_per_step(calls, steps)) == len(steps)
     assert all(c[1] is None for c in calls)
 
 

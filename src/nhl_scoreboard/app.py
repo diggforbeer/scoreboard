@@ -184,7 +184,7 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``matchup``, ``matchup_meetings``, ``leaders``,
+    ``conference_leaders``, ``full_standings``, ``matchup``, ``matchup_meetings``, ``leaders``,
     ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
@@ -202,6 +202,11 @@ class Scene:
     leaders: TeamLeaders | None = None
     #: Set only for ``scores`` (#269) -- one grid page of today's games.
     games: tuple[Game, ...] = ()
+    #: Set only for ``full_standings`` (#280) -- how far into its rotation
+    #: slot the scene is, and how long the slot is. The scroll position is a
+    #: pure function of these two, so the renderer holds no animation state.
+    slot_elapsed: float = 0.0
+    slot_seconds: float = 0.0
     #: Set only for ``goal_detail`` -- who scored, and their/their
     #: assisters' season totals (#122).
     goal_event: GoalEvent | None = None
@@ -368,6 +373,9 @@ class ScoreboardApp:
         #: Whether the last shootout frame had a cell mid-animation, which
         #: speeds the loop up the way a moving holiday sprite does.
         self._shootout_animating = False
+        #: Whether the full-conference table (#280) is mid-scroll; same
+        #: fast-loop rule, and it drops back to the slow loop while parked.
+        self._scroll_animating = False
         #: Demo only: when the current step's newest attempt "appeared".
         self._demo_shootout_started: float | None = None
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
@@ -444,6 +452,8 @@ class ScoreboardApp:
         self._demo_steps: list[DemoStep] = []
         self._demo_step_index = 0
         self._demo_next_step_at = 0.0
+        self._demo_step_started = 0.0
+        self._demo_step_seconds = DEMO_SCENE_SECONDS
         self._demo_scene: Scene | None = None
         self._demo_was_on = False
         #: Holiday decorations (#237). _overlay_animating is whether the
@@ -520,7 +530,7 @@ class ScoreboardApp:
         self.shutdown()
 
     def frame_interval(self) -> float:
-        animating = self._overlay_animating or self._shootout_animating
+        animating = self._overlay_animating or self._shootout_animating or self._scroll_animating
         return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
     def run_demo(self) -> None:
@@ -550,8 +560,8 @@ class ScoreboardApp:
                 self._set_demo_logos(step.use_logos)
                 self._start_demo_holiday(step)
                 self._start_demo_shootout(step)
-                if self._demo_holiday is not None or step.animate_shootout:
-                    self._play_animated_demo_step(step.scene)
+                if self._demo_holiday is not None or step.animate_shootout or step.seconds:
+                    self._play_animated_demo_step(step.scene, step.seconds or DEMO_SCENE_SECONDS)
                     continue
                 self.draw_scene(step.scene)
                 for _ in range(ticks_per_scene):
@@ -575,12 +585,20 @@ class ScoreboardApp:
         """Make a step's newest shootout attempt pop in as the step starts (#259)."""
         self._demo_shootout_started = self.monotonic() if step.animate_shootout else None
 
-    def _play_animated_demo_step(self, scene: Scene) -> None:
-        """Redraw every frame for DEMO_SCENE_SECONDS, so the fly-by actually moves."""
-        end = self.monotonic() + DEMO_SCENE_SECONDS
+    def _play_animated_demo_step(self, scene: Scene, seconds: float = DEMO_SCENE_SECONDS) -> None:
+        """Redraw every frame for the step, so the fly-by actually moves."""
+        start = self.monotonic()
+        end = start + seconds
         while self._running and self.monotonic() < end:
-            self.draw_scene(scene)
+            self.draw_scene(self._timed_demo_scene(scene, self.monotonic() - start, seconds))
             self.sleep(self.frame_interval())
+
+    @staticmethod
+    def _timed_demo_scene(scene: Scene, elapsed: float, seconds: float) -> Scene:
+        """A scrolling scene's slot clock for the demo, which has no rotation to supply it."""
+        if scene.kind != "full_standings":
+            return scene
+        return dataclasses.replace(scene, slot_elapsed=elapsed, slot_seconds=seconds)
 
     def set_demo_mode(self, enabled: bool) -> None:
         """Turn the live demo on or off (#204); safe from any thread."""
@@ -598,14 +616,20 @@ class ScoreboardApp:
                 self._demo_step_index = 0
             step = self._demo_steps[self._demo_step_index]
             self._demo_step_index += 1
-            self._demo_next_step_at = now + DEMO_SCENE_SECONDS
+            self._demo_step_seconds = step.seconds or DEMO_SCENE_SECONDS
+            self._demo_step_started = now
+            self._demo_next_step_at = now + self._demo_step_seconds
             self._set_demo_logos(step.use_logos)
             self._start_demo_holiday(step)
             self._start_demo_shootout(step)
             self._demo_scene = step.scene
         self._demo_drawing = True
         try:
-            self.draw_scene(self._demo_scene)
+            self.draw_scene(
+                self._timed_demo_scene(
+                    self._demo_scene, now - self._demo_step_started, self._demo_step_seconds
+                )
+            )
         finally:
             self._demo_drawing = False
 
@@ -1337,6 +1361,23 @@ class ScoreboardApp:
             return None
         return Scene("conference_leaders", standings=tuple(top))
 
+    def _full_standings_scene(self, conference: str, *, allow_fetch: bool = True) -> Scene | None:
+        """Every team in one conference, for the scrolling table (#280).
+
+        Gated like ``standings`` on the season having started, not like
+        ``top_*``: with no favourite to ask, "someone in this conference has
+        played" is the same off-season test (``standings/now`` keeps serving
+        last season's final table until then). Scroll timing is stamped on
+        by ``_split_slot``.
+        """
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
+        if not rows:
+            return None
+        table = conference_standings(rows, conference)
+        if not table or all(r.games_played <= 0 for r in table):
+            return None
+        return Scene("full_standings", standings=tuple(table))
+
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
     ) -> SeasonSeriesRecord | None:
@@ -1386,6 +1427,8 @@ class ScoreboardApp:
         """One rotation slot's scene at ``offset`` seconds into its ``seconds`` dwell."""
         if scene.kind == "scores":
             return self._page_scores(scene, offset, seconds)
+        if scene.kind == "full_standings":
+            return dataclasses.replace(scene, slot_elapsed=offset, slot_seconds=seconds)
         return self._split_matchup(scene, offset, seconds)
 
     def _page_scores(self, scene: Scene, offset: float, seconds: float) -> Scene:
@@ -1486,6 +1529,9 @@ class ScoreboardApp:
             return standings
         if screen == "clock":
             return Scene("clock")
+        if screen in ("full_west", "full_east"):
+            conference = "W" if screen == "full_west" else "E"
+            return self._full_standings_scene(conference, allow_fetch=allow_fetch)
         if screen in ("top_west", "top_east"):
             # Resolved here so a board not listing them never needs the fetch.
             conference = "W" if screen == "top_west" else "E"
@@ -2167,6 +2213,7 @@ class ScoreboardApp:
             self.canvas = self.matrix.SwapOnVSync(self.canvas)
             self._overlay_animating = False
             self._shootout_animating = False
+            self._scroll_animating = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -2206,9 +2253,12 @@ class ScoreboardApp:
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
         self._shootout_animating = False
+        self._scroll_animating = False
         favourite = self.settings.scoreboard.favourite_team
+        followed = self.settings.scoreboard.followed_teams
         if self.april_fools_active():
             favourite = april_fools.PRANK_AS
+            followed = [favourite]
             scene = self._april_fools_scene(scene)
         if scene.kind == "game":
             game = self.with_situation(scene.game)
@@ -2230,6 +2280,15 @@ class ScoreboardApp:
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "conference_leaders":
             r.draw_conference_leaders(self.canvas, scene.standings, favourite)
+        elif scene.kind == "full_standings":
+            self._scroll_animating = r.draw_full_standings(
+                self.canvas,
+                scene.standings,
+                favourite,
+                followed,
+                scene.slot_elapsed,
+                scene.slot_seconds,
+            )
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, favourite)
         elif scene.kind == "matchup":

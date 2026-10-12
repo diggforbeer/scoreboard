@@ -883,6 +883,134 @@ class Renderer:
             self.text_right(canvas, font, gp_right, y, color, str(row.games_played))
             self.text_right(canvas, font, points_right, y, color, str(row.points))
 
+    #: Scroll schedule for the full-conference table (#280), in seconds: a
+    #: beat at the top, a longer one with the favourite centred, a beat at
+    #: the bottom. Scaled down together when the slot is too short for them.
+    _SCROLL_HOLD = 2.0
+    _SCROLL_PARK = 3.0
+    #: Holds may take at most this share of the slot, so a short dwell still moves.
+    _SCROLL_MAX_HOLD_SHARE = 0.6
+    #: The rule under the last team in a playoff spot.
+    _CUT_LINE = (150, 40, 40)
+
+    @classmethod
+    def scroll_offset(
+        cls, max_offset: int, park: int | None, elapsed: float, seconds: float
+    ) -> tuple[int, bool]:
+        """Pixels scrolled ``elapsed`` seconds into a ``seconds`` slot, and whether it's moving.
+
+        Pure, so a frame is a function of the clock and nothing is kept
+        between frames: hold at the top, travel at a constant speed to the
+        bottom, pausing at ``park`` (the favourite's row, if any) on the way.
+        ``moving`` is False through the holds, which is what lets the app
+        drop back to its slow loop while the table sits still.
+        """
+        if max_offset <= 0 or seconds <= 0:
+            return 0, False
+        holds = {0: cls._SCROLL_HOLD, max_offset: cls._SCROLL_HOLD}
+        if park is not None:
+            holds[park] = max(holds.get(park, 0.0), cls._SCROLL_PARK)
+        stops = sorted(holds)
+        total_hold = sum(holds.values())
+        scale = min(1.0, cls._SCROLL_MAX_HOLD_SHARE * seconds / total_hold)
+        speed = max_offset / (seconds - total_hold * scale)
+        t = min(max(elapsed, 0.0), seconds)
+        for i, stop in enumerate(stops):
+            hold = holds[stop] * scale
+            if t < hold:
+                return stop, False
+            t -= hold
+            if i + 1 < len(stops):
+                travel = (stops[i + 1] - stop) / speed
+                if t < travel:
+                    return round(stop + t * speed), True
+                t -= travel
+        return max_offset, False
+
+    def draw_full_standings(
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        followed: Sequence[str],
+        elapsed: float,
+        seconds: float,
+    ) -> bool:
+        """A whole conference, first place down (#280), scrolled to ``elapsed`` into the slot.
+
+        Same columns as ``draw_conference_leaders`` with the label held fixed
+        while the rows move under it. The favourite's row is where the scroll
+        parks; every followed team is highlighted. A rule marks the playoff
+        cut (``in_playoff_position``, the real division/wild-card rule, not
+        a straight conference cut), and the two teams either side of it show
+        the points gap, the number that says how close the line is. Rows
+        simply run off the edges: the driver clips, so a half-visible row is
+        what makes it scroll smoothly rather than jump a line at a time.
+        Returns whether the table is mid-scroll.
+        """
+        canvas.Clear()
+        row_height = 6
+        count = len(rows)
+        cuts = [
+            i
+            for i in range(count - 1)
+            if rows[i].in_playoff_position and not rows[i + 1].in_playoff_position
+        ]
+        # Each cut costs a pixel row of its own: a tiny-face line's glyphs end
+        # a row above its baseline, so the baseline row is free for the rule,
+        # and the rows below shift down one to leave it clear of their tops.
+        tops = [1 + i * row_height + sum(1 for c in cuts if c < i) for i in range(count)]
+        max_offset = max(0, 1 + count * row_height + len(cuts) + 1 - self.height)
+        park = None
+        index = next((i for i, r in enumerate(rows) if r.abbrev == favourite), None)
+        if index is not None:
+            centre = tops[index] + row_height // 2
+            park = min(max_offset, max(0, centre - self.height // 2))
+        offset, moving = self.scroll_offset(max_offset, park, elapsed, seconds)
+
+        font = self.fonts.tiny
+        wide = self.width >= self._CONFERENCE_LABEL_MIN_WIDTH
+        left = 32 if wide else 0
+        if wide:
+            conference = rows[0].conference if rows else ""
+            label = {"W": "WEST", "E": "EAST"}.get(conference, conference)
+            self.text_center(canvas, font, left // 2, self.height // 2 + 3, WHITE, label)
+        rank_x = left + self._STANDINGS_RANK_DX
+        abbrev_x = left + self._STANDINGS_ABBREV_DX
+        record_x = left + self._STANDINGS_RECORD_DX
+        gp_right = self.width - self._STANDINGS_GP_RIGHT_PAD
+        points_right = self.width - self._STANDINGS_POINTS_RIGHT_PAD
+
+        gaps: dict[int, str] = {}
+        if cuts:
+            last_in, first_out = rows[cuts[0]], rows[cuts[0] + 1]
+            gap = last_in.points - first_out.points
+            gaps = {cuts[0]: f"+{gap}", cuts[0] + 1: f"-{gap}"}
+
+        for i, row in enumerate(rows):
+            top = tops[i] - offset
+            if top + row_height <= 0 or top >= self.height:
+                continue
+            y = top + row_height - 2
+            color = ACCENT if row.abbrev in followed else WHITE
+            self.text(canvas, font, rank_x, y, color, f"{row.conference_sequence:>2}")
+            self.text(canvas, font, abbrev_x, y, team_color(row.abbrev), row.abbrev)
+            gp = str(row.games_played)
+            self.text_right(canvas, font, gp_right, y, color, gp)
+            self.text_right(canvas, font, points_right, y, color, str(row.points))
+            if wide:
+                record = row.record_label()
+                self.text(canvas, font, record_x, y, color, record)
+                gap_text = gaps.get(i)
+                if gap_text:
+                    gap_x = record_x + text_width(font, record) + 1
+                    if gap_x + text_width(font, gap_text) <= gp_right - text_width(font, gp):
+                        gap_color = LIVE if gap_text.startswith("+") else LOSS
+                        self.text(canvas, font, gap_x, y, gap_color, gap_text)
+            if i in cuts:
+                self.hline(canvas, left, self.width - 1, y, self._CUT_LINE)
+        return moving
+
     def draw_leaders(self, canvas: Any, leaders: TeamLeaders, favourite: str) -> None:
         """The favourite's own top players (#201): goals, points, then top two goalies.
 
