@@ -102,7 +102,9 @@ Ethernet jack at the bottom and the USB jacks above it. So in the `.scad`
 files and in the text above, "bottom" (y=0) is the real top, "top" is the real
 bottom and "left" is the real right. The coordinates and the `top`/`bottom`
 names stay as modelled; the raised version label is turned round so it reads
-upright when mounted.
+upright when mounted. The exported STL file names are the exception: they are
+as mounted, so `-right.stl` is the half with the Pi (the model's `part="left"`),
+and `-left.stl` is the model's `part="right"`.
 
 ## Shared conventions
 
@@ -129,7 +131,8 @@ openscad -o case.png --imgsize=1600,500 \
   --camera=162,42,300,0,0,0,600 --projection=ortho \
   enclosure/scoreboard-case-v3.scad
 
-# Export the two printable halves
-openscad -D 'part="left"'  -o case-left.stl  enclosure/scoreboard-case-v3.scad
-openscad -D 'part="right"' -o case-right.stl enclosure/scoreboard-case-v3.scad
+# Export the two printable halves. The file names are as mounted, so the
+# model's "left" half (the Pi's) is the right one; scripts/enclosure.sh does this.
+openscad -D 'part="left"'  -o case-right.stl enclosure/scoreboard-case-v3.scad
+openscad -D 'part="right"' -o case-left.stl  enclosure/scoreboard-case-v3.scad
 ```

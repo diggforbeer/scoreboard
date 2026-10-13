@@ -79,8 +79,10 @@ wall (as mounted), a port faceplate for the Pi, and vent slits.
 [![The enclosure, front view with the open face, Pi side and ceiling grilles](enclosure/scoreboard-case-v3.png)](enclosure/scoreboard-case-v3.png)
 
 - Ready-to-slice STLs sit beside the models: `enclosure/scoreboard-case-v3-left.stl` and
-  `-right.stl` (Pi 4), or the `-pi3b` pair for a Pi 3B+. Each case file prints the
-  version it was built from on the inside of the back wall.
+  `-right.stl` (Pi 4), or the `-pi3b` pair for a Pi 3B+. Left and right are as
+  mounted (the case hangs upside down from how it is modelled), so the Pi is in
+  the `-right` half. Each case file prints the version it was built from on the
+  inside of the back wall.
 - Optional retro 70s legs to glue on afterwards: [`enclosure/legs/`](enclosure/legs/)
   (print four of `scoreboard-legs-leg.stl`).
 
