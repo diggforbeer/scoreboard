@@ -48,6 +48,7 @@ class Rig:
         self.dnsmasq_conf = tmp_path / "dnsmasq.conf"
         self.state_file = tmp_path / "state.json"
         self.scan_file = tmp_path / "networks.json"
+        self.active_file = tmp_path / "active"
         self.counter_dir = tmp_path / "counters"
         self.counter_dir.mkdir()
 
@@ -99,6 +100,7 @@ class Rig:
             "NHL_SCOREBOARD_AP_DNSMASQ_CONF": str(self.dnsmasq_conf),
             "NHL_SCOREBOARD_AP_STATE_FILE": str(self.state_file),
             "NHL_SCOREBOARD_AP_SCAN_FILE": str(self.scan_file),
+            "NHL_SCOREBOARD_AP_ACTIVE_FILE": str(self.active_file),
             # Real scans need to settle asynchronously (see the script's own
             # comment); tests don't have a real radio to wait on.
             "NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS": "0",
@@ -337,6 +339,7 @@ def test_stop_tears_down_ap_and_removes_conf(rig):
     rig.dnsmasq_conf.write_text("stale config\n")
     rig.state_file.write_text('{"ssid": "stale", "password": "stale", "open": false}\n')
     rig.scan_file.write_text('["stale"]\n')
+    rig.active_file.write_text("")
 
     result = rig.run("stop")
     assert result.returncode == 0, result.stderr
@@ -352,6 +355,19 @@ def test_stop_tears_down_ap_and_removes_conf(rig):
     # keep showing it once the board is back on a real network.
     assert not rig.state_file.exists()
     assert not rig.scan_file.exists()
+    assert not rig.active_file.exists()
+
+
+def test_stop_leaves_the_radio_alone_when_ap_never_started(rig):
+    """Regression: the unit's ExecStopPost runs `stop` after the online
+    no-op `start` too, and flushing wlan0 there deleted the DHCP address
+    networkd had just obtained -- associated, but no IP, so DNS failed."""
+    start = rig.run("start", env_extra={"FAKE_DEFAULT_ROUTE": "default via 192.168.1.1"})
+    assert start.returncode == 0, start.stderr
+    result = rig.run("stop")
+    assert result.returncode == 0, result.stderr
+    assert "addr flush" not in result.calls
+    assert "iwctl" not in result.calls
 
 
 def test_stop_is_safe_when_never_started(rig):
