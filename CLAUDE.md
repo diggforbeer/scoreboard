@@ -1023,6 +1023,13 @@ credential-submission/rollback flow is #133, not done anywhere yet.
   run from `ExecStopPost`, so it fires however the service is asked to
   end) is meant to be driven by #133's submission flow once *it* confirms
   a real network joined -- not by this script guessing.
+- **`stop` only acts if `start` took over the radio** (`ACTIVE_FILE`,
+  `/run/nhl-scoreboard-setup-ap-active`). The unit's `ExecStopPost` runs
+  `stop` even when `start` exited at once because the board was already
+  online, and the old unconditional `ip addr flush dev wlan0` deleted the
+  DHCP address networkd had just got: wlan0 associated, router showed a
+  lease, board had no IP and DNS failed ("Temporary failure in name
+  resolution") until Ethernet nudged it. Found live via `ip -br addr`.
 - Tested the same way as `nhl-scoreboard-grow-rootfs`/`scoreboard-
   provision`: the real script, run as a subprocess, with `ip`/`iwctl`/
   `dnsmasq`/`logger` faked on the PATH (`tests/test_setup_ap.py`). What
