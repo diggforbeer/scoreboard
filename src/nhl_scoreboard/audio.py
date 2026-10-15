@@ -33,6 +33,11 @@ HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
 #: flagged, not proven.
 VOLUME_CONTROLS: tuple[str, ...] = ("PCM", "Speaker", "Master", "Headphone")
 
+#: apt package that provides each player command. A board flashed before
+#: mpg123 joined the image (#208) has aplay but not mpg123, and the in-app
+#: updater can't install packages, so a missing player needs saying plainly.
+PLAYER_PACKAGES: dict[str, str] = {"aplay": "alsa-utils", "mpg123": "mpg123"}
+
 
 def upload_directory() -> Path:
     """Where the admin page's horn uploads live (#193).
@@ -75,6 +80,10 @@ class GoalHornPlayer:
         self.volume = volume
         self._run = runner or self._popen
         self._run_mixer = mixer_runner or self._amixer
+        #: Why the last play() returned False, in words fit for the admin
+        #: page; "" after a success or when the cause was just "disabled".
+        self.last_error = ""
+        self._warned_players: set[str] = set()
 
     @classmethod
     def default(
@@ -100,6 +109,7 @@ class GoalHornPlayer:
 
     def play(self, abbrev: str) -> bool:
         """Launch playback for ``abbrev``'s horn, or the default. Never raises."""
+        self.last_error = ""
         if not self.enabled:
             return False
         path = self.path_for(abbrev)
@@ -117,7 +127,22 @@ class GoalHornPlayer:
         cmd.append(str(path))
         try:
             self._run(cmd)
+        except FileNotFoundError as exc:
+            player = cmd[0]
+            package = PLAYER_PACKAGES.get(player, player)
+            self.last_error = (
+                f"{player} isn't installed on this board, so {path.name} can't play. "
+                f"Install it with 'sudo apt-get install {package}', or use a WAV horn."
+            )
+            # Once per player: this fires on every goal, and the cause won't change.
+            if player not in self._warned_players:
+                self._warned_players.add(player)
+                log.warning("Could not play %s: %s", path, self.last_error)
+            else:
+                log.debug("Could not play %s: %s", path, exc)
+            return False
         except (OSError, subprocess.SubprocessError) as exc:
+            self.last_error = f"The player command ({cmd[0]}) failed to launch: {exc}"
             log.warning("Could not play %s: %s", path, exc)
             return False
         log.debug("Playing %s", path)

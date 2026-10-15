@@ -493,7 +493,7 @@ def test_horn_test_reports_not_played_when_audio_disabled(app_dir, config_path):
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
-    assert json.loads(received) == {"type": "horn_tested", "played": False}
+    assert json.loads(received) == {"type": "horn_tested", "played": False, "reason": ""}
 
 
 def test_horn_test_plays_the_favourite_teams_horn_when_enabled(
@@ -530,7 +530,7 @@ def test_horn_test_plays_the_favourite_teams_horn_when_enabled(
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
-    assert json.loads(received) == {"type": "horn_tested", "played": True}
+    assert json.loads(received) == {"type": "horn_tested", "played": True, "reason": ""}
     assert len(calls) == 1
     assert calls[0][0] == "aplay"
     assert calls[0][-1].endswith("NSH.wav")
@@ -1512,6 +1512,31 @@ def test_play_horn_default_plays_the_default_stem_not_a_literal_default_file(
         "reason": "",
     }
     assert len(calls) == 1 and calls[0][-1].endswith("_default.wav")
+
+
+def test_horn_test_names_the_missing_player(app_dir, config_path, tmp_path, monkeypatch):
+    """A board flashed before mpg123 joined the image has no such command;
+    the Test button should say so and how to fix it, not a generic message."""
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "_default.mp3").write_bytes(b"fake mp3")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+
+    def missing(cmd):
+        raise FileNotFoundError(2, "No such file or directory", cmd[0])
+
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_popen", staticmethod(missing))
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "test_horn"}))
+        return await client.recv()
+
+    reply = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert reply["played"] is False
+    assert "mpg123 isn't installed" in reply["reason"]
+    assert "apt-get install mpg123" in reply["reason"]
 
 
 def test_play_horn_reports_not_played_when_audio_disabled(app_dir, config_path):
