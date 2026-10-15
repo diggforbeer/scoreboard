@@ -91,6 +91,12 @@ SCAN_SETTLE_SECONDS="${NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS:-2}"
 # above), and one transient failure shouldn't leave the board with no AP
 # at all. Only the pause is overridable, so tests don't have to wait.
 AP_START_ATTEMPTS=2
+# Present only while this script has actually taken over the radio. The
+# unit's ExecStopPost runs `stop` even when `start` exited at once because
+# the board was already online; without this marker that stop flushed
+# wlan0's DHCP address out from under networkd, which never re-requests it
+# because the link stays up -- associated, "leased" on the router, no IP.
+ACTIVE_FILE="${NHL_SCOREBOARD_AP_ACTIVE_FILE:-/run/nhl-scoreboard-setup-ap-active}"
 AP_START_RETRY_SECONDS="${NHL_SCOREBOARD_AP_START_RETRY_SECONDS:-2}"
 
 log() {
@@ -226,6 +232,7 @@ cmd_start() {
     fi
 
     log "Bringing up $IFACE as $SSID ($AP_ADDR/$AP_PREFIX)"
+    : > "$ACTIVE_FILE"
     ip addr flush dev "$IFACE"
     ip addr add "$AP_ADDR/$AP_PREFIX" dev "$IFACE"
     ip link set "$IFACE" up
@@ -259,6 +266,10 @@ cmd_start() {
 }
 
 cmd_stop() {
+    if [ ! -e "$ACTIVE_FILE" ]; then
+        log "AP mode was never started; leaving $IFACE alone"
+        return 0
+    fi
     log "Tearing down AP mode on $IFACE"
     iwctl ap "$IFACE" stop 2>/dev/null || true
     # Verified live: the device is left in Mode=ap after `ap stop` -- it
@@ -267,7 +278,7 @@ cmd_stop() {
     # network afterward.
     iwctl device "$IFACE" set-property Mode station 2>/dev/null || true
     ip addr flush dev "$IFACE" 2>/dev/null || true
-    rm -f "$DNSMASQ_CONF" "$STATE_FILE" "$SCAN_FILE"
+    rm -f "$DNSMASQ_CONF" "$STATE_FILE" "$SCAN_FILE" "$ACTIVE_FILE"
 }
 
 case "${1:-start}" in
