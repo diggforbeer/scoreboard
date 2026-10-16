@@ -514,8 +514,8 @@ class Game:
 
     @property
     def shows_shootout(self) -> bool:
-        """Draw the shootout grid: live SO, or a finished one we have data for."""
-        return self.in_shootout and (self.is_live or self.shootout is not None)
+        """Draw the shootout grid while it is live; a finished game shows its final score."""
+        return self.in_shootout and self.is_live
 
     @property
     def special_teams(self) -> bool:
@@ -541,7 +541,9 @@ class Game:
         if self.is_pregame:
             return self.start_local(tz).strftime("%-I:%M%p").replace("AM", "A").replace("PM", "P")
         if self.is_final:
-            if self.period_type in ("OT", "SO"):
+            if self.period_type == "SO":
+                return "FINAL/SO"
+            if self.period_type == "OT":
                 return f"F/{self.period_label()}"
             return "FINAL"
         if self.in_intermission:

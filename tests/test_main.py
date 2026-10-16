@@ -57,7 +57,7 @@ def test_dump_prints_one_right_aligned_line_per_game(monkeypatch, tmp_path, caps
         "NYI  1 @ NJD  2  FINAL",
         "SJS  2 @ ANA  6  FINAL",
         "NSH  1 @ TBL  2  FINAL",
-        "WSH  2 @ BOS  3  F/SO",
+        "WSH  2 @ BOS  3  FINAL/SO",
         "CAR  3 @ FLA  5  INT2",
         "UTA  1 @ COL  1  INT2",
         "SEA  2 @ CGY  1  1ST 05:05",

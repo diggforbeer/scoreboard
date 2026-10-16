@@ -100,7 +100,7 @@ def games() -> dict[str, Game]:
         "live": by_away["SEA"],  # 1ST 05:05
         "intermission": by_away["CAR"],  # INT2
         "final": by_away["NYI"],  # FINAL
-        "shootout": by_away["WSH"],  # F/SO
+        "shootout": by_away["WSH"],  # FINAL/SO
         "pregame": by_away["TOR"],  # 7:00P
     }
 
