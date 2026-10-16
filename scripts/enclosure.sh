@@ -57,15 +57,22 @@ render() {
     done
 }
 
-# The printable parts of each model beside it, as <model>-<part>.stl: the case
-# is too wide for the bed, so it is two halves (left, right); the legs are one
-# leg (print four). Exported in parallel; a failed export fails the script.
+# The printable parts of each model beside it, as <model>-<side>.stl: the case
+# is too wide for the bed, so it is two halves; the legs are one leg (print
+# four). The case is mounted turned over (180 degrees about the front-back
+# axis, see enclosure/README.md), so the file names are AS MOUNTED: the model's
+# `part="left"` half (with the Pi) is saved as -right.stl, and `part="right"`
+# as -left.stl. Exported in parallel; a failed export fails the script.
 stl() {
     local m part parts pids=() pid
     for m in "${models[@]}"; do
         if [ "$m" = legs/scoreboard-legs.scad ]; then parts="leg"; else parts="left right"; fi
         for part in $parts; do
-            openscad -D "part=\"$part\"" -o "${m%.scad}-$part.stl" "$m" >/dev/null 2>&1 &
+            side=$part
+            if [ "$m" != legs/scoreboard-legs.scad ]; then
+                if [ "$part" = left ]; then side=right; else side=left; fi
+            fi
+            openscad -D "part=\"$part\"" -o "${m%.scad}-$side.stl" "$m" >/dev/null 2>&1 &
             pids+=($!)
         done
     done

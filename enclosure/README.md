@@ -28,8 +28,9 @@ What changed from v2:
   USB/Ethernet end out through a port
   faceplate -- on the Pi 4, one wide opening spanning both USB jacks (no
   pillar between them, sized from measured jack shells 14.5 and 15.1mm wide,
-  3.72mm apart) and a separate Ethernet opening; the Pi 3B+ still has one
-  rounded opening per jack. An external USB speaker can plug straight in. The board sits 5mm
+  3.72mm apart) and a separate Ethernet opening; the Pi 3B+ is the same
+  idea, sized from its own measured jacks (USB shells 15 x 16mm with 3.2mm
+  between, RJ45 16 x 14mm) with 0.9mm of clearance all round. An external USB speaker can plug straight in. The board sits 5mm
   off the floor (the 3.5mm audio jack overhangs its bottom edge ~3mm).
   Standoffs are cones (10mm base, 6mm top) so they don't snap off.
   Tilted vent slits through the back wall behind it (#49). With the Pi on
@@ -44,18 +45,21 @@ What changed from v2:
   the panel that would sit over the Pi/hat have no pad (with the Pi on the
   left that is the first two, 16 and 94mm in; unscrew those). A half-circle finger notch in each side wall's
   front edge helps pull the panels off.
-- **Light sensor (#44/#45)** in the BOTTOM wall, just left of the speaker grille
-  at the jack's end (the right panel by default; that panel's middle bottom
-  magnet has no pad, so it is held by its other five): the GY-302/BH1750 board
+- **Light sensor (#44/#45)** in the model's y=0 wall, which is the real TOP of
+  the mounted case (see "Mounted upside down" below), just left of the speaker
+  grille at the jack's end (the right panel by default; that panel's middle
+  y=0-wall magnet has no pad, so it is held by its other five): the
+  GY-302/BH1750 board
   slides into rails from the open front, chip facing a 6mm window, until
   it hits a stop. The chip-side step is trimmed to 0.8mm (`bh_step_ov`)
-  so a part near the board edge doesn't catch. It faces down, so mount the
-  case so the bottom wall is not against a surface if the sensor is to read
-  room light (it will read dark with the case on the legs and close to the table).
-- **Push button (#50)**, 7mm, on the Pi's wall above the faceplate.
-- **Speaker grilles (#114)** in the BOTTOM wall, one per panel, each in the
-  middle of the widest free gap there (clear of the magnet pads, the Pi above
-  it, the seam flange and the end walls; computed, so it follows `pi_side`).
+  so a part near the board edge doesn't catch. Mounted, it faces up, so it
+  reads room light as long as the top of the case isn't against a surface.
+- **Push button (#50)**, 7mm, on the Pi's wall above the Pi as mounted (toward
+  y=0, the real top; forward in z so it clears the port openings).
+- **Speaker grilles (#114)** in the same y=0 wall (the real top when mounted),
+  one per panel, each in the middle of the widest free gap there (clear of the
+  magnet pads, the Pi, the seam flange and the end walls; computed, so it
+  follows `pi_side`), firing up.
   Still sized for a placeholder 40mm driver (`speaker_d`/`speaker_depth`).
 - **Seam gap.** The two panels sit `panel_gap` = 2mm apart, with the split
   and the seam flanges centred in that gap, so the flanges clear the panels'
@@ -89,6 +93,19 @@ top. `part` is `preview` (legs under a stand-in slab, the image
 `legs/scoreboard-legs.png`), `leg` (the printable one) or `set` (four on one bed).
 `case_w`/`case_d` mirror the case's outside size: update them if that changes.
 
+## Mounted upside down
+
+The case as modelled is not the way up it mounts. Hung or stood up, it is the
+model turned 180 degrees about the front-back axis, which is what the Pi's
+cables and board orientation needed: the Pi ends up on the RIGHT, with the
+Ethernet jack at the bottom and the USB jacks above it. So in the `.scad`
+files and in the text above, "bottom" (y=0) is the real top, "top" is the real
+bottom and "left" is the real right. The coordinates and the `top`/`bottom`
+names stay as modelled; the raised version label is turned round so it reads
+upright when mounted. The exported STL file names are the exception: they are
+as mounted, so `-right.stl` is the half with the Pi (the model's `part="left"`),
+and `-left.stl` is the model's `part="right"`.
+
 ## Shared conventions
 
 All panel dimensions at the top of each file come from the spec sheet in
@@ -114,7 +131,8 @@ openscad -o case.png --imgsize=1600,500 \
   --camera=162,42,300,0,0,0,600 --projection=ortho \
   enclosure/scoreboard-case-v3.scad
 
-# Export the two printable halves
-openscad -D 'part="left"'  -o case-left.stl  enclosure/scoreboard-case-v3.scad
-openscad -D 'part="right"' -o case-right.stl enclosure/scoreboard-case-v3.scad
+# Export the two printable halves. The file names are as mounted, so the
+# model's "left" half (the Pi's) is the right one; scripts/enclosure.sh does this.
+openscad -D 'part="left"'  -o case-right.stl enclosure/scoreboard-case-v3.scad
+openscad -D 'part="right"' -o case-left.stl  enclosure/scoreboard-case-v3.scad
 ```

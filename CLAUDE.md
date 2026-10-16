@@ -1724,7 +1724,9 @@ the repo always shows what the current model looks like:
    (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`) and exports the
    printable halves as STLs beside it too
    (`scoreboard-case-v3-left.stl`, `-right.stl`, the `-pi3b` pair, and
-   `legs/scoreboard-legs-leg.stl`).
+   `legs/scoreboard-legs-leg.stl`). STL names are AS MOUNTED, which is the
+   model turned over: `-right.stl` is the model's `part="left"` half (the Pi's)
+   and `-left.stl` is `part="right"`; the script does the swap.
    Needs `openscad`; the whole run takes about a minute.
    Never edit `case_version` by hand; the script refuses to run if the
    files have drifted apart.
