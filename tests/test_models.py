@@ -31,7 +31,7 @@ def test_final_game_fields(games):
 def test_shootout_final_is_labelled(games):
     so = next(g for g in games if g.away.abbrev == "WSH")
     assert so.period_type == "SO"
-    assert so.status_label(TZ) == "F/SO"
+    assert so.status_label(TZ) == "FINAL/SO"
 
 
 def test_live_game_shows_period_and_clock(games):
