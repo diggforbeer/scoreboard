@@ -10,12 +10,20 @@
 // panels' depth instead; the speakers move inboard between the magnets.
 //
 // Orientation: z=0 is the back wall; the front (z=outer_d) is open and the
-// panels' LED faces sit flush with it. y=0 is the BOTTOM of the case.
-// Left/right are as seen from the front. Prints flat, back face down.
+// panels' LED faces sit flush with it. Left/right are as seen from the front.
+// Prints flat, back face down.
 //
-// Layout, left to right:
-//   floor:                 L speaker                       R speaker, sensor
-//   bay:  L wall: jack  |  open  |  Pi ▐ ports + button, R wall; bottom: sensor, speakers
+// MOUNTED, THE CASE IS THIS MODEL TURNED UPSIDE DOWN (180 degrees about z,
+// the front-back axis). So in this file "bottom" (y=0) is the real TOP of the
+// mounted case and "top" (y=outer_h) is the real bottom, and "left" is the real
+// right: the Pi mounts on the RIGHT, Ethernet at the bottom and USB above it.
+// The model keeps its own coordinates (and "top"/"bottom" names) because the
+// Pi's cables and board orientation were worked out in them; the raised
+// label text is turned round to read upright when mounted.
+//
+// Layout, left to right as modelled (mounted: mirror it and swap top/bottom):
+//   y=0 wall (real top):   L speaker                       R speaker, sensor
+//   bay:  L wall: Pi ▐ ports + button  |  open  |  R wall: jack
 //
 // Too wide for a 256mm bed in one piece, so it prints as two halves split
 // at the seam between the two panels (set `part`). Each half has an
@@ -29,7 +37,7 @@ part = "all";  // "all" (preview), "left", "right"
 // Raised text on the inside of the back wall in the Pi half: the repo and
 // the case revision, plus the board variant. Bump case_version with every
 // change to the design so a printed case can be matched to its source.
-case_version = "3.14";
+case_version = "3.17";
 repo_label   = "github.com/diggforbeer/scoreboard";
 label_size   = 5;     // text height, mm -- bold strokes ~0.8mm+, printable with a 0.4mm nozzle
 label_raise  = 0.8;   // how far the text stands off the wall
@@ -121,8 +129,8 @@ ports = pi_model == 4
 port_margin = 0.75;  // clearance around each jack
 port_r      = 1;     // corner radius
 
-// ---- speakers (floor, firing down) ----------------------------------------
-// Placeholder 40mm driver. Each sits in the widest free gap on the BOTTOM
+// ---- speakers (model-bottom wall = the real top, firing up) ----------------------------------------
+// Placeholder 40mm driver. Each sits in the widest free gap on the y=0 (BOTTOM)
 // wall of its panel (between the magnet pads, clear of the Pi and the seam
 // flange), firing down through a grille. spk_xs is worked out below.
 speaker_d       = 40;
@@ -144,15 +152,19 @@ jack_nut_d    = 30;   // nut across its widest point, mm
 jack_nut_room = 3;    // working room around the nut, mm
 // jack_y (hole centre, from the outside bottom) is set below, once the
 // magnet pads are defined.
-// BH1750 (#44/#45) behind a 6mm window in the BOTTOM wall, beside the speaker's
-// grille, held in rails (see sensor_mount). sensor_x is set below.
+// BH1750 (#44/#45) behind a 6mm window in the y=0 (BOTTOM) wall, which is the
+// real TOP when mounted so it faces up, beside the speaker's grille, held in rails (see sensor_mount). sensor_x is set below.
 sensor_hole_d = 6;
 sensor_grille_gap = 4;  // mm between the grille's edge and the rails
-// 7mm momentary push button (#50) -- on the Pi's wall, above the port faceplate
-// and close to the back wall, so it clears the magnet pad above it.
+// 7mm momentary push button (#50) -- on the Pi's wall, above the Pi AS MOUNTED.
+// With the Pi on the left that is toward y=0 (the real top), the 5mm strip
+// above the board, so the hole sits well forward in z, clear of the tallest
+// port opening (they top out at z~27) and of the board; the matching bottom
+// magnet pads are over the Pi and have none. With the Pi on the right the case
+// is not turned over, so it stays above the faceplate at y=71, near the back wall.
 button_hole_d = 7;
-button_y      = 71;
-button_z      = 12;
+button_y      = pi_on_left ? 8 : 71;
+button_z      = pi_on_left ? 33 : 12;
 
 // Finger notch: a half-circle scooped out of the front edge of each side
 // wall, so you can get a fingertip on the panel's edge to pull it off the
@@ -478,7 +490,8 @@ module seam_bolt_holes() {
 // flange: in the strip above the Pi when it is on the right, or mid-height in
 // the right half when the Pi is on the left. Nothing else touches the back
 // wall there -- the speakers and the magnet pads hang from the top wall and
-// stay clear of it.
+// stay clear of it. The mounted case is this model turned over, so the text is
+// rotated 180 degrees (and the lines swapped) to read upright when mounted.
 module version_label() {
     variant = pi_model == 3 ? "pi3b" : "pi4";
     lines = [repo_label, str("case v", case_version, " - ", variant)];
@@ -488,10 +501,11 @@ module version_label() {
     strip_mid = pi_on_left ? outer_h / 2 : (pi_y0 + pi_h + outer_h - wall) / 2;
     pitch = label_size * 1.6;
     for (i = [0 : len(lines) - 1])
-        translate([x0, strip_mid + (0.5 - i) * pitch, wall])
-            linear_extrude(height = label_raise)
-                text(lines[i], size = label_size, halign = "left", valign = "center",
-                     font = "Liberation Sans:style=Bold");
+        translate([x0, strip_mid + (i - 0.5) * pitch, wall])
+            rotate(180)
+                linear_extrude(height = label_raise)
+                    text(lines[i], size = label_size, halign = "right", valign = "center",
+                         font = "Liberation Sans:style=Bold");
 }
 
 module body() {

@@ -838,6 +838,13 @@ exit; with `show_logos = false` every step is just text.
   searches before the image-baked directory. Not verified on hardware (#4);
   deleting an upload back to the shipped horn is not built.
 
+- **A missing horn player is explained, not just logged.** `mpg123` only
+  joined the image in #208 and the in-app updater can't install apt
+  packages (#284), so a board flashed earlier plays WAVs (`aplay`) but not
+  MP3s. `GoalHornPlayer.play()` sets `last_error` on a `FileNotFoundError`
+  (naming the apt package), warns once per player rather than per goal, and
+  the admin page's Test horn buttons show that text.
+
 ## Image build facts (each cost a failed CI run)
 
 - rpi-image-gen builds **Debian**, not Raspberry Pi OS. Imager's "OS
@@ -1685,7 +1692,9 @@ the repo always shows what the current model looks like:
    (`enclosure/scoreboard-case-v3.png`, `...-pi3b.png`) and exports the
    printable halves as STLs beside it too
    (`scoreboard-case-v3-left.stl`, `-right.stl`, the `-pi3b` pair, and
-   `legs/scoreboard-legs-leg.stl`).
+   `legs/scoreboard-legs-leg.stl`). STL names are AS MOUNTED, which is the
+   model turned over: `-right.stl` is the model's `part="left"` half (the Pi's)
+   and `-left.stl` is `part="right"`; the script does the swap.
    Needs `openscad`; the whole run takes about a minute.
    Never edit `case_version` by hand; the script refuses to run if the
    files have drifted apart.

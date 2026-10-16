@@ -201,6 +201,31 @@ def test_mp3_plays_through_mpg123(tmp_path):
     assert runner.calls == [["mpg123", "-q", "-a", "hw:1,0", str(tmp_path / "NSH.mp3")]]
 
 
+def test_missing_player_is_explained_and_logged_once(tmp_path, caplog):
+    """mpg123 only arrived with #208; a board flashed earlier lacks it and
+    the updater can't install packages. Say which package, and don't repeat
+    the warning on every goal."""
+    touch(tmp_path / "NSH.mp3")
+
+    def missing(cmd):
+        raise FileNotFoundError(2, "No such file or directory", cmd[0])
+
+    player = GoalHornPlayer([tmp_path], runner=missing)
+    with caplog.at_level("WARNING", logger="nhl_scoreboard.audio"):
+        assert player.play("NSH") is False
+        assert player.play("NSH") is False
+    assert "apt-get install mpg123" in player.last_error
+    assert len([r for r in caplog.records if r.levelname == "WARNING"]) == 1
+
+
+def test_last_error_clears_after_a_successful_play(tmp_path):
+    touch(tmp_path / "NSH.wav")
+    player = GoalHornPlayer([tmp_path], runner=RecordingRunner())
+    player.last_error = "stale"
+    assert player.play("NSH") is True
+    assert player.last_error == ""
+
+
 def test_team_mp3_beats_default_wav(tmp_path):
     touch(tmp_path / "NSH.mp3")
     touch(tmp_path / "_default.wav")
