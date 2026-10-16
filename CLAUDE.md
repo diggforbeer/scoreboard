@@ -295,7 +295,9 @@ to the surname, then truncates. The one-star-per-frame alternative wasn't
 needed at 128px -- only 12+ letter surnames truncate between logos.
 
 The shootout screen (#259) replaces the game scene while `periodType ==
-"SO"` and the game is live (or final, once we hold shootout data):
+"SO"` and the game is live (a finished one falls back to the plain game
+scene, labelled `FINAL/SO`, so the held final reads as a final score --
+the grid used to linger after the game, #259 follow-up):
 `Game.shows_shootout` -> `Renderer.draw_shootout`, a horizontal grid, away
 row over home row, one column per attempt (green disc goal, red X anything
 else, dim ring still to come), no shooter names (owner's call). Data is
@@ -345,7 +347,7 @@ goals disagreeing with `liveScore`, shooting on past a decision -- is
 `unknown`, and the screen then shows plain `SHOOTOUT` with no outline. The
 label is `MUST SCORE` (amber, with that team's next pending cell ringed in
 a slow 3s breathe off the injected clock), `SUDDEN DEATH`, `SHOOTOUT`, and
-`FINAL/SO` once the game is final. The demo (`animate_shootout` steps)
+(the grid itself is live-only now). The demo (`animate_shootout` steps)
 covers a live shootout, a must-score moment, sudden death and the final,
 each popping in its newest attempt. None of this is verified on hardware
 (#4) or against a live sudden-death payload.
