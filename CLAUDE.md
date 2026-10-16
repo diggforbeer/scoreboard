@@ -836,6 +836,13 @@ exit; with `show_logos = false` every step is just text.
   searches before the image-baked directory. Not verified on hardware (#4);
   deleting an upload back to the shipped horn is not built.
 
+- **A missing horn player is explained, not just logged.** `mpg123` only
+  joined the image in #208 and the in-app updater can't install apt
+  packages (#284), so a board flashed earlier plays WAVs (`aplay`) but not
+  MP3s. `GoalHornPlayer.play()` sets `last_error` on a `FileNotFoundError`
+  (naming the apt package), warns once per player rather than per goal, and
+  the admin page's Test horn buttons show that text.
+
 ## Image build facts (each cost a failed CI run)
 
 - rpi-image-gen builds **Debian**, not Raspberry Pi OS. Imager's "OS
