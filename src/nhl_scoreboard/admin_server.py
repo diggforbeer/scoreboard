@@ -239,6 +239,20 @@ thing:
   ``_coerce_rotation``, where the TOML loader would silently repair them.
   Sent last on connect, after the snapshot.
 
+* Live view (#268): a snapshot of the panel, re-taken whenever the scene
+  changes. Snapshots, not a stream, by the owner's call: a page left open
+  shouldn't have the Pi recording every frame, and every reason for the
+  view (a panel dark when it shouldn't be, a layout, what a save did) needs
+  a still picture, not animation. Opt-in per connection like the Logs tab
+  (``frame_subscribe``/``frame_unsubscribe``): while anyone subscribes,
+  ``Mirror.watching`` has the render thread snapshot each change of scene
+  (``display/mirror.py``, ``ScoreboardApp._begin_frame``); ``frame_refresh``
+  sets ``Mirror.requested`` for the next frame regardless (the clock's time,
+  a fly-by). ``_watch_frames`` sends each new snapshot to every subscriber:
+  ``{"type": "frame", width, height, brightness, captured_at, data}``,
+  ``data`` being base64 RGB, row-major. Pixels are what was drawn (full
+  brightness); ``brightness`` is the panel's setting, for the page to note.
+
 No auth, same trust model ``status_server.py`` (the page this replaces)
 had: a LAN-only admin tool, not something to port-forward.
 """
@@ -277,6 +291,7 @@ from .config import (
     Settings,
 )
 from .display.holiday import HOLIDAYS
+from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
 from .updater import installed_version
 
@@ -315,6 +330,8 @@ UPDATE_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_UPDATE_POLL", "
 #: pushed straight off the main loop -- this process has no other way to
 #: know ScoreboardApp's state changed except asking again.
 SNAPSHOT_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_SNAPSHOT_POLL", "2"))
+#: How often to look for a new live-view snapshot (#268) while anyone watches.
+FRAME_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_ADMIN_FRAME_POLL", "0.25"))
 
 #: Every currently-open connection -- the update-state/snapshot watchers
 #: broadcast to all of them, unlike everything else here, which only ever
@@ -337,6 +354,12 @@ _log_task: asyncio.Task[None] | None = None
 #: snapshot parameter had -- this module still has no idea what a scene or
 #: a game is.
 SNAPSHOT_PROVIDER: Callable[[], dict[str, str]] | None = None
+#: The running app's panel mirror (#268); None with no live app.
+MIRROR: Mirror | None = None
+#: Connections watching the live view, and the seq of the last snapshot
+#: sent to them.
+_frame_subscribers: set[ServerConnection] = set()
+_last_frame_sent = 0
 #: Turns the live demo (#204) on/off on the running ScoreboardApp; None with no live app.
 DEMO_SETTER: Callable[[bool], None] | None = None
 #: A goal horn is a few seconds long; 2 MB is generous for that and still
@@ -686,6 +709,62 @@ async def _unsubscribe_logs(connection: ServerConnection) -> None:
     _log_subscribers.discard(connection)
     if not _log_subscribers:
         await _stop_log_follower()
+
+
+# -- live view (#268) ----------------------------------------------------------
+
+
+def _frame_payload(frame: Frame) -> dict[str, object]:
+    return {
+        "type": "frame",
+        "width": frame.width,
+        "height": frame.height,
+        "brightness": frame.brightness,
+        "captured_at": frame.captured_at.isoformat(),
+        "data": base64.b64encode(frame.pixels).decode("ascii"),
+    }
+
+
+async def _subscribe_frames(connection: ServerConnection) -> None:
+    global _last_frame_sent
+    if MIRROR is None:
+        error = {"type": "error", "section": "live_view", "message": "no live panel to mirror"}
+        await connection.send(json.dumps(error))
+        return
+    frame = MIRROR.latest()
+    if _frame_subscribers and frame is not None:
+        # Someone's already watching, so the last snapshot is current.
+        await connection.send(json.dumps(_frame_payload(frame)))
+    else:
+        # Nobody was: whatever snapshot is left over may be long stale.
+        _last_frame_sent = frame.seq if frame is not None else 0
+        MIRROR.requested = True
+    _frame_subscribers.add(connection)
+    MIRROR.watching = True
+
+
+def _refresh_frame() -> None:
+    if MIRROR is not None:
+        MIRROR.requested = True
+
+
+def _unsubscribe_frames(connection: ServerConnection) -> None:
+    _frame_subscribers.discard(connection)
+    if not _frame_subscribers and MIRROR is not None:
+        MIRROR.watching = False
+
+
+async def _watch_frames() -> None:
+    global _last_frame_sent
+    while True:
+        frame = MIRROR.latest() if MIRROR is not None and _frame_subscribers else None
+        if frame is not None and frame.seq > _last_frame_sent:
+            _last_frame_sent = frame.seq
+            raw = json.dumps(_frame_payload(frame))
+            for client in list(_frame_subscribers):
+                with contextlib.suppress(websockets.exceptions.ConnectionClosed):
+                    await client.send(raw)
+        await asyncio.sleep(FRAME_POLL_SECONDS)
 
 
 async def _send_version(connection: ServerConnection) -> None:
@@ -1296,6 +1375,12 @@ async def _handle(connection: ServerConnection) -> None:
                 await _subscribe_logs(connection)
             elif msg_type == "logs_unsubscribe":
                 await _unsubscribe_logs(connection)
+            elif msg_type == "frame_subscribe":
+                await _subscribe_frames(connection)
+            elif msg_type == "frame_unsubscribe":
+                _unsubscribe_frames(connection)
+            elif msg_type == "frame_refresh":
+                _refresh_frame()
             elif msg_type == "demo_mode":
                 enabled = message.get("enabled")
                 if not isinstance(enabled, bool):
@@ -1323,6 +1408,7 @@ async def _handle(connection: ServerConnection) -> None:
         log.info("Admin page %s disconnected", connection.remote_address)
     finally:
         _clients.discard(connection)
+        _unsubscribe_frames(connection)
         await _unsubscribe_logs(connection)
 
 
@@ -1392,6 +1478,7 @@ _WS_LOG.setLevel(logging.WARNING)
 async def run(host: str = HOST, port: int = PORT) -> None:
     watcher = asyncio.create_task(_watch_update_state())
     snapshot_watcher = asyncio.create_task(_watch_snapshot())
+    frame_watcher = asyncio.create_task(_watch_frames())
     try:
         async with serve(
             _handle,
@@ -1404,12 +1491,10 @@ async def run(host: str = HOST, port: int = PORT) -> None:
             log.info("Admin server listening on http://%s:%d/ (page + WebSocket)", host, port)
             await server.serve_forever()
     finally:
-        watcher.cancel()
-        snapshot_watcher.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await watcher
-        with contextlib.suppress(asyncio.CancelledError):
-            await snapshot_watcher
+        for task in (watcher, snapshot_watcher, frame_watcher):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         await _stop_log_follower()
 
 
@@ -1438,12 +1523,14 @@ class AdminServer:
         port: int,
         snapshot: Callable[[], dict[str, str]] | None = None,
         demo_setter: Callable[[bool], None] | None = None,
+        mirror: Mirror | None = None,
         host: str = "0.0.0.0",  # intentional: a LAN admin page, see module docstring
     ) -> None:
         self._config_path = config_path
         self._port = port
         self._snapshot = snapshot
         self._demo_setter = demo_setter
+        self._mirror = mirror
         self._host = host
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -1456,10 +1543,11 @@ class AdminServer:
         return self._bound_port if self._bound_port is not None else self._port
 
     def start(self) -> None:
-        global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER
+        global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER, MIRROR
         CONFIG_PATH = self._config_path
         SNAPSHOT_PROVIDER = self._snapshot
         DEMO_SETTER = self._demo_setter
+        MIRROR = self._mirror
         ready = threading.Event()
         self._thread = threading.Thread(
             target=lambda: asyncio.run(self._serve(ready)), name="admin-server", daemon=True
@@ -1473,6 +1561,7 @@ class AdminServer:
         self._stop_event = asyncio.Event()
         watcher = asyncio.create_task(_watch_update_state())
         snapshot_watcher = asyncio.create_task(_watch_snapshot())
+        frame_watcher = asyncio.create_task(_watch_frames())
         try:
             async with serve(
                 _handle,
@@ -1491,12 +1580,10 @@ class AdminServer:
                 ready.set()
                 await self._stop_event.wait()
         finally:
-            watcher.cancel()
-            snapshot_watcher.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await watcher
-            with contextlib.suppress(asyncio.CancelledError):
-                await snapshot_watcher
+            for task in (watcher, snapshot_watcher, frame_watcher):
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             await _stop_log_follower()
 
     def stop(self) -> None:
