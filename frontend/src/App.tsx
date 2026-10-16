@@ -280,7 +280,7 @@ type ServerMessage =
   | { type: 'applying' }
   | { type: 'rebooting' }
   | { type: 'shutting_down' }
-  | { type: 'horn_tested'; played: boolean }
+  | { type: 'horn_tested'; played: boolean; reason: string }
   | { type: 'horn_uploaded'; name: string }
   | { type: 'horn_list'; horns: HornEntry[] }
   | { type: 'horn_played'; team: string; played: boolean; reason: string }
@@ -589,7 +589,9 @@ function App() {
               hornTestTimerRef.current = setTimeout(() => setHornTestMessage(null), 4000)
             } else {
               setHornTestMessage({
-                text: 'No horn available -- check Audio is enabled and a horn file exists.',
+                text:
+                  message.reason ||
+                  'No horn available -- check Audio is enabled and a horn file exists.',
                 ok: false,
               })
             }

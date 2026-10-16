@@ -817,7 +817,7 @@ def _apply_audio_volume() -> None:
         horn.apply_volume()
 
 
-def _test_horn() -> bool:
+def _test_horn() -> tuple[bool, str]:
     """Play the goal horn on demand, from the Audio section (#178).
 
     Builds its own GoalHornPlayer from a fresh disk read, same as every
@@ -830,9 +830,10 @@ def _test_horn() -> bool:
     attached (local dev), the same as every config section already does.
     Plays whatever's currently configured as the favourite's own horn
     (falling back to the shipped default), matching what a real goal
-    would actually play; returns whether playback actually launched
-    (False if audio is disabled or no horn file -- including the shipped
-    default -- could be found).
+    would actually play; returns ``(played, reason)``: whether playback
+    actually launched (False if audio is disabled or no horn file --
+    including the shipped default -- could be found), and, when a missing
+    or failing player is why, the words for it (else "").
 
     Also applies the configured volume first, when enabled (#187) -- this
     runs on AdminServer's own background thread, not ScoreboardApp's
@@ -847,7 +848,8 @@ def _test_horn() -> bool:
     horn = _current_horn(settings)
     if horn.enabled:
         horn.apply_volume()
-    return horn.play(settings.scoreboard.favourite_team)
+    played = horn.play(settings.scoreboard.favourite_team)
+    return played, horn.last_error
 
 
 def _looks_like_mp3(raw: bytes) -> bool:
@@ -1011,7 +1013,8 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
         return False, "No horn file found for this team, and no default is available either."
     if horn.play(team):
         return True, ""
-    return False, "The player command (aplay/mpg123) failed to launch -- check the board's logs."
+    fallback = "The player command failed to launch -- check the board's logs."
+    return False, horn.last_error or fallback
 
 
 async def _watch_update_state() -> None:
@@ -1306,8 +1309,10 @@ async def _handle(connection: ServerConnection) -> None:
                     # Every tab learns at once, not just the one that clicked.
                     await _broadcast(_snapshot_payload())
             elif msg_type == "test_horn":
-                played = _test_horn()
-                await connection.send(json.dumps({"type": "horn_tested", "played": played}))
+                played, reason = _test_horn()
+                await connection.send(
+                    json.dumps({"type": "horn_tested", "played": played, "reason": reason})
+                )
             else:
                 error = {"type": "error", "message": "unknown message type"}
                 await connection.send(json.dumps(error))
