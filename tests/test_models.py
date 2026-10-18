@@ -614,3 +614,23 @@ def test_missing_game_outcome_reads_as_regulation():
         }
     )
     assert meeting.last_period_type == "REG"
+
+
+def _end_of_period(period, away, home):
+    return Game.from_api(
+        {
+            "id": 1,
+            "gameState": "LIVE",
+            "period": period,
+            "periodDescriptor": {"number": period, "periodType": "REG", "maxRegulationPeriods": 3},
+            "clock": {"timeRemaining": "00:00", "running": False, "inIntermission": True},
+            "awayTeam": {"abbrev": "NSH", "score": away},
+            "homeTeam": {"abbrev": "CAR", "score": home},
+        }
+    )
+
+
+def test_no_third_intermission_when_the_game_is_decided():
+    assert not _end_of_period(3, 3, 2).in_intermission
+    assert _end_of_period(3, 2, 2).in_intermission  # tied: OT follows
+    assert _end_of_period(2, 3, 2).in_intermission  # earlier periods unaffected
