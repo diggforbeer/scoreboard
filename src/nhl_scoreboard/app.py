@@ -46,6 +46,7 @@ from .display.holiday import (
 )
 from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
+from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
 from .light_sensor import LightSensor
 from .nhl.api import NHLApiError, NHLClient
@@ -319,14 +320,19 @@ class ScoreboardApp:
         self.backend = backend or load_backend()
         self.matrix, self.backend = create_matrix(settings.panel, self.backend)
         self.canvas = self.matrix.CreateFrameCanvas()
+        #: The admin page's live view (#268): a snapshot per change of scene,
+        #: only while it's open. _mirror_key is what the last one showed.
+        self.mirror = Mirror(settings.panel.width, settings.panel.height)
+        self._mirror_key: object = None
         logos = None
         if settings.scoreboard.show_logos:
             logos = LogoLibrary.default(
                 size=min(settings.panel.height, 32), variant=settings.scoreboard.logo_variant
             )
+        graphics = MirrorGraphics(self.backend.graphics)
         self.renderer = Renderer(
-            graphics=self.backend.graphics,
-            fonts=FontSet(self.backend.graphics),
+            graphics=graphics,
+            fonts=FontSet(graphics),
             width=settings.panel.width,
             height=settings.panel.height,
             tz=self.tz,
@@ -352,6 +358,7 @@ class ScoreboardApp:
                 port=settings.status.port,
                 snapshot=self.status_snapshot,
                 demo_setter=self.set_demo_mode,
+                mirror=self.mirror,
             )
         else:
             self.admin_server = None
@@ -490,7 +497,7 @@ class ScoreboardApp:
         if self.admin_server is not None:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
-        self.canvas = self.matrix.SwapOnVSync(self.canvas)
+        self.swap_canvas()
 
         next_poll = 0.0
         next_rotate = 0.0
@@ -874,6 +881,7 @@ class ScoreboardApp:
                     port=new_settings.status.port,
                     snapshot=self.status_snapshot,
                     demo_setter=self.set_demo_mode,
+                    mirror=self.mirror,
                 )
                 # run() starts the server once, before its loop; a rebuild
                 # inside the loop has to start itself. Outside the loop,
@@ -2163,8 +2171,9 @@ class ScoreboardApp:
             # Blank outright: brightness 0 alone isn't guaranteed dark on
             # every backend, and there's no point rendering a scene nobody
             # can see.
+            self._begin_frame(("blank", self._applied_brightness))
             self.canvas.Clear()
-            self.canvas = self.matrix.SwapOnVSync(self.canvas)
+            self.swap_canvas()
             self._overlay_animating = False
             self._shootout_animating = False
             return
@@ -2179,6 +2188,33 @@ class ScoreboardApp:
             self._demo_was_on = False
             self.renderer.logos = self._demo_real_logos
         self.draw_scene(self.select_scene())
+
+    def _begin_frame(self, key: object) -> None:
+        """Snapshot this frame for the live view (#268) if what it shows
+        (``key``: the scene and everything else that decides its pixels)
+        differs from the last snapshot, or one was asked for. A frame in the
+        middle of an animation waits for it to finish, so a fly-by or a
+        shootout pop-in isn't frozen half-drawn; ``key`` stays unrecorded
+        until then, so the change isn't missed. The clock's ticking time
+        isn't in ``key``: the page's Refresh is for that."""
+        mirror = self.mirror
+        if not mirror.watching and not mirror.requested:
+            self._mirror_key = None
+            return
+        if key == self._mirror_key and not mirror.requested:
+            return
+        if self._overlay_animating or self._shootout_animating:
+            return
+        mirror.requested = False
+        self._mirror_key = key
+        self.canvas = MirrorCanvas(unwrap(self.canvas), mirror)
+
+    def swap_canvas(self) -> None:
+        """Show the frame just drawn, publishing it first if it was a
+        live-view snapshot (see _begin_frame)."""
+        if isinstance(self.canvas, MirrorCanvas):
+            self.mirror.publish(self._applied_brightness, self.clock())
+        self.canvas = self.matrix.SwapOnVSync(unwrap(self.canvas))
 
     def april_fools_active(self) -> bool:
         """April 1 on a Preds board (#248) -- see april_fools.py."""
@@ -2211,7 +2247,12 @@ class ScoreboardApp:
             favourite = april_fools.PRANK_AS
             scene = self._april_fools_scene(scene)
         if scene.kind == "game":
-            game = self.with_situation(scene.game)
+            scene = dataclasses.replace(scene, game=self.with_situation(scene.game))
+        self._begin_frame(
+            (scene, favourite, self.renderer.logos is not None, self._applied_brightness)
+        )
+        if scene.kind == "game":
+            game = scene.game
             if game.shows_shootout:
                 ages = self._shootout_frame_ages(game)
                 self._shootout_animating = bool(ages)
@@ -2255,7 +2296,7 @@ class ScoreboardApp:
         else:
             r.draw_message(self.canvas, "NO GAMES")
         self._draw_holiday_overlay(scene, favourite)
-        self.canvas = self.matrix.SwapOnVSync(self.canvas)
+        self.swap_canvas()
 
     def _shootout_frame_ages(self, game: Game) -> dict[int, float]:
         if self._demo_drawing:
