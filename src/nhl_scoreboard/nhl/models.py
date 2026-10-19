@@ -466,16 +466,25 @@ class Game:
         state = str(raw.get("gameState") or "FUT").upper()
         clock_time = str(clock.get("timeRemaining") or "00:00")
         clock_running = bool(clock.get("running"))
+        period = int(raw.get("period") or descriptor.get("number") or 0)
+        max_regulation = int(descriptor.get("maxRegulationPeriods") or 3)
+        away = TeamSide.from_api(raw.get("awayTeam") or {})
+        home = TeamSide.from_api(raw.get("homeTeam") or {})
+        # After the last regulation period (or any OT) a score that isn't tied
+        # means the game is over, not heading into another period; the state
+        # flips to FINAL a poll or two later, and until then the board
+        # flashed INT3. A tie is a real intermission (OT or shootout follows).
+        game_decided = period >= max_regulation and away.score != home.score
         return cls(
             id=int(raw["id"]),
             state=state,
             game_type=int(raw.get("gameType") or 2),
             start_utc=_parse_utc(raw.get("startTimeUTC")),
-            away=TeamSide.from_api(raw.get("awayTeam") or {}),
-            home=TeamSide.from_api(raw.get("homeTeam") or {}),
-            period=int(raw.get("period") or descriptor.get("number") or 0),
+            away=away,
+            home=home,
+            period=period,
             period_type=str(descriptor.get("periodType") or "REG").upper(),
-            max_regulation_periods=int(descriptor.get("maxRegulationPeriods") or 3),
+            max_regulation_periods=max_regulation,
             clock_time=clock_time,
             clock_running=clock_running,
             # The API's own inIntermission flag lags briefly right at a period's
@@ -490,8 +499,11 @@ class Game:
             # off the same field, not just the displayed label. Gated on
             # state being live: a FINAL/OFF game's clock sits at 00:00/not
             # running too, and is not an intermission.
-            in_intermission=bool(clock.get("inIntermission"))
-            or (state in LIVE_STATES and clock_time == "00:00" and not clock_running),
+            in_intermission=not game_decided
+            and (
+                bool(clock.get("inIntermission"))
+                or (state in LIVE_STATES and clock_time == "00:00" and not clock_running)
+            ),
         )
 
     # -- state helpers ---------------------------------------------------
