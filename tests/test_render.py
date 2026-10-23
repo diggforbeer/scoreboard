@@ -1074,6 +1074,20 @@ def test_conference_scroll_is_a_pure_function_of_time():
     assert r.standings_scroll_px(5, 5, seconds) == 0
 
 
+def test_conference_scroll_never_runs_faster_than_readable():
+    r = make_renderer()
+    needed = r.standings_scroll_seconds(16, 8)
+    assert needed > 8, "an 8s slot is too short for 16 teams"
+    assert needed == 2 * r.SCROLL_HOLD_SECONDS + 65 / r.SCROLL_MAX_PX_PER_SECOND
+    assert r.standings_scroll_seconds(16, 60) == 60, "a longer slot is kept (and scrolls slower)"
+    assert r.standings_scroll_seconds(5, 8) == 8, "a table that fits has nothing to scroll"
+    px_per_s = max(
+        r.standings_scroll_px(16, (t + 1) / 10, needed) - r.standings_scroll_px(16, t / 10, needed)
+        for t in range(int(needed * 10))
+    )
+    assert px_per_s <= 1  # per 0.1s: at most 10 px/s even with rounding, 5 on average
+
+
 def test_conference_scroll_reaches_every_team(update_snapshots):
     rows = [standings_row(a, i, 90 - i) for i, a in enumerate(WEST16, 1)]
     r = make_renderer()

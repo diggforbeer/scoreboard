@@ -843,11 +843,23 @@ class Renderer:
 
     #: Seconds the scroll rests at the top and at the bottom of the list.
     SCROLL_HOLD_SECONDS = 2.0
+    #: Fastest the list may scroll, about a row every 1.2s: any quicker
+    #: and it can't be read, however short the configured slot.
+    SCROLL_MAX_PX_PER_SECOND = 5.0
     _STANDINGS_ROW_HEIGHT = 6
 
     def standings_scroll_range(self, row_count: int) -> int:
         """Pixels the list overflows the panel by (0 when it all fits)."""
         return max(0, row_count * self._STANDINGS_ROW_HEIGHT + 1 - self.height)
+
+    def standings_scroll_seconds(self, row_count: int, minimum: float) -> float:
+        """The slot length a table needs: ``minimum``, or longer if scrolling it
+        at no more than ``SCROLL_MAX_PX_PER_SECOND`` takes more than that."""
+        overflow = self.standings_scroll_range(row_count)
+        if overflow <= 0:
+            return minimum
+        needed = 2 * self.SCROLL_HOLD_SECONDS + overflow / self.SCROLL_MAX_PX_PER_SECOND
+        return max(minimum, needed)
 
     def standings_scroll_px(self, row_count: int, offset: float, seconds: float) -> int:
         """How far the list has scrolled ``offset`` seconds into a ``seconds`` dwell.

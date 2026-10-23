@@ -1415,6 +1415,15 @@ class ScoreboardApp:
             return self._scroll_conference(scene, offset, seconds)
         return self._split_matchup(scene, offset, seconds)
 
+    def _slot_seconds(self, scene: Scene, configured: float) -> float:
+        """A scrolling table's slot lasts as long as a readable scroll needs.
+
+        The configured seconds is a minimum there, not an exact length.
+        """
+        if scene.kind != "conference_leaders":
+            return configured
+        return self.renderer.standings_scroll_seconds(len(scene.standings), configured)
+
     def _scroll_conference(self, scene: Scene, offset: float, seconds: float) -> Scene:
         """Scroll the conference table down over the slot's dwell."""
         r = self.renderer
@@ -1563,7 +1572,7 @@ class ScoreboardApp:
         normally. ``None`` only when every entry is currently unavailable.
         """
         slots = [
-            (scene, entry.seconds)
+            (scene, self._slot_seconds(scene, entry.seconds))
             for entry in self._effective_rotation()
             if (
                 scene := self._rotation_screen_scene(

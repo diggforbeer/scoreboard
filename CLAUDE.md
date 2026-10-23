@@ -463,7 +463,10 @@ conference, no parking on the favourite): `_split_slot` ->
 `_scroll_conference` turns the offset into the slot's dwell into
 `Scene.scroll_px` via `Renderer.standings_scroll_px`, a pure function --
 rest `SCROLL_HOLD_SECONDS` (2s) at the top, scroll evenly, rest at the
-bottom, so a longer dwell scrolls slower. `Scene.scrolling` holds the
+bottom, so a longer dwell scrolls slower. Never faster than
+`SCROLL_MAX_PX_PER_SECOND` (5): the entry's `seconds` is a *minimum*
+here, and `_slot_seconds` stretches the slot (~17s for 16 teams) when
+that is too short to scroll at a readable pace. `Scene.scrolling` holds the
 fast animation loop (and defers live-view snapshots) only while moving.
 Rows partly off the panel are still drawn and clipped by the driver, so
 a scrolled frame records out-of-bounds pixels below the panel by design.

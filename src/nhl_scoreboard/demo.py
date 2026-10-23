@@ -76,7 +76,7 @@ _LEADERS = TeamLeaders(
 
 
 #: Long enough for the hold at each end plus an unhurried scroll.
-DEMO_SCROLL_SECONDS = 14.0
+DEMO_SCROLL_SECONDS = 17.0
 
 
 class DemoStep(NamedTuple):
