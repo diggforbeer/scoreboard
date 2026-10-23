@@ -111,11 +111,12 @@ scores_grid = false
 # below; once any [[rotation]] table is present, rotate_seconds/
 # show_standings/show_clock_between_games above are no longer read for this
 # purpose. screen is one of "countdown_preview", "standings", "clock",
-# "matchup", "top_west", "top_east", "leaders", "holiday", "scores".
+# "matchup", "top_west", "top_east", "division", "leaders", "holiday", "scores".
 # "matchup" (your team's head-to-head record this season against its next
 # opponent, then the scores of the meetings so far for the second half of
 # its time),
-# "top_west"/"top_east" (top five of that conference), "leaders" (your
+# "top_west"/"top_east" (the whole conference, scrolling down), "division" (your
+# team's division, scrolling), "leaders" (your
 # team's top goal scorer, top point getter and top two goalies),
 # "holiday" (a holiday's own screen: Dec 1-25, a twinkling tree in your
 # team's colours counting down to Christmas, with [holiday] on and

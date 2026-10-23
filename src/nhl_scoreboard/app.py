@@ -62,6 +62,7 @@ from .nhl.models import (
     Star,
     TeamLeaders,
     conference_standings,
+    division_standings,
     standings_window,
     team_leaders,
 )
@@ -103,6 +104,9 @@ LEADERS_TTL_SECONDS = 60 * 60
 BRIGHTNESS_SMOOTHING = 0.3
 #: How long each scene stays up in ``--demo`` (#47).
 DEMO_SCENE_SECONDS = 4.0
+
+#: Scene kinds whose table scrolls over the slot (#280, #296).
+SCROLLING_KINDS = ("conference_leaders", "division")
 #: Written by nhl-scoreboard-setup-ap while the board's own first-boot WiFi
 #: AP is up (#131 follow-up); its mere presence means the ap_setup scene
 #: overrides everything else, so a phone that can only reach the board over
@@ -185,7 +189,7 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``matchup``, ``matchup_meetings``, ``leaders``,
+    ``conference_leaders``, ``division``, ``matchup``, ``matchup_meetings``, ``leaders``,
     ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
@@ -227,6 +231,10 @@ class Scene:
     #: and the SSID that outcome is about.
     wifi_join_status: str | None = None
     wifi_join_ssid: str | None = None
+    #: Set only for ``conference_leaders`` -- pixels the list has scrolled up.
+    scroll_px: int = 0
+    #: True while ``scroll_px`` is still moving, so the loop runs fast.
+    scrolling: bool = False
 
 
 class ScoreboardApp:
@@ -375,6 +383,7 @@ class ScoreboardApp:
         #: Whether the last shootout frame had a cell mid-animation, which
         #: speeds the loop up the way a moving holiday sprite does.
         self._shootout_animating = False
+        self._scroll_animating = False
         #: Demo only: when the current step's newest attempt "appeared".
         self._demo_shootout_started: float | None = None
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
@@ -527,7 +536,7 @@ class ScoreboardApp:
         self.shutdown()
 
     def frame_interval(self) -> float:
-        animating = self._overlay_animating or self._shootout_animating
+        animating = self._overlay_animating or self._shootout_animating or self._scroll_animating
         return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
     def run_demo(self) -> None:
@@ -557,6 +566,9 @@ class ScoreboardApp:
                 self._set_demo_logos(step.use_logos)
                 self._start_demo_holiday(step)
                 self._start_demo_shootout(step)
+                if step.scroll_seconds:
+                    self._play_scrolling_demo_step(step.scene, step.scroll_seconds)
+                    continue
                 if self._demo_holiday is not None or step.animate_shootout:
                     self._play_animated_demo_step(step.scene)
                     continue
@@ -587,6 +599,13 @@ class ScoreboardApp:
         end = self.monotonic() + DEMO_SCENE_SECONDS
         while self._running and self.monotonic() < end:
             self.draw_scene(scene)
+            self.sleep(self.frame_interval())
+
+    def _play_scrolling_demo_step(self, scene: Scene, seconds: float) -> None:
+        """Scroll a conference table through one slot's worth of dwell."""
+        start = self.monotonic()
+        while self._running and (elapsed := self.monotonic() - start) < seconds:
+            self.draw_scene(self._scroll_conference(scene, elapsed, seconds))
             self.sleep(self.frame_interval())
 
     def set_demo_mode(self, enabled: bool) -> None:
@@ -1332,7 +1351,9 @@ class ScoreboardApp:
     def _conference_leaders_scene(
         self, conference: str, *, allow_fetch: bool = True
     ) -> Scene | None:
-        """Top five of one conference (#200), or None with no standings yet.
+        """The whole of one conference (#200), or None with no standings yet.
+
+        Scrolled by ``_split_slot`` over the slot's dwell.
 
         Deliberately not gated on anyone's ``games_played``: the owner chose
         to just show whatever the latest table says.
@@ -1340,10 +1361,30 @@ class ScoreboardApp:
         rows = self._refresh_standings(allow_fetch=allow_fetch)
         if not rows:
             return None
-        top = conference_standings(rows, conference)[:5]
-        if not top:
+        table = conference_standings(rows, conference)
+        if not table:
             return None
-        return Scene("conference_leaders", standings=tuple(top))
+        return Scene("conference_leaders", standings=tuple(table))
+
+    def _division_scene(self, *, allow_fetch: bool = True) -> Scene | None:
+        """The favourite's whole division (#296), or None to skip the slot.
+
+        Gated on the favourite having played, like ``standings``: the API
+        serves last season's final table all through the off-season.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
+        if not rows:
+            return None
+        favourite_row = next((r for r in rows if r.abbrev == favourite), None)
+        if favourite_row is None or favourite_row.games_played <= 0:
+            return None
+        table = division_standings(rows, favourite_row.division)
+        if not table:
+            return None
+        return Scene("division", standings=tuple(table))
 
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
@@ -1394,7 +1435,27 @@ class ScoreboardApp:
         """One rotation slot's scene at ``offset`` seconds into its ``seconds`` dwell."""
         if scene.kind == "scores":
             return self._page_scores(scene, offset, seconds)
+        if scene.kind in SCROLLING_KINDS:
+            return self._scroll_conference(scene, offset, seconds)
         return self._split_matchup(scene, offset, seconds)
+
+    def _slot_seconds(self, scene: Scene, configured: float) -> float:
+        """A scrolling table's slot lasts as long as a readable scroll needs.
+
+        The configured seconds is a minimum there, not an exact length.
+        """
+        if scene.kind not in SCROLLING_KINDS:
+            return configured
+        return self.renderer.standings_scroll_seconds(len(scene.standings), configured)
+
+    def _scroll_conference(self, scene: Scene, offset: float, seconds: float) -> Scene:
+        """Scroll the conference table down over the slot's dwell."""
+        r = self.renderer
+        rows = len(scene.standings)
+        px = r.standings_scroll_px(rows, offset, seconds)
+        hold = min(r.SCROLL_HOLD_SECONDS, seconds / 4)
+        moving = r.standings_scroll_range(rows) > 0 and hold <= offset < seconds - hold
+        return dataclasses.replace(scene, scroll_px=px, scrolling=moving)
 
     def _page_scores(self, scene: Scene, offset: float, seconds: float) -> Scene:
         """The ``scores`` slot's dwell is shared evenly by its grid pages (#269)."""
@@ -1498,6 +1559,8 @@ class ScoreboardApp:
             # Resolved here so a board not listing them never needs the fetch.
             conference = "W" if screen == "top_west" else "E"
             return self._conference_leaders_scene(conference, allow_fetch=allow_fetch)
+        if screen == "division":
+            return self._division_scene(allow_fetch=allow_fetch)
         if screen == "matchup":
             # Resolved here, not up front like standings, so a board without
             # "matchup" in its rotation never calls right-rail at all.
@@ -1535,7 +1598,7 @@ class ScoreboardApp:
         normally. ``None`` only when every entry is currently unavailable.
         """
         slots = [
-            (scene, entry.seconds)
+            (scene, self._slot_seconds(scene, entry.seconds))
             for entry in self._effective_rotation()
             if (
                 scene := self._rotation_screen_scene(
@@ -2203,7 +2266,7 @@ class ScoreboardApp:
             return
         if key == self._mirror_key and not mirror.requested:
             return
-        if self._overlay_animating or self._shootout_animating:
+        if self._overlay_animating or self._shootout_animating or self._scroll_animating:
             return
         mirror.requested = False
         self._mirror_key = key
@@ -2242,6 +2305,7 @@ class ScoreboardApp:
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
         self._shootout_animating = False
+        self._scroll_animating = scene.scrolling
         favourite = self.settings.scoreboard.favourite_team
         if self.april_fools_active():
             favourite = april_fools.PRANK_AS
@@ -2270,7 +2334,9 @@ class ScoreboardApp:
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "conference_leaders":
-            r.draw_conference_leaders(self.canvas, scene.standings, favourite)
+            r.draw_conference_leaders(self.canvas, scene.standings, favourite, scene.scroll_px)
+        elif scene.kind == "division":
+            r.draw_division(self.canvas, scene.standings, favourite, scene.scroll_px)
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, favourite)
         elif scene.kind == "matchup":
