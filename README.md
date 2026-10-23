@@ -182,7 +182,7 @@ scores_grid = false         # with no favourite game up, show today's games four
 # screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, leaders, holiday, scores
 # seconds = 10
 # "matchup" (season series vs. the next opponent, then each finished meeting),
-# "top_west"/"top_east" (top five of that conference), "leaders" (your team's top
+# "top_west"/"top_east" (the whole conference, scrolling down), "leaders" (your team's top
 # goal scorer, top point getter and top two goalies), "holiday" (Dec 1-25: a
 # Christmas tree counting down to the 25th) and "scores" (every game today, four
 # to a frame, its seconds shared between the pages) only show if listed here.

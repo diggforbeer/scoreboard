@@ -841,10 +841,36 @@ class Renderer:
     #: (chain_length=1) skips the label rather than draw off-panel.
     _CONFERENCE_LABEL_MIN_WIDTH = 96
 
+    #: Seconds the scroll rests at the top and at the bottom of the list.
+    SCROLL_HOLD_SECONDS = 2.0
+    _STANDINGS_ROW_HEIGHT = 6
+
+    def standings_scroll_range(self, row_count: int) -> int:
+        """Pixels the list overflows the panel by (0 when it all fits)."""
+        return max(0, row_count * self._STANDINGS_ROW_HEIGHT + 1 - self.height)
+
+    def standings_scroll_px(self, row_count: int, offset: float, seconds: float) -> int:
+        """How far the list has scrolled ``offset`` seconds into a ``seconds`` dwell.
+
+        A pure function of time so the loop and the tests agree: rest at the
+        top, scroll evenly, rest at the bottom. The scroll speed is derived
+        from the dwell, so a longer slot scrolls slower and never overruns.
+        """
+        overflow = self.standings_scroll_range(row_count)
+        hold = min(self.SCROLL_HOLD_SECONDS, seconds / 4)
+        travel = seconds - 2 * hold
+        if overflow <= 0 or travel <= 0:
+            return 0
+        progress = min(1.0, max(0.0, (offset - hold) / travel))
+        return round(progress * overflow)
+
     def draw_conference_leaders(
-        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str
+        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, scroll: int = 0
     ) -> None:
-        """Top of one conference (#200): "WEST"/"EAST" label in the logo's slot, then the rows.
+        """One whole conference (#200): "WEST"/"EAST" label in the logo's slot, then the rows.
+
+        ``scroll`` shifts the rows up by that many pixels (the label stays
+        put), so the app can scroll all of them past the panel.
 
         Same columns as ``draw_standings``; the label stands where the
         favourite's logo would, so the conference is named without costing a
@@ -861,10 +887,15 @@ class Renderer:
             self.text_center(
                 canvas, self.fonts.small, left // 2, self.height // 2 + 3, WHITE, label
             )
-        self._draw_standings_rows(canvas, rows, favourite, left)
+        self._draw_standings_rows(canvas, rows, favourite, left, scroll)
 
     def _draw_standings_rows(
-        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, left: int
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        left: int,
+        scroll: int = 0,
     ) -> None:
         font = self.fonts.tiny
         row_height = 6
@@ -875,7 +906,9 @@ class Renderer:
         points_right = self.width - self._STANDINGS_POINTS_RIGHT_PAD
 
         for i, row in enumerate(rows):
-            y = 1 + i * row_height + (row_height - 2)
+            y = 1 + i * row_height + (row_height - 2) - scroll
+            if y < 0 or y - row_height >= self.height:
+                continue  # scrolled clear of the panel
             color = ACCENT if row.abbrev == favourite else WHITE
             self.text(canvas, font, rank_x, y, color, f"{row.conference_sequence:>2}")
             self.text(canvas, font, abbrev_x, y, team_color(row.abbrev), row.abbrev)

@@ -17,6 +17,7 @@ import dataclasses
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -1049,6 +1050,58 @@ def test_leaders_layout_labels_conference_and_fits_five_rows(update_snapshots):
         assert team_color(row.abbrev) in colors
         assert colors <= {ACCENT if row.abbrev == "NSH" else WHITE, team_color(row.abbrev)}
     check_snapshot("leaders_west", art, update_snapshots)
+
+
+WEST16 = [
+    "WPG", "DAL", "VGK", "LAK", "COL", "NSH", "EDM", "MIN",
+    "STL", "CGY", "VAN", "UTA", "ANA", "SEA", "CHI", "SJS",
+]  # fmt: skip
+
+
+def test_conference_scroll_is_a_pure_function_of_time():
+    r = make_renderer()
+    overflow = r.standings_scroll_range(16)
+    assert overflow == 16 * STANDINGS_ROW_HEIGHT + 1 - H
+    assert r.standings_scroll_range(5) == 0
+    seconds = 20
+    assert r.standings_scroll_px(16, 0, seconds) == 0
+    assert r.standings_scroll_px(16, r.SCROLL_HOLD_SECONDS, seconds) == 0
+    assert r.standings_scroll_px(16, seconds - r.SCROLL_HOLD_SECONDS, seconds) == overflow
+    assert r.standings_scroll_px(16, seconds, seconds) == overflow
+    steps = [r.standings_scroll_px(16, t / 10, seconds) for t in range(seconds * 10)]
+    assert steps == sorted(steps), "scroll must never move back up"
+    assert max(b - a for a, b in pairwise(steps)) <= 1, "smooth: one pixel at a time"
+    assert r.standings_scroll_px(5, 5, seconds) == 0
+
+
+def test_conference_scroll_reaches_every_team(update_snapshots):
+    rows = [standings_row(a, i, 90 - i) for i, a in enumerate(WEST16, 1)]
+    r = make_renderer()
+    overflow = r.standings_scroll_range(len(rows))
+    seen: set[str] = set()
+    for scroll in range(overflow + 1):
+        c = canvas()
+        r.draw_conference_leaders(c, rows, "NSH", scroll)
+        for i, row in enumerate(rows):
+            top = i * STANDINGS_ROW_HEIGHT - scroll
+            if (
+                top >= 0
+                and top + STANDINGS_ROW_HEIGHT <= H
+                and (
+                    team_color(row.abbrev)
+                    in c.colors(32, top, W - 1, top + STANDINGS_ROW_HEIGHT - 1)
+                )
+            ):
+                seen.add(row.abbrev)
+        assert c.lit(0, 0, 31, H - 1), "conference label scrolled away"
+    assert seen == set(WEST16)
+    bottom = canvas()
+    r.draw_conference_leaders(bottom, rows, "NSH", overflow)
+    check_snapshot(
+        "leaders_west_scrolled_bottom",
+        show("west, scrolled to the end", bottom),
+        update_snapshots,
+    )
 
 
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):

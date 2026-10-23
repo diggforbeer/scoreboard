@@ -115,7 +115,7 @@ scores_grid = false
 # "matchup" (your team's head-to-head record this season against its next
 # opponent, then the scores of the meetings so far for the second half of
 # its time),
-# "top_west"/"top_east" (top five of that conference), "leaders" (your
+# "top_west"/"top_east" (the whole conference, scrolling down), "leaders" (your
 # team's top goal scorer, top point getter and top two goalies),
 # "holiday" (a holiday's own screen: Dec 1-25, a twinkling tree in your
 # team's colours counting down to Christmas, with [holiday] on and

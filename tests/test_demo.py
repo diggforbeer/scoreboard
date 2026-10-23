@@ -151,7 +151,10 @@ def test_every_step_renders_on_panel(width):
             r.draw_christmas_tree(c, NOW, "NSH")
         else:
             r.draw_message(c, scene.kind.upper())
-        assert c.out_of_bounds == [], f"{scene.kind} drew off-panel"
+        # A scrolling table is clipped by the panel at the foot (as on
+        # hardware), never sideways or above.
+        off = [p for p in c.out_of_bounds if scene.kind != "conference_leaders" or p[1] < 32]
+        assert off == [], f"{scene.kind} drew off-panel"
         assert c.lit(), f"{scene.kind} drew nothing"
 
 
