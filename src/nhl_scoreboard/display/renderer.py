@@ -11,7 +11,7 @@ import logging
 import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
 from ..nhl.models import (
@@ -891,15 +891,39 @@ class Renderer:
         drop it and draw the rows flush left, same graceful-degradation
         precedent as a missing team logo elsewhere in this file.
         """
+        conference = rows[0].conference if rows else ""
+        label = {"W": "WEST", "E": "EAST"}.get(conference, conference)
+        self._draw_labelled_table(canvas, rows, favourite, scroll, label)
+
+    #: Short enough for the 32px label block at the 5x7 face.
+    _DIVISION_LABELS: ClassVar[dict[str, str]] = {"A": "ATL", "M": "METRO", "C": "CENT", "P": "PAC"}
+
+    def draw_division(
+        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, scroll: int = 0
+    ) -> None:
+        """The favourite's division (#296): same table and scroll as the conference
+        screens, ranked within the division, with its name in the label block."""
+        division = rows[0].division if rows else ""
+        label = self._DIVISION_LABELS.get(division, division)
+        self._draw_labelled_table(canvas, rows, favourite, scroll, label, by_division=True)
+
+    def _draw_labelled_table(
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        scroll: int,
+        label: str,
+        *,
+        by_division: bool = False,
+    ) -> None:
         canvas.Clear()
         left = 32 if self.width >= self._CONFERENCE_LABEL_MIN_WIDTH else 0
         if left:
-            conference = rows[0].conference if rows else ""
-            label = {"W": "WEST", "E": "EAST"}.get(conference, conference)
             self.text_center(
                 canvas, self.fonts.small, left // 2, self.height // 2 + 3, WHITE, label
             )
-        self._draw_standings_rows(canvas, rows, favourite, left, scroll)
+        self._draw_standings_rows(canvas, rows, favourite, left, scroll, by_division=by_division)
 
     def _draw_standings_rows(
         self,
@@ -908,6 +932,8 @@ class Renderer:
         favourite: str,
         left: int,
         scroll: int = 0,
+        *,
+        by_division: bool = False,
     ) -> None:
         font = self.fonts.tiny
         row_height = 6
@@ -922,7 +948,8 @@ class Renderer:
             if y < 0 or y - row_height >= self.height:
                 continue  # scrolled clear of the panel
             color = ACCENT if row.abbrev == favourite else WHITE
-            self.text(canvas, font, rank_x, y, color, f"{row.conference_sequence:>2}")
+            rank = row.division_sequence if by_division else row.conference_sequence
+            self.text(canvas, font, rank_x, y, color, f"{rank:>2}")
             self.text(canvas, font, abbrev_x, y, team_color(row.abbrev), row.abbrev)
             self.text(canvas, font, record_x, y, color, row.record_label())
             self.text_right(canvas, font, gp_right, y, color, str(row.games_played))

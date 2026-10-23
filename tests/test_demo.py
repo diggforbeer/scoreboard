@@ -23,6 +23,7 @@ EVERY_KIND = {
     "matchup",
     "matchup_meetings",
     "conference_leaders",
+    "division",
     "leaders",
     "scores",
     "christmas_tree",
@@ -141,6 +142,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_matchup_meetings(c, scene.game, scene.meetings)
         elif scene.kind == "conference_leaders":
             r.draw_conference_leaders(c, scene.standings, "NSH")
+        elif scene.kind == "division":
+            r.draw_division(c, scene.standings, "NSH")
         elif scene.kind == "leaders":
             r.draw_leaders(c, scene.leaders, "NSH")
         elif scene.kind == "scores":
@@ -153,7 +156,11 @@ def test_every_step_renders_on_panel(width):
             r.draw_message(c, scene.kind.upper())
         # A scrolling table is clipped by the panel at the foot (as on
         # hardware), never sideways or above.
-        off = [p for p in c.out_of_bounds if scene.kind != "conference_leaders" or p[1] < 32]
+        off = [
+            p
+            for p in c.out_of_bounds
+            if scene.kind not in ("conference_leaders", "division") or p[1] < 32
+        ]
         assert off == [], f"{scene.kind} drew off-panel"
         assert c.lit(), f"{scene.kind} drew nothing"
 

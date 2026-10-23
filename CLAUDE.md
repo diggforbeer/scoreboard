@@ -470,6 +470,12 @@ that is too short to scroll at a readable pace. `Scene.scrolling` holds the
 fast animation loop (and defers live-view snapshots) only while moving.
 Rows partly off the panel are still drawn and clipped by the driver, so
 a scrolled frame records out-of-bounds pixels below the panel by design.
+`division` (#296) is the same table for the favourite's own division
+(`division_standings()`, ranked by `divisionSequence`, name in the label
+block): opt-in, gated on the favourite's `games_played > 0` like
+`standings`, and no playoff line yet -- the owner deferred any line until
+later in the season, together with a separate wild-card screen.
+`SCROLLING_KINDS` lists the scene kinds sharing the scroll.
 **Independently built alongside `leaders` (#201) below, and
 both features happened to reuse the exact same Scene kind and method name
 (`"leaders"` / `_leaders_scene`)** -- merging the two PRs together is what

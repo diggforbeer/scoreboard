@@ -62,6 +62,7 @@ from .nhl.models import (
     Star,
     TeamLeaders,
     conference_standings,
+    division_standings,
     standings_window,
     team_leaders,
 )
@@ -103,6 +104,9 @@ LEADERS_TTL_SECONDS = 60 * 60
 BRIGHTNESS_SMOOTHING = 0.3
 #: How long each scene stays up in ``--demo`` (#47).
 DEMO_SCENE_SECONDS = 4.0
+
+#: Scene kinds whose table scrolls over the slot (#280, #296).
+SCROLLING_KINDS = ("conference_leaders", "division")
 #: Written by nhl-scoreboard-setup-ap while the board's own first-boot WiFi
 #: AP is up (#131 follow-up); its mere presence means the ap_setup scene
 #: overrides everything else, so a phone that can only reach the board over
@@ -185,7 +189,7 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``matchup``, ``matchup_meetings``, ``leaders``,
+    ``conference_leaders``, ``division``, ``matchup``, ``matchup_meetings``, ``leaders``,
     ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
@@ -1362,6 +1366,26 @@ class ScoreboardApp:
             return None
         return Scene("conference_leaders", standings=tuple(table))
 
+    def _division_scene(self, *, allow_fetch: bool = True) -> Scene | None:
+        """The favourite's whole division (#296), or None to skip the slot.
+
+        Gated on the favourite having played, like ``standings``: the API
+        serves last season's final table all through the off-season.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
+        if not rows:
+            return None
+        favourite_row = next((r for r in rows if r.abbrev == favourite), None)
+        if favourite_row is None or favourite_row.games_played <= 0:
+            return None
+        table = division_standings(rows, favourite_row.division)
+        if not table:
+            return None
+        return Scene("division", standings=tuple(table))
+
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
     ) -> SeasonSeriesRecord | None:
@@ -1411,7 +1435,7 @@ class ScoreboardApp:
         """One rotation slot's scene at ``offset`` seconds into its ``seconds`` dwell."""
         if scene.kind == "scores":
             return self._page_scores(scene, offset, seconds)
-        if scene.kind == "conference_leaders":
+        if scene.kind in SCROLLING_KINDS:
             return self._scroll_conference(scene, offset, seconds)
         return self._split_matchup(scene, offset, seconds)
 
@@ -1420,7 +1444,7 @@ class ScoreboardApp:
 
         The configured seconds is a minimum there, not an exact length.
         """
-        if scene.kind != "conference_leaders":
+        if scene.kind not in SCROLLING_KINDS:
             return configured
         return self.renderer.standings_scroll_seconds(len(scene.standings), configured)
 
@@ -1535,6 +1559,8 @@ class ScoreboardApp:
             # Resolved here so a board not listing them never needs the fetch.
             conference = "W" if screen == "top_west" else "E"
             return self._conference_leaders_scene(conference, allow_fetch=allow_fetch)
+        if screen == "division":
+            return self._division_scene(allow_fetch=allow_fetch)
         if screen == "matchup":
             # Resolved here, not up front like standings, so a board without
             # "matchup" in its rotation never calls right-rail at all.
@@ -2309,6 +2335,8 @@ class ScoreboardApp:
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "conference_leaders":
             r.draw_conference_leaders(self.canvas, scene.standings, favourite, scene.scroll_px)
+        elif scene.kind == "division":
+            r.draw_division(self.canvas, scene.standings, favourite, scene.scroll_px)
         elif scene.kind == "standings":
             r.draw_standings(self.canvas, scene.standings, favourite)
         elif scene.kind == "matchup":

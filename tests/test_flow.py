@@ -1713,6 +1713,36 @@ def test_a_live_followed_game_takes_the_screen_over_the_grid(fake_backend):
     assert scene(app) == ("game", 101)
 
 
+def test_division_screen_shows_only_the_favourites_division(day):
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    app.settings.rotation = [RotationEntry("division", 8)]
+    rows = [
+        dataclasses.replace(r, division="C", division_sequence=i)
+        for i, r in enumerate(west_standings(), 1)
+    ]
+    rows.append(dataclasses.replace(standings_row("VAN", 1), division="P", division_sequence=1))
+    client.standings_rows = rows
+    app.refresh()
+    app.monotonic = lambda: 0.0
+    shown = app.select_scene()
+    assert shown.kind == "division"
+    assert [r.abbrev for r in shown.standings] == [r.abbrev for r in rows[:-1]]
+
+
+def test_division_screen_waits_until_the_favourite_has_played(day):
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    app.settings.rotation = [RotationEntry("division", 8)]
+    client.standings_rows = [
+        dataclasses.replace(r, division="C", games_played=0) for r in west_standings()
+    ]
+    app.refresh()
+    assert app.select_scene().kind != "division"
+
+
 def test_top_west_scrolls_the_whole_conference_over_its_dwell(day):
     """top_west/top_east (#200) list every team and scroll them down the slot."""
     from nhl_scoreboard.config import RotationEntry

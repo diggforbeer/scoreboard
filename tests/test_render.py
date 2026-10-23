@@ -1118,6 +1118,30 @@ def test_conference_scroll_reaches_every_team(update_snapshots):
     )
 
 
+def test_division_ranks_within_the_division_and_names_it(update_snapshots):
+    names = ["WPG", "DAL", "NSH", "STL", "COL", "MIN", "UTA", "CHI"]
+    rows = [
+        dataclasses.replace(standings_row(a, i, 80 - i), division="C", division_sequence=i)
+        for i, a in enumerate(names, 1)
+    ]
+    # Conference rank differs from division rank, so the wrong column would show.
+    rows = [dataclasses.replace(r, conference_sequence=r.division_sequence + 3) for r in rows]
+    r = make_renderer()
+    c = canvas()
+    r.draw_division(c, rows, "NSH")
+    art = show("division, central", c)
+    assert c.lit(0, 0, 31, H - 1), "division label missing"
+    for i, row in enumerate(rows[:5]):
+        top = i * STANDINGS_ROW_HEIGHT
+        assert team_color(row.abbrev) in c.colors(32, top, W - 1, top + STANDINGS_ROW_HEIGHT - 1)
+    overflow = r.standings_scroll_range(len(rows))
+    assert 0 < overflow < 20
+    bottom = canvas()
+    r.draw_division(bottom, rows, "NSH", overflow)
+    assert team_color("CHI") in bottom.colors(32, H - STANDINGS_ROW_HEIGHT - 2, W - 1, H - 1)
+    check_snapshot("division_central", art, update_snapshots)
+
+
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
     c = canvas()
     make_renderer(logos=synthetic_logos).draw_standings(c, FAVOURITE_WINDOW, "NSH")

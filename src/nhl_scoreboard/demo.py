@@ -77,6 +77,7 @@ _LEADERS = TeamLeaders(
 
 #: Long enough for the hold at each end plus an unhurried scroll.
 DEMO_SCROLL_SECONDS = 17.0
+DEMO_DIVISION_SECONDS = 8.0
 
 
 class DemoStep(NamedTuple):
@@ -175,6 +176,10 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(
             Scene("conference_leaders", standings=tuple(_conference_table(favourite))),
             scroll_seconds=DEMO_SCROLL_SECONDS,
+        ),
+        DemoStep(
+            Scene("division", standings=tuple(_conference_table(favourite)[:8])),
+            scroll_seconds=DEMO_DIVISION_SECONDS,
         ),
         DemoStep(Scene("leaders", leaders=_LEADERS)),
         DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),

@@ -916,6 +916,12 @@ def conference_standings(rows: list[StandingsRow], conference: str) -> list[Stan
     return sorted(matches, key=lambda r: r.conference_sequence)
 
 
+def division_standings(rows: list[StandingsRow], division: str) -> list[StandingsRow]:
+    """``rows`` for one division, ranked by ``divisionSequence``."""
+    matches = [r for r in rows if division and r.division == division.strip().upper()]
+    return sorted(matches, key=lambda r: r.division_sequence)
+
+
 def standings_window(
     rows: list[StandingsRow], abbrev: str, above: int = 2, below: int = 2
 ) -> list[StandingsRow]:
