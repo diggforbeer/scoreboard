@@ -170,6 +170,7 @@ show_logos = true           # false = three-letter abbreviations instead
 logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
 three_stars_seconds = 8     # how long the 3 STARS screen stays up once your team's game is final
+broadcast_delay_seconds = 0  # hold the board this far behind the NHL data to match a TV broadcast (30-60 is typical)
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation

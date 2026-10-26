@@ -617,6 +617,7 @@ _DEFAULT_SCOREBOARD_DATA = {
     "goal_flash_seconds": 6.0,
     "goal_detail_seconds": 8.0,
     "three_stars_seconds": 8.0,
+    "broadcast_delay_seconds": 0.0,
     "countdown_hours": 2.0,
     "final_hold_minutes": 30.0,
     "show_standings": True,
