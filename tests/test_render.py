@@ -17,6 +17,7 @@ import dataclasses
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -1049,6 +1050,96 @@ def test_leaders_layout_labels_conference_and_fits_five_rows(update_snapshots):
         assert team_color(row.abbrev) in colors
         assert colors <= {ACCENT if row.abbrev == "NSH" else WHITE, team_color(row.abbrev)}
     check_snapshot("leaders_west", art, update_snapshots)
+
+
+WEST16 = [
+    "WPG", "DAL", "VGK", "LAK", "COL", "NSH", "EDM", "MIN",
+    "STL", "CGY", "VAN", "UTA", "ANA", "SEA", "CHI", "SJS",
+]  # fmt: skip
+
+
+def test_conference_scroll_is_a_pure_function_of_time():
+    r = make_renderer()
+    overflow = r.standings_scroll_range(16)
+    assert overflow == 16 * STANDINGS_ROW_HEIGHT + 1 - H
+    assert r.standings_scroll_range(5) == 0
+    seconds = 20
+    assert r.standings_scroll_px(16, 0, seconds) == 0
+    assert r.standings_scroll_px(16, r.SCROLL_HOLD_SECONDS, seconds) == 0
+    assert r.standings_scroll_px(16, seconds - r.SCROLL_HOLD_SECONDS, seconds) == overflow
+    assert r.standings_scroll_px(16, seconds, seconds) == overflow
+    steps = [r.standings_scroll_px(16, t / 10, seconds) for t in range(seconds * 10)]
+    assert steps == sorted(steps), "scroll must never move back up"
+    assert max(b - a for a, b in pairwise(steps)) <= 1, "smooth: one pixel at a time"
+    assert r.standings_scroll_px(5, 5, seconds) == 0
+
+
+def test_conference_scroll_never_runs_faster_than_readable():
+    r = make_renderer()
+    needed = r.standings_scroll_seconds(16, 8)
+    assert needed > 8, "an 8s slot is too short for 16 teams"
+    assert needed == 2 * r.SCROLL_HOLD_SECONDS + 65 / r.SCROLL_MAX_PX_PER_SECOND
+    assert r.standings_scroll_seconds(16, 60) == 60, "a longer slot is kept (and scrolls slower)"
+    assert r.standings_scroll_seconds(5, 8) == 8, "a table that fits has nothing to scroll"
+    px_per_s = max(
+        r.standings_scroll_px(16, (t + 1) / 10, needed) - r.standings_scroll_px(16, t / 10, needed)
+        for t in range(int(needed * 10))
+    )
+    assert px_per_s <= 1  # per 0.1s: at most 10 px/s even with rounding, 5 on average
+
+
+def test_conference_scroll_reaches_every_team(update_snapshots):
+    rows = [standings_row(a, i, 90 - i) for i, a in enumerate(WEST16, 1)]
+    r = make_renderer()
+    overflow = r.standings_scroll_range(len(rows))
+    seen: set[str] = set()
+    for scroll in range(overflow + 1):
+        c = canvas()
+        r.draw_conference_leaders(c, rows, "NSH", scroll)
+        for i, row in enumerate(rows):
+            top = i * STANDINGS_ROW_HEIGHT - scroll
+            if (
+                top >= 0
+                and top + STANDINGS_ROW_HEIGHT <= H
+                and (
+                    team_color(row.abbrev)
+                    in c.colors(32, top, W - 1, top + STANDINGS_ROW_HEIGHT - 1)
+                )
+            ):
+                seen.add(row.abbrev)
+        assert c.lit(0, 0, 31, H - 1), "conference label scrolled away"
+    assert seen == set(WEST16)
+    bottom = canvas()
+    r.draw_conference_leaders(bottom, rows, "NSH", overflow)
+    check_snapshot(
+        "leaders_west_scrolled_bottom",
+        show("west, scrolled to the end", bottom),
+        update_snapshots,
+    )
+
+
+def test_division_ranks_within_the_division_and_names_it(update_snapshots):
+    names = ["WPG", "DAL", "NSH", "STL", "COL", "MIN", "UTA", "CHI"]
+    rows = [
+        dataclasses.replace(standings_row(a, i, 80 - i), division="C", division_sequence=i)
+        for i, a in enumerate(names, 1)
+    ]
+    # Conference rank differs from division rank, so the wrong column would show.
+    rows = [dataclasses.replace(r, conference_sequence=r.division_sequence + 3) for r in rows]
+    r = make_renderer()
+    c = canvas()
+    r.draw_division(c, rows, "NSH")
+    art = show("division, central", c)
+    assert c.lit(0, 0, 31, H - 1), "division label missing"
+    for i, row in enumerate(rows[:5]):
+        top = i * STANDINGS_ROW_HEIGHT
+        assert team_color(row.abbrev) in c.colors(32, top, W - 1, top + STANDINGS_ROW_HEIGHT - 1)
+    overflow = r.standings_scroll_range(len(rows))
+    assert 0 < overflow < 20
+    bottom = canvas()
+    r.draw_division(bottom, rows, "NSH", overflow)
+    assert team_color("CHI") in bottom.colors(32, H - STANDINGS_ROW_HEIGHT - 2, W - 1, H - 1)
+    check_snapshot("division_central", art, update_snapshots)
 
 
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
