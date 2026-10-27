@@ -50,6 +50,7 @@ from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
 from .light_sensor import LightSensor
+from .network import default_route_ip
 from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
     Game,
@@ -108,6 +109,11 @@ DEMO_SCENE_SECONDS = 4.0
 
 #: Scene kinds whose table scrolls over the slot (#280, #296).
 SCROLLING_KINDS = ("conference_leaders", "division")
+#: How long the admin page's address stays up after the board first gets a
+#: default route -- on boot (Ethernet or saved Wi-Fi) or after a join (#293).
+ADDRESS_SHOW_SECONDS = 60.0
+#: How long a looked-up IP is reused, so the lookup isn't made every frame.
+IP_CACHE_SECONDS = 5.0
 #: Written by nhl-scoreboard-setup-ap while the board's own first-boot WiFi
 #: AP is up (#131 follow-up); its mere presence means the ap_setup scene
 #: overrides everything else, so a phone that can only reach the board over
@@ -192,7 +198,7 @@ class Scene:
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
     ``conference_leaders``, ``division``, ``matchup``, ``matchup_meetings``, ``leaders``,
     ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
-    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
+    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
     """
 
     kind: str
@@ -232,6 +238,10 @@ class Scene:
     #: and the SSID that outcome is about.
     wifi_join_status: str | None = None
     wifi_join_ssid: str | None = None
+    #: Set only for ``address`` (#293) -- where the admin page is reachable.
+    address_ip: str | None = None
+    address_port: int = 80
+    address_qr: tuple[tuple[bool, ...], ...] | None = None
     #: Set only for ``conference_leaders`` -- pixels the list has scrolled up.
     scroll_px: int = 0
     #: True while ``scroll_px`` is still moving, so the loop runs fast.
@@ -257,8 +267,17 @@ class ScoreboardApp:
         wifi_join: WifiJoinAttempt | None = None,
         hw_mapping_trial_path: Path | None = None,
         restart_service: Callable[[], None] | None = None,
+        ip_lookup: Callable[[], str | None] | None = None,
     ) -> None:
         self.settings = settings
+        #: Injectable so tests never touch a real socket (#293).
+        self._ip_lookup = ip_lookup or default_route_ip
+        self._ip_cache: tuple[float, str | None] | None = None
+        #: monotonic time the post-connect address screen runs until, and
+        #: whether the last check found an address (see _track_address).
+        self._address_until: float | None = None
+        self._had_ip = False
+        self._address_qr_cache: tuple[str, tuple[tuple[bool, ...], ...] | None] | None = None
         self.clock = clock or (lambda: datetime.now(UTC))
         self.monotonic = monotonic or time.monotonic
         self.sleep = sleep or time.sleep
@@ -537,6 +556,7 @@ class ScoreboardApp:
             self.refresh_goal_details()
             self.refresh_three_stars()
             self._sync_setup_server()
+            self._track_address()
             self.wifi_join.poll()
             self.wifi_join.expire_outcome_if_stale()
             self.draw()
@@ -1606,6 +1626,8 @@ class ScoreboardApp:
             return self._leaders_scene(allow_fetch=allow_fetch)
         if screen == "holiday":
             return self._holiday_screen_scene()
+        if screen == "address":
+            return self._address_scene()
         if screen == "scores":
             return Scene("scores", games=tuple(self.games)) if self.games else None
         return None
@@ -1684,6 +1706,10 @@ class ScoreboardApp:
         ap_scene = self._ap_setup_scene()
         if ap_scene is not None:
             return ap_scene
+        if self._address_until is not None and self.monotonic() < self._address_until:
+            address_scene = self._address_scene()
+            if address_scene is not None:
+                return address_scene
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
 
@@ -1737,6 +1763,12 @@ class ScoreboardApp:
             payload = f"WIFI:T:nopass;S:{_qr_escape(ssid)};;"
         else:
             payload = f"WIFI:T:WPA;S:{_qr_escape(ssid)};P:{_qr_escape(password)};;"
+        matrix = self._qr_matrix(payload, "AP setup")
+        self._ap_qr_cache = (cache_key, matrix)
+        return matrix
+
+    @staticmethod
+    def _qr_matrix(payload: str, what: str) -> tuple[tuple[bool, ...], ...] | None:
         try:
             # border=0 explicitly: verified live that get_matrix() otherwise
             # includes the library's own default 4-module quiet zone in its
@@ -1749,12 +1781,48 @@ class ScoreboardApp:
             qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, border=0)
             qr.add_data(payload)
             qr.make(fit=True)
-            matrix = tuple(tuple(bool(v) for v in row) for row in qr.get_matrix())
+            return tuple(tuple(bool(v) for v in row) for row in qr.get_matrix())
         except Exception as exc:
-            log.warning("Could not build AP setup QR code: %s", exc)
-            matrix = None
-        self._ap_qr_cache = (cache_key, matrix)
-        return matrix
+            log.warning("Could not build %s QR code: %s", what, exc)
+            return None
+
+    # -- Admin page address (#293) -----------------------------------------
+
+    def _current_ip(self) -> str | None:
+        now = self.monotonic()
+        if self._ip_cache is None or now - self._ip_cache[0] >= IP_CACHE_SECONDS:
+            self._ip_cache = (now, self._ip_lookup())
+        return self._ip_cache[1]
+
+    def _track_address(self) -> None:
+        """Start the address screen's minute when the board first gets online.
+
+        Keyed on "has a default route" (the same test the setup-AP script
+        uses), not on the Wi-Fi join state, so an Ethernet-only boot gets it
+        too. Mutates state, so only run()'s own loop calls it, never the
+        admin server's status thread.
+        """
+        has_ip = self._current_ip() is not None
+        if has_ip and not self._had_ip:
+            self._address_until = self.monotonic() + ADDRESS_SHOW_SECONDS
+        self._had_ip = has_ip
+
+    def _address_scene(self) -> Scene | None:
+        """Where to reach the admin page, or None with no address or no page.
+
+        The name line (``<name>.local``) waits for #292; the IP leads until
+        then. The QR always carries the full URL.
+        """
+        cfg = self.settings.status
+        ip = self._current_ip()
+        if not cfg.enabled or ip is None:
+            return None
+        url = f"http://{ip}" if cfg.port == 80 else f"http://{ip}:{cfg.port}"
+        if self._address_qr_cache is None or self._address_qr_cache[0] != url:
+            self._address_qr_cache = (url, self._qr_matrix(url, "admin address"))
+        return Scene(
+            "address", address_ip=ip, address_port=cfg.port, address_qr=self._address_qr_cache[1]
+        )
 
     # -- WiFi setup page (#132) --------------------------------------------
 
@@ -2413,6 +2481,8 @@ class ScoreboardApp:
             r.draw_clock(self.canvas, self.clock(), favourite)
         elif scene.kind == "christmas_tree":
             r.draw_christmas_tree(self.canvas, self.clock(), favourite)
+        elif scene.kind == "address":
+            r.draw_address(self.canvas, scene.address_ip, scene.address_port, scene.address_qr)
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":

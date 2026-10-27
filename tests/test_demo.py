@@ -28,6 +28,7 @@ EVERY_KIND = {
     "scores",
     "christmas_tree",
     "clock",
+    "address",
     "no_games",
     "no_data",
 }
@@ -148,6 +149,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_leaders(c, scene.leaders, "NSH")
         elif scene.kind == "scores":
             r.draw_scores(c, scene.games)
+        elif scene.kind == "address":
+            r.draw_address(c, scene.address_ip, scene.address_port, scene.address_qr)
         elif scene.kind == "clock":
             r.draw_clock(c, NOW)
         elif scene.kind == "christmas_tree":
