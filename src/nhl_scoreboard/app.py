@@ -52,6 +52,8 @@ from .display.renderer import Renderer
 from .light_sensor import LightSensor
 from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
+    DIVISION_SPOTS,
+    WILDCARD_SPOTS,
     Game,
     GoalEvent,
     MeetingResult,
@@ -63,13 +65,11 @@ from .nhl.models import (
     Star,
     TeamLeaders,
     conference_standings,
-    DIVISION_SPOTS,
-    WILDCARD_SPOTS,
     division_standings,
     playoff_cut,
-    wildcard_standings,
     standings_window,
     team_leaders,
+    wildcard_standings,
 )
 from .setup_server import SetupServer
 from .updater import installed_version
@@ -194,8 +194,8 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``, ``leaders``,
-    ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
+    ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
+    ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``.
     """
 

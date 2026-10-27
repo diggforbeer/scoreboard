@@ -926,9 +926,7 @@ def wildcard_standings(rows: list[StandingsRow], conference: str) -> list[Standi
     """The wild-card race (#298): ``conference``'s teams outside the top 3 of a
     division, ranked by ``wildcardSequence``. The first ``WILDCARD_SPOTS`` get in."""
     matches = [
-        r
-        for r in rows
-        if r.conference == conference.strip().upper() and r.wildcard_sequence >= 1
+        r for r in rows if r.conference == conference.strip().upper() and r.wildcard_sequence >= 1
     ]
     return sorted(matches, key=lambda r: r.wildcard_sequence)
 
