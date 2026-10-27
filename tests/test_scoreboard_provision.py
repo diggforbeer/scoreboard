@@ -77,6 +77,16 @@ class Rig:
             "exit 0\n",
         )
         write_fake(self.bindir, "systemctl", "exit 0")
+        write_fake(self.bindir, "hostname", "exit 0")
+        self.net_dir = tmp_path / "net"
+        self.net_dir.mkdir()
+        self.hostname_file = tmp_path / "hostname"
+        self.hosts_file = tmp_path / "hosts"
+        self.hostname_state = tmp_path / "state" / "hostname-chosen"
+
+    def seed_nic(self, name: str, mac: str) -> None:
+        (self.net_dir / name).mkdir(exist_ok=True)
+        (self.net_dir / name / "address").write_text(f"{mac}\n")
 
     def seed_profile(self, ssid: str, password: str) -> Path:
         profile = self.iwd_dir / f"{ssid}.psk"
@@ -110,6 +120,10 @@ class Rig:
             "NHL_SCOREBOARD_ZONEINFO_DIR": str(self.zoneinfo_dir),
             "NHL_SCOREBOARD_LOCALTIME": str(self.localtime_path),
             "NHL_SCOREBOARD_TIMEZONE_FILE": str(self.timezone_file),
+            "NHL_SCOREBOARD_NET_DIR": str(self.net_dir),
+            "NHL_SCOREBOARD_HOSTNAME_FILE": str(self.hostname_file),
+            "NHL_SCOREBOARD_HOSTS_FILE": str(self.hosts_file),
+            "NHL_SCOREBOARD_HOSTNAME_STATE": str(self.hostname_state),
             "NHL_SCOREBOARD_WIFI_TIMEOUT": "1",
             "NHL_SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
             "PYTHONPATH": repo_src,
@@ -433,3 +447,36 @@ def test_malformed_toml_is_logged_and_leaves_system_untouched(rig):
     assert not rig.timezone_file.exists()
     assert not rig.localtime_path.exists()
     assert not any(rig.iwd_dir.iterdir())
+
+
+# ---- unique mDNS hostname, chosen once (#292) ---------------------------
+
+
+def test_hostname_derived_from_mac_and_persisted(rig):
+    rig.seed_nic("eth0", "dc:a6:32:00:11:22")
+    rig.seed_nic("wlan0", "dc:a6:32:aa:b1:c2")
+    rig.hostname_file.write_text("scoreboard\n")
+    rig.hosts_file.write_text("127.0.0.1\tlocalhost\n127.0.1.1\tscoreboard\n")
+    result = rig.run("[scoreboard]\n")
+    assert result.returncode == 0
+    assert "restart avahi-daemon.service" in result.calls
+    assert rig.hostname_file.read_text() == "scoreboard-b1c2\n"
+    assert rig.hosts_file.read_text() == "127.0.0.1\tlocalhost\n127.0.1.1\tscoreboard-b1c2\n"
+
+
+def test_hostname_never_rechosen_once_stored(rig):
+    rig.seed_nic("wlan0", "dc:a6:32:aa:b1:c2")
+    rig.hostname_file.write_text("scoreboard\n")
+    rig.run("[scoreboard]\n")
+    # A different MAC later (e.g. a swapped NIC) must not rename the board.
+    rig.seed_nic("wlan0", "dc:a6:32:00:ff:ee")
+    result = rig.run("[scoreboard]\n")
+    assert rig.hostname_file.read_text() == "scoreboard-b1c2\n"
+    assert "avahi-daemon" not in result.calls
+
+
+def test_hostname_untouched_without_a_mac(rig):
+    rig.hostname_file.write_text("scoreboard\n")
+    assert rig.run("[scoreboard]\n").returncode == 0
+    assert rig.hostname_file.read_text() == "scoreboard\n"
+    assert not rig.hostname_state.exists()

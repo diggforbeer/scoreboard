@@ -242,7 +242,7 @@ cover.
 |---|---|
 | Username | `scoreboard` |
 | Password | `Scoreboard1!` |
-| Host | the board's IP on your network (check your router's DHCP client list — there's no `.local`/mDNS name set up) |
+| Host | `scoreboard-xxxx.local` (`xxxx` = last four hex digits of the board's MAC, set once on first boot so it never changes). If your device can't resolve `.local`, use the IP from your router's DHCP client list |
 
 **Change the password** (`passwd`) before putting the board on any network
 you don't fully trust — this default is baked into every flashed image and

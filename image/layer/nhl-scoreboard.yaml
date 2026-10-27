@@ -68,6 +68,11 @@ mmdebstrap:
     # below -- only our own instance, scoped to wlan0 and started from
     # nhl-scoreboard-setup-ap.service, ever runs.
     - dnsmasq
+    # mDNS responder so the admin page opens as http://scoreboard-xxxx.local
+    # instead of by IP (#292). A new dependency, flagged like dnsmasq above.
+    # The package's postinst enables avahi-daemon.service; the hostname it
+    # announces is set once by scoreboard-provision.
+    - avahi-daemon
     # nhl-scoreboard-setup-ap's `ip addr`/`ip link` calls need this --
     # verified missing live on real hardware (#131's follow-up): the
     # script died immediately with "ip: not found" (exit 127) before ever
@@ -238,6 +243,13 @@ mmdebstrap:
       install -m 0644 "$IGconf_sb_assetdir/systemd/nhl-scoreboard-setup-ap.service" \
         "$1/etc/systemd/system/"
       ln -sf /dev/null "$1/etc/systemd/system/dnsmasq.service"
+
+    # ---- mDNS advertisement of the admin page (#292) -------------------
+    - |-
+      set -eu
+      install -d "$1/etc/avahi/services"
+      install -m 0644 "$IGconf_sb_assetdir/avahi/nhl-scoreboard.service" \
+        "$1/etc/avahi/services/"
 
     # ---- app self-update (#32) -----------------------------------------
     # The timer only *checks*; installing is the admin page's button, via
