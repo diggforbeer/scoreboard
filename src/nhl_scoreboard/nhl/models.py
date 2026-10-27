@@ -922,6 +922,38 @@ def division_standings(rows: list[StandingsRow], division: str) -> list[Standing
     return sorted(matches, key=lambda r: r.division_sequence)
 
 
+def wildcard_standings(rows: list[StandingsRow], conference: str) -> list[StandingsRow]:
+    """The wild-card race (#298): ``conference``'s teams outside the top 3 of a
+    division, ranked by ``wildcardSequence``. The first ``WILDCARD_SPOTS`` get in."""
+    matches = [
+        r
+        for r in rows
+        if r.conference == conference.strip().upper() and r.wildcard_sequence >= 1
+    ]
+    return sorted(matches, key=lambda r: r.wildcard_sequence)
+
+
+#: Wild-card places per conference.
+WILDCARD_SPOTS = 2
+#: Automatic places per division.
+DIVISION_SPOTS = 3
+
+
+def playoff_cut(rows: list[StandingsRow]) -> int | None:
+    """How many leading rows of a ranked ``rows`` are in a playoff place (#298).
+
+    The line is drawn after that many. None when there is no line to draw: all
+    in, all out, or the in-rows aren't a clean prefix (a table not ranked the
+    way this expects), in which case a line would be misleading.
+    """
+    cut = next((i for i, r in enumerate(rows) if not r.in_playoff_position), len(rows))
+    if cut == 0 or cut == len(rows):
+        return None
+    if any(r.in_playoff_position for r in rows[cut:]):
+        return None
+    return cut
+
+
 def standings_window(
     rows: list[StandingsRow], abbrev: str, above: int = 2, below: int = 2
 ) -> list[StandingsRow]:

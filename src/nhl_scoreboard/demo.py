@@ -174,11 +174,19 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
         DemoStep(
-            Scene("conference_leaders", standings=tuple(_conference_table(favourite))),
+            Scene(
+                "conference_leaders",
+                standings=tuple(_conference_table(favourite)),
+                playoff_cut=8,
+            ),
             scroll_seconds=DEMO_SCROLL_SECONDS,
         ),
         DemoStep(
-            Scene("division", standings=tuple(_conference_table(favourite)[:8])),
+            Scene("division", standings=tuple(_conference_table(favourite)[:8]), playoff_cut=3),
+            scroll_seconds=DEMO_DIVISION_SECONDS,
+        ),
+        DemoStep(
+            Scene("wildcard", standings=tuple(_conference_table(favourite)[8:]), playoff_cut=2),
             scroll_seconds=DEMO_DIVISION_SECONDS,
         ),
         DemoStep(Scene("leaders", leaders=_LEADERS)),
