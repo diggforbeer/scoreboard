@@ -185,7 +185,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ),
         DemoStep(Scene("leaders", leaders=_LEADERS)),
         DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
-        DemoStep(Scene("address", address_ip="192.168.1.42", address_port=8080, address_qr=_ADDRESS_QR)),
+        DemoStep(
+            Scene("address", address_ip="192.168.1.42", address_port=8080, address_qr=_ADDRESS_QR)
+        ),
         DemoStep(Scene("clock")),
         DemoStep(Scene("game", live), holiday="halloween"),
         DemoStep(Scene("clock"), holiday="halloween"),
