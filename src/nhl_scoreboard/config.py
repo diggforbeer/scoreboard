@@ -237,6 +237,10 @@ class ScoreboardConfig:
     #: game is final and the NHL has named its stars, before the normal
     #: held-final scoreboard takes over for the rest of final_hold_minutes.
     three_stars_seconds: float = 8.0
+    #: Seconds to hold the whole board behind the NHL API (#301). The API
+    #: runs 30-60 s ahead of the TV broadcast; this lines the score, horn,
+    #: goal screen and the rest up with it. 0 = no delay.
+    broadcast_delay_seconds: float = 0.0
     #: Inside this many hours of puck drop the preview becomes a countdown.
     countdown_hours: float = 2.0
     #: How long a finished favourite game stays up before the next preview.

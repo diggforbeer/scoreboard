@@ -411,6 +411,7 @@ _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
     "goal_flash_seconds": _FieldSpec("float"),
     "goal_detail_seconds": _FieldSpec("float"),
     "three_stars_seconds": _FieldSpec("float"),
+    "broadcast_delay_seconds": _FieldSpec("float"),
     "countdown_hours": _FieldSpec("float"),
     "final_hold_minutes": _FieldSpec("float"),
     "show_clock_between_games": _FieldSpec("bool"),

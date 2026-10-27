@@ -230,6 +230,21 @@ favourite-only: standings, leaders, matchup, three stars, the countdown/
 preview, holiday team colours. With only `also_follow` and no favourite,
 the turns still run, then today's-games rotation as before.
 
+**Broadcast delay (#301).** `scoreboard.broadcast_delay_seconds` (default 0,
+admin page Scoreboard > Timing) holds the whole board behind the API, which
+runs 30-60s ahead of a TV broadcast. Every fetch result (`score/now`, situation,
+shootout, goal scorer) is applied through `delay.py`'s `DelayQueue` instead of
+directly, so the score, horn, goal screen, scorer and shootout animation all
+shift together; no feature has delay logic of its own. The first result per key
+applies at once (after a restart the board shows data immediately and the delay
+catches up behind it, never jumping backwards); later ones wait, and never run
+before an earlier one for the same key even if the delay is lowered. Side
+fetches and `poll_interval()` target `_api_games()` (the undelayed list), not
+the delayed `self.games`, so they start when the API says a game is live;
+`with_situation` reads `_shown_situations`/`_shown_shootouts`, the delayed
+copies. Three stars needs nothing extra: it starts from the delayed final.
+Unverified on hardware (#4) and against a real broadcast.
+
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
 **only** for followed teams' live games and the on-screen game, at
 `live_poll_seconds`, never during intermission. Do not widen this without

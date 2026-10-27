@@ -36,6 +36,7 @@ from .config import (
     next_hardware_mapping,
     resolve_timezone,
 )
+from .delay import DelayQueue
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
@@ -348,6 +349,13 @@ class ScoreboardApp:
         )
         self.games: list[Game] = []
         self.index = 0
+        #: Fetch results waiting out ``broadcast_delay_seconds`` (#301), and the
+        #: undelayed games the side fetches target so they start when the API
+        #: says a game is live, not N seconds later.
+        self._delay = DelayQueue(self.monotonic)
+        self._latest_games: list[Game] | None = None
+        self._shown_situations: dict[int, Situation | None] = {}
+        self._shown_shootouts: dict[int, Shootout | None] = {}
         self.last_success: float | None = None
         #: Wall-clock companions to last_success, for the status page (#48) --
         #: last_success itself is monotonic and not meaningful to a human.
@@ -665,11 +673,32 @@ class ScoreboardApp:
             log.warning("Score refresh failed: %s", exc)
             self._record_error(f"score refresh: {exc}", from_scores=True)
             return
-        self.games = self.order(games)
+        self._latest_games = self.order(games)
         self.last_success = self.monotonic()
         self.last_success_at = self.clock()
         if self._last_error_from_scores and self.last_error_recovered_at is None:
             self.last_error_recovered_at = self.last_success_at
+        self._submit("games", lambda: self._apply_games(games))
+
+    def _delay_seconds(self) -> float:
+        return min(max(self.settings.scoreboard.broadcast_delay_seconds, 0.0), 300.0)
+
+    def _submit(self, key: object, apply: Callable[[], None]) -> None:
+        """Apply a fetch result after the broadcast delay (#301); at once with none."""
+        self._delay.submit(key, self._delay_seconds(), apply)
+
+    def _api_games(self) -> list[Game]:
+        """Today's games as the API has them now, ahead of the delayed ``self.games``.
+
+        Side fetches (situation, shootout, scorer) and the poll cadence follow
+        this so they start on time; their results are delayed on the way in.
+        """
+        if self._latest_games is not None and self._delay_seconds() > 0:
+            return self._latest_games
+        return self.games
+
+    def _apply_games(self, games: list[Game]) -> None:
+        self.games = self.order(games)
         self._detect_goals(self.games)
         now = self.clock()
         for game in self.games:
@@ -704,7 +733,12 @@ class ScoreboardApp:
         refreshed from the live schedule every poll, so any id no longer in
         it is done for today and safe to forget.
         """
-        current_ids = {game.id for game in self.games}
+        current_ids = {game.id for game in self.games} | {game.id for game in self._api_games()}
+        self._delay.forget(lambda key: not isinstance(key, tuple) or key[1] in current_ids)
+        for shown in (self._shown_situations, self._shown_shootouts):
+            for game_id in list(shown):
+                if game_id not in current_ids:
+                    del shown[game_id]
         self._seen_live &= current_ids
         for game_id in list(self.ended_at):
             if game_id not in current_ids:
@@ -1110,7 +1144,7 @@ class ScoreboardApp:
         a new endpoint), on the same ``live_poll_seconds`` cadence, skipped
         during intermission for the same reason situation is.
         """
-        for game in self.games:
+        for game in self._api_games():
             if game.is_live and self._is_followed(game):
                 self._refresh_goal_detail(game, self._celebrated_teams(game))
 
@@ -1130,7 +1164,9 @@ class ScoreboardApp:
             all_events = events
         team_events = tuple(e for e in all_events if e.team_abbrev in teams)
         self._goal_events[game.id] = (now, team_events)
-        self._detect_goal_detail(game.id, team_events)
+        self._submit(
+            ("goal_detail", game.id), lambda: self._detect_goal_detail(game.id, team_events)
+        )
 
     def _detect_goal_detail(self, game_id: int, events: tuple[GoalEvent, ...]) -> None:
         """A followed team's scoring array grew by one entry: show it, once.
@@ -2016,13 +2052,17 @@ class ScoreboardApp:
         Everything else shows even strength; that is the trade for not
         hammering the landing endpoint once per live game every poll.
         """
-        targets = [g for g in self.games if g.is_live and self._is_followed(g)]
+        targets = [g for g in self._api_games() if g.is_live and self._is_followed(g)]
         if self.games and not self._scores_grid_fallback():
             # The grid draws no situation, so it has no "on-screen" game to poll for.
-            current = self.games[self.index]
+            current = self._api_game(self.games[self.index])
             if current.is_live and current not in targets:
                 targets.append(current)
         return targets
+
+    def _api_game(self, game: Game) -> Game:
+        """The API's current view of a (possibly delayed) game."""
+        return next((g for g in self._api_games() if g.id == game.id), game)
 
     def refresh_situations(self) -> None:
         now = self.monotonic()
@@ -2031,6 +2071,7 @@ class ScoreboardApp:
         for game_id in list(self.situations):
             if game_id not in wanted:
                 del self.situations[game_id]
+                self._shown_situations.pop(game_id, None)
         for game_id, game in wanted.items():
             fetched_at = self.situations.get(game_id, (None, None))[0]
             if fetched_at is not None and now - fetched_at < interval:
@@ -2038,6 +2079,9 @@ class ScoreboardApp:
             if game.in_intermission or game.in_shootout:
                 # No special teams in a shootout; refresh_shootouts() owns it.
                 self.situations[game_id] = (now, None)
+                self._submit(
+                    ("situation", game_id), lambda i=game_id: self._show_situation(i, None)
+                )
                 continue
             try:
                 situation = self.client.situation(game_id)
@@ -2045,6 +2089,12 @@ class ScoreboardApp:
                 log.debug("Situation fetch for %s failed: %s", game_id, exc)
                 situation = self.situations.get(game_id, (None, None))[1]
             self.situations[game_id] = (now, situation)
+            self._submit(
+                ("situation", game_id), lambda i=game_id, s=situation: self._show_situation(i, s)
+            )
+
+    def _show_situation(self, game_id: int, situation: Situation | None) -> None:
+        self._shown_situations[game_id] = situation
 
     def shootout_targets(self) -> list[Game]:
         """Shootout games to track: followed teams' and the on-screen one (#259, #260).
@@ -2053,9 +2103,9 @@ class ScoreboardApp:
         until one fetch has landed after it ended, so the grid ends on the
         deciding shot rather than the last poll before the final horn.
         """
-        candidates = [g for g in self.games if self._is_followed(g)]
+        candidates = [g for g in self._api_games() if self._is_followed(g)]
         if self.games and not self._scores_grid_fallback():
-            candidates.append(self.games[self.index])
+            candidates.append(self._api_game(self.games[self.index]))
         targets: list[Game] = []
         for game in candidates:
             if game in targets or not game.in_shootout:
@@ -2075,10 +2125,11 @@ class ScoreboardApp:
         """
         now = self.monotonic()
         interval = self.settings.scoreboard.shootout_poll_seconds
-        current = {g.id for g in self.games}
+        current = {g.id for g in self._api_games()}
         for game_id in list(self.shootouts):
             if game_id not in current:
                 del self.shootouts[game_id]
+                self._shown_shootouts.pop(game_id, None)
         for game_id in list(self._shootout_seen):
             if game_id not in current:
                 del self._shootout_seen[game_id]
@@ -2093,7 +2144,13 @@ class ScoreboardApp:
                 self.shootouts[game.id] = (now, previous[1], previous[2])
                 continue
             self.shootouts[game.id] = (now, shootout, game.is_final)
-            self._note_shootout_attempts(game.id, shootout, now)
+            self._submit(
+                ("shootout", game.id), lambda i=game.id, s=shootout: self._show_shootout(i, s)
+            )
+
+    def _show_shootout(self, game_id: int, shootout: Shootout | None) -> None:
+        self._shown_shootouts[game_id] = shootout
+        self._note_shootout_attempts(game_id, shootout, self.monotonic())
 
     def _note_shootout_attempts(self, game_id: int, shootout: Shootout | None, now: float) -> None:
         """Stamp each attempt with when we first saw it (#259).
@@ -2123,12 +2180,11 @@ class ScoreboardApp:
         return ages
 
     def with_situation(self, game: Game) -> Game:
-        entry = self.situations.get(game.id)
-        if entry is not None and entry[1] is not None:
-            game = dataclasses.replace(game, situation=entry[1])
-        shootout = self.shootouts.get(game.id)
-        if shootout is not None and shootout[1] is not None and game.shootout is None:
-            data = shootout[1]
+        situation = self._shown_situations.get(game.id)
+        if situation is not None:
+            game = dataclasses.replace(game, situation=situation)
+        data = self._shown_shootouts.get(game.id)
+        if data is not None and game.shootout is None:
             if self.april_fools_active():
                 data = april_fools.swap_shootout(data)
             game = dataclasses.replace(game, shootout=data)
@@ -2151,9 +2207,10 @@ class ScoreboardApp:
     def poll_interval(self) -> float:
         """Poll harder while a game is actually in progress."""
         cfg = self.settings.scoreboard
-        if any(g.is_live and g.in_shootout for g in self.games):
+        games = self._api_games()
+        if any(g.is_live and g.in_shootout for g in games):
             return min(cfg.shootout_poll_seconds, cfg.live_poll_seconds)
-        if any(g.is_live and not g.in_intermission for g in self.games):
+        if any(g.is_live and not g.in_intermission for g in games):
             return cfg.live_poll_seconds
         return cfg.poll_seconds
 
@@ -2230,6 +2287,7 @@ class ScoreboardApp:
         return value.astimezone(self.tz).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def draw(self) -> None:
+        self._delay.drain()
         if self._night_mode_active() and self.settings.night_mode.dim_brightness == 0:
             # Blank outright: brightness 0 alone isn't guaranteed dark on
             # every backend, and there's no point rendering a scene nobody

@@ -81,6 +81,12 @@ goal_detail_seconds = 8
 # the NHL has named its three stars, before the final score takes over.
 three_stars_seconds = 8
 
+# Hold the whole board this many seconds behind the NHL data, so scores, the
+# goal horn and the GOAL screen line up with a TV broadcast, which runs 30-60
+# seconds behind the API. 0 = no delay. Trial and error: watch a goal on TV
+# and note how early the board was.
+broadcast_delay_seconds = 0
+
 # Whether the favourite's conference playoff picture (their spot plus a
 # few teams on either side) is included when no explicit [[rotation]]
 # list is given below (see the comment on that section) -- only read for

@@ -142,6 +142,7 @@ interface ScoreboardConfig {
   goal_flash_seconds: number
   goal_detail_seconds: number
   three_stars_seconds: number
+  broadcast_delay_seconds: number
   countdown_hours: number
   final_hold_minutes: number
   show_standings: boolean
@@ -1096,6 +1097,7 @@ function App() {
                   ['goal_flash_seconds', 'Goal celebration duration (seconds)'],
                   ['goal_detail_seconds', 'Goal detail duration (seconds)'],
                   ['three_stars_seconds', 'Three stars duration (seconds)'],
+                  ['broadcast_delay_seconds', 'TV broadcast delay (seconds)'],
                 ] as const
               ).map(([key, label]) => (
                 <div className="mb-3" key={key}>
