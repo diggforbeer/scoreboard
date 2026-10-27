@@ -49,6 +49,11 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   PR rather than just a link before trusting it. Either way, review what
   it produces the same as any other PR — a real test run doesn't make the
   *change* correct, only that it doesn't fail the suite as written.
+- **The cloud run's venv is built by a workflow step, not by Claude.**
+  `claude.yml` runs `setup-python` + `pip install -e '.[dev,e2e]'` and puts
+  `.venv/bin` on `PATH` before the action starts, so a run only needs plain
+  `pytest` / `ruff` calls. Runs that had to build the venv themselves kept
+  getting those commands denied (the action redacts which one), e.g. PR #305.
 - **What a cloud run can actually execute, concretely.** The current
   full `--allowedTools` list lives in exactly one place --
   `claude.yml`'s own `claude_args` -- and is intentionally not
