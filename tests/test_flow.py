@@ -1820,3 +1820,51 @@ def test_top_west_scrolls_the_whole_conference_over_its_dwell(day):
     last = at(seconds - 1)
     assert last.scroll_px == app.renderer.standings_scroll_range(7)
     assert not last.scrolling
+
+
+# --------------------------------------------------------------------------
+# Admin page address (#293)
+# --------------------------------------------------------------------------
+
+
+def test_address_shows_for_a_minute_once_online(day):
+    app, clock, _ = day
+    app._ip_lookup = lambda: "192.168.1.42"
+    app._track_address()
+    s = app.select_scene()
+    assert (s.kind, s.address_ip, s.address_port) == ("address", "192.168.1.42", 8080)
+    assert s.address_qr
+    clock.mono += 61
+    app._track_address()
+    assert app.select_scene().kind != "address"
+
+
+def test_address_shown_when_the_route_appears_later(day):
+    app, clock, _ = day
+    ips = ["10.0.0.7"]
+    app._ip_lookup = lambda: ips[0] if ips else None
+    ips.clear()
+    app._track_address()
+    assert app.select_scene().kind != "address"
+    clock.mono += 30
+    ips.append("10.0.0.7")
+    app._track_address()
+    assert app.select_scene().kind == "address"
+
+
+def test_address_rotation_screen_is_opt_in_and_skipped_offline(day):
+    app, clock, _ = day
+    ips = ["10.0.0.7"]
+    app._ip_lookup = lambda: ips[0] if ips else None
+    assert app.select_scene().kind != "address"  # not listed, no boot minute yet
+    assert app._rotation_screen_scene("address", None, None).kind == "address"
+    ips.clear()
+    clock.mono += 10
+    assert app._rotation_screen_scene("address", None, None) is None
+
+
+def test_address_skipped_when_admin_page_is_off(day):
+    app, _, _ = day
+    app._ip_lookup = lambda: "10.0.0.7"
+    app.settings.status.enabled = False
+    assert app._rotation_screen_scene("address", None, None) is None

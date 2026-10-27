@@ -50,6 +50,7 @@ const ROTATION_SCREENS = [
   'leaders',
   'holiday',
   'scores',
+  'address',
 ] as const
 const ROTATION_MAX_ROWS = 8
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.

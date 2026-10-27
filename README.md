@@ -180,13 +180,15 @@ scores_grid = false         # with no favourite game up, show today's games four
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, division, leaders, holiday, scores
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, division, leaders, holiday, scores, address
 # seconds = 10
 # "matchup" (season series vs. the next opponent, then each finished meeting),
 # "top_west"/"top_east" (the whole conference, scrolling down), "division" (your team's division, scrolling), "leaders" (your team's top
 # goal scorer, top point getter and top two goalies), "holiday" (Dec 1-25: a
 # Christmas tree counting down to the 25th) and "scores" (every game today, four
-# to a frame, its seconds shared between the pages) only show if listed here.
+# to a frame, its seconds shared between the pages) and "address" (the admin page's
+# IP and a QR code to it) only show if listed here. The address also appears by
+# itself for a minute once the board first gets online.
 
 [audio]
 enabled = true

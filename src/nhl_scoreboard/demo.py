@@ -11,7 +11,7 @@ import dataclasses
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
-from .app import Scene
+from .app import Scene, ScoreboardApp
 from .nhl.models import (
     Game,
     GoalieLine,
@@ -65,6 +65,8 @@ _CONFERENCE = (
 
 
 #: Made-up players, shown whichever team is the favourite.
+_ADDRESS_QR = ScoreboardApp._qr_matrix("http://192.168.1.42:8080", "demo address")
+
 _LEADERS = TeamLeaders(
     goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
     points=SkaterLine(2, "R. O'Reilly", 9, 17, 26),
@@ -191,6 +193,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ),
         DemoStep(Scene("leaders", leaders=_LEADERS)),
         DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
+        DemoStep(
+            Scene("address", address_ip="192.168.1.42", address_port=8080, address_qr=_ADDRESS_QR)
+        ),
         DemoStep(Scene("clock")),
         DemoStep(Scene("game", live), holiday="halloween"),
         DemoStep(Scene("clock"), holiday="halloween"),

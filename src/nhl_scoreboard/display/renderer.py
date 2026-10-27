@@ -1263,6 +1263,67 @@ class Renderer:
                 self._fit_text(self.fonts.tiny, password, max_w - 15),
             )
 
+    def draw_address(
+        self,
+        canvas: Any,
+        ip: str | None,
+        port: int,
+        qr_matrix: Sequence[Sequence[bool]] | None,
+    ) -> None:
+        """Where to reach the admin page (#293): the IP as text on the left
+        half, a QR code to the full URL on the right.
+
+        Same layout rules as ``draw_ap_setup``: the QR stays inside one
+        physical panel half so it never straddles the seam, dark modules on
+        white, 1px per module. On a panel too narrow for readable text next
+        to it (a single 64px one) the QR is centred alone -- it carries the
+        whole URL anyway. The port is its own line rather than ``:8080`` on
+        the IP's, which wouldn't fit the half; port 80 is omitted.
+        """
+        canvas.Clear()
+        half = self.width // 2
+        text_wide = half >= 56
+        box_x0 = half if text_wide else 0
+        box_w = self.width - box_x0
+        if qr_matrix:
+            h = len(qr_matrix)
+            w = len(qr_matrix[0]) if h else 0
+            if w <= box_w and h <= self.height:
+                if text_wide:
+                    for y in range(self.height):
+                        for x in range(box_x0, self.width):
+                            canvas.SetPixel(x, y, *WHITE)
+                ox = box_x0 + (box_w - w) // 2
+                oy = (self.height - h) // 2
+                if not text_wide:
+                    # No half-panel backdrop here: a white square just
+                    # around the code, so the rest of the panel stays dark.
+                    for y in range(oy - 1, oy + h + 1):
+                        for x in range(ox - 1, ox + w + 1):
+                            if 0 <= x < self.width and 0 <= y < self.height:
+                                canvas.SetPixel(x, y, *WHITE)
+                for y, row in enumerate(qr_matrix):
+                    for x, val in enumerate(row):
+                        if val:
+                            canvas.SetPixel(ox + x, oy + y, 0, 0, 0)
+            else:
+                log.warning(
+                    "Admin address QR (%dx%d modules) doesn't fit (%dx%d available)",
+                    w,
+                    h,
+                    box_w,
+                    self.height,
+                )
+        if not text_wide:
+            return
+        max_w = half - 2
+        tiny = self.fonts.tiny
+        self.text(canvas, tiny, 1, 7, WHITE, self._fit_text(tiny, "ADMIN PAGE", max_w))
+        self.text(canvas, tiny, 1, 15, WHITE, self._fit_text(tiny, ip or "NO NETWORK", max_w))
+        if ip and port != 80:
+            self.text(canvas, tiny, 1, 22, SUBDUED, self._fit_text(tiny, f"PORT {port}", max_w))
+        self.text(canvas, tiny, 1, 30, SUBDUED, self._fit_text(tiny, "SCAN TO OPEN", max_w))
+
     def draw_wifi_join(self, canvas: Any, status: str | None, ssid: str | None) -> None:
         """WiFi join outcome (#133): shown while nhl_scoreboard.wifi_join is
         attempting a network submitted via the setup page, or briefly after,
