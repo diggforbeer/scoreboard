@@ -41,6 +41,25 @@ jobs:
           # allowlist without this would be a half-working fix.
           fetch-depth: 0
 
+      # Build the venv BEFORE Claude starts, so a run never has to get
+      # venv/pip commands past the allowlist. Real runs (#293 -> PR #305)
+      # reported pytest/ruff/venv "needed approval" and the action redacts
+      # which command was denied, so guessing at more allowlist variants
+      # (see the history in the comment below) kept failing. With the
+      # tools already on PATH, the only commands left are plain `pytest`,
+      # `ruff check .` and `ruff format .`, which are allowed.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dev dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[dev,e2e]'
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -147,5 +166,5 @@ jobs:
           # for the venv-local binary instead, so it gets the same
           # by-path variant as pip.
           claude_args: |
-            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*),Bash(. .venv/bin/activate:*),Bash(python3 -m venv:*),Bash(.venv/bin/pip install:*),Bash(.venv/bin/playwright:*),Bash(npm ci:*),Bash(npm run build:*)"
-            --append-system-prompt "Before saying you are done with a code change, set up the venv (python3 -m venv .venv, source .venv/bin/activate, pip install -e '.[dev]') if not already done, then run pytest and ruff check . and ruff format --check . , and report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Separately: when asked to capture a screenshot (the admin page, a rendered panel scene, anything visual) for a PR or issue, there is no tool that attaches an image directly to a comment -- commit the resulting PNG to your own branch and link it in your comment by its raw.githubusercontent.com URL instead (the same way PR #153's LED-panel screenshots were shared); don't ask for permission to do this, it's the accepted mechanism. Every other default instruction still applies."
+            --allowedTools "Bash(python3 -m venv .venv:*),Bash(source .venv/bin/activate:*),Bash(python3 -m pip install:*),Bash(pip install:*),Bash(pytest:*),Bash(ruff check:*),Bash(ruff format:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh issue list:*),Bash(gh issue close:*),Bash(gh issue view:*),Bash(gh label list:*),Bash(git fetch:*),Bash(git merge:*),Bash(gh pr view:*),Bash(python3:*),Bash(nhl-scoreboard:*),Bash(playwright install:*),Bash(. .venv/bin/activate:*),Bash(python3 -m venv:*),Bash(.venv/bin/pip install:*),Bash(.venv/bin/playwright:*),Bash(npm ci:*),Bash(npm run build:*),Bash(ruff:*),Bash(.venv/bin/pytest:*),Bash(.venv/bin/ruff:*),Bash(.venv/bin/python:*)"
+            --append-system-prompt "Before saying you are done with a code change, run pytest and ruff check . and ruff format --check . -- the venv is already built and on PATH (do not create another), and run each as its own Bash call, not chained with && or ;. If you add or change a render snapshot test, run pytest --update-snapshots, review the snapshot diff, run ruff format ., and commit the generated files. Report the real results -- don't claim success without having run them. Separately: when you were triggered by an issue (not an existing pull request) and you have committed and pushed a branch, run `gh pr create` yourself to open the pull request (base the repository's default branch, from your branch, with a clear title and body) instead of only posting a compare/quick_pull link -- this overrides the default issue-triggered behavior of leaving a link only. Separately: when asked to capture a screenshot (the admin page, a rendered panel scene, anything visual) for a PR or issue, there is no tool that attaches an image directly to a comment -- commit the resulting PNG to your own branch and link it in your comment by its raw.githubusercontent.com URL instead (the same way PR #153's LED-panel screenshots were shared); don't ask for permission to do this, it's the accepted mechanism. Every other default instruction still applies."
