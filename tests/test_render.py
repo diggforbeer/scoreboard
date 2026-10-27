@@ -2172,3 +2172,46 @@ def test_scores_grid_status_fits_a_column(games, key, status, detail):
     r = make_renderer()
     assert r._scores_status(games[key]) == (status, detail)
     assert text_width(r.fonts.small, status) <= SCORES_COL - 2
+
+
+# --------------------------------------------------------------------------
+# Admin page address (#293): IP text + QR to the admin URL
+# --------------------------------------------------------------------------
+
+
+def _address_qr():
+    return tuple(tuple((x * y + x) % 3 == 0 for x in range(25)) for y in range(25))
+
+
+def test_address_scene(update_snapshots):
+    c = canvas()
+    make_renderer().draw_address(c, "192.168.100.100", 8080, _address_qr())
+    art = show("address", c)
+
+    assert not c.out_of_bounds
+    # QR confined to the right half, never across the seam.
+    assert c.colors(HALF, 0, W - 1, H - 1) == {WHITE}
+    assert c.colors(0, 0, HALF - 1, H - 1) <= {WHITE, SUBDUED}
+    box = c.bbox(0, 0, HALF - 1, H - 1)
+    assert box is not None
+    assert box.x1 <= HALF - 1
+    check_snapshot("address", art, update_snapshots)
+
+
+def test_address_scene_default_port_has_no_port_line(update_snapshots):
+    c = canvas()
+    make_renderer().draw_address(c, "10.0.0.5", 80, _address_qr())
+    art = show("address_port80", c)
+    assert not c.out_of_bounds
+    assert c.bbox(0, 17, HALF - 1, 23) is None
+    check_snapshot("address_port80", art, update_snapshots)
+
+
+def test_address_scene_single_panel_shows_qr_alone(update_snapshots):
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ, logos=None)
+    c = AsciiCanvas(64, H)
+    r.draw_address(c, "192.168.1.9", 8080, _address_qr())
+    art = show("address_64", c)
+    assert not c.out_of_bounds
+    assert c.colors(0, 0, 63, H - 1) == {WHITE}
+    check_snapshot("address_64", art, update_snapshots)
