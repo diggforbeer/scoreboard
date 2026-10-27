@@ -464,7 +464,7 @@ needs the favourite. Team/player stat leaders (#169) are still a separate
 follow-up.
 
 `top_west`/`top_east` (#200) are two more opt-in `[[rotation]]` screens
-(also absent from `_default_rotation`): the top five teams of one
+(also absent from `_default_rotation`): every team of one
 conference by `conferenceSequence`, reusing `conference_standings()`/
 `_refresh_standings()` from the existing `standings` scene (#40) with no
 favourite-window trimming and, by the owner's choice, no `games_played`
@@ -473,7 +473,25 @@ Layout (`Renderer.draw_conference_leaders`) reuses `_draw_standings_rows`
 with a `"WEST"`/`"EAST"` label drawn in the logo's slot instead of the
 favourite's crest, so the conference is named without costing one of the
 five rows that fit; the favourite is still highlighted if it appears in
-the list. **Independently built alongside `leaders` (#201) below, and
+the list. The table scrolls (#280, by the owner's call: just the chosen
+conference, no parking on the favourite): `_split_slot` ->
+`_scroll_conference` turns the offset into the slot's dwell into
+`Scene.scroll_px` via `Renderer.standings_scroll_px`, a pure function --
+rest `SCROLL_HOLD_SECONDS` (2s) at the top, scroll evenly, rest at the
+bottom, so a longer dwell scrolls slower. Never faster than
+`SCROLL_MAX_PX_PER_SECOND` (5): the entry's `seconds` is a *minimum*
+here, and `_slot_seconds` stretches the slot (~17s for 16 teams) when
+that is too short to scroll at a readable pace. `Scene.scrolling` holds the
+fast animation loop (and defers live-view snapshots) only while moving.
+Rows partly off the panel are still drawn and clipped by the driver, so
+a scrolled frame records out-of-bounds pixels below the panel by design.
+`division` (#296) is the same table for the favourite's own division
+(`division_standings()`, ranked by `divisionSequence`, name in the label
+block): opt-in, gated on the favourite's `games_played > 0` like
+`standings`, and no playoff line yet -- the owner deferred any line until
+later in the season, together with a separate wild-card screen.
+`SCROLLING_KINDS` lists the scene kinds sharing the scroll.
+**Independently built alongside `leaders` (#201) below, and
 both features happened to reuse the exact same Scene kind and method name
 (`"leaders"` / `_leaders_scene`)** -- merging the two PRs together is what
 surfaced it: Python let the second definition silently shadow the first

@@ -75,6 +75,11 @@ _LEADERS = TeamLeaders(
 )
 
 
+#: Long enough for the hold at each end plus an unhurried scroll.
+DEMO_SCROLL_SECONDS = 17.0
+DEMO_DIVISION_SECONDS = 8.0
+
+
 class DemoStep(NamedTuple):
     """One frame of the demo: what to draw, and whether to draw it with logos."""
 
@@ -85,6 +90,8 @@ class DemoStep(NamedTuple):
     holiday: str | None = None
     #: Pop the newest shootout attempt in as the step starts (#259).
     animate_shootout: bool = False
+    #: Scroll the scene's table over this many seconds (``conference_leaders``).
+    scroll_seconds: float = 0.0
 
 
 def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
@@ -166,7 +173,14 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         DemoStep(Scene("scores", games=(live, intermission, final, shootout))),
         DemoStep(Scene("standings", standings=_standings(favourite))),
         DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
-        DemoStep(Scene("conference_leaders", standings=_standings("")[:5])),
+        DemoStep(
+            Scene("conference_leaders", standings=tuple(_conference_table(favourite))),
+            scroll_seconds=DEMO_SCROLL_SECONDS,
+        ),
+        DemoStep(
+            Scene("division", standings=tuple(_conference_table(favourite)[:8])),
+            scroll_seconds=DEMO_DIVISION_SECONDS,
+        ),
         DemoStep(Scene("leaders", leaders=_LEADERS)),
         DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
         DemoStep(Scene("clock")),
@@ -257,6 +271,13 @@ def _standings(favourite: str) -> tuple[StandingsRow, ...]:
     configured team gets a window centred on itself; with no favourite at
     all, the top of the table stands in.
     """
+    ranked = _conference_table(favourite)
+    window = standings_window(ranked, favourite) if favourite else ranked[:5]
+    return tuple(window)
+
+
+def _conference_table(favourite: str) -> list[StandingsRow]:
+    """All sixteen rows of the synthetic West, ranked."""
     teams = list(_CONFERENCE)
     if favourite and favourite not in teams:
         teams[5] = favourite
@@ -277,6 +298,4 @@ def _standings(favourite: str) -> tuple[StandingsRow, ...]:
         )
         for rank, abbrev in enumerate(teams, start=1)
     ]
-    ranked = conference_standings(rows, "W")
-    window = standings_window(ranked, favourite) if favourite else ranked[:5]
-    return tuple(window)
+    return conference_standings(rows, "W")
