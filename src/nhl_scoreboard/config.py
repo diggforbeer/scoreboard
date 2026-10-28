@@ -291,8 +291,8 @@ class ScoreboardConfig:
 #: "countdown_preview" auto-switches between countdown/preview based on
 #: countdown_hours, same as always -- which one shows isn't a user choice,
 #: so it isn't split into two separately configurable screens (#150).
-#: "matchup" (#157), "top_west"/"top_east" (#200), "division" (#296), "leaders" (#201) and
-#: "holiday" (#243, the active holiday's own screen) and "scores" (#269,
+#: "matchup" (#157), "top_west"/"top_east" (#200), "division" (#296), "wildcard" (#298),
+#: "leaders" (#201) and "holiday" (#243, the active holiday's own screen) and "scores" (#269,
 #: today's games several to a frame) and "address" (#293, how to reach the admin
 #: page) are opt-in only: never part of the
 #: derived default list.
@@ -304,6 +304,7 @@ VALID_ROTATION_SCREENS = (
     "top_west",
     "top_east",
     "division",
+    "wildcard",
     "leaders",
     "holiday",
     "scores",

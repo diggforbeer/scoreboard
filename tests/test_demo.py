@@ -24,6 +24,7 @@ EVERY_KIND = {
     "matchup_meetings",
     "conference_leaders",
     "division",
+    "wildcard",
     "leaders",
     "scores",
     "christmas_tree",
@@ -144,7 +145,9 @@ def test_every_step_renders_on_panel(width):
         elif scene.kind == "conference_leaders":
             r.draw_conference_leaders(c, scene.standings, "NSH")
         elif scene.kind == "division":
-            r.draw_division(c, scene.standings, "NSH")
+            r.draw_division(c, scene.standings, "NSH", cut=scene.playoff_cut)
+        elif scene.kind == "wildcard":
+            r.draw_wildcard(c, scene.standings, "NSH", cut=scene.playoff_cut)
         elif scene.kind == "leaders":
             r.draw_leaders(c, scene.leaders, "NSH")
         elif scene.kind == "scores":
@@ -162,7 +165,7 @@ def test_every_step_renders_on_panel(width):
         off = [
             p
             for p in c.out_of_bounds
-            if scene.kind not in ("conference_leaders", "division") or p[1] < 32
+            if scene.kind not in ("conference_leaders", "division", "wildcard") or p[1] < 32
         ]
         assert off == [], f"{scene.kind} drew off-panel"
         assert c.lit(), f"{scene.kind} drew nothing"

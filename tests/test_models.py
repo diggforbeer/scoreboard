@@ -634,3 +634,55 @@ def test_no_third_intermission_when_the_game_is_decided():
     assert not _end_of_period(3, 3, 2).in_intermission
     assert _end_of_period(3, 2, 2).in_intermission  # tied: OT follows
     assert _end_of_period(2, 3, 2).in_intermission  # earlier periods unaffected
+
+
+def _seq_row(abbrev: str, division_sequence: int, wildcard_sequence: int = 0, conf: str = "W"):
+    return StandingsRow(
+        abbrev=abbrev,
+        conference=conf,
+        division="C",
+        division_sequence=division_sequence,
+        wildcard_sequence=wildcard_sequence,
+        conference_sequence=1,
+        clinch_indicator="",
+        points=0,
+        games_played=1,
+        wins=0,
+        losses=0,
+        ot_losses=0,
+    )
+
+
+def test_wildcard_standings_ranks_teams_outside_the_division_top_three():
+    from nhl_scoreboard.nhl.models import wildcard_standings
+
+    rows = [
+        _seq_row("A", 1),
+        _seq_row("C", 4, 2),
+        _seq_row("B", 4, 1),
+        _seq_row("D", 5, 3),
+        _seq_row("E", 4, 1, conf="E"),
+    ]
+    assert [r.abbrev for r in wildcard_standings(rows, "w")] == ["B", "C", "D"]
+
+
+def test_playoff_cut_is_the_count_of_leading_teams_in():
+    from nhl_scoreboard.nhl.models import playoff_cut
+
+    rows = [_seq_row("A", 1), _seq_row("B", 2), _seq_row("C", 3), _seq_row("D", 4)]
+    assert playoff_cut(rows) == 3
+
+
+@pytest.mark.parametrize(
+    "sequences",
+    [
+        [1, 2, 3],  # everyone in: nothing to draw
+        [4, 5, 6],  # everyone out
+        [1, 4, 2],  # in-rows aren't a clean prefix: a line would mislead
+    ],
+)
+def test_playoff_cut_is_none_without_a_clean_line(sequences):
+    from nhl_scoreboard.nhl.models import playoff_cut
+
+    rows = [_seq_row(f"T{i}", s) for i, s in enumerate(sequences)]
+    assert playoff_cut(rows) is None
