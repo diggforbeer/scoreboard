@@ -39,6 +39,8 @@ FINAL = (150, 150, 150)
 PREGAME = (90, 180, 255)
 ACCENT = (255, 210, 0)
 SUBDUED = (110, 110, 110)
+#: The playoff line (#298): visible, but quieter than any text beside it.
+PLAYOFF_LINE = (150, 40, 40)
 #: A past meeting lost (#168); a win reuses LIVE's green.
 LOSS = (235, 50, 50)
 #: The GOAL screen's two coloured lines (#265): GOAL, then the scoring team.
@@ -814,7 +816,13 @@ class Renderer:
     _STANDINGS_GP_RIGHT_PAD = 20
     _STANDINGS_POINTS_RIGHT_PAD = 1
 
-    def draw_standings(self, canvas: Any, rows: Sequence[StandingsRow], favourite: str) -> None:
+    def draw_standings(
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        cut: int | None = None,
+    ) -> None:
         """The favourite's conference neighbourhood: logo, rank, abbrev, record, GP, points.
 
         The favourite's own logo anchors the left edge -- full panel height,
@@ -832,7 +840,7 @@ class Renderer:
             left = logo.width
         else:
             left = 0
-        self._draw_standings_rows(canvas, rows, favourite, left)
+        self._draw_standings_rows(canvas, rows, favourite, left, cut=cut)
 
     #: Below this, the fixed rank/abbrev/record/GP/points column offsets
     #: _draw_standings_rows uses have nowhere to put a 32px label column
@@ -877,7 +885,12 @@ class Renderer:
         return round(progress * overflow)
 
     def draw_conference_leaders(
-        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, scroll: int = 0
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        scroll: int = 0,
+        cut: int | None = None,
     ) -> None:
         """One whole conference (#200): "WEST"/"EAST" label in the logo's slot, then the rows.
 
@@ -893,19 +906,40 @@ class Renderer:
         """
         conference = rows[0].conference if rows else ""
         label = {"W": "WEST", "E": "EAST"}.get(conference, conference)
-        self._draw_labelled_table(canvas, rows, favourite, scroll, label)
+        self._draw_labelled_table(canvas, rows, favourite, scroll, label, cut=cut)
 
     #: Short enough for the 32px label block at the 5x7 face.
     _DIVISION_LABELS: ClassVar[dict[str, str]] = {"A": "ATL", "M": "METRO", "C": "CENT", "P": "PAC"}
 
     def draw_division(
-        self, canvas: Any, rows: Sequence[StandingsRow], favourite: str, scroll: int = 0
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        scroll: int = 0,
+        cut: int | None = None,
     ) -> None:
         """The favourite's division (#296): same table and scroll as the conference
         screens, ranked within the division, with its name in the label block."""
         division = rows[0].division if rows else ""
         label = self._DIVISION_LABELS.get(division, division)
-        self._draw_labelled_table(canvas, rows, favourite, scroll, label, by_division=True)
+        self._draw_labelled_table(
+            canvas, rows, favourite, scroll, label, rank="division_sequence", cut=cut
+        )
+
+    def draw_wildcard(
+        self,
+        canvas: Any,
+        rows: Sequence[StandingsRow],
+        favourite: str,
+        scroll: int = 0,
+        cut: int | None = None,
+    ) -> None:
+        """The wild-card race (#298): the conference's teams outside the top 3 of a
+        division, ranked by wild-card position, with the line after the last in."""
+        self._draw_labelled_table(
+            canvas, rows, favourite, scroll, "WILD", rank="wildcard_sequence", cut=cut
+        )
 
     def _draw_labelled_table(
         self,
@@ -915,7 +949,8 @@ class Renderer:
         scroll: int,
         label: str,
         *,
-        by_division: bool = False,
+        rank: str = "conference_sequence",
+        cut: int | None = None,
     ) -> None:
         canvas.Clear()
         left = 32 if self.width >= self._CONFERENCE_LABEL_MIN_WIDTH else 0
@@ -923,7 +958,7 @@ class Renderer:
             self.text_center(
                 canvas, self.fonts.small, left // 2, self.height // 2 + 3, WHITE, label
             )
-        self._draw_standings_rows(canvas, rows, favourite, left, scroll, by_division=by_division)
+        self._draw_standings_rows(canvas, rows, favourite, left, scroll, rank=rank, cut=cut)
 
     def _draw_standings_rows(
         self,
@@ -933,7 +968,8 @@ class Renderer:
         left: int,
         scroll: int = 0,
         *,
-        by_division: bool = False,
+        rank: str = "conference_sequence",
+        cut: int | None = None,
     ) -> None:
         font = self.fonts.tiny
         row_height = 6
@@ -948,12 +984,18 @@ class Renderer:
             if y < 0 or y - row_height >= self.height:
                 continue  # scrolled clear of the panel
             color = ACCENT if row.abbrev == favourite else WHITE
-            rank = row.division_sequence if by_division else row.conference_sequence
-            self.text(canvas, font, rank_x, y, color, f"{rank:>2}")
+            self.text(canvas, font, rank_x, y, color, f"{getattr(row, rank):>2}")
             self.text(canvas, font, abbrev_x, y, team_color(row.abbrev), row.abbrev)
             self.text(canvas, font, record_x, y, color, row.record_label())
             self.text_right(canvas, font, gp_right, y, color, str(row.games_played))
             self.text_right(canvas, font, points_right, y, color, str(row.points))
+
+        if cut is not None and 0 < cut < len(rows):
+            # The spacer pixel row under the last team in: no row shifts for it.
+            line_y = cut * row_height - 1 - scroll
+            if 0 <= line_y < self.height:
+                for x in range(left, self.width):
+                    canvas.SetPixel(x, line_y, *PLAYOFF_LINE)
 
     def draw_leaders(self, canvas: Any, leaders: TeamLeaders, favourite: str) -> None:
         """The favourite's own top players (#201): goals, points, then top two goalies.

@@ -1743,6 +1743,59 @@ def test_division_screen_waits_until_the_favourite_has_played(day):
     assert app.select_scene().kind != "division"
 
 
+def wildcard_rows():
+    """Three Central leaders, then a wild-card race of three: VGK and DAL in, COL out."""
+    leaders = [
+        dataclasses.replace(standings_row(a, i, 60 - i), division_sequence=i)
+        for i, a in enumerate(["WPG", "STL", "MIN"], 1)
+    ]
+    race = [
+        dataclasses.replace(
+            standings_row(a, i + 3, 50 - i), division_sequence=4, wildcard_sequence=i
+        )
+        for i, a in enumerate(["VGK", FAV, "COL"], 1)
+    ]
+    return leaders + race
+
+
+def test_wildcard_screen_lists_the_race_with_the_line_after_second(day):
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    app.settings.rotation = [RotationEntry("wildcard", 8)]
+    client.standings_rows = wildcard_rows()
+    app.refresh()
+    app.monotonic = lambda: 0.0
+    shown = app.select_scene()
+    assert shown.kind == "wildcard"
+    assert [r.abbrev for r in shown.standings] == ["VGK", FAV, "COL"]
+    assert shown.playoff_cut == 2
+
+
+def test_wildcard_screen_waits_until_the_favourite_has_played(day):
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    app.settings.rotation = [RotationEntry("wildcard", 8)]
+    client.standings_rows = [dataclasses.replace(r, games_played=0) for r in wildcard_rows()]
+    app.refresh()
+    assert app.select_scene().kind != "wildcard"
+
+
+def test_standings_screens_carry_the_real_playoff_cut(day):
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    app.settings.rotation = [RotationEntry("top_west", 8)]
+    client.standings_rows = wildcard_rows()
+    app.refresh()
+    app.monotonic = lambda: 0.0
+    shown = app.select_scene()
+    assert shown.kind == "conference_leaders"
+    # WPG, STL, MIN by division, then the two wild cards: 5 in, COL first out.
+    assert shown.playoff_cut == 5
+
+
 def test_top_west_scrolls_the_whole_conference_over_its_dwell(day):
     """top_west/top_east (#200) list every team and scroll them down the slot."""
     from nhl_scoreboard.config import RotationEntry

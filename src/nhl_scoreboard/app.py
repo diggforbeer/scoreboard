@@ -53,6 +53,8 @@ from .light_sensor import LightSensor
 from .network import default_route_ip
 from .nhl.api import NHLApiError, NHLClient
 from .nhl.models import (
+    DIVISION_SPOTS,
+    WILDCARD_SPOTS,
     Game,
     GoalEvent,
     MeetingResult,
@@ -65,8 +67,10 @@ from .nhl.models import (
     TeamLeaders,
     conference_standings,
     division_standings,
+    playoff_cut,
     standings_window,
     team_leaders,
+    wildcard_standings,
 )
 from .setup_server import SetupServer
 from .updater import installed_version
@@ -108,7 +112,7 @@ BRIGHTNESS_SMOOTHING = 0.3
 DEMO_SCENE_SECONDS = 4.0
 
 #: Scene kinds whose table scrolls over the slot (#280, #296).
-SCROLLING_KINDS = ("conference_leaders", "division")
+SCROLLING_KINDS = ("conference_leaders", "division", "wildcard")
 #: How long the admin page's address stays up after the board first gets a
 #: default route -- on boot (Ethernet or saved Wi-Fi) or after a join (#293).
 ADDRESS_SHOW_SECONDS = 60.0
@@ -196,8 +200,8 @@ class Scene:
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
     ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
-    ``conference_leaders``, ``division``, ``matchup``, ``matchup_meetings``, ``leaders``,
-    ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
+    ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
+    ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
     """
 
@@ -238,6 +242,8 @@ class Scene:
     #: and the SSID that outcome is about.
     wifi_join_status: str | None = None
     wifi_join_ssid: str | None = None
+    #: Rows above the playoff line on a standings table (#298), or None for no line.
+    playoff_cut: int | None = None
     #: Set only for ``address`` (#293) -- where the admin page is reachable.
     address_ip: str | None = None
     address_port: int = 80
@@ -1402,7 +1408,7 @@ class ScoreboardApp:
         window = standings_window(conference_standings(rows, favourite_row.conference), favourite)
         if not window:
             return None
-        return Scene("standings", standings=tuple(window))
+        return Scene("standings", standings=tuple(window), playoff_cut=playoff_cut(window))
 
     def _conference_leaders_scene(
         self, conference: str, *, allow_fetch: bool = True
@@ -1420,7 +1426,7 @@ class ScoreboardApp:
         table = conference_standings(rows, conference)
         if not table:
             return None
-        return Scene("conference_leaders", standings=tuple(table))
+        return Scene("conference_leaders", standings=tuple(table), playoff_cut=playoff_cut(table))
 
     def _division_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's whole division (#296), or None to skip the slot.
@@ -1440,7 +1446,28 @@ class ScoreboardApp:
         table = division_standings(rows, favourite_row.division)
         if not table:
             return None
-        return Scene("division", standings=tuple(table))
+        cut = DIVISION_SPOTS if len(table) > DIVISION_SPOTS else None
+        return Scene("division", standings=tuple(table), playoff_cut=cut)
+
+    def _wildcard_scene(self, *, allow_fetch: bool = True) -> Scene | None:
+        """The favourite's conference wild-card race (#298), or None to skip the slot.
+
+        Gated on the favourite having played, like ``standings``/``division``.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return None
+        rows = self._refresh_standings(allow_fetch=allow_fetch)
+        if not rows:
+            return None
+        favourite_row = next((r for r in rows if r.abbrev == favourite), None)
+        if favourite_row is None or favourite_row.games_played <= 0:
+            return None
+        table = wildcard_standings(rows, favourite_row.conference)
+        if not table:
+            return None
+        cut = WILDCARD_SPOTS if len(table) > WILDCARD_SPOTS else None
+        return Scene("wildcard", standings=tuple(table), playoff_cut=cut)
 
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
@@ -1617,6 +1644,8 @@ class ScoreboardApp:
             return self._conference_leaders_scene(conference, allow_fetch=allow_fetch)
         if screen == "division":
             return self._division_scene(allow_fetch=allow_fetch)
+        if screen == "wildcard":
+            return self._wildcard_scene(allow_fetch=allow_fetch)
         if screen == "matchup":
             # Resolved here, not up front like standings, so a board without
             # "matchup" in its rotation never calls right-rail at all.
@@ -2460,11 +2489,19 @@ class ScoreboardApp:
         elif scene.kind == "preview":
             r.draw_preview(self.canvas, scene.game, self.clock())
         elif scene.kind == "conference_leaders":
-            r.draw_conference_leaders(self.canvas, scene.standings, favourite, scene.scroll_px)
+            r.draw_conference_leaders(
+                self.canvas, scene.standings, favourite, scene.scroll_px, scene.playoff_cut
+            )
         elif scene.kind == "division":
-            r.draw_division(self.canvas, scene.standings, favourite, scene.scroll_px)
+            r.draw_division(
+                self.canvas, scene.standings, favourite, scene.scroll_px, scene.playoff_cut
+            )
+        elif scene.kind == "wildcard":
+            r.draw_wildcard(
+                self.canvas, scene.standings, favourite, scene.scroll_px, scene.playoff_cut
+            )
         elif scene.kind == "standings":
-            r.draw_standings(self.canvas, scene.standings, favourite)
+            r.draw_standings(self.canvas, scene.standings, favourite, scene.playoff_cut)
         elif scene.kind == "matchup":
             r.draw_matchup(self.canvas, scene.game, scene.season_series)
         elif scene.kind == "matchup_meetings":

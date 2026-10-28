@@ -33,6 +33,7 @@ from nhl_scoreboard.display.renderer import (
     INTERMISSION,
     LIVE,
     LOSS,
+    PLAYOFF_LINE,
     PREGAME,
     SUBDUED,
     WHITE,
@@ -1140,6 +1141,63 @@ def test_division_ranks_within_the_division_and_names_it(update_snapshots):
     r.draw_division(bottom, rows, "NSH", overflow)
     assert team_color("CHI") in bottom.colors(32, H - STANDINGS_ROW_HEIGHT - 2, W - 1, H - 1)
     check_snapshot("division_central", art, update_snapshots)
+
+
+def _pixels_in_row(c: AsciiCanvas, y: int, x0: int = 32) -> set:
+    return set(c.lit(x0, y, W - 1, y).values())
+
+
+def test_playoff_line_sits_in_the_spacer_row_after_the_cut(update_snapshots):
+    names = ["WPG", "DAL", "VGK", "LAK", "NSH"]
+    rows = [standings_row(a, i, 60 - i) for i, a in enumerate(names, 1)]
+    plain, lined = canvas(), canvas()
+    r = make_renderer()
+    r.draw_conference_leaders(plain, rows, "NSH")
+    r.draw_conference_leaders(lined, rows, "NSH", cut=2)
+    art = show("west, playoff line after 2nd", lined)
+    line_y = 2 * STANDINGS_ROW_HEIGHT - 1
+    assert not lined.out_of_bounds
+    assert _pixels_in_row(lined, line_y) == {PLAYOFF_LINE}
+    assert len(lined.lit(32, line_y, W - 1, line_y)) == W - 32
+    # Only the spacer row differs: no text moved to make room for the line.
+    assert {p for p in lined.pixels if lined.pixels[p] != plain.pixels.get(p)} == {
+        (x, line_y) for x in range(32, W)
+    }
+    check_snapshot("playoff_line_west", art, update_snapshots)
+
+
+def test_playoff_line_scrolls_with_the_table_and_is_absent_without_a_cut():
+    rows = [standings_row(a, i, 90 - i) for i, a in enumerate(WEST16, 1)]
+    r = make_renderer()
+    c = canvas()
+    r.draw_conference_leaders(c, rows, "NSH", 10, 4)
+    assert _pixels_in_row(c, 4 * STANDINGS_ROW_HEIGHT - 1 - 10) == {PLAYOFF_LINE}
+    off = canvas()
+    r.draw_conference_leaders(off, rows, "NSH", 40, 2)  # line scrolled off the top
+    assert PLAYOFF_LINE not in set(off.pixels.values())
+    none = canvas()
+    r.draw_conference_leaders(none, rows, "NSH")
+    assert PLAYOFF_LINE not in set(none.pixels.values())
+
+
+def test_wildcard_ranks_by_wildcard_position_and_names_itself(update_snapshots):
+    names = ["MIN", "UTA", "STL", "CHI", "SEA"]
+    rows = [
+        dataclasses.replace(
+            standings_row(a, i + 3, 70 - i), division_sequence=4, wildcard_sequence=i
+        )
+        for i, a in enumerate(names, 1)
+    ]
+    c = canvas()
+    make_renderer().draw_wildcard(c, rows, "NSH", cut=2)
+    art = show("wildcard, west", c)
+    assert not c.out_of_bounds
+    assert c.lit(0, 0, 31, H - 1), "WILD label missing"
+    for i, row in enumerate(rows):
+        top = i * STANDINGS_ROW_HEIGHT
+        assert team_color(row.abbrev) in c.colors(32, top, W - 1, top + STANDINGS_ROW_HEIGHT - 1)
+    assert _pixels_in_row(c, 2 * STANDINGS_ROW_HEIGHT - 1) == {PLAYOFF_LINE}
+    check_snapshot("wildcard_west", art, update_snapshots)
 
 
 def test_standings_logo_layout_favourite_centred(synthetic_logos, update_snapshots):
