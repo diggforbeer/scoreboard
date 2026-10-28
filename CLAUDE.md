@@ -493,8 +493,12 @@ a scrolled frame records out-of-bounds pixels below the panel by design.
 `division` (#296) is the same table for the favourite's own division
 (`division_standings()`, ranked by `divisionSequence`, name in the label
 block): opt-in, gated on the favourite's `games_played > 0` like
-`standings`, and no playoff line yet -- the owner deferred any line until
-later in the season, together with a separate wild-card screen.
+`standings`. The playoff line (#298: a rule at the real cut on `standings`,
+`top_*` and `division`, and after 2nd on the `wildcard` screen) is held back
+by the owner's call until `PLAYOFF_LINE_MIN_GAMES` (20, about US Thanksgiving)
+games are played by some team in the table (`playoff_line_ready`, applied by
+`ScoreboardApp._line`): early on the order is noise and the line misled. The
+screens themselves show from the first game.
 `SCROLLING_KINDS` lists the scene kinds sharing the scroll.
 **Independently built alongside `leaders` (#201) below, and
 both features happened to reuse the exact same Scene kind and method name

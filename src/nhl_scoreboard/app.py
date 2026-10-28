@@ -68,6 +68,7 @@ from .nhl.models import (
     conference_standings,
     division_standings,
     playoff_cut,
+    playoff_line_ready,
     standings_window,
     team_leaders,
     wildcard_standings,
@@ -1435,7 +1436,11 @@ class ScoreboardApp:
         window = standings_window(conference_standings(rows, favourite_row.conference), favourite)
         if not window:
             return None
-        return Scene("standings", standings=tuple(window), playoff_cut=playoff_cut(window))
+        return Scene(
+            "standings",
+            standings=tuple(window),
+            playoff_cut=self._line(window, playoff_cut(window)),
+        )
 
     def _conference_leaders_scene(
         self, conference: str, *, allow_fetch: bool = True
@@ -1453,7 +1458,16 @@ class ScoreboardApp:
         table = conference_standings(rows, conference)
         if not table:
             return None
-        return Scene("conference_leaders", standings=tuple(table), playoff_cut=playoff_cut(table))
+        return Scene(
+            "conference_leaders",
+            standings=tuple(table),
+            playoff_cut=self._line(table, playoff_cut(table)),
+        )
+
+    @staticmethod
+    def _line(table: list[StandingsRow], cut: int | None) -> int | None:
+        """``cut`` once the season is far enough along for a playoff line (#298)."""
+        return cut if playoff_line_ready(table) else None
 
     def _division_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's whole division (#296), or None to skip the slot.
@@ -1474,7 +1488,7 @@ class ScoreboardApp:
         if not table:
             return None
         cut = DIVISION_SPOTS if len(table) > DIVISION_SPOTS else None
-        return Scene("division", standings=tuple(table), playoff_cut=cut)
+        return Scene("division", standings=tuple(table), playoff_cut=self._line(table, cut))
 
     def _wildcard_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's conference wild-card race (#298), or None to skip the slot.
@@ -1494,7 +1508,7 @@ class ScoreboardApp:
         if not table:
             return None
         cut = WILDCARD_SPOTS if len(table) > WILDCARD_SPOTS else None
-        return Scene("wildcard", standings=tuple(table), playoff_cut=cut)
+        return Scene("wildcard", standings=tuple(table), playoff_cut=self._line(table, cut))
 
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True
