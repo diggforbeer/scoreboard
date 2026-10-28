@@ -10,6 +10,7 @@ for that.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import http.client
 import json
@@ -1730,6 +1731,52 @@ def test_delete_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team
 
     received = asyncio.run(_serve_and_run(scenario))
     message = json.loads(received)
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
+@pytest.mark.parametrize(
+    ("team", "data", "filename"),
+    [
+        ("NSH", _wav_b64(), "NSH.wav"),
+        ("NSH", _mp3_b64(), "NSH.mp3"),
+        ("default", _wav_b64(), "default-horn.wav"),
+        ("wah_wah", _wav_b64(), "wah-wah.wav"),
+    ],
+)
+def test_download_horn_round_trips_the_upload_byte_for_byte(
+    app_dir, config_path, upload_dir, team, data, filename
+):
+    _upload(team, data)
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": team}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "horn_download"
+    assert message["team"] == team and message["filename"] == filename
+    assert base64.b64decode(message["data"]) == base64.b64decode(data)
+
+
+def test_download_horn_without_an_upload_is_an_error(app_dir, config_path, upload_dir):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": "NSH"}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
+@pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
+def test_download_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": team}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
     assert message["type"] == "error" and message["section"] == "horn_action"
 
 

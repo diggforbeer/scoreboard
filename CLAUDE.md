@@ -889,6 +889,12 @@ exit; with `show_logos = false` every step is just text.
   across reflash/update, unlike `/usr/share`), which `default_directories()`
   searches before the image-baked directory. Not verified on hardware (#4);
   deleting an upload back to the shipped horn is not built.
+  Each custom-horn row also has Download (#314): `download_horn {team}` ->
+  `horn_download {team, filename, data}` (base64), the upload path in
+  reverse, so `_horn_stem` validates and no HTTP route is added. Errors
+  come back as `horn_action`. The special slots download as
+  `default-horn.wav` / `wah-wah.wav`. Uploaded files only; offering the
+  shipped horns is not built.
 
 - **A missing horn player is explained, not just logged.** `mpg123` only
   joined the image in #208 and the in-app updater can't install apt
