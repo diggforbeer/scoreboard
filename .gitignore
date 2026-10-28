@@ -39,3 +39,4 @@ assets/logos/[0-9]*/
 # Never committed, unlike _default.wav (synthesized, no such issue).
 assets/horns/*.wav
 !assets/horns/_default.wav
+!assets/horns/_wah_wah.wav

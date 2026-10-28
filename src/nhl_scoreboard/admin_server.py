@@ -282,7 +282,13 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from . import updater
-from .audio import DEFAULT_STEM, HORN_EXTENSIONS, GoalHornPlayer, upload_directory
+from .audio import (
+    DEFAULT_STEM,
+    HORN_EXTENSIONS,
+    WAH_WAH_STEM,
+    GoalHornPlayer,
+    upload_directory,
+)
 from .config import (
     FLYBY_FREQUENCIES,
     PANEL_HARDWARE_MAPPING_CHOICES,
@@ -393,6 +399,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
     "device": _FieldSpec("str"),
     "horn_dir": _FieldSpec("str"),
     "volume": _FieldSpec("int"),
+    "wah_wah": _FieldSpec("bool"),
 }
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
@@ -882,6 +889,7 @@ def _current_horn(settings: Settings) -> GoalHornPlayer:
         horn_dir=settings.audio.horn_dir,
         enabled=settings.audio.enabled,
         volume=settings.audio.volume,
+        wah_wah=settings.audio.wah_wah,
     )
 
 
@@ -952,13 +960,16 @@ def _looks_like_mp3(raw: bytes) -> bool:
 
 def _horn_stem(team: object) -> str:
     """The on-disk stem for ``team`` -- the shipped default slot
-    (``"default"``) or a real TEAM_COLORS abbreviation. Raises ValueError
+    (``"default"``), the opponent-goal sting (``"wah_wah"``, #307) or a
+    real TEAM_COLORS abbreviation. Raises ValueError
     with a message fit to show; the one place "is this team key legal" is
     decided, shared by upload/list/delete/play (#193, #208, and #211's
     follow-up below) so there's exactly one definition of a valid key.
     """
     if team == "default":
         return DEFAULT_STEM
+    if team == "wah_wah":
+        return WAH_WAH_STEM
     if isinstance(team, str) and team in TEAM_COLORS:
         return team
     raise ValueError(f"unknown team {team!r}")
@@ -1025,7 +1036,11 @@ def _list_uploaded_horns() -> list[dict[str, str]]:
     if not directory.is_dir():
         return []
     horns: list[dict[str, str]] = []
-    for team, stem in [("default", DEFAULT_STEM), *((t, t) for t in TEAM_COLORS)]:
+    for team, stem in [
+        ("default", DEFAULT_STEM),
+        ("wah_wah", WAH_WAH_STEM),
+        *((t, t) for t in TEAM_COLORS),
+    ]:
         for ext in HORN_EXTENSIONS:
             path = directory / f"{stem}{ext}"
             if path.is_file():
@@ -1089,6 +1104,12 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
     if not horn.enabled:
         return False, "Audio is disabled in the Audio section."
     horn.apply_volume()
+    if team == "wah_wah":
+        if horn.wah_wah_path() is None:
+            return False, "No wah-wah file found."
+        if horn.play_wah_wah(force=True):
+            return True, ""
+        return False, horn.last_error or "The player command failed to launch."
     if horn.path_for(team) is None:
         return False, "No horn file found for this team, and no default is available either."
     if horn.play(team):

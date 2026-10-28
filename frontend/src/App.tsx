@@ -119,6 +119,7 @@ interface AudioConfig {
   device: string
   horn_dir: string
   volume: number
+  wah_wah: boolean
 }
 
 // One row per horn actually sitting in the admin page's writable upload
@@ -1785,6 +1786,18 @@ function App() {
                   Goal horn enabled
                 </label>
               </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-wah-wah"
+                  checked={audio.wah_wah}
+                  onChange={(e) => audioSave.edit({ ...audio, wah_wah: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-wah-wah">
+                  Play a sad “wah wah” when the other team scores
+                </label>
+              </div>
               <div className="mb-3">
                 <label className="form-label" htmlFor="audio-device">
                   ALSA device (blank for default)
@@ -1872,7 +1885,11 @@ function App() {
                 >
                   <div>
                     <strong>
-                      {horn.team === 'default' ? 'Default horn' : `${teamName(horn.team)} (${horn.team})`}
+                      {horn.team === 'default'
+                        ? 'Default horn'
+                        : horn.team === 'wah_wah'
+                          ? 'Wah-wah (opponent scores)'
+                          : `${teamName(horn.team)} (${horn.team})`}
                     </strong>
                     <span className="text-body-secondary small ms-2">{horn.filename}</span>
                     {hornActionMessage?.team === horn.team && (
@@ -1922,6 +1939,7 @@ function App() {
                 onChange={(e) => setHornUploadTeam(e.target.value)}
               >
                 <option value="default">Default horn (all teams)</option>
+                <option value="wah_wah">Wah-wah (opponent scores)</option>
                 {NHL_TEAMS.map(([code, name]) => (
                   <option key={code} value={code}>
                     {name} ({code})

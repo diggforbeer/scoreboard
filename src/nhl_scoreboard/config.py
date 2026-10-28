@@ -379,6 +379,9 @@ class AudioConfig:
     #: (PanelConfig.max_brightness, NightModeConfig.dim_brightness's own
     #: upper end).
     volume: int = 100
+    #: Play a sad-trombone "wah wah" when the opponent scores in the
+    #: favourite's live game (#307). Off by default: not everyone wants it.
+    wah_wah: bool = False
 
     def __post_init__(self) -> None:
         self.volume = max(0, min(100, self.volume))
