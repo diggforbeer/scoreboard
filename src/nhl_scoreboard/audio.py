@@ -142,10 +142,11 @@ class GoalHornPlayer:
             return False
         return self._launch(path)
 
-    def play_wah_wah(self) -> bool:
-        """Launch the opponent-goal sting. Off unless ``wah_wah`` is on; never raises."""
+    def play_wah_wah(self, force: bool = False) -> bool:
+        """Launch the opponent-goal sting. Off unless ``wah_wah`` is on (``force``
+        skips that, for the admin page's Play button); never raises."""
         self.last_error = ""
-        if not (self.enabled and self.wah_wah):
+        if not (self.enabled and (self.wah_wah or force)):
             return False
         path = self.wah_wah_path()
         if path is None:

@@ -1885,7 +1885,11 @@ function App() {
                 >
                   <div>
                     <strong>
-                      {horn.team === 'default' ? 'Default horn' : `${teamName(horn.team)} (${horn.team})`}
+                      {horn.team === 'default'
+                        ? 'Default horn'
+                        : horn.team === 'wah_wah'
+                          ? 'Wah-wah (opponent scores)'
+                          : `${teamName(horn.team)} (${horn.team})`}
                     </strong>
                     <span className="text-body-secondary small ms-2">{horn.filename}</span>
                     {hornActionMessage?.team === horn.team && (
@@ -1935,6 +1939,7 @@ function App() {
                 onChange={(e) => setHornUploadTeam(e.target.value)}
               >
                 <option value="default">Default horn (all teams)</option>
+                <option value="wah_wah">Wah-wah (opponent scores)</option>
                 {NHL_TEAMS.map(([code, name]) => (
                   <option key={code} value={code}>
                     {name} ({code})

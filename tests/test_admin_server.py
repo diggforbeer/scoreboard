@@ -1359,6 +1359,40 @@ def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upl
     assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
 
 
+def test_upload_horn_wah_wah_overrides_the_shipped_sting(app_dir, config_path, upload_dir):
+    reply = _upload("wah_wah", _wav_b64())
+    assert reply == {"type": "horn_uploaded", "name": "_wah_wah.wav"}
+    from nhl_scoreboard.audio import GoalHornPlayer
+
+    assert GoalHornPlayer.default().wah_wah_path() == upload_dir / "_wah_wah.wav"
+    # Listed beside the horns, and it never shadows a goal horn.
+    assert {"team": "wah_wah", "filename": "_wah_wah.wav"} in admin_server._list_uploaded_horns()
+    assert GoalHornPlayer.default().path_for("TOR") != upload_dir / "_wah_wah.wav"
+
+
+def test_play_horn_wah_wah_plays_even_with_the_setting_off(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "_wah_wah.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "wah_wah"}))
+        return json.loads(await client.recv())
+
+    reply = asyncio.run(_serve_and_run(scenario))
+    assert reply["played"] is True
+    assert len(calls) == 1 and calls[0][-1].endswith("_wah_wah.wav")
+
+
 @pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
 def test_upload_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team):
     reply = _upload(team, _wav_b64())
