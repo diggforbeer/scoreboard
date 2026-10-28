@@ -165,6 +165,11 @@ device = ""
 # copyrighted -- so this is a slot to drop your own recording into.
 horn_dir = ""
 
+# A short ding when another team you follow (also_follow) scores, like a
+# score alert on your phone, so you know to look up. Your favourite's goals
+# still get the horn. Drop a _chime.wav in the horn directory to use your own.
+score_chime = true
+
 [status]
 # A small web page showing what the board currently thinks is going on
 # (current scene, last successful poll, last error, favourite team) plus

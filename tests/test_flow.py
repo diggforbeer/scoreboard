@@ -96,6 +96,10 @@ class RecordingHorn:
         self.calls.append(abbrev)
         return True
 
+    def play_chime(self) -> bool:
+        self.calls.append("chime")
+        return True
+
 
 class FlowClient:
     def __init__(self) -> None:
@@ -1456,7 +1460,23 @@ def test_a_followed_teams_goal_interrupts_whichever_game_is_up_without_the_horn(
     tick(app, clock, seconds=1)
     assert scene(app) == ("goal", 9)
     assert app.select_scene().goal_team == "SEA", "the screen says who scored (#265)"
-    assert app.horn.calls == [], "the horn is the favourite's alone"
+    assert app.horn.calls == ["chime"], "the horn is the favourite's alone; others get the ding"
+
+
+def test_the_chime_can_be_switched_off_and_respects_the_mute(followed):
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    app.settings.audio.score_chime = False
+    client.today[0] = _live(client.today[0], away=1)  # SEA scores at CGY
+    tick(app, clock, seconds=1)
+    assert app.horn.calls == []
+
+    app.settings.audio.score_chime = True
+    app._horn_muted_until = app.monotonic() + 600
+    client.today[0] = _live(client.today[0], away=2)
+    tick(app, clock, seconds=1)
+    assert app.horn.calls == []
 
 
 def test_the_favourites_goal_still_sounds_the_horn_while_following_others(followed):
@@ -1509,7 +1529,7 @@ def test_two_followed_teams_meeting_each_fire_their_own_goals(day):
     client.today[0] = _live(client.today[0], away=1, home=1)  # CGY
     tick(app, clock, seconds=1)
     assert scene(app) == ("goal", 9)
-    assert app.horn.calls == []
+    assert app.horn.calls == ["chime", "chime"], "dinged, never the horn"
 
 
 def test_no_scorer_screen_for_a_followed_teams_goal_on_the_favourite(day):

@@ -20,6 +20,11 @@ log = logging.getLogger(__name__)
 DEFAULT_STEM = "_default"
 DEFAULT_NAME = f"{DEFAULT_STEM}.wav"
 
+#: The score-change ding for a followed team's goal that isn't the
+#: favourite's (#308). Its own stem, never falling back to the horn: a ding
+#: that silently became the siren would defeat the point of two sounds.
+CHIME_STEM = "_chime"
+
 #: Horn file extensions, in lookup order within one directory. WAV plays
 #: through aplay, MP3 through mpg123 (#208) -- aplay can't decode MP3.
 HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
@@ -116,6 +121,22 @@ class GoalHornPlayer:
         if path is None:
             log.debug("No horn for %s and no default available", abbrev)
             return False
+        return self._launch(path)
+
+    def play_chime(self) -> bool:
+        """Launch the score-change ding, if one is installed. Never raises."""
+        self.last_error = ""
+        if not self.enabled:
+            return False
+        for directory in self.directories:
+            for ext in HORN_EXTENSIONS:
+                candidate = directory / f"{CHIME_STEM}{ext}"
+                if candidate.is_file():
+                    return self._launch(candidate)
+        log.debug("No score chime available")
+        return False
+
+    def _launch(self, path: Path) -> bool:
         if path.suffix.lower() == ".mp3":
             cmd = ["mpg123", "-q"]
             if self.device:

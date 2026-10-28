@@ -379,6 +379,11 @@ class AudioConfig:
     #: (PanelConfig.max_brightness, NightModeConfig.dim_brightness's own
     #: upper end).
     volume: int = 100
+    #: A short ding when an ``also_follow`` team scores (#308), the audible
+    #: counterpart of the goal screen cutting in on another game. The
+    #: favourite's goals get the horn instead. Read fresh per goal, so
+    #: toggling it needs no player rebuild.
+    score_chime: bool = True
 
     def __post_init__(self) -> None:
         self.volume = max(0, min(100, self.volume))

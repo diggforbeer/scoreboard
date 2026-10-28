@@ -230,3 +230,29 @@ def test_team_mp3_beats_default_wav(tmp_path):
     touch(tmp_path / "NSH.mp3")
     touch(tmp_path / "_default.wav")
     assert GoalHornPlayer([tmp_path]).path_for("NSH") == tmp_path / "NSH.mp3"
+
+
+def test_chime_plays_its_own_file_and_never_the_horn(tmp_path):
+    touch(tmp_path / DEFAULT_NAME)
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], runner=runner)
+    assert player.play_chime() is False and runner.calls == []
+
+    touch(tmp_path / "_chime.wav")
+    assert player.play_chime() is True
+    assert runner.calls == [["aplay", "-q", str(tmp_path / "_chime.wav")]]
+
+
+def test_chime_respects_enabled(tmp_path):
+    touch(tmp_path / "_chime.wav")
+    runner = RecordingRunner()
+    assert GoalHornPlayer([tmp_path], enabled=False, runner=runner).play_chime() is False
+    assert runner.calls == []
+
+
+def test_default_chime_ships_and_is_a_valid_wav():
+    import wave
+
+    chime = Path(__file__).resolve().parents[1] / "assets" / "horns" / "_chime.wav"
+    with wave.open(str(chime)) as wav:
+        assert wav.getnframes() > 0

@@ -393,6 +393,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
     "device": _FieldSpec("str"),
     "horn_dir": _FieldSpec("str"),
     "volume": _FieldSpec("int"),
+    "score_chime": _FieldSpec("bool"),
 }
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.

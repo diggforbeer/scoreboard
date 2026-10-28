@@ -184,6 +184,7 @@ mmdebstrap:
       set -eu
       install -d -m 0755 "$1/usr/share/nhl-scoreboard/horns"
       install -m 0644 "$IGconf_sb_srcdir/assets/horns/_default.wav" \
+        "$IGconf_sb_srcdir/assets/horns/_chime.wav" \
         "$1/usr/share/nhl-scoreboard/horns/"
 
     # ---- HUB75 driver ------------------------------------------------

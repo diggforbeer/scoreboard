@@ -119,6 +119,7 @@ interface AudioConfig {
   device: string
   horn_dir: string
   volume: number
+  score_chime: boolean
 }
 
 // One row per horn actually sitting in the admin page's writable upload
@@ -1783,6 +1784,18 @@ function App() {
                 />
                 <label className="form-check-label" htmlFor="audio-enabled">
                   Goal horn enabled
+                </label>
+              </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-score-chime"
+                  checked={audio.score_chime}
+                  onChange={(e) => audioSave.edit({ ...audio, score_chime: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-score-chime">
+                  Ding when another followed team scores
                 </label>
               </div>
               <div className="mb-3">

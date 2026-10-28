@@ -866,6 +866,14 @@ exit; with `show_logos = false` every step is just text.
   step needed. Team-specific horns (`{ABBR}.wav`) are a user drop-in slot,
   same reasoning as logos not being redistributed -- but those, if a user
   supplies them, are never committed either.
+- **Score chime (#308).** A followed team's goal that isn't the favourite's
+  (`also_follow`, the red-zone goal screen cutting in on another game) plays
+  `GoalHornPlayer.play_chime()`, a short synthesized ding
+  (`assets/horns/_chime.wav`, `scripts/generate-score-chime.py`) instead of
+  silence. Its own `_chime` stem with no fallback to the horn; honours the
+  button mute and `audio.enabled`, plus `audio.score_chime` (default on,
+  admin Audio tab). Fires from `_on_goal`, so it follows the broadcast delay
+  like the goal screen. Not verified on hardware (#4).
 - **Horn uploads (#193)**: the admin page's Audio tab uploads a WAV for
   `default` (`_default.wav`) or one `TEAM_COLORS` abbreviation, over the
   existing WebSocket as base64 (`upload_horn`; `max_size` raised to fit the

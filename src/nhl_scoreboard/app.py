@@ -1108,7 +1108,7 @@ class ScoreboardApp:
                     self._on_goal(game, team)
 
     def _on_goal(self, game: Game, team: str | None = None) -> None:
-        """Show the goal scene; sound the horn only for the favourite's own goals (#260)."""
+        """Show the goal scene; the horn is the favourite's alone (#260), a ding is the others'."""
         favourite = self.settings.scoreboard.favourite_team
         team = team or favourite
         log.info(
@@ -1120,10 +1120,14 @@ class ScoreboardApp:
             game.home.abbrev,
         )
         self.last_goal = (game.id, self.monotonic(), team)
-        if team != favourite:
-            return
         if self._horn_muted():
             log.info("Goal horn muted by button press; not playing")
+            return
+        if team != favourite:
+            # The goal screen cutting in on another game is the cue; the ding
+            # makes it audible from across the room (#308). Same mute button.
+            if self.settings.audio.score_chime:
+                self.horn.play_chime()
             return
         self.horn.play(favourite)
 

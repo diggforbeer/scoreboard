@@ -106,7 +106,8 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 
 - The scoreboard app at `/opt/nhl-scoreboard`, run by `nhl-scoreboard.service`
 - Team logos at `/usr/share/nhl-scoreboard/logos/32/{dark,light}/`
-- The default goal siren at `/usr/share/nhl-scoreboard/horns/_default.wav`,
+- The default goal siren (`_default.wav`) and score-change ding (`_chime.wav`) in
+  `/usr/share/nhl-scoreboard/horns/`,
   and `alsa-utils` for `aplay`
 - `rgbmatrix` Python bindings, compiled during the build, then the compiler
   toolchain that built them (`build-essential`, `cmake`, `ninja-build`,
