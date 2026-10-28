@@ -399,7 +399,19 @@ class StatusServerConfig:
     """
 
     enabled: bool = True
-    port: int = 8080
+    #: 80, so ``http://<name>.local`` is the whole address (#292). The WiFi
+    #: setup page needs 80 too while the AP is up; the admin page steps back
+    #: to ``alias_port`` for that time (ScoreboardApp._sync_setup_server).
+    port: int = 80
+    #: Second listener so existing ``:8080`` bookmarks keep working; 0 = off,
+    #: and ignored when it equals ``port``.
+    alias_port: int = 8080
+    #: Owner-chosen mDNS name (``kitchen-scoreboard`` -> kitchen-scoreboard.local).
+    #: Empty keeps the name scoreboard-provision derived from the MAC. An
+    #: invalid label is ignored, never fatal.
+    hostname: str = ""
+    #: Also answer to plain ``scoreboard.local`` when no other board has it.
+    local_alias: bool = True
 
 
 @dataclass(slots=True)

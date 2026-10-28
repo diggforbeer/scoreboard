@@ -2273,3 +2273,26 @@ def test_address_scene_single_panel_shows_qr_alone(update_snapshots):
     assert not c.out_of_bounds
     assert c.colors(0, 0, 63, H - 1) == {WHITE}
     check_snapshot("address_64", art, update_snapshots)
+
+
+def test_address_scene_with_name_leads_with_it(update_snapshots):
+    c = canvas()
+    make_renderer().draw_address(c, "192.168.100.100", 80, _address_qr(), "scoreboard-a1b2.local")
+    art = show("address_name", c)
+    assert not c.out_of_bounds
+    assert c.colors(HALF, 0, W - 1, H - 1) == {WHITE}
+    box = c.bbox(0, 0, HALF - 1, H - 1)
+    assert box is not None
+    assert box.x1 <= HALF - 1
+    check_snapshot("address_name", art, update_snapshots)
+
+
+def test_address_name_too_wide_never_leaves_its_half():
+    c = canvas()
+    make_renderer().draw_address(
+        c, "192.168.100.100", 8080, _address_qr(), "a-very-long-kitchen-scoreboard.local"
+    )
+    assert not c.out_of_bounds
+    box = c.bbox(0, 0, HALF - 1, H - 1)
+    assert box is not None
+    assert box.x1 <= HALF - 1

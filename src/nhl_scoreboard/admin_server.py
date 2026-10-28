@@ -299,6 +299,12 @@ from .config import (
 from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
+from .hostname import (
+    apply_hostname,
+    current_hostname,
+    normalise_hostname,
+    valid_hostname_label,
+)
 from .updater import installed_version
 
 log = logging.getLogger(__name__)
@@ -431,6 +437,9 @@ _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
 _STATUS_FIELDS: dict[str, _FieldSpec] = {
     "enabled": _FieldSpec("bool"),
     "port": _FieldSpec("int"),
+    "alias_port": _FieldSpec("int"),
+    "hostname": _FieldSpec("str"),
+    "local_alias": _FieldSpec("bool"),
 }
 
 #: Mirrors PanelConfig's own fields (config.py), same convention -- except
@@ -506,7 +515,11 @@ def _scoreboard_payload(settings: Settings) -> dict[str, object]:
 
 
 def _status_payload(settings: Settings) -> dict[str, object]:
-    return {"type": "config", "section": "status", "data": dataclasses.asdict(settings.status)}
+    data = dataclasses.asdict(settings.status)
+    # What the board is actually called right now (the saved name only takes
+    # effect once applied), so the page can show the real address.
+    data["board_name"] = current_hostname()
+    return {"type": "config", "section": "status", "data": data}
 
 
 def _panel_payload(settings: Settings) -> dict[str, object]:
@@ -1275,6 +1288,32 @@ _SEND_AFTER_SAVE = {
 }
 
 
+def _coerce_status(data: object) -> dict[str, object]:
+    if isinstance(data, dict):
+        # Sent by the server for display, echoed back by the page's whole-object save.
+        data = {k: v for k, v in data.items() if k != "board_name"}
+    values = _coerce_scalar_fields(data, _STATUS_FIELDS)
+    if "hostname" in values:
+        name = normalise_hostname(str(values["hostname"]))
+        # Rejected rather than repaired, like the other live editors: the
+        # person typing should see what is wrong (a space, an underscore).
+        if name and not valid_hostname_label(name):
+            msg = (
+                "letters, digits and hyphens only (no spaces), not starting or "
+                "ending with a hyphen, up to 63 characters"
+            )
+            raise ValueError(json.dumps({"hostname": msg}))
+        values["hostname"] = name
+    return values
+
+
+def _apply_hostname_change(values: object) -> None:
+    """Rename the board now if the saved name differs from the live one (#292)."""
+    name = values.get("hostname") if isinstance(values, dict) else None
+    if isinstance(name, str) and name and name != current_hostname():
+        apply_hostname(name)
+
+
 async def _handle_save(connection: ServerConnection, message: dict[str, object]) -> None:
     section = message.get("section")
     try:
@@ -1283,7 +1322,7 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
         elif section == "scoreboard":
             values = _coerce_scalar_fields(message.get("data"), _SCOREBOARD_FIELDS)
         elif section == "status":
-            values = _coerce_scalar_fields(message.get("data"), _STATUS_FIELDS)
+            values = _coerce_status(message.get("data"))
         elif section == "panel":
             values = _coerce_scalar_fields(message.get("data"), _PANEL_FIELDS)
         elif section == "night_mode":
@@ -1305,6 +1344,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
         return
     if section == "audio":
         _apply_audio_volume()
+    elif section == "status":
+        _apply_hostname_change(values)
     await connection.send(json.dumps({"type": "saved", "section": section}))
     await _SEND_AFTER_SAVE[section](connection)
 
@@ -1547,9 +1588,13 @@ class AdminServer:
         demo_setter: Callable[[bool], None] | None = None,
         mirror: Mirror | None = None,
         host: str = "0.0.0.0",  # intentional: a LAN admin page, see module docstring
+        alias_port: int = 0,
     ) -> None:
         self._config_path = config_path
         self._port = port
+        #: A second listener for the same page (#292): port 80 is the address,
+        #: 8080 keeps old bookmarks working. 0, or equal to ``port``, is off.
+        self._alias_port = alias_port if alias_port != port else 0
         self._snapshot = snapshot
         self._demo_setter = demo_setter
         self._mirror = mirror
@@ -1578,6 +1623,16 @@ class AdminServer:
         if not ready.wait(timeout=5):
             log.warning("Admin server did not confirm startup within 5s")
 
+    def _listen(self, port: int):
+        return serve(
+            _handle,
+            self._host,
+            port,
+            process_request=_process_request,
+            max_size=WS_MAX_SIZE,
+            logger=_WS_LOG,
+        )
+
     async def _serve(self, ready: threading.Event) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
@@ -1585,14 +1640,21 @@ class AdminServer:
         snapshot_watcher = asyncio.create_task(_watch_snapshot())
         frame_watcher = asyncio.create_task(_watch_frames())
         try:
-            async with serve(
-                _handle,
-                self._host,
-                self._port,
-                process_request=_process_request,
-                max_size=WS_MAX_SIZE,
-                logger=_WS_LOG,
-            ) as server:
+            async with contextlib.AsyncExitStack() as stack:
+                try:
+                    server = await stack.enter_async_context(self._listen(self._port))
+                except OSError as exc:
+                    # Port 80 needs root (and the setup page can hold it): say
+                    # so, rather than die with a traceback on this thread.
+                    log.error("Admin server could not listen on port %d: %s", self._port, exc)
+                    ready.set()
+                    return
+                if self._alias_port:
+                    try:
+                        await stack.enter_async_context(self._listen(self._alias_port))
+                    except OSError as exc:
+                        # The alias is a convenience; never take the page down.
+                        log.warning("Admin alias port %d unavailable: %s", self._alias_port, exc)
                 self._bound_port = server.sockets[0].getsockname()[1]
                 log.info(
                     "Admin server listening on http://%s:%d/ (page + WebSocket)",

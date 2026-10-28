@@ -1269,9 +1269,14 @@ class Renderer:
         ip: str | None,
         port: int,
         qr_matrix: Sequence[Sequence[bool]] | None,
+        name: str | None = None,
     ) -> None:
-        """Where to reach the admin page (#293): the IP as text on the left
-        half, a QR code to the full URL on the right.
+        """Where to reach the admin page (#293): the name (#292) and IP as
+        text on the left half, a QR code to the full URL on the right.
+
+        With a ``name`` (``kitchen.local``) it leads and the IP is the
+        fallback line; one too wide for the half drops its ``.local``, then
+        truncates. Without one the layout is the original IP-only one.
 
         Same layout rules as ``draw_ap_setup``: the QR stays inside one
         physical panel half so it never straddles the seam, dark modules on
@@ -1318,6 +1323,16 @@ class Renderer:
             return
         max_w = half - 2
         tiny = self.fonts.tiny
+        if name:
+            shown = name
+            if text_width(tiny, shown) > max_w:
+                shown = shown.removesuffix(".local")
+            title = "ADMIN PAGE" if port == 80 else f"ADMIN :{port}"
+            self.text(canvas, tiny, 1, 7, SUBDUED, self._fit_text(tiny, title, max_w))
+            self.text(canvas, tiny, 1, 15, WHITE, self._fit_text(tiny, shown, max_w))
+            self.text(canvas, tiny, 1, 22, WHITE, self._fit_text(tiny, ip or "NO NETWORK", max_w))
+            self.text(canvas, tiny, 1, 30, SUBDUED, self._fit_text(tiny, "SCAN TO OPEN", max_w))
+            return
         self.text(canvas, tiny, 1, 7, WHITE, self._fit_text(tiny, "ADMIN PAGE", max_w))
         self.text(canvas, tiny, 1, 15, WHITE, self._fit_text(tiny, ip or "NO NETWORK", max_w))
         if ip and port != 80:

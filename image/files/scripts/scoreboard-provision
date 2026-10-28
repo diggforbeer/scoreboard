@@ -65,6 +65,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     apply_timezone(config.get("scoreboard", {}))
+    apply_chosen_hostname(config.get("status", {}))
     apply_avahi_port(config.get("status", {}))
     # Imported here, not at module load: this script has to keep running
     # (timezone/regdom) even on a board where the nhl_scoreboard package
@@ -111,7 +112,11 @@ def ensure_hostname() -> None:
     if suffix is None:
         log.warning("No MAC address found; keeping the current hostname")
         return
-    name = f"scoreboard-{suffix}"
+    set_hostname(f"scoreboard-{suffix}")
+
+
+def set_hostname(name: str) -> None:
+    """Write the name everywhere it lives and re-announce it. Never fatal."""
     try:
         HOSTNAME_FILE.write_text(f"{name}\n")
         if HOSTS_FILE.exists():
@@ -132,9 +137,28 @@ def ensure_hostname() -> None:
             log.warning("%s failed: %s", cmd[0], exc)
 
 
+def apply_chosen_hostname(status: dict) -> None:
+    """Use the owner's ``[status] hostname`` over the MAC-derived name (#292)."""
+    name = status.get("hostname", "")
+    if not isinstance(name, str):
+        return
+    name = name.strip().lower().removesuffix(".local")
+    if not name:
+        return
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", name):
+        log.warning("Ignoring invalid [status] hostname %r", name)
+        return
+    try:
+        if HOSTNAME_FILE.read_text().strip() == name:
+            return
+    except OSError:
+        pass
+    set_hostname(name)
+
+
 def apply_avahi_port(status: dict) -> None:
     """Point the mDNS service listing at [status] port (#292). Never fatal."""
-    port = status.get("port", 8080)
+    port = status.get("port", 80)
     if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
         log.warning("Ignoring invalid [status] port %r for mDNS", port)
         return

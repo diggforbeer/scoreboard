@@ -49,6 +49,7 @@ from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
+from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
 from .nhl.api import NHLApiError, NHLClient
@@ -247,6 +248,8 @@ class Scene:
     #: Set only for ``address`` (#293) -- where the admin page is reachable.
     address_ip: str | None = None
     address_port: int = 80
+    #: The board's mDNS name (``<host>.local``, #292), None when unknown.
+    address_name: str | None = None
     address_qr: tuple[tuple[bool, ...], ...] | None = None
     #: Set only for ``conference_leaders`` -- pixels the list has scrolled up.
     scroll_px: int = 0
@@ -274,8 +277,17 @@ class ScoreboardApp:
         hw_mapping_trial_path: Path | None = None,
         restart_service: Callable[[], None] | None = None,
         ip_lookup: Callable[[], str | None] | None = None,
+        hostname_lookup: Callable[[], str] | None = None,
+        alias_publisher: AliasPublisher | None = None,
     ) -> None:
         self.settings = settings
+        self._hostname_lookup = hostname_lookup or current_hostname
+        #: None = never publish ``scoreboard.local`` (tests, the demo); the
+        #: real entry point passes one (#292).
+        self.alias_publisher = alias_publisher
+        #: True while the admin page has stepped off port 80 so the WiFi setup
+        #: page can have it (see _sync_setup_server).
+        self._admin_yielded = False
         #: Injectable so tests never touch a real socket (#293).
         self._ip_lookup = ip_lookup or default_route_ip
         self._ip_cache: tuple[float, str | None] | None = None
@@ -391,18 +403,9 @@ class ScoreboardApp:
         #: admin page doesn't show a long-past blip as if it were current.
         self.last_error_recovered_at: datetime | None = None
         self._last_error_from_scores = False
-        if admin_server is not None:
-            self.admin_server = admin_server
-        elif settings.status.enabled:
-            self.admin_server = AdminServer(
-                config_path=str(settings.source_path or DEFAULT_CONFIG_PATHS[0]),
-                port=settings.status.port,
-                snapshot=self.status_snapshot,
-                demo_setter=self.set_demo_mode,
-                mirror=self.mirror,
-            )
-        else:
-            self.admin_server = None
+        #: Only a server built here may be rebuilt to yield port 80.
+        self._admin_owned = admin_server is None
+        self.admin_server = admin_server if admin_server is not None else self._build_admin()
         #: game id -> (fetched at, situation). Only kept for the games we
         #: actually show the indicator on: the favourite's and the on-screen one.
         self.situations: dict[int, tuple[float, Situation | None]] = {}
@@ -563,6 +566,7 @@ class ScoreboardApp:
             self.refresh_three_stars()
             self._sync_setup_server()
             self._track_address()
+            self._sync_alias()
             self.wifi_join.poll()
             self.wifi_join.expire_outcome_if_stale()
             self.draw()
@@ -683,6 +687,8 @@ class ScoreboardApp:
                 self.admin_server.stop()
             if self.setup_server is not None:
                 self.setup_server.stop()
+            if self.alias_publisher is not None:
+                self.alias_publisher.stop()
             if self.button is not None:
                 self.button.close()
             self.matrix.Clear()
@@ -871,10 +877,11 @@ class ScoreboardApp:
         )
         followed_changed = old.scoreboard.followed_teams != new_settings.scoreboard.followed_teams
         auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
-        status_changed = (old.status.enabled, old.status.port) != (
-            new_settings.status.enabled,
-            new_settings.status.port,
-        )
+        status_changed = (
+            old.status.enabled,
+            old.status.port,
+            old.status.alias_port,
+        ) != (new_settings.status.enabled, new_settings.status.port, new_settings.status.alias_port)
         # mute_minutes is read fresh on every press, so it alone needs no rebuild.
         button_changed = (old.button.enabled, old.button.pin, old.button.hold_seconds) != (
             new_settings.button.enabled,
@@ -955,22 +962,13 @@ class ScoreboardApp:
             # means stop-and-rebuild rather than reconfigure in place.
             if self.admin_server is not None:
                 self.admin_server.stop()
-            if new_settings.status.enabled:
-                self.admin_server = AdminServer(
-                    config_path=str(new_settings.source_path or DEFAULT_CONFIG_PATHS[0]),
-                    port=new_settings.status.port,
-                    snapshot=self.status_snapshot,
-                    demo_setter=self.set_demo_mode,
-                    mirror=self.mirror,
-                )
-                # run() starts the server once, before its loop; a rebuild
-                # inside the loop has to start itself. Outside the loop,
-                # construct only -- same as __init__ -- so it's run() that
-                # binds the socket, not whoever happened to reload.
-                if self._running:
-                    self.admin_server.start()
-            else:
-                self.admin_server = None
+            self.admin_server = self._build_admin()
+            # run() starts the server once, before its loop; a rebuild
+            # inside the loop has to start itself. Outside the loop,
+            # construct only -- same as __init__ -- so it's run() that
+            # binds the socket, not whoever happened to reload.
+            if self.admin_server is not None and self._running:
+                self.admin_server.start()
 
         if button_changed:
             # gpiozero fixes pin and hold_time at construction; close first
@@ -1844,6 +1842,60 @@ class ScoreboardApp:
 
     # -- Admin page address (#293) -----------------------------------------
 
+    def _build_admin(self) -> AdminServer | None:
+        """The admin server for the current settings (not started).
+
+        Normally on ``status.port`` plus the ``alias_port`` listener. While the
+        WiFi setup page holds port 80 (``_admin_yielded``) it is on the alias
+        port alone, or off if that is disabled -- the setup page is what a
+        phone on the AP needs then, and both can't have the port.
+        """
+        cfg = self.settings.status
+        if not cfg.enabled:
+            return None
+        port, alias = cfg.port, cfg.alias_port
+        if self._admin_yielded:
+            if not cfg.alias_port:
+                return None
+            port, alias = cfg.alias_port, 0
+        return AdminServer(
+            config_path=str(self.settings.source_path or DEFAULT_CONFIG_PATHS[0]),
+            port=port,
+            snapshot=self.status_snapshot,
+            demo_setter=self.set_demo_mode,
+            mirror=self.mirror,
+            alias_port=alias,
+        )
+
+    def _set_admin_yield(self, yielded: bool) -> None:
+        """Hand port 80 to (or take it back from) the WiFi setup page (#292).
+
+        Must stop the admin listener before the setup server binds, and
+        rebuild it only after the setup server has released the port.
+        """
+        if yielded == self._admin_yielded or not self._admin_owned:
+            return
+        if self.admin_server is not None:
+            self.admin_server.stop()
+        self._admin_yielded = yielded
+        self.admin_server = self._build_admin()
+        if self.admin_server is not None and self._running:
+            self.admin_server.start()
+
+    def _board_name(self) -> str | None:
+        """``<hostname>.local`` for the panel and status page, None if unknown."""
+        name = self._hostname_lookup().strip().lower()
+        return f"{name}.local" if valid_hostname_label(name) else None
+
+    def _sync_alias(self) -> None:
+        """Keep plain ``scoreboard.local`` published while it's free (#292)."""
+        if self.alias_publisher is None:
+            return
+        cfg = self.settings.status
+        own = self._hostname_lookup().strip().lower()
+        wanted = cfg.enabled and cfg.local_alias and own != "scoreboard"
+        self.alias_publisher.sync(wanted, self._current_ip())
+
     def _current_ip(self) -> str | None:
         now = self.monotonic()
         if self._ip_cache is None or now - self._ip_cache[0] >= IP_CACHE_SECONDS:
@@ -1866,8 +1918,8 @@ class ScoreboardApp:
     def _address_scene(self) -> Scene | None:
         """Where to reach the admin page, or None with no address or no page.
 
-        The name line (``<name>.local``) waits for #292; the IP leads until
-        then. The QR always carries the full URL.
+        The name (``<name>.local``, #292) leads and the IP is the fallback for
+        a device that can't resolve it. The QR always carries the IP URL.
         """
         cfg = self.settings.status
         ip = self._current_ip()
@@ -1877,7 +1929,11 @@ class ScoreboardApp:
         if self._address_qr_cache is None or self._address_qr_cache[0] != url:
             self._address_qr_cache = (url, self._qr_matrix(url, "admin address"))
         return Scene(
-            "address", address_ip=ip, address_port=cfg.port, address_qr=self._address_qr_cache[1]
+            "address",
+            address_ip=ip,
+            address_port=cfg.port,
+            address_qr=self._address_qr_cache[1],
+            address_name=self._board_name(),
         )
 
     # -- WiFi setup page (#132) --------------------------------------------
@@ -1903,6 +1959,11 @@ class ScoreboardApp:
             self.setup_server.stop()
             self.setup_server = None
         self._setup_server_config = desired
+        # Port 80 is shared by name only: the admin page steps back to its
+        # alias port while the setup page runs, and returns after (#292).
+        self._set_admin_yield(
+            desired is not None and cfg.port == self.settings.status.port,
+        )
         if desired is None:
             # The AP setup flow is over (WiFi joined, or setup disabled) --
             # any hardware_mapping trial (#172) belongs to this session
@@ -2380,6 +2441,7 @@ class ScoreboardApp:
         cfg = self.settings.scoreboard
         return {
             "version": installed_version() or "unknown (factory image)",
+            "address": self._board_name() or "(unknown)",
             "demo mode": "on" if self._demo_mode else "off",
             "scene": "demo" if self._demo_mode else scene.kind,
             "current game": self._scene_game_label(scene),
@@ -2546,7 +2608,13 @@ class ScoreboardApp:
         elif scene.kind == "christmas_tree":
             r.draw_christmas_tree(self.canvas, self.clock(), favourite)
         elif scene.kind == "address":
-            r.draw_address(self.canvas, scene.address_ip, scene.address_port, scene.address_qr)
+            r.draw_address(
+                self.canvas,
+                scene.address_ip,
+                scene.address_port,
+                scene.address_qr,
+                scene.address_name,
+            )
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(self.canvas, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":

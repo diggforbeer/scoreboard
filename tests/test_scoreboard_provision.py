@@ -485,20 +485,43 @@ def test_hostname_untouched_without_a_mac(rig):
 
 
 def test_avahi_service_follows_status_port(rig):
-    rig.avahi_service.write_text("<service><port>8080</port></service>\n")
-    result = rig.run("[status]\nport = 80\n")
+    rig.avahi_service.write_text("<service><port>80</port></service>\n")
+    result = rig.run("[status]\nport = 9000\n")
     assert result.returncode == 0
-    assert "<port>80</port>" in rig.avahi_service.read_text()
+    assert "<port>9000</port>" in rig.avahi_service.read_text()
     assert "restart avahi-daemon.service" in result.calls
 
 
 def test_avahi_service_untouched_at_default_port(rig):
-    rig.avahi_service.write_text("<service><port>8080</port></service>\n")
-    result = rig.run("[status]\nport = 8080\n")
+    rig.avahi_service.write_text("<service><port>80</port></service>\n")
+    result = rig.run("[status]\nport = 80\n")
     assert "avahi-daemon" not in result.calls
 
 
 def test_avahi_service_ignores_a_bad_port(rig):
-    rig.avahi_service.write_text("<service><port>8080</port></service>\n")
+    rig.avahi_service.write_text("<service><port>80</port></service>\n")
     assert rig.run('[status]\nport = "abc"\n').returncode == 0
-    assert "<port>8080</port>" in rig.avahi_service.read_text()
+    assert "<port>80</port>" in rig.avahi_service.read_text()
+
+
+def test_owner_hostname_replaces_the_mac_name(rig):
+    rig.seed_nic("wlan0", "dc:a6:32:00:a1:b2")
+    result = rig.run('[status]\nhostname = "Kitchen-Scoreboard.local"\n')
+    assert result.returncode == 0
+    assert rig.hostname_file.read_text().strip() == "kitchen-scoreboard"
+    assert "restart avahi-daemon.service" in result.calls
+
+
+def test_invalid_owner_hostname_is_ignored(rig):
+    rig.seed_nic("wlan0", "dc:a6:32:00:a1:b2")
+    result = rig.run('[status]\nhostname = "not a name!"\n')
+    assert result.returncode == 0
+    assert rig.hostname_file.read_text().strip() == "scoreboard-a1b2"
+
+
+def test_owner_hostname_survives_the_next_boot(rig):
+    rig.seed_nic("wlan0", "dc:a6:32:00:a1:b2")
+    rig.run('[status]\nhostname = "kitchen"\n')
+    result = rig.run('[status]\nhostname = "kitchen"\n')
+    assert rig.hostname_file.read_text().strip() == "kitchen"
+    assert "avahi-daemon" not in result.calls

@@ -6,6 +6,6 @@
   <name replace-wildcards="yes">NHL Scoreboard (%h)</name>
   <service>
     <type>_http._tcp</type>
-    <port>8080</port>
+    <port>80</port>
   </service>
 </service-group>

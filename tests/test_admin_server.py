@@ -772,11 +772,12 @@ def test_sends_the_current_status_config_on_connect(app_dir, config_path):
         return await client.recv()
 
     received = asyncio.run(_serve_and_run(scenario))
-    assert json.loads(received) == {
-        "type": "config",
-        "section": "status",
-        "data": {"enabled": False, "port": 9000},
-    }
+    message = json.loads(received)
+    assert message["section"] == "status"
+    data = message["data"]
+    assert (data["enabled"], data["port"], data["alias_port"]) == (False, 9000, 8080)
+    assert (data["hostname"], data["local_alias"]) == ("", True)
+    assert data["board_name"]  # what the board is called right now
 
 
 def test_status_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_path):
@@ -788,11 +789,9 @@ def test_status_save_writes_the_file_and_confirms_with_fresh_config(app_dir, con
 
     saved, fresh = asyncio.run(_serve_and_run(scenario))
     assert json.loads(saved) == {"type": "saved", "section": "status"}
-    assert json.loads(fresh) == {
-        "type": "config",
-        "section": "status",
-        "data": {"enabled": False, "port": 9090},
-    }
+    fresh = json.loads(fresh)
+    assert fresh["section"] == "status"
+    assert (fresh["data"]["enabled"], fresh["data"]["port"]) == (False, 9090)
     assert "port = 9090" in config_path.read_text()
 
 
@@ -1947,3 +1946,42 @@ async def _serve_and_get_quiet(path):
                 conn.close()
 
         return await asyncio.to_thread(_get)
+
+
+def test_save_status_hostname_is_normalised_and_applied(app_dir, config_path, monkeypatch):
+    applied = []
+    monkeypatch.setattr(admin_server, "apply_hostname", applied.append)
+    monkeypatch.setattr(admin_server, "current_hostname", lambda: "scoreboard-a1b2")
+    config_path.write_text("[status]\nport = 9000\n")
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(
+            json.dumps(
+                {
+                    "type": "save",
+                    "section": "status",
+                    "data": {"hostname": "Kitchen.local", "board_name": "scoreboard-a1b2"},
+                }
+            )
+        )
+        return json.loads(await client.recv())
+
+    assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
+    assert applied == ["kitchen"]
+    assert 'hostname = "kitchen"' in config_path.read_text()
+
+
+def test_save_status_rejects_a_bad_hostname(app_dir, config_path, monkeypatch):
+    monkeypatch.setattr(admin_server, "apply_hostname", lambda name: pytest.fail(name))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(
+            json.dumps({"type": "save", "section": "status", "data": {"hostname": "my board"}})
+        )
+        return json.loads(await client.recv())
+
+    reply = asyncio.run(_serve_and_run(scenario))
+    assert reply["type"] == "error"
+    assert "hostname" in reply["message"]
