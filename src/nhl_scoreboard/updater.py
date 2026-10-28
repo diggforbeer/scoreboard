@@ -60,6 +60,13 @@ STATE_FILE = Path(
 DRIVER_COMMIT_FILE = Path(
     os.environ.get("NHL_SCOREBOARD_DRIVER_COMMIT", "/usr/share/nhl-scoreboard/driver-commit")
 )
+#: The image-level fingerprint (scripts, units, apt packages) this board was
+#: flashed with, written at image build time by scripts/image_manifest.py.
+#: The updater can't change those things, so this stays the record of what is
+#: on the board until a reflash replaces it (#284). Absent on older boards.
+IMAGE_MANIFEST_FILE = Path(
+    os.environ.get("NHL_SCOREBOARD_IMAGE_MANIFEST", "/usr/share/nhl-scoreboard/image-manifest.json")
+)
 RELEASE_URL = os.environ.get(
     "NHL_SCOREBOARD_RELEASE_URL",
     "https://api.github.com/repos/diggforbeer/scoreboard/releases/latest",
@@ -157,6 +164,30 @@ def _download(url: str, dest: Path) -> None:
         shutil.copyfileobj(response, out)
 
 
+def image_changes(release: Any) -> dict[str, Any] | None:
+    """How a release's image-level files differ from what this board has (#284).
+
+    None when the release carries no fingerprint (an older release: nothing to
+    say). ``status`` is ``unknown`` when the board has no record, which is never
+    treated as a match. Informational only; the app update still applies.
+    """
+    if not isinstance(release, dict):
+        return None
+    try:
+        board = json.loads(IMAGE_MANIFEST_FILE.read_text())
+        if not isinstance(board, dict):
+            raise ValueError("not an object")
+    except (OSError, ValueError):
+        return {"status": "unknown", "files": [], "packages": [], "command": ""}
+    wanted = release.get("files") or {}
+    have = board.get("files") or {}
+    files = sorted(n for n in wanted.keys() | have.keys() if wanted.get(n) != have.get(n))
+    packages = sorted(set(release.get("packages") or []) - set(board.get("packages") or []))
+    command = "sudo apt-get install -y " + " ".join(packages) if packages else ""
+    status = "differs" if files or packages else "match"
+    return {"status": status, "files": files, "packages": packages, "command": command}
+
+
 def check() -> dict[str, Any]:
     """Look up the latest release and record whether it can be applied."""
     state = read_state()
@@ -166,7 +197,9 @@ def check() -> dict[str, Any]:
         release = _fetch_json(RELEASE_URL)
         tag = str(release["tag_name"])
         assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
-        state.update(latest=tag, error="", available=False, applicable=False, reason="")
+        state.update(
+            latest=tag, error="", available=False, applicable=False, reason="", image_changes=None
+        )
         if not is_newer(tag, state["installed"]):
             state["reason"] = "Up to date"
         elif BUNDLE_ASSET not in assets or MANIFEST_ASSET not in assets:
@@ -174,6 +207,7 @@ def check() -> dict[str, Any]:
         else:
             manifest = _fetch_json(assets[MANIFEST_ASSET])
             state["available"] = True
+            state["image_changes"] = image_changes(manifest.get("image"))
             if not _drivers_match(str(manifest.get("driver_commit", ""))):
                 state["reason"] = "Needs a reflash: the HUB75 driver changed"
             else:
@@ -296,7 +330,13 @@ def apply() -> bool:
         log.info("%s is running %s", SERVICE, tag)
         shutil.rmtree(prev_dir, ignore_errors=True)
         shutil.rmtree(prev_admin, ignore_errors=True)
-        state.update(installed=tag, available=False, applicable=False, reason="Up to date")
+        state.update(
+            installed=tag,
+            available=False,
+            applicable=False,
+            reason="Up to date",
+            image_changes=None,
+        )
         _record(state, "success", f"Updated to {tag}")
         return True
 
