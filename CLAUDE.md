@@ -1844,3 +1844,14 @@ so a stale one prints the wrong case. So:
 - Commit messages explain *why*; the first line under ~65 chars. Include
   what a failed CI run taught if that's what drove the change.
 - Match the surrounding comment density; comments say why, not what.
+
+## mDNS name (#292)
+
+`avahi-daemon` advertises the board as `scoreboard-xxxx.local` (last 4 hex of
+the MAC), chosen once by `scoreboard-provision`'s `ensure_hostname()` and
+remembered in `/var/lib/nhl-scoreboard/hostname-chosen`, so boot order with a
+second board can never rename it (avahi's own clash rename isn't remembered).
+The `_http._tcp` service file's port is rewritten from `[status] port` on each
+provision run. Still open in #292: port 80 vs 8080 (AP-mode conflict with
+`setup_server.py`), an owner-chosen name, and showing the name on the panel
+(#293). Unverified on hardware (#4).

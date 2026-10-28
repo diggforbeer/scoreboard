@@ -44,6 +44,12 @@ HOSTNAME_STATE = Path(
     os.environ.get("NHL_SCOREBOARD_HOSTNAME_STATE", "/var/lib/nhl-scoreboard/hostname-chosen")
 )
 
+#: The _http._tcp advertisement baked into the image (#292); rewritten here
+#: when [status] port isn't the default so the listing follows the real port.
+AVAHI_SERVICE_FILE = Path(
+    os.environ.get("NHL_SCOREBOARD_AVAHI_SERVICE", "/etc/avahi/services/nhl-scoreboard.service")
+)
+
 log = logging.getLogger("scoreboard-provision")
 
 
@@ -59,6 +65,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     apply_timezone(config.get("scoreboard", {}))
+    apply_avahi_port(config.get("status", {}))
     # Imported here, not at module load: this script has to keep running
     # (timezone/regdom) even on a board where the nhl_scoreboard package
     # somehow isn't importable, same tolerance read_config() already has
@@ -123,6 +130,28 @@ def ensure_hostname() -> None:
             subprocess.run(cmd, check=False, timeout=30)
         except (OSError, subprocess.SubprocessError) as exc:
             log.warning("%s failed: %s", cmd[0], exc)
+
+
+def apply_avahi_port(status: dict) -> None:
+    """Point the mDNS service listing at [status] port (#292). Never fatal."""
+    port = status.get("port", 8080)
+    if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
+        log.warning("Ignoring invalid [status] port %r for mDNS", port)
+        return
+    try:
+        text = AVAHI_SERVICE_FILE.read_text()
+        new = re.sub(r"<port>\d+</port>", f"<port>{port}</port>", text)
+        if new == text:
+            return
+        AVAHI_SERVICE_FILE.write_text(new)
+    except OSError as exc:
+        log.warning("Could not update mDNS service port: %s", exc)
+        return
+    log.info("mDNS service port set to %d", port)
+    try:
+        subprocess.run(["systemctl", "restart", "avahi-daemon.service"], check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("avahi restart failed: %s", exc)
 
 
 def read_config(path: Path) -> dict | None:

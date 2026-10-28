@@ -83,6 +83,7 @@ class Rig:
         self.hostname_file = tmp_path / "hostname"
         self.hosts_file = tmp_path / "hosts"
         self.hostname_state = tmp_path / "state" / "hostname-chosen"
+        self.avahi_service = tmp_path / "avahi.service"
 
     def seed_nic(self, name: str, mac: str) -> None:
         (self.net_dir / name).mkdir(exist_ok=True)
@@ -124,6 +125,7 @@ class Rig:
             "NHL_SCOREBOARD_HOSTNAME_FILE": str(self.hostname_file),
             "NHL_SCOREBOARD_HOSTS_FILE": str(self.hosts_file),
             "NHL_SCOREBOARD_HOSTNAME_STATE": str(self.hostname_state),
+            "NHL_SCOREBOARD_AVAHI_SERVICE": str(self.avahi_service),
             "NHL_SCOREBOARD_WIFI_TIMEOUT": "1",
             "NHL_SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
             "PYTHONPATH": repo_src,
@@ -480,3 +482,23 @@ def test_hostname_untouched_without_a_mac(rig):
     assert rig.run("[scoreboard]\n").returncode == 0
     assert rig.hostname_file.read_text() == "scoreboard\n"
     assert not rig.hostname_state.exists()
+
+
+def test_avahi_service_follows_status_port(rig):
+    rig.avahi_service.write_text("<service><port>8080</port></service>\n")
+    result = rig.run("[status]\nport = 80\n")
+    assert result.returncode == 0
+    assert "<port>80</port>" in rig.avahi_service.read_text()
+    assert "restart avahi-daemon.service" in result.calls
+
+
+def test_avahi_service_untouched_at_default_port(rig):
+    rig.avahi_service.write_text("<service><port>8080</port></service>\n")
+    result = rig.run("[status]\nport = 8080\n")
+    assert "avahi-daemon" not in result.calls
+
+
+def test_avahi_service_ignores_a_bad_port(rig):
+    rig.avahi_service.write_text("<service><port>8080</port></service>\n")
+    assert rig.run('[status]\nport = "abc"\n').returncode == 0
+    assert "<port>8080</port>" in rig.avahi_service.read_text()

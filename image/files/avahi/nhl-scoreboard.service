@@ -1,7 +1,7 @@
 <?xml version="1.0" standalone='no'?>
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
-<!-- Lists the admin page in network browsers (#292). Port matches
-     [status] port's default; a changed port isn't reflected here yet. -->
+<!-- Lists the admin page in network browsers (#292). Port is the
+     [status] port default; scoreboard-provision rewrites it to match. -->
 <service-group>
   <name replace-wildcards="yes">NHL Scoreboard (%h)</name>
   <service>
