@@ -439,6 +439,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
             "available": True,
             "applicable": True,
             "last_apply": "",
+            "image_changes": None,
         },
     }
 
@@ -1947,3 +1948,16 @@ async def _serve_and_get_quiet(path):
                 conn.close()
 
         return await asyncio.to_thread(_get)
+
+
+@pytest.mark.parametrize("status", ["match", "differs", "unknown"])
+def test_update_payload_exposes_the_image_comparison(state_file, status):
+    differs = status == "differs"
+    changes = dict(
+        status=status,
+        files=["scripts/x"] if differs else [],
+        packages=["mpg123"] if differs else [],
+        command="sudo apt-get install -y mpg123" if differs else "",
+    )
+    state_file.write_text(json.dumps(dict(available=True, image_changes=changes)))
+    assert admin_server._update_payload()["data"]["image_changes"] == changes

@@ -580,6 +580,7 @@ def _update_payload() -> dict[str, object]:
             "available": bool(state.get("available")),
             "applicable": bool(state.get("applicable")),
             "last_apply": (state.get("last_apply") or {}).get("detail") or "",
+            "image_changes": state.get("image_changes"),
         },
     }
 

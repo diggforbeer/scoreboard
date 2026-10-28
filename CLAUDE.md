@@ -1541,6 +1541,24 @@ when it was written; that history is left as-is rather than rewritten.
   it in by rename with the app tree, and restores the old one on
   rollback. A bundle with no `admin/` leaves the page untouched. One
   version signal for both: they always ship together.
+- **The updater is app-only, and says so (#284).** It never touches
+  `/usr/local/sbin` scripts, systemd units or apt packages (option 1 in
+  the issue, installing them, was not chosen; revisit if image-level
+  fixes keep coming). `scripts/image_manifest.py` hashes each file under
+  `image/files/scripts` and `image/files/systemd` and lists the layer's
+  apt packages; `build-app-bundle.py` puts that in `manifest.json` as
+  `image`, and the image build writes the same thing to
+  `/usr/share/nhl-scoreboard/image-manifest.json` (`IMAGE_MANIFEST_FILE`),
+  the board's record. `updater.check()` stores `image_changes` in the
+  state file: `match`, `differs` (changed files plus *new* packages, with
+  the `apt-get install -y` command; removed packages are ignored), or
+  `unknown` when the board has no record (flashed before this; never
+  treated as a match). The update card shows it only while an update is
+  available, and it is informational: `apply()` is unchanged. A release
+  with no `image` key (older) shows nothing. Note the record is never
+  updated by the in-app update, since that doesn't install these files;
+  only a reflash replaces it. The "unknown" notice repeats for each
+  release rather than being shown once. Not verified on hardware (#4).
 - **Autosave + Undo (#273).** Every section except Panel and Status saves
   itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
   the Save buttons are gone). One `AutosaveToast` bar pinned to the

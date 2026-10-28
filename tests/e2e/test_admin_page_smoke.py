@@ -53,6 +53,7 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> None:
 class AdminPage(NamedTuple):
     url: str
     config_path: Path
+    state_path: Path
 
     def config(self) -> dict:
         return tomllib.loads(self.config_path.read_text())
@@ -76,6 +77,7 @@ def admin_page(tmp_path):
     env = os.environ.copy()
     env["NHL_SCOREBOARD_CONFIG"] = str(config_path)
     env["NHL_SCOREBOARD_ADMIN_DIR"] = str(DIST_DIR)
+    env["NHL_SCOREBOARD_UPDATE_STATE"] = str(tmp_path / "update-state.json")
     env["NHL_SCOREBOARD_ADMIN_HOST"] = HOST
     env["NHL_SCOREBOARD_ADMIN_PORT"] = str(PORT)
 
@@ -89,7 +91,7 @@ def admin_page(tmp_path):
     )
     try:
         _wait_for_port(HOST, PORT)
-        yield AdminPage(f"http://{HOST}:{PORT}/", config_path)
+        yield AdminPage(f"http://{HOST}:{PORT}/", config_path, tmp_path / "update-state.json")
     finally:
         proc.terminate()
         try:
@@ -129,6 +131,53 @@ def test_admin_page_loads_and_saves_a_real_change(admin_page):
 
             assert page.input_value("#sb-favourite-team") == "TOR"
             assert admin_page.config()["scoreboard"]["favourite_team"] == "TOR"
+        finally:
+            browser.close()
+
+
+def test_update_card_lists_image_level_changes(admin_page):
+    """A release that changes scripts/units/packages says so, with the apt
+    command, and the board with no record gets the reflash notice (#284)."""
+    import json
+
+    from playwright.sync_api import sync_playwright
+
+    def write(changes):
+        admin_page.state_path.write_text(
+            json.dumps(
+                {
+                    "installed": "v2026.09.01",
+                    "latest": "v2026.09.02",
+                    "available": True,
+                    "applicable": True,
+                    "image_changes": changes,
+                }
+            )
+        )
+
+    write(
+        {
+            "status": "differs",
+            "files": ["scripts/nhl-scoreboard-setup-ap"],
+            "packages": ["mpg123"],
+            "command": "sudo apt-get install -y mpg123",
+        }
+    )
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            differs = page.get_by_test_id("image-changes-differs")
+            differs.wait_for(timeout=15000)
+            assert "scripts/nhl-scoreboard-setup-ap" in differs.inner_text()
+            assert "sudo apt-get install -y mpg123" in differs.inner_text()
+            assert page.get_by_role("button", name="Install v2026.09.02").is_visible()
+
+            # The server pushes a changed state file without a reload.
+            write({"status": "unknown", "files": [], "packages": [], "command": ""})
+            page.get_by_test_id("image-changes-unknown").wait_for(timeout=15000)
+            assert page.get_by_test_id("image-changes-differs").count() == 0
         finally:
             browser.close()
 
