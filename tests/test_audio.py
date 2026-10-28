@@ -230,3 +230,64 @@ def test_team_mp3_beats_default_wav(tmp_path):
     touch(tmp_path / "NSH.mp3")
     touch(tmp_path / "_default.wav")
     assert GoalHornPlayer([tmp_path]).path_for("NSH") == tmp_path / "NSH.mp3"
+
+
+def test_wah_wah_is_off_by_default_and_plays_nothing(tmp_path):
+    touch(tmp_path / "_wah_wah.wav")
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], runner=runner)
+    assert player.play_wah_wah() is False
+    assert runner.calls == []
+
+
+def test_wah_wah_plays_its_own_file_not_the_horn(tmp_path):
+    touch(tmp_path / DEFAULT_NAME)
+    touch(tmp_path / "_wah_wah.wav")
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], device="plughw:1,0", wah_wah=True, runner=runner)
+    assert player.play_wah_wah() is True
+    assert runner.calls == [["aplay", "-q", "-D", "plughw:1,0", str(tmp_path / "_wah_wah.wav")]]
+
+
+def test_wah_wah_upload_directory_beats_the_shipped_file(tmp_path):
+    uploads, shipped = tmp_path / "up", tmp_path / "ship"
+    uploads.mkdir()
+    shipped.mkdir()
+    touch(uploads / "_wah_wah.wav")
+    touch(shipped / "_wah_wah.wav")
+    player = GoalHornPlayer([uploads, shipped], wah_wah=True)
+    assert player.wah_wah_path() == uploads / "_wah_wah.wav"
+
+
+def test_wah_wah_missing_file_or_disabled_audio_is_not_an_error(tmp_path):
+    runner = RecordingRunner()
+    assert GoalHornPlayer([tmp_path], wah_wah=True, runner=runner).play_wah_wah() is False
+    touch(tmp_path / "_wah_wah.wav")
+    muted = GoalHornPlayer([tmp_path], enabled=False, wah_wah=True, runner=runner)
+    assert muted.play_wah_wah() is False
+    assert runner.calls == []
+
+
+def test_wah_wah_missing_player_never_raises(tmp_path):
+    touch(tmp_path / "_wah_wah.wav")
+    player = GoalHornPlayer(
+        [tmp_path], wah_wah=True, runner=RecordingRunner(raises=FileNotFoundError())
+    )
+    assert player.play_wah_wah() is False
+    assert "alsa-utils" in player.last_error
+
+
+def test_shipped_wah_wah_is_reproducible_and_matches_the_horn_format():
+    import importlib.util
+    import wave
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("make_wah_wah", root / "scripts/make_wah_wah.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    shipped = root / "assets" / "horns" / "_wah_wah.wav"
+    with wave.open(str(shipped)) as wah, wave.open(str(root / "assets/horns/_default.wav")) as horn:
+        assert wah.getparams()[:3] == horn.getparams()[:3]
+        assert 2.0 <= wah.getnframes() / wah.getframerate() <= 3.0
+        assert wah.readframes(wah.getnframes()) == module.generate()

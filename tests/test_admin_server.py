@@ -149,7 +149,13 @@ def test_sends_the_current_audio_config_on_connect(app_dir, config_path):
     assert json.loads(received) == {
         "type": "config",
         "section": "audio",
-        "data": {"enabled": False, "device": "hw:1,0", "horn_dir": "", "volume": 100},
+        "data": {
+            "enabled": False,
+            "device": "hw:1,0",
+            "horn_dir": "",
+            "volume": 100,
+            "wah_wah": False,
+        },
     }
 
 
@@ -170,6 +176,7 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
                         "device": "hw:1,0",
                         "horn_dir": "",
                         "volume": 75,
+                        "wah_wah": True,
                     },
                 }
             )
@@ -181,7 +188,13 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
     assert json.loads(fresh) == {
         "type": "config",
         "section": "audio",
-        "data": {"enabled": False, "device": "hw:1,0", "horn_dir": "", "volume": 75},
+        "data": {
+            "enabled": False,
+            "device": "hw:1,0",
+            "horn_dir": "",
+            "volume": 75,
+            "wah_wah": True,
+        },
     }
     assert 'device = "hw:1,0"' in config_path.read_text()
 

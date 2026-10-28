@@ -393,6 +393,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
     "device": _FieldSpec("str"),
     "horn_dir": _FieldSpec("str"),
     "volume": _FieldSpec("int"),
+    "wah_wah": _FieldSpec("bool"),
 }
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
@@ -882,6 +883,7 @@ def _current_horn(settings: Settings) -> GoalHornPlayer:
         horn_dir=settings.audio.horn_dir,
         enabled=settings.audio.enabled,
         volume=settings.audio.volume,
+        wah_wah=settings.audio.wah_wah,
     )
 
 

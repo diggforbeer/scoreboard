@@ -20,6 +20,10 @@ log = logging.getLogger(__name__)
 DEFAULT_STEM = "_default"
 DEFAULT_NAME = f"{DEFAULT_STEM}.wav"
 
+#: The "wah wah" sting for the opponent's goals (#307). One shared file, no
+#: per-team variants; an upload or drop-in of this name overrides the shipped one.
+WAH_WAH_STEM = "_wah_wah"
+
 #: Horn file extensions, in lookup order within one directory. WAV plays
 #: through aplay, MP3 through mpg123 (#208) -- aplay can't decode MP3.
 HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
@@ -71,6 +75,7 @@ class GoalHornPlayer:
         device: str = "",
         enabled: bool = True,
         volume: int = 100,
+        wah_wah: bool = False,
         runner: Callable[[list[str]], None] | None = None,
         mixer_runner: Callable[[list[str]], bool] | None = None,
     ) -> None:
@@ -78,6 +83,7 @@ class GoalHornPlayer:
         self.device = device
         self.enabled = enabled
         self.volume = volume
+        self.wah_wah = wah_wah
         self._run = runner or self._popen
         self._run_mixer = mixer_runner or self._amixer
         #: Why the last play() returned False, in words fit for the admin
@@ -87,9 +93,20 @@ class GoalHornPlayer:
 
     @classmethod
     def default(
-        cls, device: str = "", horn_dir: str = "", enabled: bool = True, volume: int = 100
+        cls,
+        device: str = "",
+        horn_dir: str = "",
+        enabled: bool = True,
+        volume: int = 100,
+        wah_wah: bool = False,
     ) -> GoalHornPlayer:
-        return cls(default_directories(horn_dir), device=device, enabled=enabled, volume=volume)
+        return cls(
+            default_directories(horn_dir),
+            device=device,
+            enabled=enabled,
+            volume=volume,
+            wah_wah=wah_wah,
+        )
 
     def path_for(self, abbrev: str) -> Path | None:
         """Team-specific file first, the shipped default otherwise.
@@ -99,7 +116,14 @@ class GoalHornPlayer:
         directory order -- a team file anywhere in the search path wins
         over a default earlier in it.
         """
-        for stem in (abbrev.strip().upper(), DEFAULT_STEM):
+        return self._find(abbrev.strip().upper(), DEFAULT_STEM)
+
+    def wah_wah_path(self) -> Path | None:
+        """The opponent-goal sting: uploads and drop-ins first, then the shipped file."""
+        return self._find(WAH_WAH_STEM)
+
+    def _find(self, *stems: str) -> Path | None:
+        for stem in stems:
             for directory in self.directories:
                 for ext in HORN_EXTENSIONS:
                     candidate = directory / f"{stem}{ext}"
@@ -116,6 +140,20 @@ class GoalHornPlayer:
         if path is None:
             log.debug("No horn for %s and no default available", abbrev)
             return False
+        return self._launch(path)
+
+    def play_wah_wah(self) -> bool:
+        """Launch the opponent-goal sting. Off unless ``wah_wah`` is on; never raises."""
+        self.last_error = ""
+        if not (self.enabled and self.wah_wah):
+            return False
+        path = self.wah_wah_path()
+        if path is None:
+            log.debug("No wah-wah sound available")
+            return False
+        return self._launch(path)
+
+    def _launch(self, path: Path) -> bool:
         if path.suffix.lower() == ".mp3":
             cmd = ["mpg123", "-q"]
             if self.device:

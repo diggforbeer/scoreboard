@@ -119,6 +119,7 @@ interface AudioConfig {
   device: string
   horn_dir: string
   volume: number
+  wah_wah: boolean
 }
 
 // One row per horn actually sitting in the admin page's writable upload
@@ -1783,6 +1784,18 @@ function App() {
                 />
                 <label className="form-check-label" htmlFor="audio-enabled">
                   Goal horn enabled
+                </label>
+              </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-wah-wah"
+                  checked={audio.wah_wah}
+                  onChange={(e) => audioSave.edit({ ...audio, wah_wah: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-wah-wah">
+                  Play a sad “wah wah” when the other team scores
                 </label>
               </div>
               <div className="mb-3">

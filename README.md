@@ -194,6 +194,7 @@ scores_grid = false         # with no favourite game up, show today's games four
 enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
+wah_wah = false              # sad-trombone "wah wah" when the other team scores (live game, favourite only)
 
 [wifi]
 ssid = ""                    # leave empty if you're using wired ethernet instead

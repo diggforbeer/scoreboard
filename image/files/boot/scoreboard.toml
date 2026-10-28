@@ -165,6 +165,12 @@ device = ""
 # copyrighted -- so this is a slot to drop your own recording into.
 horn_dir = ""
 
+# Play a short synthesized "wah wah, wah, waaah" when the team playing your
+# favourite scores in a live game. Off by default. Follows the broadcast delay,
+# the volume and the button mute. Drop a _wah_wah.wav into the horn directory
+# (or the admin page's upload folder) to replace it.
+wah_wah = false
+
 [status]
 # A small web page showing what the board currently thinks is going on
 # (current scene, last successful poll, last error, favourite team) plus
