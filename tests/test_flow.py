@@ -91,9 +91,14 @@ class RecordingHorn:
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.wah_wah_calls = 0
 
     def play(self, abbrev: str) -> bool:
         self.calls.append(abbrev)
+        return True
+
+    def play_wah_wah(self) -> bool:
+        self.wah_wah_calls += 1
         return True
 
 
@@ -433,6 +438,48 @@ def test_opponent_goal_does_not_fire(day):
     tick(app, clock, minutes=1)
     assert app.horn.calls == []
     assert scene(app)[0] == "game"
+
+
+def test_opponent_goal_plays_the_wah_wah_but_not_the_horn(day):
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    assert app.horn.wah_wah_calls == 0
+
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), away=1)
+    tick(app, clock, minutes=1)
+    assert app.horn.wah_wah_calls == 1
+    assert app.horn.calls == []
+    tick(app, clock, minutes=1)
+    assert app.horn.wah_wah_calls == 1, "fires once per goal"
+
+
+def test_favourite_goal_does_not_play_the_wah_wah(day):
+    app, clock, client = day
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, minutes=1)
+    assert app.horn.calls == [FAV]
+    assert app.horn.wah_wah_calls == 0
+
+
+def test_opponent_first_sighting_never_plays_the_wah_wah(fake_backend):
+    client = FlowClient()
+    client.today = [game(1, "TBL", FAV, PUCK_DROP, "LIVE", period=2, home_score=0, away_score=2)]
+    app = make_app(fake_backend, Clock(PUCK_DROP + timedelta(hours=1)), client)
+    app.refresh()
+    assert app.horn.wah_wah_calls == 0
+
+
+def test_opponent_goal_is_silent_in_an_unrelated_game_or_without_a_favourite(day):
+    app, clock, client = day
+    app.settings.scoreboard.favourite_team = ""
+    client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
+    tick(app, clock, hours=6, minutes=5)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), away=1)
+    tick(app, clock, minutes=1)
+    assert app.horn.wah_wah_calls == 0
 
 
 def test_score_correction_downward_does_not_fire(day):

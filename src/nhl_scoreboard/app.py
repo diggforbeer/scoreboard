@@ -932,6 +932,7 @@ class ScoreboardApp:
                 horn_dir=new_settings.audio.horn_dir,
                 enabled=new_settings.audio.enabled,
                 volume=new_settings.audio.volume,
+                wah_wah=new_settings.audio.wah_wah,
             )
 
         if logos_changed:
@@ -1106,6 +1107,32 @@ class ScoreboardApp:
                 self._known_scores[(game.id, team)] = score
                 if previous is not None and score > previous:
                     self._on_goal(game, team)
+            self._detect_opponent_goal(game)
+
+    def _detect_opponent_goal(self, game: Game) -> None:
+        """The favourite's opponent scored in a live game: the "wah wah" (#307).
+
+        Sound only: no goal screen, same as any non-favourite goal. Baselined
+        on first sighting without firing, so a restart mid-game stays quiet;
+        recorded under the opponent's own ``_known_scores`` key (free in the
+        favourite's game, where only the favourite is celebrated). Skipped
+        in a shootout, where the headline score only moves when it's decided.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite or not game.involves(favourite):
+            return
+        opponent = game.away if game.home.abbrev == favourite else game.home
+        previous = self._known_scores.get((game.id, opponent.abbrev))
+        self._known_scores[(game.id, opponent.abbrev)] = opponent.score
+        if previous is None or opponent.score <= previous:
+            return
+        if not game.is_live or game.in_shootout:
+            return
+        log.info("Opponent goal: %s (%d)", opponent.abbrev, opponent.score)
+        if self._horn_muted():
+            log.info("Sounds muted by button press; not playing the wah wah")
+            return
+        self.horn.play_wah_wah()
 
     def _on_goal(self, game: Game, team: str | None = None) -> None:
         """Show the goal scene; sound the horn only for the favourite's own goals (#260)."""
