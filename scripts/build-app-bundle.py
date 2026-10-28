@@ -9,7 +9,8 @@ been built, the admin page as a top-level ``admin/``; nhl_scoreboard.updater
 unpacks the package over /opt/nhl-scoreboard and ``admin/`` into the admin
 page's directory (#185). The manifest carries the HUB75 driver
 pin (from fetch-vendor.sh) so a board can refuse a release that needs a
-rebuilt ``rgbmatrix``, plus the bundle's sha256.
+rebuilt ``rgbmatrix``, the bundle's sha256, and an ``image`` fingerprint of the
+scripts, units and apt packages the updater can't deliver (#284).
 """
 
 from __future__ import annotations
@@ -18,10 +19,14 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import image_manifest  # noqa: E402  (sibling script; needs the path line above)
 
 
 def driver_pin() -> str:
@@ -45,6 +50,8 @@ def build(version: str, out: Path, admin_dist: Path = ROOT / "frontend/dist") ->
     manifest = {
         "version": version,
         "driver_commit": driver_pin(),
+        # What the updater can't install (#284); the board compares it with its own record.
+        "image": image_manifest.build(),
         "sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

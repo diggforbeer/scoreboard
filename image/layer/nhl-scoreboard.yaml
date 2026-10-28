@@ -255,6 +255,10 @@ mmdebstrap:
         "$1/etc/systemd/system/timers.target.wants/nhl-scoreboard-update.timer"
       git -C "$IGconf_sb_vendordir/rpi-rgb-led-matrix" rev-parse HEAD \
         > "$1/usr/share/nhl-scoreboard/driver-commit"
+      # What this image installs outside the app tree, for the updater to
+      # compare a release against (#284).
+      python3 "$IGconf_sb_srcdir/scripts/image_manifest.py" \
+        > "$1/usr/share/nhl-scoreboard/image-manifest.json"
       # Only a real release build sets sb.version (build-image.yml, --
       # IGconf_sb_version=<tag>, refs/tags/v* only) -- a PR/dev build
       # leaves it empty, and installed_version() already treats a missing

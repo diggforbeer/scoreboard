@@ -240,6 +240,15 @@ interface UpdateConfig {
   available: boolean
   applicable: boolean
   last_apply: string
+  image_changes: ImageChanges | null
+}
+
+// What a release changes that the in-app update can't install (#284).
+interface ImageChanges {
+  status: 'match' | 'differs' | 'unknown'
+  files: string[]
+  packages: string[]
+  command: string
 }
 
 // ScoreboardApp.status_snapshot()'s dict, handed straight through by
@@ -1694,6 +1703,34 @@ function App() {
               {update.error && <p className="text-danger mb-1">{update.error}</p>}
               {!update.error && update.reason && (
                 <p className="text-body-secondary small mb-1">{update.reason}</p>
+              )}
+              {update.available && update.image_changes?.status === 'unknown' && (
+                <p className="text-warning small mb-1" data-testid="image-changes-unknown">
+                  Can't tell whether this release changes image-level files (scripts, services,
+                  packages): this board has no record from when it was flashed. Reflashing is
+                  recommended. The app update itself still installs.
+                </p>
+              )}
+              {update.available && update.image_changes?.status === 'differs' && (
+                <div className="text-warning small mb-1" data-testid="image-changes-differs">
+                  <p className="mb-1">
+                    This release changes image-level files the in-app update can't install. The app
+                    update still applies, but a reflash is needed for:
+                  </p>
+                  {update.image_changes.files.length > 0 && (
+                    <ul className="mb-1">
+                      {update.image_changes.files.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {update.image_changes.command && (
+                    <p className="mb-1">
+                      New packages can be installed by hand:{' '}
+                      <code>{update.image_changes.command}</code>
+                    </p>
+                  )}
+                </div>
               )}
               {update.last_apply && (
                 <p className="text-body-secondary small mb-1">Last install: {update.last_apply}</p>
