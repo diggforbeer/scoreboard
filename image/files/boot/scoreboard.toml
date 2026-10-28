@@ -171,6 +171,13 @@ horn_dir = ""
 # (or the admin page's upload folder) to replace it.
 wah_wah = false
 
+# Play a short synthesized "ding" when a team you follow (also_follow) scores
+# in a live game, whether or not your favourite is playing. On by default; it
+# does nothing unless also_follow is set. Follows the broadcast delay, the
+# volume and the button mute. Drop a _ding.wav into the horn directory (or
+# the admin page's upload folder) to replace it.
+ding = true
+
 [status]
 # A small web page showing what the board currently thinks is going on
 # (current scene, last successful poll, last error, favourite team) plus

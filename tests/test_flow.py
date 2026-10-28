@@ -92,6 +92,7 @@ class RecordingHorn:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.wah_wah_calls = 0
+        self.ding_calls = 0
 
     def play(self, abbrev: str) -> bool:
         self.calls.append(abbrev)
@@ -99,6 +100,10 @@ class RecordingHorn:
 
     def play_wah_wah(self) -> bool:
         self.wah_wah_calls += 1
+        return True
+
+    def play_ding(self) -> bool:
+        self.ding_calls += 1
         return True
 
 
@@ -1915,3 +1920,70 @@ def test_address_skipped_when_admin_page_is_off(day):
     app._ip_lookup = lambda: "10.0.0.7"
     app.settings.status.enabled = False
     assert app._rotation_screen_scene("address", None, None) is None
+
+
+# --------------------------------------------------------------------------
+# the followed-team ding (#311)
+# --------------------------------------------------------------------------
+
+
+def test_a_followed_teams_goal_dings_while_the_favourite_is_live(followed):
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    assert app.horn.ding_calls == 0
+
+    client.today[0] = _live(client.today[0], away=1)  # SEA scores at CGY
+    tick(app, clock, seconds=1)
+    assert app.horn.ding_calls == 1
+    assert app.horn.calls == [] and app.horn.wah_wah_calls == 0
+    tick(app, clock, seconds=1)
+    assert app.horn.ding_calls == 1, "fires once per goal"
+
+
+def test_a_followed_teams_goal_dings_while_the_favourite_is_not_playing(followed):
+    app, clock, client = followed
+    client.today[0] = _live(client.today[0])
+    tick(app, clock, seconds=1)
+    client.today[0] = _live(client.today[0], away=1)
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    assert app.horn.ding_calls == 1
+
+
+def test_the_ding_is_silenced_by_the_button_mute(followed):
+    app, clock, client = followed
+    app._horn_muted_until = app.monotonic() + 3600
+    client.today[0] = _live(client.today[0], away=1)
+    tick(app, clock, seconds=1)
+    assert app.horn.ding_calls == 0
+
+
+def test_a_followed_opponent_gets_the_wah_wah_not_the_ding(day):
+    app, clock, client = day
+    app.settings.scoreboard.also_follow = ["TBL"]
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    client.today[1] = _live(client.today[1], away=1)  # TBL scores on NSH
+    tick(app, clock, seconds=1)
+    assert app.horn.wah_wah_calls == 1
+    assert app.horn.ding_calls == 0
+
+
+def test_the_favourites_goal_plays_the_horn_not_the_ding(followed):
+    app, clock, client = followed
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    client.today[1] = _live(client.today[1], home=1)
+    tick(app, clock, seconds=1)
+    assert app.horn.calls == [FAV]
+    assert app.horn.ding_calls == 0
+
+
+def test_a_followed_game_first_seen_mid_score_stays_quiet(fake_backend):
+    client = FlowClient()
+    client.today = [game(9, "SEA", "CGY", PUCK_DROP, "LIVE", period=2, home_score=0, away_score=2)]
+    app = make_app(fake_backend, Clock(PUCK_DROP + timedelta(hours=1)), client)
+    app.settings.scoreboard.also_follow = ["SEA"]
+    app.refresh()
+    assert app.horn.ding_calls == 0
