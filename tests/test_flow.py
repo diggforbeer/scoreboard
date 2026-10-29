@@ -24,6 +24,7 @@ from nhl_scoreboard.config import RotationEntry, Settings
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.nhl.api import NHLApiError
 from nhl_scoreboard.nhl.models import (
+    PLAYOFF_LINE_MIN_GAMES,
     ClubStats,
     Game,
     GoalEvent,
@@ -1810,12 +1811,34 @@ def wildcard_rows():
     return leaders + race
 
 
+def late_season(rows, games=PLAYOFF_LINE_MIN_GAMES):
+    return [dataclasses.replace(r, games_played=games) for r in rows]
+
+
+@pytest.mark.parametrize("screen", ["standings", "top_west", "division", "wildcard"])
+def test_playoff_line_waits_until_enough_games_are_played(day, screen):
+    """Too early in the season the order is noise, so no screen draws a line (#298)."""
+    from nhl_scoreboard.config import RotationEntry
+
+    app, _clock, client = day
+    app.settings.rotation = [RotationEntry(screen, 8)]
+    rows = [dataclasses.replace(r, division="C") for r in wildcard_rows()]
+    for games, expect_line in ((PLAYOFF_LINE_MIN_GAMES - 1, False), (PLAYOFF_LINE_MIN_GAMES, True)):
+        client.standings_rows = late_season(rows, games)
+        app._standings = None  # skip the hourly cache so the new table is read
+        app.refresh()
+        app.monotonic = lambda: 0.0
+        shown = app.select_scene()
+        assert shown.standings, screen
+        assert (shown.playoff_cut is not None) is expect_line, (screen, games)
+
+
 def test_wildcard_screen_lists_the_race_with_the_line_after_second(day):
     from nhl_scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("wildcard", 8)]
-    client.standings_rows = wildcard_rows()
+    client.standings_rows = late_season(wildcard_rows())
     app.refresh()
     app.monotonic = lambda: 0.0
     shown = app.select_scene()
@@ -1839,7 +1862,7 @@ def test_standings_screens_carry_the_real_playoff_cut(day):
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("top_west", 8)]
-    client.standings_rows = wildcard_rows()
+    client.standings_rows = late_season(wildcard_rows())
     app.refresh()
     app.monotonic = lambda: 0.0
     shown = app.select_scene()

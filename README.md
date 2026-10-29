@@ -356,6 +356,18 @@ boot. A submitted form is checked against the request's own `Host`
 header to reject cross-site submissions, but there's still no login: as
 with the rest of the page, this assumes the LAN itself is trusted.
 
+### What the in-app update can't change
+
+The admin page's software update replaces the app and the admin page only.
+Scripts in `/usr/local/sbin`, systemd units and apt packages come from the
+flashed image, so a release that changes one of them is not fully applied by
+the update. Each release records a fingerprint of those files and the image's
+package list; the update card compares it with the one the board was flashed
+with and lists what differs, plus the `sudo apt-get install -y ...` command
+for new packages. A board flashed before this has no record, so the card says
+it can't tell and recommends a reflash. The app update still installs either
+way. Not verified on hardware.
+
 ## Layout
 
 With logos (the default):

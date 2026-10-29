@@ -582,6 +582,7 @@ def _update_payload() -> dict[str, object]:
             "available": bool(state.get("available")),
             "applicable": bool(state.get("applicable")),
             "last_apply": (state.get("last_apply") or {}).get("detail") or "",
+            "image_changes": state.get("image_changes"),
         },
     }
 
@@ -1076,6 +1077,30 @@ def _delete_horn(team: object) -> bool:
     return deleted
 
 
+_HORN_DOWNLOAD_NAMES = {"default": "default-horn", "wah_wah": "wah-wah"}
+
+
+def _read_horn(team: object) -> tuple[str, bytes]:
+    """The uploaded horn for ``team`` as ``(download file name, bytes)`` --
+    the reverse of _save_horn, behind the Download button. Only the upload
+    directory is read (shipped files are out of scope), and the path comes
+    from _horn_stem plus a fixed extension, never from the client. Raises
+    ValueError with a message fit to show, for an unknown team or no
+    uploaded file.
+    """
+    stem = _horn_stem(team)
+    directory = upload_directory()
+    for ext in HORN_EXTENSIONS:
+        path = directory / f"{stem}{ext}"
+        if path.is_file():
+            try:
+                raw = path.read_bytes()
+            except OSError as exc:
+                raise ValueError(f"could not read the file: {exc.strerror or exc}") from None
+            return f"{_HORN_DOWNLOAD_NAMES.get(str(team), stem)}{ext}", raw
+    raise ValueError(f"no uploaded horn for {team}")
+
+
 def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
     """Play a specific horn by key (#211's follow-up), not just whichever
     one the favourite currently resolves to (_test_horn's own job) -- same
@@ -1406,6 +1431,21 @@ async def _handle(connection: ServerConnection) -> None:
                 else:
                     await connection.send(json.dumps({"type": "horn_deleted", "team": team}))
                     await _broadcast(_horn_list_payload())
+            elif msg_type == "download_horn":
+                team = message.get("team")
+                try:
+                    filename, raw = _read_horn(team)
+                except ValueError as exc:
+                    error = {"type": "error", "section": "horn_action", "message": str(exc)}
+                    await connection.send(json.dumps(error))
+                else:
+                    reply = {
+                        "type": "horn_download",
+                        "team": team,
+                        "filename": filename,
+                        "data": base64.b64encode(raw).decode("ascii"),
+                    }
+                    await connection.send(json.dumps(reply))
             elif msg_type == "logs_subscribe":
                 await _subscribe_logs(connection)
             elif msg_type == "logs_unsubscribe":

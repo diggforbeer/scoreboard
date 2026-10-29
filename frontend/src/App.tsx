@@ -241,6 +241,15 @@ interface UpdateConfig {
   available: boolean
   applicable: boolean
   last_apply: string
+  image_changes: ImageChanges | null
+}
+
+// What a release changes that the in-app update can't install (#284).
+interface ImageChanges {
+  status: 'match' | 'differs' | 'unknown'
+  files: string[]
+  packages: string[]
+  command: string
 }
 
 // ScoreboardApp.status_snapshot()'s dict, handed straight through by
@@ -292,6 +301,7 @@ type ServerMessage =
   | { type: 'horn_list'; horns: HornEntry[] }
   | { type: 'horn_played'; team: string; played: boolean; reason: string }
   | { type: 'horn_deleted'; team: string }
+  | { type: 'horn_download'; team: string; filename: string; data: string }
   | PanelFrame
 
 function connectionBadge(state: ConnectionState) {
@@ -549,6 +559,23 @@ function App() {
             setHornActionBusy(null)
             setHornActionMessage({ team: message.team, text: 'Deleted.', ok: true })
             break
+          case 'horn_download': {
+            setHornActionBusy(null)
+            const bytes = Uint8Array.from(atob(message.data), (c) => c.charCodeAt(0))
+            const blob = new Blob([bytes], {
+              type: message.filename.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
+            })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = message.filename
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            URL.revokeObjectURL(url)
+            setHornActionMessage({ team: message.team, text: 'Downloaded.', ok: true })
+            break
+          }
           case 'error':
             if (message.section === 'logs') {
               setLogError(message.message)
@@ -861,6 +888,19 @@ function App() {
     }
     setHornActionBusy(team)
     socketRef.current.send(JSON.stringify({ type: 'play_horn', team }))
+  }
+
+  function downloadHorn(team: string) {
+    if (hornActionTimerRef.current) clearTimeout(hornActionTimerRef.current)
+    hornActionTeamRef.current = team
+    setHornActionMessage(null)
+    if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      setHornActionMessage({ team, text: NOT_CONNECTED_ERROR, ok: false })
+      return
+    }
+    setHornActionBusy(team)
+    setHornActionMessage({ team, text: 'Downloading...', ok: true })
+    socketRef.current.send(JSON.stringify({ type: 'download_horn', team }))
   }
 
   function deleteHorn(team: string) {
@@ -1696,6 +1736,34 @@ function App() {
               {!update.error && update.reason && (
                 <p className="text-body-secondary small mb-1">{update.reason}</p>
               )}
+              {update.available && update.image_changes?.status === 'unknown' && (
+                <p className="text-warning small mb-1" data-testid="image-changes-unknown">
+                  Can't tell whether this release changes image-level files (scripts, services,
+                  packages): this board has no record from when it was flashed. Reflashing is
+                  recommended. The app update itself still installs.
+                </p>
+              )}
+              {update.available && update.image_changes?.status === 'differs' && (
+                <div className="text-warning small mb-1" data-testid="image-changes-differs">
+                  <p className="mb-1">
+                    This release changes image-level files the in-app update can't install. The app
+                    update still applies, but a reflash is needed for:
+                  </p>
+                  {update.image_changes.files.length > 0 && (
+                    <ul className="mb-1">
+                      {update.image_changes.files.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {update.image_changes.command && (
+                    <p className="mb-1">
+                      New packages can be installed by hand:{' '}
+                      <code>{update.image_changes.command}</code>
+                    </p>
+                  )}
+                </div>
+              )}
               {update.last_apply && (
                 <p className="text-body-secondary small mb-1">Last install: {update.last_apply}</p>
               )}
@@ -1923,6 +1991,14 @@ function App() {
                       disabled={hornActionBusy === horn.team}
                     >
                       Play
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => downloadHorn(horn.team)}
+                      disabled={hornActionBusy === horn.team}
+                    >
+                      Download
                     </button>
                     <button
                       type="button"

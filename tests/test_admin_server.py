@@ -10,6 +10,7 @@ for that.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import http.client
 import json
@@ -442,6 +443,7 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
             "available": True,
             "applicable": True,
             "last_apply": "",
+            "image_changes": None,
         },
     }
 
@@ -1735,6 +1737,52 @@ def test_delete_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team
     assert message["type"] == "error" and message["section"] == "horn_action"
 
 
+@pytest.mark.parametrize(
+    ("team", "data", "filename"),
+    [
+        ("NSH", _wav_b64(), "NSH.wav"),
+        ("NSH", _mp3_b64(), "NSH.mp3"),
+        ("default", _wav_b64(), "default-horn.wav"),
+        ("wah_wah", _wav_b64(), "wah-wah.wav"),
+    ],
+)
+def test_download_horn_round_trips_the_upload_byte_for_byte(
+    app_dir, config_path, upload_dir, team, data, filename
+):
+    _upload(team, data)
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": team}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "horn_download"
+    assert message["team"] == team and message["filename"] == filename
+    assert base64.b64decode(message["data"]) == base64.b64decode(data)
+
+
+def test_download_horn_without_an_upload_is_an_error(app_dir, config_path, upload_dir):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": "NSH"}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
+@pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
+def test_download_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": team}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
 def test_demo_mode_message_calls_setter_and_broadcasts_snapshot(app_dir, config_path, monkeypatch):
     seen = []
     state = {"demo mode": "off"}
@@ -1983,3 +2031,16 @@ def test_play_horn_ding_plays_even_with_the_setting_off(
     reply = asyncio.run(_serve_and_run(scenario))
     assert reply["played"] is True
     assert len(calls) == 1 and calls[0][-1].endswith("_ding.wav")
+
+
+@pytest.mark.parametrize("status", ["match", "differs", "unknown"])
+def test_update_payload_exposes_the_image_comparison(state_file, status):
+    differs = status == "differs"
+    changes = dict(
+        status=status,
+        files=["scripts/x"] if differs else [],
+        packages=["mpg123"] if differs else [],
+        command="sudo apt-get install -y mpg123" if differs else "",
+    )
+    state_file.write_text(json.dumps(dict(available=True, image_changes=changes)))
+    assert admin_server._update_payload()["data"]["image_changes"] == changes
