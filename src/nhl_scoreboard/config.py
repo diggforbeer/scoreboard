@@ -382,6 +382,9 @@ class AudioConfig:
     #: Play a sad-trombone "wah wah" when the opponent scores in the
     #: favourite's live game (#307). Off by default: not everyone wants it.
     wah_wah: bool = False
+    #: Play a "ding" when a followed (also_follow) team scores in a live game
+    #: (#311). On by default: it does nothing without also_follow.
+    ding: bool = True
 
     def __post_init__(self) -> None:
         self.volume = max(0, min(100, self.volume))

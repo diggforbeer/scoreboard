@@ -291,3 +291,62 @@ def test_shipped_wah_wah_is_reproducible_and_matches_the_horn_format():
         assert wah.getparams()[:3] == horn.getparams()[:3]
         assert 2.0 <= wah.getnframes() / wah.getframerate() <= 3.0
         assert wah.readframes(wah.getnframes()) == module.generate()
+
+
+def test_ding_is_on_by_default_and_plays_its_own_file(tmp_path):
+    touch(tmp_path / "_ding.wav")
+    touch(tmp_path / "_default.wav")
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], device="plughw:1,0", runner=runner)
+    assert player.play_ding() is True
+    assert runner.calls == [["aplay", "-q", "-D", "plughw:1,0", str(tmp_path / "_ding.wav")]]
+
+
+def test_ding_off_switch_and_force(tmp_path):
+    touch(tmp_path / "_ding.wav")
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], ding=False, runner=runner)
+    assert player.play_ding() is False
+    assert runner.calls == []
+    assert player.play_ding(force=True) is True
+
+
+def test_ding_upload_directory_beats_the_shipped_file(tmp_path):
+    uploads, shipped = tmp_path / "up", tmp_path / "ship"
+    uploads.mkdir()
+    shipped.mkdir()
+    touch(uploads / "_ding.wav")
+    touch(shipped / "_ding.wav")
+    assert GoalHornPlayer([uploads, shipped]).ding_path() == uploads / "_ding.wav"
+
+
+def test_ding_missing_file_or_disabled_audio_is_not_an_error(tmp_path):
+    runner = RecordingRunner()
+    assert GoalHornPlayer([tmp_path], runner=runner).play_ding() is False
+    touch(tmp_path / "_ding.wav")
+    assert GoalHornPlayer([tmp_path], enabled=False, runner=runner).play_ding() is False
+    assert runner.calls == []
+
+
+def test_shipped_ding_is_reproducible_and_matches_the_horn_format():
+    import importlib.util
+    import wave
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("make_ding", root / "scripts/make_ding.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    shipped = root / "assets" / "horns" / "_ding.wav"
+    with (
+        wave.open(str(shipped)) as ding,
+        wave.open(str(root / "assets/horns/_default.wav")) as horn,
+    ):
+        assert ding.getparams()[:3] == horn.getparams()[:3]
+        assert 0.5 <= ding.getnframes() / ding.getframerate() <= 1.0
+        frames = ding.readframes(ding.getnframes())
+    assert frames == module.generate()
+    samples = [
+        int.from_bytes(frames[i : i + 2], "little", signed=True) for i in range(0, len(frames), 2)
+    ]
+    assert max(abs(s) for s in samples) < 32767
