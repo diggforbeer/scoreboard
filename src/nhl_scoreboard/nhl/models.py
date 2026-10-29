@@ -938,9 +938,9 @@ DIVISION_SPOTS = 3
 
 
 #: The playoff line stays off until some team in the table has played this many
-#: games: early on the order is mostly noise and the line would mislead. About
-#: a quarter of the season, around US Thanksgiving, the usual first checkpoint.
-PLAYOFF_LINE_MIN_GAMES = 20
+#: games: early on the order is mostly noise and the line would mislead. Halfway
+#: through the 82-game season (early January), by the owner's call.
+PLAYOFF_LINE_MIN_GAMES = 41
 
 
 def playoff_line_ready(rows: list[StandingsRow]) -> bool:

@@ -495,8 +495,8 @@ a scrolled frame records out-of-bounds pixels below the panel by design.
 block): opt-in, gated on the favourite's `games_played > 0` like
 `standings`. The playoff line (#298: a rule at the real cut on `standings`,
 `top_*` and `division`, and after 2nd on the `wildcard` screen) is held back
-by the owner's call until `PLAYOFF_LINE_MIN_GAMES` (20, about US Thanksgiving)
-games are played by some team in the table (`playoff_line_ready`, applied by
+by the owner's call until `PLAYOFF_LINE_MIN_GAMES` (41, halfway through the
+season) games are played by some team in the table (`playoff_line_ready`, applied by
 `ScoreboardApp._line`): early on the order is noise and the line misled. The
 screens themselves show from the first game.
 `SCROLLING_KINDS` lists the scene kinds sharing the scroll.
