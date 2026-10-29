@@ -934,6 +934,7 @@ class ScoreboardApp:
                 enabled=new_settings.audio.enabled,
                 volume=new_settings.audio.volume,
                 wah_wah=new_settings.audio.wah_wah,
+                ding=new_settings.audio.ding,
             )
 
         if logos_changed:
@@ -1136,7 +1137,7 @@ class ScoreboardApp:
         self.horn.play_wah_wah()
 
     def _on_goal(self, game: Game, team: str | None = None) -> None:
-        """Show the goal scene; sound the horn only for the favourite's own goals (#260)."""
+        """Show the goal scene; the horn is the favourite's, a followed team gets the ding."""
         favourite = self.settings.scoreboard.favourite_team
         team = team or favourite
         log.info(
@@ -1149,6 +1150,12 @@ class ScoreboardApp:
         )
         self.last_goal = (game.id, self.monotonic(), team)
         if team != favourite:
+            # #311: live goals only; a shootout's headline score moves when decided.
+            if game.is_live and not game.in_shootout:
+                if self._horn_muted():
+                    log.info("Sounds muted by button press; not playing the ding")
+                else:
+                    self.horn.play_ding()
             return
         if self._horn_muted():
             log.info("Goal horn muted by button press; not playing")

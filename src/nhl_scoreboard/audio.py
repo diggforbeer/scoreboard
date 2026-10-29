@@ -24,6 +24,9 @@ DEFAULT_NAME = f"{DEFAULT_STEM}.wav"
 #: per-team variants; an upload or drop-in of this name overrides the shipped one.
 WAH_WAH_STEM = "_wah_wah"
 
+#: The "ding" for a followed (non-favourite) team's goals (#311); same override rules.
+DING_STEM = "_ding"
+
 #: Horn file extensions, in lookup order within one directory. WAV plays
 #: through aplay, MP3 through mpg123 (#208) -- aplay can't decode MP3.
 HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
@@ -76,6 +79,7 @@ class GoalHornPlayer:
         enabled: bool = True,
         volume: int = 100,
         wah_wah: bool = False,
+        ding: bool = True,
         runner: Callable[[list[str]], None] | None = None,
         mixer_runner: Callable[[list[str]], bool] | None = None,
     ) -> None:
@@ -84,6 +88,7 @@ class GoalHornPlayer:
         self.enabled = enabled
         self.volume = volume
         self.wah_wah = wah_wah
+        self.ding = ding
         self._run = runner or self._popen
         self._run_mixer = mixer_runner or self._amixer
         #: Why the last play() returned False, in words fit for the admin
@@ -99,6 +104,7 @@ class GoalHornPlayer:
         enabled: bool = True,
         volume: int = 100,
         wah_wah: bool = False,
+        ding: bool = True,
     ) -> GoalHornPlayer:
         return cls(
             default_directories(horn_dir),
@@ -106,6 +112,7 @@ class GoalHornPlayer:
             enabled=enabled,
             volume=volume,
             wah_wah=wah_wah,
+            ding=ding,
         )
 
     def path_for(self, abbrev: str) -> Path | None:
@@ -121,6 +128,10 @@ class GoalHornPlayer:
     def wah_wah_path(self) -> Path | None:
         """The opponent-goal sting: uploads and drop-ins first, then the shipped file."""
         return self._find(WAH_WAH_STEM)
+
+    def ding_path(self) -> Path | None:
+        """The followed-team ding: uploads and drop-ins first, then the shipped file."""
+        return self._find(DING_STEM)
 
     def _find(self, *stems: str) -> Path | None:
         for stem in stems:
@@ -151,6 +162,18 @@ class GoalHornPlayer:
         path = self.wah_wah_path()
         if path is None:
             log.debug("No wah-wah sound available")
+            return False
+        return self._launch(path)
+
+    def play_ding(self, force: bool = False) -> bool:
+        """Launch the followed-team ding. Off unless ``ding`` is on (``force`` skips
+        that, for the admin page's Play button); never raises."""
+        self.last_error = ""
+        if not (self.enabled and (self.ding or force)):
+            return False
+        path = self.ding_path()
+        if path is None:
+            log.debug("No ding sound available")
             return False
         return self._launch(path)
 
