@@ -305,3 +305,125 @@ def test_apply_without_admin_in_bundle_leaves_frontend_alone(env, admin, monkeyp
     _prepared(env, monkeypatch, _bundle(GOOD), healthy=True)
     assert updater.apply() is True
     assert (admin / "index.html").read_text() == "OLD-UI"
+
+
+# -- image-level manifest (#284) ------------------------------------------
+
+BOARD_IMAGE = {
+    "files": {"scripts/a": "1", "systemd/a.service": "2"},
+    "packages": ["python3", "alsa-utils"],
+}
+
+
+@pytest.fixture
+def board_image(tmp_path, monkeypatch):
+    path = tmp_path / "image-manifest.json"
+    monkeypatch.setattr(updater, "IMAGE_MANIFEST_FILE", path)
+    return path
+
+
+def test_image_changes_match(board_image):
+    board_image.write_text(json.dumps(BOARD_IMAGE))
+    assert updater.image_changes(BOARD_IMAGE) == {
+        "status": "match",
+        "files": [],
+        "packages": [],
+        "command": "",
+    }
+
+
+def test_image_changes_lists_changed_files_and_new_packages(board_image):
+    board_image.write_text(json.dumps(BOARD_IMAGE))
+    release = {
+        "files": {"scripts/a": "changed", "systemd/a.service": "2", "systemd/b.timer": "3"},
+        "packages": ["python3", "alsa-utils", "mpg123", "dnsmasq"],
+    }
+    assert updater.image_changes(release) == {
+        "status": "differs",
+        "files": ["scripts/a", "systemd/b.timer"],
+        "packages": ["dnsmasq", "mpg123"],
+        "command": "sudo apt-get install -y dnsmasq mpg123",
+    }
+
+
+def test_image_changes_ignores_removed_packages(board_image):
+    board_image.write_text(json.dumps(BOARD_IMAGE))
+    release = {**BOARD_IMAGE, "packages": ["python3"]}
+    assert updater.image_changes(release)["status"] == "match"
+
+
+@pytest.mark.parametrize("content", [None, "not json", "[]"])
+def test_image_changes_without_a_board_record_is_unknown_not_match(board_image, content):
+    if content is not None:
+        board_image.write_text(content)
+    assert updater.image_changes(BOARD_IMAGE)["status"] == "unknown"
+
+
+def test_image_changes_none_for_a_release_without_a_fingerprint(board_image):
+    assert updater.image_changes(None) is None
+
+
+def test_check_records_image_changes_and_still_applies(env, board_image, monkeypatch):
+    board_image.write_text(json.dumps(BOARD_IMAGE))
+    _fake_release(monkeypatch)
+    real = updater._fetch_json
+
+    def fetch(url):
+        data = real(url)
+        if url.endswith("manifest.json"):
+            data = {**data, "image": {**BOARD_IMAGE, "packages": ["python3", "mpg123"]}}
+        return data
+
+    monkeypatch.setattr(updater, "_fetch_json", fetch)
+    state = updater.check()
+    assert state["applicable"] is True
+    assert state["image_changes"]["status"] == "differs"
+    assert state["image_changes"]["command"] == "sudo apt-get install -y mpg123"
+
+
+def _load_script(name):
+    path = Path(__file__).resolve().parent.parent / "scripts" / name
+    spec = importlib.util.spec_from_file_location(name.removesuffix(".py"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fake_repo(root, *, script="a", unit="u", packages=("python3",)):
+    (root / "image/files/scripts").mkdir(parents=True, exist_ok=True)
+    (root / "image/files/systemd").mkdir(parents=True, exist_ok=True)
+    (root / "image/layer").mkdir(parents=True, exist_ok=True)
+    (root / "image/files/scripts/tool").write_text(script)
+    (root / "image/files/systemd/x.service").write_text(unit)
+    listing = "".join(f"    - {p}  # why\n" for p in packages)
+    (root / "image/layer/nhl-scoreboard.yaml").write_text(
+        f"  packages:\n{listing}\n  customize-hooks:\n    - x\n"
+    )
+
+
+def test_image_manifest_detects_script_unit_and_package_changes(tmp_path):
+    module = _load_script("image_manifest.py")
+    _fake_repo(tmp_path / "one")
+    _fake_repo(tmp_path / "two", script="b", unit="v", packages=("python3", "mpg123"))
+    one = module.build(tmp_path / "one")
+    two = module.build(tmp_path / "two")
+    assert set(one["files"]) == {"scripts/tool", "systemd/x.service"}
+    assert one["packages"] == ["python3"]
+    assert one["files"]["scripts/tool"] != two["files"]["scripts/tool"]
+    assert one["files"]["systemd/x.service"] != two["files"]["systemd/x.service"]
+    assert two["packages"] == ["mpg123", "python3"]
+
+
+def test_image_manifest_lists_the_real_layer_packages():
+    module = _load_script("image_manifest.py")
+    manifest = module.build()
+    assert "mpg123" in manifest["packages"]
+    assert "scripts/nhl-scoreboard-setup-ap" in manifest["files"]
+    assert "systemd/nhl-scoreboard.service" in manifest["files"]
+
+
+def test_build_app_bundle_manifest_carries_the_image_fingerprint(tmp_path):
+    module = _load_script("build-app-bundle.py")
+    module.build("v2026.09.29", tmp_path)
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["image"] == _load_script("image_manifest.py").build()

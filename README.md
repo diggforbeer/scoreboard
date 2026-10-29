@@ -194,6 +194,7 @@ scores_grid = false         # with no favourite game up, show today's games four
 enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
+ding = true                  # "ding" when a team you follow (also_follow) scores in a live game
 wah_wah = false              # sad-trombone "wah wah" when the other team scores (live game, favourite only)
 
 [wifi]
@@ -290,7 +291,8 @@ take turns, `rotate_seconds` each, with a quick look back at your
 favourite's score every cycle. When your favourite isn't playing, live
 followed games take equal turns. When a followed team scores, the board
 jumps straight to that game's GOAL screen (and the scorer after it) from
-whichever game was up. The horn still only plays for your favourite, and
+whichever game was up. The horn still only plays for your favourite (a followed team's goal plays a
+short "ding" instead, `audio.ding`), and
 in your favourite's own game only its goals count: a followed team scoring
 against your favourite is never celebrated.
 Standings, leaders, the matchup and three stars stay your favourite's.
@@ -353,6 +355,18 @@ doesn't come up, the same rollback `scoreboard-provision` already does at
 boot. A submitted form is checked against the request's own `Host`
 header to reject cross-site submissions, but there's still no login: as
 with the rest of the page, this assumes the LAN itself is trusted.
+
+### What the in-app update can't change
+
+The admin page's software update replaces the app and the admin page only.
+Scripts in `/usr/local/sbin`, systemd units and apt packages come from the
+flashed image, so a release that changes one of them is not fully applied by
+the update. Each release records a fingerprint of those files and the image's
+package list; the update card compares it with the one the board was flashed
+with and lists what differs, plus the `sudo apt-get install -y ...` command
+for new packages. A board flashed before this has no record, so the card says
+it can't tell and recommends a reflash. The app update still installs either
+way. Not verified on hardware.
 
 ## Layout
 
