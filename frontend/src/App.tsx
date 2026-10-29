@@ -120,6 +120,7 @@ interface AudioConfig {
   horn_dir: string
   volume: number
   wah_wah: boolean
+  ding: boolean
 }
 
 // One row per horn actually sitting in the admin page's writable upload
@@ -1866,6 +1867,18 @@ function App() {
                   Play a sad “wah wah” when the other team scores
                 </label>
               </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="audio-ding"
+                  checked={audio.ding}
+                  onChange={(e) => audioSave.edit({ ...audio, ding: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="audio-ding">
+                  Play a ding when a team you follow scores
+                </label>
+              </div>
               <div className="mb-3">
                 <label className="form-label" htmlFor="audio-device">
                   ALSA device (blank for default)
@@ -1957,7 +1970,9 @@ function App() {
                         ? 'Default horn'
                         : horn.team === 'wah_wah'
                           ? 'Wah-wah (opponent scores)'
-                          : `${teamName(horn.team)} (${horn.team})`}
+                          : horn.team === 'ding'
+                            ? 'Ding (followed team scores)'
+                            : `${teamName(horn.team)} (${horn.team})`}
                     </strong>
                     <span className="text-body-secondary small ms-2">{horn.filename}</span>
                     {hornActionMessage?.team === horn.team && (
@@ -2016,6 +2031,7 @@ function App() {
               >
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
+                <option value="ding">Ding (followed team scores)</option>
                 {NHL_TEAMS.map(([code, name]) => (
                   <option key={code} value={code}>
                     {name} ({code})
