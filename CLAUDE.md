@@ -102,6 +102,7 @@ ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (
 nhl-scoreboard --dump                                            # today's scores as text; no display
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live board at http://localhost:8888
 python scripts/preview.py --fixture                              # frames as ASCII, offline
+python scripts/render-screens.py                                 # docs/screens/*.png for screens.md; rerun after a layout change
 python scripts/fetch-logos.py                                    # team logos -> assets/logos/ (git-ignored)
 ./scripts/fetch-vendor.sh                                        # HUB75 driver source -> image/files/vendor/
 ```
@@ -147,6 +148,15 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   round-trips) so a regression in the "static page + WebSocket on one
   port" mechanism itself is caught automatically instead of relying on
   that manual discipline continuing forever.
+
+- **`screens.md` is the screen guide, and its pictures are generated.**
+  `scripts/render-screens.py` draws every `demo_steps()` scene (each has a
+  unique `name`) through the real renderer into `docs/screens/`, with
+  synthetic circle logos (the crests aren't committed). `tests/
+  test_screens_doc.py` fails if an image is stale or orphaned, if a
+  `Scene.kind` is missing from the guide, or if a demo step's image isn't
+  shown in it. A new scene: add a named demo step, regenerate, write its
+  section.
 
 ## Rendering rules
 
