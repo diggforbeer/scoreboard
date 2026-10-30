@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import qrcode
 
-from . import april_fools
+from . import april_fools, blowout
 from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
@@ -485,6 +485,9 @@ class ScoreboardApp:
         #: (game id, monotonic time, stars) of the three-stars screen, for
         #: how long it stays up.
         self._three_stars: tuple[int, float, tuple[Star, ...]] | None = None
+        #: (game id, monotonic start) of the blowout flash (#326, blowout.py).
+        self._blowout: tuple[int, float] | None = None
+        self._blowout_shown: set[int] = set()
         #: The configured logo library, held by run_demo() while it toggles
         #: renderer.logos between it and None for the text layout.
         self._demo_real_logos: LogoLibrary | None = logos
@@ -741,6 +744,7 @@ class ScoreboardApp:
                 watched = game.id in self._seen_live
                 self.ended_at[game.id] = now if watched else min(now, game.estimated_end())
                 self._queue_three_stars(game, watched=watched)
+                self._note_blowout(game, watched=watched)
                 log.debug(
                     "Game %s ended at %s (%s)",
                     game.id,
@@ -785,6 +789,7 @@ class ScoreboardApp:
             if game_id not in current_ids:
                 del self._three_stars_pending[game_id]
         self._three_stars_shown &= current_ids
+        self._blowout_shown &= current_ids
 
     def _record_error(self, message: str, *, from_scores: bool = False) -> None:
         """Track the most recent fetch failure, for the status page (#48).
@@ -1341,7 +1346,29 @@ class ScoreboardApp:
                 continue
             del self._three_stars_pending[game_id]
             self._three_stars_shown.add(game_id)
-            self._three_stars = (game_id, now, stars)
+            self._three_stars = (game_id, now + self._blowout_remaining(), stars)
+
+    def _note_blowout(self, game: Game, *, watched: bool) -> None:
+        """Arm the blowout flash (#326) when a game we watched ends as one."""
+        favourite = self.settings.scoreboard.favourite_team
+        if (
+            watched
+            and game.id not in self._blowout_shown
+            and blowout.is_blowout_loss(game, favourite)
+        ):
+            self._blowout_shown.add(game.id)
+            self._blowout = (game.id, self.monotonic())
+
+    def _blowout_remaining(self) -> float:
+        if self._blowout is None:
+            return 0.0
+        return max(0.0, self._blowout[1] + blowout.SECONDS - self.monotonic())
+
+    def _blowout_override(self) -> Scene | None:
+        if self._blowout is None or self._blowout_remaining() <= 0:
+            return None
+        game = next((g for g in self.games if g.id == self._blowout[0]), None)
+        return None if game is None else Scene("blowout", game)
 
     def _three_stars_override(self) -> Scene | None:
         if self._three_stars is None:
@@ -2121,6 +2148,9 @@ class ScoreboardApp:
                 and self.monotonic() - goal_time < self.settings.scoreboard.goal_flash_seconds
             ):
                 return Scene("goal", goal_game, goal_team=goal_team)
+        flash = self._blowout_override()
+        if flash is not None:
+            return flash
         stars = self._three_stars_override()
         return stars if stars is not None else scene
 
@@ -2534,6 +2564,8 @@ class ScoreboardApp:
             r.draw_goal_detail(self.canvas, scene.game, scene.goal_event)
         elif scene.kind == "three_stars":
             r.draw_three_stars(self.canvas, scene.game, scene.stars)
+        elif scene.kind == "blowout":  # not documented on purpose, see blowout.py
+            r.draw_blowout(self.canvas, scene.game, favourite)
         elif scene.kind == "countdown":
             r.draw_countdown(self.canvas, scene.game, self.clock())
         elif scene.kind == "preview":
