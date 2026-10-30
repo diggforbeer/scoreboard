@@ -256,6 +256,8 @@ same way a router's printed default password is. The account can `sudo`
 
 ## What it shows
 
+Every screen, with pictures, is in the [screen guide](screens.md).
+
 With a `favourite_team` set (the default, `NSH`), the board follows your team's day:
 
 | When | Board shows |

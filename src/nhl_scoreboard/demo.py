@@ -13,7 +13,9 @@ from typing import Any, NamedTuple
 
 from .app import Scene, ScoreboardApp
 from .nhl.models import (
+    AssistDetail,
     Game,
+    GoalEvent,
     GoalieLine,
     MeetingResult,
     SeasonSeriesRecord,
@@ -22,6 +24,7 @@ from .nhl.models import (
     Situation,
     SkaterLine,
     StandingsRow,
+    Star,
     TeamLeaders,
     conference_standings,
     standings_window,
@@ -67,6 +70,8 @@ _CONFERENCE = (
 #: Made-up players, shown whichever team is the favourite.
 _ADDRESS_QR = ScoreboardApp._qr_matrix("http://192.168.1.42:8080", "demo address")
 
+_AP_QR = ScoreboardApp._qr_matrix("WIFI:T:WPA;S:NHL-Scoreboard;P:scoreboard;;", "demo AP setup")
+
 _LEADERS = TeamLeaders(
     goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
     points=SkaterLine(2, "R. O'Reilly", 9, 17, 26),
@@ -94,6 +99,9 @@ class DemoStep(NamedTuple):
     animate_shootout: bool = False
     #: Scroll the scene's table over this many seconds (``conference_leaders``).
     scroll_seconds: float = 0.0
+    #: A unique, file-safe name (``game_live``, ``game_live_text``), which
+    #: ``scripts/render-screens.py`` uses to name the step's image.
+    name: str = ""
 
 
 def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
@@ -146,80 +154,139 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         shootout=_shootout(away, home, ["xg", "gx", "xg"]),
     )
 
-    return [
-        DemoStep(Scene("connecting")),
-        DemoStep(Scene("preview", upcoming)),
-        DemoStep(Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1))),
-        DemoStep(
-            Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1)), use_logos=False
+    goal_event = GoalEvent(
+        team_abbrev=home,
+        scorer_name="F. Forsberg",
+        scorer_goals_to_date=15,
+        scorer_player_id=1,
+        assists=(AssistDetail("R. O'Reilly", 18, 90), AssistDetail("R. Josi", 12, 59)),
+        strength="pp",
+        scorer_sweater_number=9,
+        scorer_points=24,
+    )
+    stars = (
+        Star(1, 1, home, "F. Forsberg", 9, "R", 2, 1, 3),
+        Star(2, 2, away, "N. MacKinnon", 29, "C", 1, 1, 2),
+        Star(3, 3, home, "R. O'Reilly", 90, "C", 0, 2, 2),
+    )
+
+    steps = [
+        ("connecting", Scene("connecting"), {}),
+        ("preview", Scene("preview", upcoming), {}),
+        ("matchup", Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1)), {}),
+        (
+            "matchup_text",
+            Scene("matchup", upcoming, season_series=SeasonSeriesRecord(2, 1)),
+            {"use_logos": False},
         ),
-        DemoStep(Scene("matchup_meetings", upcoming, meetings=_meetings(now))),
-        DemoStep(Scene("matchup_meetings", upcoming, meetings=_meetings(now)), use_logos=False),
-        DemoStep(Scene("countdown", soon)),
-        DemoStep(Scene("game", soon)),
-        DemoStep(Scene("game", live)),
-        DemoStep(Scene("game", live), use_logos=False),
-        DemoStep(Scene("game", power_play)),
-        DemoStep(Scene("game", empty_net)),
-        DemoStep(Scene("game", intermission)),
-        DemoStep(Scene("game", overtime)),
-        DemoStep(Scene("goal", goal, goal_team=home)),
-        DemoStep(Scene("goal", goal, goal_team=home), use_logos=False),
-        DemoStep(Scene("game", final)),
-        DemoStep(Scene("game", final), use_logos=False),
-        DemoStep(Scene("game", shootout)),
-        DemoStep(Scene("game", so_live), animate_shootout=True),
-        DemoStep(Scene("game", so_must_score), animate_shootout=True),
-        DemoStep(Scene("game", so_sudden), animate_shootout=True),
-        DemoStep(Scene("game", so_final), animate_shootout=True),
-        DemoStep(Scene("scores", games=(live, intermission, final, shootout))),
-        DemoStep(Scene("standings", standings=_standings(favourite))),
-        DemoStep(Scene("standings", standings=_standings(favourite)), use_logos=False),
-        DemoStep(
+        ("matchup_meetings", Scene("matchup_meetings", upcoming, meetings=_meetings(now)), {}),
+        (
+            "matchup_meetings_text",
+            Scene("matchup_meetings", upcoming, meetings=_meetings(now)),
+            {"use_logos": False},
+        ),
+        ("countdown", Scene("countdown", soon), {}),
+        ("game_pregame", Scene("game", soon), {}),
+        ("game_live", Scene("game", live), {}),
+        ("game_live_text", Scene("game", live), {"use_logos": False}),
+        ("game_power_play", Scene("game", power_play), {}),
+        ("game_empty_net", Scene("game", empty_net), {}),
+        ("game_intermission", Scene("game", intermission), {}),
+        ("game_overtime", Scene("game", overtime), {}),
+        ("goal", Scene("goal", goal, goal_team=home), {}),
+        ("goal_text", Scene("goal", goal, goal_team=home), {"use_logos": False}),
+        ("goal_detail", Scene("goal_detail", goal, goal_event=goal_event), {}),
+        (
+            "goal_detail_text",
+            Scene("goal_detail", goal, goal_event=goal_event),
+            {"use_logos": False},
+        ),
+        ("game_final", Scene("game", final), {}),
+        ("game_final_text", Scene("game", final), {"use_logos": False}),
+        ("three_stars", Scene("three_stars", final, stars=stars), {}),
+        ("three_stars_text", Scene("three_stars", final, stars=stars), {"use_logos": False}),
+        ("game_final_shootout", Scene("game", shootout), {}),
+        ("shootout_live", Scene("game", so_live), {"animate_shootout": True}),
+        ("shootout_must_score", Scene("game", so_must_score), {"animate_shootout": True}),
+        ("shootout_sudden_death", Scene("game", so_sudden), {"animate_shootout": True}),
+        ("shootout_final", Scene("game", so_final), {"animate_shootout": True}),
+        ("scores", Scene("scores", games=(live, intermission, final, shootout)), {}),
+        ("standings", Scene("standings", standings=_standings(favourite)), {}),
+        (
+            "standings_text",
+            Scene("standings", standings=_standings(favourite)),
+            {"use_logos": False},
+        ),
+        (
+            "conference_leaders",
             Scene(
                 "conference_leaders",
                 standings=tuple(_conference_table(favourite)),
                 playoff_cut=8,
             ),
-            scroll_seconds=DEMO_SCROLL_SECONDS,
+            {"scroll_seconds": DEMO_SCROLL_SECONDS},
         ),
-        DemoStep(
+        (
+            "division",
             Scene("division", standings=tuple(_conference_table(favourite)[:8]), playoff_cut=3),
-            scroll_seconds=DEMO_DIVISION_SECONDS,
+            {"scroll_seconds": DEMO_DIVISION_SECONDS},
         ),
-        DemoStep(
+        (
+            "wildcard",
             Scene("wildcard", standings=tuple(_conference_table(favourite)[8:]), playoff_cut=2),
-            scroll_seconds=DEMO_DIVISION_SECONDS,
+            {"scroll_seconds": DEMO_DIVISION_SECONDS},
         ),
-        DemoStep(Scene("leaders", leaders=_LEADERS)),
-        DemoStep(Scene("leaders", leaders=_LEADERS), use_logos=False),
-        DemoStep(
-            Scene("address", address_ip="192.168.1.42", address_port=8080, address_qr=_ADDRESS_QR)
+        ("leaders", Scene("leaders", leaders=_LEADERS), {}),
+        ("leaders_text", Scene("leaders", leaders=_LEADERS), {"use_logos": False}),
+        (
+            "address",
+            Scene("address", address_ip="192.168.1.42", address_port=8080, address_qr=_ADDRESS_QR),
+            {},
         ),
-        DemoStep(Scene("clock")),
-        DemoStep(Scene("game", live), holiday="halloween"),
-        DemoStep(Scene("clock"), holiday="halloween"),
-        DemoStep(Scene("game", live), holiday="thanksgiving"),
-        DemoStep(Scene("clock"), holiday="thanksgiving"),
-        DemoStep(Scene("game", live), holiday="christmas"),
-        DemoStep(Scene("clock"), holiday="christmas"),
-        DemoStep(Scene("game", live), holiday="new_year"),
-        DemoStep(Scene("clock"), holiday="new_year"),
-        DemoStep(Scene("game", live), holiday="groundhog"),
-        DemoStep(Scene("clock"), holiday="groundhog"),
-        DemoStep(Scene("game", live), holiday="valentines"),
-        DemoStep(Scene("clock"), holiday="valentines"),
-        DemoStep(Scene("game", live), holiday="st_patricks"),
-        DemoStep(Scene("clock"), holiday="st_patricks"),
-        DemoStep(Scene("game", live), holiday="easter"),
-        DemoStep(Scene("clock"), holiday="easter"),
-        # July is the off-season: the clock is what these holidays decorate.
-        DemoStep(Scene("clock"), holiday="canada_day"),
-        DemoStep(Scene("clock"), holiday="july_4th"),
-        DemoStep(Scene("christmas_tree")),
-        DemoStep(Scene("no_games")),
-        DemoStep(Scene("no_data")),
+        ("clock", Scene("clock"), {}),
     ]
+    for holiday in (
+        "halloween",
+        "thanksgiving",
+        "christmas",
+        "new_year",
+        "groundhog",
+        "valentines",
+        "st_patricks",
+        "easter",
+    ):
+        steps.append((f"game_{holiday}", Scene("game", live), {"holiday": holiday}))
+        steps.append((f"clock_{holiday}", Scene("clock"), {"holiday": holiday}))
+    # July is the off-season: the clock is what these holidays decorate.
+    steps += [
+        ("clock_canada_day", Scene("clock"), {"holiday": "canada_day"}),
+        ("clock_july_4th", Scene("clock"), {"holiday": "july_4th"}),
+        ("christmas_tree", Scene("christmas_tree"), {}),
+        ("no_games", Scene("no_games"), {}),
+        ("no_data", Scene("no_data"), {}),
+        (
+            "ap_setup",
+            Scene(
+                "ap_setup",
+                ap_ssid="NHL-Scoreboard",
+                ap_password="scoreboard",
+                ap_qr_matrix=_AP_QR,
+            ),
+            {},
+        ),
+        (
+            "wifi_join_attempting",
+            Scene("wifi_join", wifi_join_status="attempting", wifi_join_ssid="HomeNetwork"),
+            {},
+        ),
+        (
+            "wifi_join_connected",
+            Scene("wifi_join", wifi_join_status="connected", wifi_join_ssid="HomeNetwork"),
+            {},
+        ),
+        ("wifi_join_failed", Scene("wifi_join", wifi_join_status="failed"), {}),
+    ]
+    return [DemoStep(scene, name=name, **options) for name, scene, options in steps]
 
 
 def _game(

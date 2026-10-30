@@ -1732,6 +1732,10 @@ def stub_renderer(app: ScoreboardApp) -> None:
     for name in (
         "draw_game",
         "draw_goal",
+        "draw_goal_detail",
+        "draw_three_stars",
+        "draw_ap_setup",
+        "draw_wifi_join",
         "draw_countdown",
         "draw_preview",
         "draw_standings",
