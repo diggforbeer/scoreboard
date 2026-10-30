@@ -68,6 +68,7 @@ from .nhl.models import (
     conference_standings,
     division_standings,
     playoff_cut,
+    playoff_line_ready,
     standings_window,
     team_leaders,
     wildcard_standings,
@@ -324,6 +325,8 @@ class ScoreboardApp:
             horn_dir=settings.audio.horn_dir,
             enabled=settings.audio.enabled,
             volume=settings.audio.volume,
+            wah_wah=settings.audio.wah_wah,
+            ding=settings.audio.ding,
         )
         # Only probe the I2C bus when the feature is actually on -- a board
         # without the sensor shouldn't get I2C log noise every startup.
@@ -933,6 +936,7 @@ class ScoreboardApp:
                 enabled=new_settings.audio.enabled,
                 volume=new_settings.audio.volume,
                 wah_wah=new_settings.audio.wah_wah,
+                ding=new_settings.audio.ding,
             )
 
         if logos_changed:
@@ -1135,7 +1139,7 @@ class ScoreboardApp:
         self.horn.play_wah_wah()
 
     def _on_goal(self, game: Game, team: str | None = None) -> None:
-        """Show the goal scene; sound the horn only for the favourite's own goals (#260)."""
+        """Show the goal scene; the horn is the favourite's, a followed team gets the ding."""
         favourite = self.settings.scoreboard.favourite_team
         team = team or favourite
         log.info(
@@ -1148,6 +1152,12 @@ class ScoreboardApp:
         )
         self.last_goal = (game.id, self.monotonic(), team)
         if team != favourite:
+            # #311: live goals only; a shootout's headline score moves when decided.
+            if game.is_live and not game.in_shootout:
+                if self._horn_muted():
+                    log.info("Sounds muted by button press; not playing the ding")
+                else:
+                    self.horn.play_ding()
             return
         if self._horn_muted():
             log.info("Goal horn muted by button press; not playing")
@@ -1435,7 +1445,11 @@ class ScoreboardApp:
         window = standings_window(conference_standings(rows, favourite_row.conference), favourite)
         if not window:
             return None
-        return Scene("standings", standings=tuple(window), playoff_cut=playoff_cut(window))
+        return Scene(
+            "standings",
+            standings=tuple(window),
+            playoff_cut=self._line(window, playoff_cut(window)),
+        )
 
     def _conference_leaders_scene(
         self, conference: str, *, allow_fetch: bool = True
@@ -1453,7 +1467,16 @@ class ScoreboardApp:
         table = conference_standings(rows, conference)
         if not table:
             return None
-        return Scene("conference_leaders", standings=tuple(table), playoff_cut=playoff_cut(table))
+        return Scene(
+            "conference_leaders",
+            standings=tuple(table),
+            playoff_cut=self._line(table, playoff_cut(table)),
+        )
+
+    @staticmethod
+    def _line(table: list[StandingsRow], cut: int | None) -> int | None:
+        """``cut`` once the season is far enough along for a playoff line (#298)."""
+        return cut if playoff_line_ready(table) else None
 
     def _division_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's whole division (#296), or None to skip the slot.
@@ -1474,7 +1497,7 @@ class ScoreboardApp:
         if not table:
             return None
         cut = DIVISION_SPOTS if len(table) > DIVISION_SPOTS else None
-        return Scene("division", standings=tuple(table), playoff_cut=cut)
+        return Scene("division", standings=tuple(table), playoff_cut=self._line(table, cut))
 
     def _wildcard_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's conference wild-card race (#298), or None to skip the slot.
@@ -1494,7 +1517,7 @@ class ScoreboardApp:
         if not table:
             return None
         cut = WILDCARD_SPOTS if len(table) > WILDCARD_SPOTS else None
-        return Scene("wildcard", standings=tuple(table), playoff_cut=cut)
+        return Scene("wildcard", standings=tuple(table), playoff_cut=self._line(table, cut))
 
     def _refresh_season_series(
         self, game_id: int, *, allow_fetch: bool = True

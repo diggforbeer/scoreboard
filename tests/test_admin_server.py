@@ -10,6 +10,7 @@ for that.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import http.client
 import json
@@ -155,6 +156,7 @@ def test_sends_the_current_audio_config_on_connect(app_dir, config_path):
             "horn_dir": "",
             "volume": 100,
             "wah_wah": False,
+            "ding": True,
         },
     }
 
@@ -177,6 +179,7 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
                         "horn_dir": "",
                         "volume": 75,
                         "wah_wah": True,
+                        "ding": False,
                     },
                 }
             )
@@ -194,6 +197,7 @@ def test_save_writes_the_file_and_confirms_with_fresh_config(app_dir, config_pat
             "horn_dir": "",
             "volume": 75,
             "wah_wah": True,
+            "ding": False,
         },
     }
     assert 'device = "hw:1,0"' in config_path.read_text()
@@ -1733,6 +1737,52 @@ def test_delete_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team
     assert message["type"] == "error" and message["section"] == "horn_action"
 
 
+@pytest.mark.parametrize(
+    ("team", "data", "filename"),
+    [
+        ("NSH", _wav_b64(), "NSH.wav"),
+        ("NSH", _mp3_b64(), "NSH.mp3"),
+        ("default", _wav_b64(), "default-horn.wav"),
+        ("wah_wah", _wav_b64(), "wah-wah.wav"),
+    ],
+)
+def test_download_horn_round_trips_the_upload_byte_for_byte(
+    app_dir, config_path, upload_dir, team, data, filename
+):
+    _upload(team, data)
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": team}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "horn_download"
+    assert message["team"] == team and message["filename"] == filename
+    assert base64.b64decode(message["data"]) == base64.b64decode(data)
+
+
+def test_download_horn_without_an_upload_is_an_error(app_dir, config_path, upload_dir):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": "NSH"}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
+@pytest.mark.parametrize("team", ["../evil", "XXX", "nsh", None, 5])
+def test_download_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "download_horn", "team": team}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error" and message["section"] == "horn_action"
+
+
 def test_demo_mode_message_calls_setter_and_broadcasts_snapshot(app_dir, config_path, monkeypatch):
     seen = []
     state = {"demo mode": "off"}
@@ -1948,6 +1998,39 @@ async def _serve_and_get_quiet(path):
                 conn.close()
 
         return await asyncio.to_thread(_get)
+
+
+def test_upload_horn_ding_overrides_the_shipped_ding(app_dir, config_path, upload_dir):
+    reply = _upload("ding", _wav_b64())
+    assert reply == {"type": "horn_uploaded", "name": "_ding.wav"}
+    from nhl_scoreboard.audio import GoalHornPlayer
+
+    assert GoalHornPlayer.default().ding_path() == upload_dir / "_ding.wav"
+    assert {"team": "ding", "filename": "_ding.wav"} in admin_server._list_uploaded_horns()
+    assert GoalHornPlayer.default().path_for("TOR") != upload_dir / "_ding.wav"
+
+
+def test_play_horn_ding_plays_even_with_the_setting_off(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "_ding.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nding = false\nhorn_dir = "{horn_dir}"\n')
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "ding"}))
+        return json.loads(await client.recv())
+
+    reply = asyncio.run(_serve_and_run(scenario))
+    assert reply["played"] is True
+    assert len(calls) == 1 and calls[0][-1].endswith("_ding.wav")
 
 
 @pytest.mark.parametrize("status", ["match", "differs", "unknown"])

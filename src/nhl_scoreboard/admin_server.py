@@ -284,6 +284,7 @@ from websockets.http11 import Request, Response
 from . import updater
 from .audio import (
     DEFAULT_STEM,
+    DING_STEM,
     HORN_EXTENSIONS,
     WAH_WAH_STEM,
     GoalHornPlayer,
@@ -400,6 +401,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
     "horn_dir": _FieldSpec("str"),
     "volume": _FieldSpec("int"),
     "wah_wah": _FieldSpec("bool"),
+    "ding": _FieldSpec("bool"),
 }
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
@@ -891,6 +893,7 @@ def _current_horn(settings: Settings) -> GoalHornPlayer:
         enabled=settings.audio.enabled,
         volume=settings.audio.volume,
         wah_wah=settings.audio.wah_wah,
+        ding=settings.audio.ding,
     )
 
 
@@ -961,7 +964,8 @@ def _looks_like_mp3(raw: bytes) -> bool:
 
 def _horn_stem(team: object) -> str:
     """The on-disk stem for ``team`` -- the shipped default slot
-    (``"default"``), the opponent-goal sting (``"wah_wah"``, #307) or a
+    (``"default"``), the opponent-goal sting (``"wah_wah"``, #307), the followed-team ding
+    (``"ding"``, #311) or a
     real TEAM_COLORS abbreviation. Raises ValueError
     with a message fit to show; the one place "is this team key legal" is
     decided, shared by upload/list/delete/play (#193, #208, and #211's
@@ -971,6 +975,8 @@ def _horn_stem(team: object) -> str:
         return DEFAULT_STEM
     if team == "wah_wah":
         return WAH_WAH_STEM
+    if team == "ding":
+        return DING_STEM
     if isinstance(team, str) and team in TEAM_COLORS:
         return team
     raise ValueError(f"unknown team {team!r}")
@@ -1040,6 +1046,7 @@ def _list_uploaded_horns() -> list[dict[str, str]]:
     for team, stem in [
         ("default", DEFAULT_STEM),
         ("wah_wah", WAH_WAH_STEM),
+        ("ding", DING_STEM),
         *((t, t) for t in TEAM_COLORS),
     ]:
         for ext in HORN_EXTENSIONS:
@@ -1068,6 +1075,30 @@ def _delete_horn(team: object) -> bool:
             path.unlink()
             deleted = True
     return deleted
+
+
+_HORN_DOWNLOAD_NAMES = {"default": "default-horn", "wah_wah": "wah-wah"}
+
+
+def _read_horn(team: object) -> tuple[str, bytes]:
+    """The uploaded horn for ``team`` as ``(download file name, bytes)`` --
+    the reverse of _save_horn, behind the Download button. Only the upload
+    directory is read (shipped files are out of scope), and the path comes
+    from _horn_stem plus a fixed extension, never from the client. Raises
+    ValueError with a message fit to show, for an unknown team or no
+    uploaded file.
+    """
+    stem = _horn_stem(team)
+    directory = upload_directory()
+    for ext in HORN_EXTENSIONS:
+        path = directory / f"{stem}{ext}"
+        if path.is_file():
+            try:
+                raw = path.read_bytes()
+            except OSError as exc:
+                raise ValueError(f"could not read the file: {exc.strerror or exc}") from None
+            return f"{_HORN_DOWNLOAD_NAMES.get(str(team), stem)}{ext}", raw
+    raise ValueError(f"no uploaded horn for {team}")
 
 
 def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
@@ -1109,6 +1140,12 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
         if horn.wah_wah_path() is None:
             return False, "No wah-wah file found."
         if horn.play_wah_wah(force=True):
+            return True, ""
+        return False, horn.last_error or "The player command failed to launch."
+    if team == "ding":
+        if horn.ding_path() is None:
+            return False, "No ding file found."
+        if horn.play_ding(force=True):
             return True, ""
         return False, horn.last_error or "The player command failed to launch."
     if horn.path_for(team) is None:
@@ -1394,6 +1431,21 @@ async def _handle(connection: ServerConnection) -> None:
                 else:
                     await connection.send(json.dumps({"type": "horn_deleted", "team": team}))
                     await _broadcast(_horn_list_payload())
+            elif msg_type == "download_horn":
+                team = message.get("team")
+                try:
+                    filename, raw = _read_horn(team)
+                except ValueError as exc:
+                    error = {"type": "error", "section": "horn_action", "message": str(exc)}
+                    await connection.send(json.dumps(error))
+                else:
+                    reply = {
+                        "type": "horn_download",
+                        "team": team,
+                        "filename": filename,
+                        "data": base64.b64encode(raw).decode("ascii"),
+                    }
+                    await connection.send(json.dumps(reply))
             elif msg_type == "logs_subscribe":
                 await _subscribe_logs(connection)
             elif msg_type == "logs_unsubscribe":
