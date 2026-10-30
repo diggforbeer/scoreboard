@@ -1733,9 +1733,12 @@ class AdminServer:
             await _stop_log_follower()
 
     def stop(self) -> None:
-        if self._loop is not None and self._stop_event is not None:
+        # A failed listen (port 80 without root) ends the thread and its loop
+        # on its own; asking a dead loop to stop would only wait out the timeout.
+        serving = self._thread is not None and self._thread.is_alive()
+        if serving and self._loop is not None and self._stop_event is not None:
             stop_event = self._stop_event
-            with contextlib.suppress(RuntimeError):
+            with contextlib.suppress(RuntimeError, TimeoutError):
                 asyncio.run_coroutine_threadsafe(
                     self._set_stop_event(stop_event), self._loop
                 ).result(timeout=5)
