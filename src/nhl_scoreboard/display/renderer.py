@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
+from .. import blowout
 from ..nhl.models import (
     Game,
     GoalEvent,
@@ -1158,6 +1159,25 @@ class Renderer:
         top_colour = team_color(favourite) if favourite else (220, 0, 30)
         self.text_center(canvas, self.fonts.large, centre, 14, top_colour, top)
         self.text_center(canvas, self.fonts.medium, centre, self.height - 4, (0, 200, 60), bottom)
+
+    def draw_blowout(self, canvas: Any, game: Game, favourite: str) -> None:
+        """The blowout Easter egg (#326): see blowout.py. A toilet at each edge
+        where the logos go, the caption between, the score from the loser's side.
+        A single 64px panel has no room beside the caption: one toilet, centred."""
+        canvas.Clear()
+        mine, theirs = (
+            (game.home, game.away) if game.home.abbrev == favourite else (game.away, game.home)
+        )
+        top = (self.height - blowout.HEIGHT) // 2
+        if self.width < 128:
+            blowout.draw_toilet(canvas, (self.width - blowout.WIDTH) // 2, top)
+            return
+        blowout.draw_toilet(canvas, 8, top)
+        blowout.draw_toilet(canvas, self.width - 8 - blowout.WIDTH, top, flip=True)
+        cx = self.width // 2
+        self.text_center(canvas, self.fonts.large, cx, 14, (255, 40, 40), "BLOWOUT")
+        line = f"{mine.abbrev} {mine.score} - {theirs.score} {theirs.abbrev}"
+        self.text_center(canvas, self.fonts.small, cx, self.height - 5, WHITE, line)
 
     def draw_message(self, canvas: Any, title: str, subtitle: str = "") -> None:
         canvas.Clear()

@@ -2071,3 +2071,66 @@ def test_startup_horn_carries_the_wah_wah_and_ding_settings(fake_backend):
     off = Settings.from_dict({"audio": {"wah_wah": False, "ding": False}})
     app = ScoreboardApp(off, client=FlowClient(), backend=fake_backend)
     assert app.horn.wah_wah is False and app.horn.ding is False
+
+
+# --------------------------------------------------------------------------
+# the blowout Easter egg -- #326, see blowout.py (kept out of the guide on purpose)
+# --------------------------------------------------------------------------
+
+
+def _watch_the_favourite_lose(app, clock, client, *, home: int, away: int) -> None:
+    live = dataclasses.replace(client.today[1], state="LIVE", period=2)
+    client.today[1] = score(live, home=home, away=away)  # the goals went in earlier
+    tick(app, clock, hours=7)
+    client.today[1] = dataclasses.replace(client.today[1], state="FINAL", period=3)
+    tick(app, clock, hours=1, minutes=40)
+
+
+def test_a_watched_blowout_loss_flashes_then_reverts_to_the_held_final(day):
+    app, clock, client = day
+    _watch_the_favourite_lose(app, clock, client, home=1, away=6)
+    assert scene(app) == ("blowout", 1)
+    app.draw()  # the real dispatch must draw it without raising
+    clock.advance(seconds=5)
+    assert scene(app) == ("blowout", 1)
+    clock.advance(seconds=2)
+    assert scene(app) == ("game", 1)
+
+
+def test_the_three_stars_wait_out_the_flash_instead_of_losing_their_window(day):
+    app, clock, client = day
+    app.settings.scoreboard.three_stars_seconds = 8
+    client.stars[1] = STARS
+    _watch_the_favourite_lose(app, clock, client, home=1, away=6)
+    app.refresh_three_stars()
+    assert scene(app) == ("blowout", 1)
+    clock.advance(seconds=7)
+    assert scene(app) == ("three_stars", 1)
+    clock.advance(seconds=5)  # 12s in: past 8s from the first fetch, inside 8s from the flash's end
+    assert scene(app) == ("three_stars", 1), "their full window starts after the flash"
+    clock.advance(seconds=3)
+    assert scene(app) == ("game", 1)
+
+
+@pytest.mark.parametrize(("home", "away"), [(2, 6), (6, 1), (3, 2)])
+def test_a_smaller_loss_or_a_win_gets_no_flash(day, home, away):
+    app, clock, client = day
+    _watch_the_favourite_lose(app, clock, client, home=home, away=away)
+    assert scene(app) == ("game", 1)
+
+
+def test_a_blowout_already_final_at_startup_is_not_replayed(day):
+    app, clock, client = day
+    final = dataclasses.replace(client.today[1], state="FINAL", period=3)
+    client.today[1] = score(final, home=0, away=7)
+    tick(app, clock, hours=9)
+    assert app._blowout is None and not app._blowout_shown
+    assert scene(app)[0] != "blowout"
+
+
+def test_a_blowout_flashes_once_per_game(day):
+    app, clock, client = day
+    _watch_the_favourite_lose(app, clock, client, home=1, away=6)
+    clock.advance(seconds=10)
+    app.refresh()
+    assert scene(app) == ("game", 1)
