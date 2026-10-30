@@ -180,12 +180,12 @@ scores_grid = false         # with no favourite game up, show today's games four
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, division, leaders, holiday, scores, address
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, division, leaders, holiday, scores_grid, address
 # seconds = 10
 # "matchup" (season series vs. the next opponent, then each finished meeting),
 # "top_west"/"top_east" (the whole conference, scrolling down), "division" (your team's division, scrolling), "leaders" (your team's top
 # goal scorer, top point getter and top two goalies), "holiday" (Dec 1-25: a
-# Christmas tree counting down to the 25th) and "scores" (every game today, four
+# Christmas tree counting down to the 25th) and "scores_grid" (every game today, four
 # to a frame, its seconds shared between the pages) and "address" (the admin page's
 # IP and a QR code to it) only show if listed here. The address also appears by
 # itself for a minute once the board first gets online.
@@ -283,7 +283,7 @@ nothing to show right now is skipped, not shown blank. With no
 rotates through every game in the league today, `rotate_seconds` each,
 favourite first (`prefer_favourite`) -- or, with `scores_grid` on, four at
 a time (two on a single 64×32 panel), one compact column per game. The
-same grid can also join the idle rotation as a `"scores"` entry.
+same grid can also join the idle rotation as a `"scores_grid"` entry.
 
 **Following more teams.** `also_follow` lists extra teams. While your
 favourite is live and the puck is in play, its game holds the screen and
