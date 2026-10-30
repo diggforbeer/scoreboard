@@ -24,6 +24,8 @@ LOCAL_CONFIG="${REPO_ROOT}/scoreboard.local.toml"
 if [ ! -f "${LOCAL_CONFIG}" ]; then
     echo "==> Creating scoreboard.local.toml from the shipped boot-partition template"
     cp "${REPO_ROOT}/image/files/boot/scoreboard.toml" "${LOCAL_CONFIG}"
+    # Port 80 needs root; a dev machine isn't the board.
+    sed -i 's/^port = 80$/port = 8080/; s/^alias_port = 8080$/alias_port = 0/; s/^local_alias = true$/local_alias = false/' "${LOCAL_CONFIG}"
 else
     echo "==> scoreboard.local.toml already exists; leaving it as-is"
 fi

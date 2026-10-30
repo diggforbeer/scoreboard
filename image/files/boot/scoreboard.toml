@@ -187,7 +187,16 @@ ding = true
 # the internet -- do not port-forward it. Set enabled = false to turn it
 # off.
 enabled = true
-port = 8080
+# Port 80, so http://<name>.local is the whole address. 8080 keeps answering
+# too (alias_port) so old bookmarks work; set alias_port = 0 to turn that off.
+port = 80
+alias_port = 8080
+# A friendlier name than the default scoreboard-xxxx, e.g. "kitchen-scoreboard"
+# -> http://kitchen-scoreboard.local. Letters, digits and hyphens only. Also
+# editable on the admin page. Empty keeps the default.
+hostname = ""
+# Also answer to plain http://scoreboard.local when no other board has that name.
+local_alias = true
 
 [update]
 # Once a day the board asks GitHub Releases whether a newer version exists

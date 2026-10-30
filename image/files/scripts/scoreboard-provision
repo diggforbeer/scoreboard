@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -32,11 +34,30 @@ ZONEINFO = Path(os.environ.get("NHL_SCOREBOARD_ZONEINFO_DIR", "/usr/share/zonein
 LOCALTIME = Path(os.environ.get("NHL_SCOREBOARD_LOCALTIME", "/etc/localtime"))
 TIMEZONE_FILE = Path(os.environ.get("NHL_SCOREBOARD_TIMEZONE_FILE", "/etc/timezone"))
 
+#: Overridable for tests, same convention as the paths above.
+NET_DIR = Path(os.environ.get("NHL_SCOREBOARD_NET_DIR", "/sys/class/net"))
+HOSTNAME_FILE = Path(os.environ.get("NHL_SCOREBOARD_HOSTNAME_FILE", "/etc/hostname"))
+HOSTS_FILE = Path(os.environ.get("NHL_SCOREBOARD_HOSTS_FILE", "/etc/hosts"))
+#: Existence of this file means the name was chosen once and must never be
+#: re-derived (#292): avahi's own clash rename isn't remembered, this is.
+HOSTNAME_STATE = Path(
+    os.environ.get("NHL_SCOREBOARD_HOSTNAME_STATE", "/var/lib/nhl-scoreboard/hostname-chosen")
+)
+
+#: The _http._tcp advertisement baked into the image (#292); rewritten here
+#: when [status] port isn't the default so the listing follows the real port.
+AVAHI_SERVICE_FILE = Path(
+    os.environ.get("NHL_SCOREBOARD_AVAHI_SERVICE", "/etc/avahi/services/nhl-scoreboard.service")
+)
+
 log = logging.getLogger("scoreboard-provision")
 
 
 def main(argv: list[str]) -> int:
     logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
+    # Before the config is read: the name doesn't depend on it, and a board
+    # with no scoreboard.toml should still be reachable by name.
+    ensure_hostname()
     path = Path(argv[1]) if len(argv) > 1 else Path("/boot/firmware/scoreboard.toml")
 
     config = read_config(path)
@@ -44,6 +65,8 @@ def main(argv: list[str]) -> int:
         return 0
 
     apply_timezone(config.get("scoreboard", {}))
+    apply_chosen_hostname(config.get("status", {}))
+    apply_avahi_port(config.get("status", {}))
     # Imported here, not at module load: this script has to keep running
     # (timezone/regdom) even on a board where the nhl_scoreboard package
     # somehow isn't importable, same tolerance read_config() already has
@@ -57,6 +80,102 @@ def main(argv: list[str]) -> int:
     timeout = wifi.get("connect_timeout_seconds")
     apply_wifi(wifi, path, connect_timeout=float(timeout) if timeout is not None else None)
     return 0
+
+
+def mac_suffix() -> str | None:
+    """Last 4 hex digits of the first real NIC's MAC (wlan0 preferred)."""
+    try:
+        names = sorted(p.name for p in NET_DIR.iterdir() if p.name != "lo")
+    except OSError:
+        return None
+    names.sort(key=lambda n: n != "wlan0")
+    for name in names:
+        try:
+            mac = (NET_DIR / name / "address").read_text().strip().lower()
+        except OSError:
+            continue
+        digits = re.sub(r"[^0-9a-f]", "", mac)
+        if len(digits) == 12 and digits != "0" * 12:
+            return digits[-4:]
+    return None
+
+
+def ensure_hostname() -> None:
+    """Give the board a unique, stable mDNS name once (#292): scoreboard-xxxx.
+
+    Chosen from the MAC so two boards never clash with no network check, and
+    persisted so it can't change later with boot order. Never fatal.
+    """
+    if HOSTNAME_STATE.exists():
+        return
+    suffix = mac_suffix()
+    if suffix is None:
+        log.warning("No MAC address found; keeping the current hostname")
+        return
+    set_hostname(f"scoreboard-{suffix}")
+
+
+def set_hostname(name: str) -> None:
+    """Write the name everywhere it lives and re-announce it. Never fatal."""
+    try:
+        HOSTNAME_FILE.write_text(f"{name}\n")
+        if HOSTS_FILE.exists():
+            lines = [ln for ln in HOSTS_FILE.read_text().splitlines() if "127.0.1.1" not in ln]
+            HOSTS_FILE.write_text("\n".join([*lines, f"127.0.1.1\t{name}"]) + "\n")
+        HOSTNAME_STATE.parent.mkdir(parents=True, exist_ok=True)
+        HOSTNAME_STATE.write_text(f"{name}\n")
+    except OSError as exc:
+        log.error("Could not set hostname: %s", exc)
+        return
+    log.info("Hostname set to %s", name)
+    # avahi reads the hostname at startup, so restart it to announce the new
+    # one. Best-effort.
+    for cmd in (["hostname", name], ["systemctl", "restart", "avahi-daemon.service"]):
+        try:
+            subprocess.run(cmd, check=False, timeout=30)
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.warning("%s failed: %s", cmd[0], exc)
+
+
+def apply_chosen_hostname(status: dict) -> None:
+    """Use the owner's ``[status] hostname`` over the MAC-derived name (#292)."""
+    name = status.get("hostname", "")
+    if not isinstance(name, str):
+        return
+    name = name.strip().lower().removesuffix(".local")
+    if not name:
+        return
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", name):
+        log.warning("Ignoring invalid [status] hostname %r", name)
+        return
+    try:
+        if HOSTNAME_FILE.read_text().strip() == name:
+            return
+    except OSError:
+        pass
+    set_hostname(name)
+
+
+def apply_avahi_port(status: dict) -> None:
+    """Point the mDNS service listing at [status] port (#292). Never fatal."""
+    port = status.get("port", 80)
+    if isinstance(port, bool) or not isinstance(port, int) or not 0 < port < 65536:
+        log.warning("Ignoring invalid [status] port %r for mDNS", port)
+        return
+    try:
+        text = AVAHI_SERVICE_FILE.read_text()
+        new = re.sub(r"<port>\d+</port>", f"<port>{port}</port>", text)
+        if new == text:
+            return
+        AVAHI_SERVICE_FILE.write_text(new)
+    except OSError as exc:
+        log.warning("Could not update mDNS service port: %s", exc)
+        return
+    log.info("mDNS service port set to %d", port)
+    try:
+        subprocess.run(["systemctl", "restart", "avahi-daemon.service"], check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("avahi restart failed: %s", exc)
 
 
 def read_config(path: Path) -> dict | None:
