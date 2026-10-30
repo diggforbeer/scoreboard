@@ -778,6 +778,15 @@ scene drawing or `display/teams.py`'s `GUEST_COLORS`. It relabels every screen,
 live games included, but only labels: scores, goal detection, the horn and
 every fetch still key off the real team -- its tests pin that.
 
+`blowout.py` (#326) is a second small Easter egg for NSH boards, same family
+as `april_fools.py`: read its docstring before touching it. It is deliberately
+**never documented anywhere user-facing** -- not README.md, not `screens.md`
+or its images, not the demo, not the snapshots -- and that includes any future
+pass to "complete" the screen guide or make it cover every scene kind (its
+`Scene` kind is left out of `Scene`'s docstring for that reason).
+`tests/test_blowout.py` pins this; if one of its fence tests fails, the fix is
+never to document it.
+
 Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
 like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`
