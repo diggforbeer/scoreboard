@@ -264,14 +264,12 @@ import base64
 import binascii
 import contextlib
 import dataclasses
-import io
 import json
 import logging
 import os
 import re
 import subprocess
 import threading
-import wave
 from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
@@ -290,6 +288,7 @@ from .audio import (
     GoalHornPlayer,
     upload_directory,
 )
+from .audio_normalize import Normalized, normalize
 from .config import (
     FLYBY_FREQUENCIES,
     PANEL_HARDWARE_MAPPING_CHOICES,
@@ -995,8 +994,9 @@ def _horn_stem(team: object) -> str:
     raise ValueError(f"unknown team {team!r}")
 
 
-def _save_horn(team: object, data_b64: object) -> str:
-    """Validate and store an uploaded horn, WAV or MP3 (#193, #208); returns the file name.
+def _save_horn(team: object, data_b64: object) -> tuple[str, Normalized]:
+    """Validate, loudness-normalise (#322) and store an uploaded horn, WAV or
+    MP3 (#193, #208), always as a WAV; returns the file name and what was done.
 
     ``team`` is a real abbreviation from TEAM_COLORS or ``"default"`` (the
     shipped default horn), which keeps the file name off the wire --
@@ -1016,14 +1016,14 @@ def _save_horn(team: object, data_b64: object) -> str:
         raise ValueError("file is empty")
     if len(raw) > HORN_MAX_BYTES:
         raise ValueError(f"file is too large (max {HORN_MAX_BYTES // (1024 * 1024)} MB)")
-    ext = ".mp3" if _looks_like_mp3(raw) else ".wav"
-    if ext == ".wav":
-        try:
-            with wave.open(io.BytesIO(raw)) as wav:
-                if wav.getnframes() <= 0:
-                    raise ValueError("WAV file has no audio")
-        except (wave.Error, EOFError):
-            raise ValueError("not a valid WAV or MP3 file") from None
+    try:
+        result = normalize(raw, _looks_like_mp3(raw))
+    except ValueError:
+        raise
+    except Exception:  # a decoder/maths surprise must not kill the socket handler
+        log.exception("horn normalisation failed")
+        raise ValueError("could not process the audio file") from None
+    raw, ext = result.wav, ".wav"
     name = f"{stem}{ext}"
     directory = upload_directory()
     try:
@@ -1038,7 +1038,7 @@ def _save_horn(team: object, data_b64: object) -> str:
                 (directory / f"{stem}{other}").unlink(missing_ok=True)
     except OSError as exc:
         raise ValueError(f"could not store the file: {exc.strerror or exc}") from None
-    return name
+    return name, result
 
 
 def _list_uploaded_horns() -> list[dict[str, str]]:
@@ -1433,12 +1433,21 @@ async def _handle(connection: ServerConnection) -> None:
                 _shutdown()
             elif msg_type == "upload_horn":
                 try:
-                    name = _save_horn(message.get("team"), message.get("data"))
+                    # Off the event loop: decoding an MP3 can take seconds.
+                    name, result = await asyncio.to_thread(
+                        _save_horn, message.get("team"), message.get("data")
+                    )
                 except ValueError as exc:
                     error = {"type": "error", "section": "horn_upload", "message": str(exc)}
                     await connection.send(json.dumps(error))
                 else:
-                    await connection.send(json.dumps({"type": "horn_uploaded", "name": name}))
+                    reply = {
+                        "type": "horn_uploaded",
+                        "name": name,
+                        "note": result.note,
+                        "gain_db": result.gain_db,
+                    }
+                    await connection.send(json.dumps(reply))
                     # Every tab's horn list picks up the new row, not just
                     # the one that uploaded it -- same "every tab learns at
                     # once" reasoning as demo_mode below.

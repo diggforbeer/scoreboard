@@ -302,7 +302,7 @@ type ServerMessage =
   | { type: 'rebooting' }
   | { type: 'shutting_down' }
   | { type: 'horn_tested'; played: boolean; reason: string }
-  | { type: 'horn_uploaded'; name: string }
+  | { type: 'horn_uploaded'; name: string; note?: string; gain_db?: number | null }
   | { type: 'horn_list'; horns: HornEntry[] }
   | { type: 'horn_played'; team: string; played: boolean; reason: string }
   | { type: 'horn_deleted'; team: string }
@@ -541,7 +541,10 @@ function App() {
             break
           case 'horn_uploaded':
             setHornUploading(false)
-            setHornUploadMessage({ text: `Uploaded ${message.name}.`, ok: true })
+            setHornUploadMessage({
+              text: `Uploaded ${message.name}${message.note ? ` (${message.note})` : ''}.`,
+              ok: true,
+            })
             break
           case 'horn_list':
             setHornList(message.horns)
