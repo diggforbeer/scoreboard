@@ -1483,6 +1483,82 @@ def test_upload_horn_mp3_without_mpg123_is_rejected(app_dir, config_path, upload
     assert not upload_dir.exists()
 
 
+@pytest.fixture(autouse=True)
+def no_ffmpeg(monkeypatch):
+    """The suite runs the mpg123/stdlib path unless a test installs ffmpeg."""
+    from nhl_scoreboard import audio_normalize
+
+    monkeypatch.setattr(audio_normalize, "_which", lambda name: None)
+
+
+def _fake_ffmpeg(monkeypatch, wav_b64=None, returncode=0, timeout=False):
+    import base64
+    import subprocess
+
+    from nhl_scoreboard import audio_normalize
+
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        if timeout:
+            raise subprocess.TimeoutExpired(cmd, 1)
+        if returncode == 0:
+            with open(cmd[-1], "wb") as f:
+                f.write(base64.b64decode(wav_b64 or _tone_b64(2000)))
+        return subprocess.CompletedProcess(cmd, returncode, b"", b"")
+
+    monkeypatch.setattr(audio_normalize, "_which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(audio_normalize, "_run", run)
+    return calls
+
+
+def test_upload_horn_uses_ffmpeg_for_any_format(app_dir, config_path, upload_dir, monkeypatch):
+    import base64
+
+    calls = _fake_ffmpeg(monkeypatch)
+    reply = _upload("NSH", base64.b64encode(b"OggS-not-really-but-ffmpeg-decides").decode())
+    assert reply["name"] == "NSH.wav" and "normalized" in reply["note"]
+    rms, _ = _stored_levels(upload_dir / "NSH.wav")
+    assert abs(rms + 6.3) < 1.0
+    argv = calls[0]
+    assert argv[0] == "ffmpeg" and "-nostdin" in argv
+    assert not any("NSH" in part for part in argv)
+
+
+def test_upload_horn_ffmpeg_failure_is_a_readable_error(
+    app_dir, config_path, upload_dir, monkeypatch
+):
+    _fake_ffmpeg(monkeypatch, returncode=1)
+    reply = _upload("NSH", _mp3_b64())
+    assert reply["type"] == "error" and "decode" in reply["message"]
+    assert not upload_dir.exists()
+
+
+def test_upload_horn_ffmpeg_timeout_is_a_readable_error(
+    app_dir, config_path, upload_dir, monkeypatch
+):
+    _fake_ffmpeg(monkeypatch, timeout=True)
+    assert "too long to decode" in _upload("NSH", _mp3_b64())["message"]
+
+
+def test_upload_horn_ffmpeg_over_long_clip_is_rejected(
+    app_dir, config_path, upload_dir, monkeypatch
+):
+    _fake_ffmpeg(monkeypatch, wav_b64=_tone_b64(3000, seconds=11))
+    assert "too long" in _upload("NSH", _mp3_b64())["message"]
+
+
+def test_upload_horn_without_ffmpeg_names_the_package_for_other_formats(
+    app_dir, config_path, upload_dir
+):
+    import base64
+
+    reply = _upload("NSH", base64.b64encode(b"fLaC" + b"\x00" * 50).decode())
+    assert reply["type"] == "error" and "apt-get install -y ffmpeg" in reply["message"]
+    assert not upload_dir.exists()
+
+
 def test_upload_horn_replaces_other_format(app_dir, config_path, upload_dir):
     upload_dir.mkdir()
     (upload_dir / "NSH.mp3").write_bytes(b"old")

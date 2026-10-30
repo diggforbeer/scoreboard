@@ -5,9 +5,13 @@ volume can't fix a mismatch *between* files. So each upload is decoded to
 16-bit PCM once, scaled to a common RMS level and stored as a mono WAV, which
 plays with ``aplay`` alone (no ``mpg123`` for uploaded sounds).
 
-All the maths is ``array``/``math`` -- the board has no numpy/sox/ffmpeg and
-Python 3.13 dropped ``audioop``. MP3s are decoded by ``mpg123 -w`` into a temp
-file; nothing client-supplied reaches a path or a command line.
+All the maths is ``array``/``math`` (Python 3.13 dropped ``audioop``). Decoding
+prefers ``ffmpeg`` when the board has it (any format, one code path); boards
+flashed before it joined the image fall back to ``wave`` for WAV and
+``mpg123 -w`` for MP3. Gain stays an RMS match to the default horn rather than
+ffmpeg's ``loudnorm``: that targets integrated LUFS, a different measure from
+the RMS the target was taken in, and is unreliable on clips this short. Either
+way nothing client-supplied reaches a path or a command line.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from __future__ import annotations
 import array
 import io
 import math
+import shutil
 import struct
 import subprocess
 import sys
@@ -43,9 +48,13 @@ MAX_SECONDS = 10.0
 #: 2 MB upload can't balloon into a huge temp file before the length check.
 MP3_MAX_FRAMES = 1000
 MP3_DECODE_TIMEOUT = 20
+FFMPEG_TIMEOUT = 30
 
 _FULL_SCALE = 32768.0
 _run = subprocess.run  # a seam for tests, like GoalHornPlayer._popen
+_which = shutil.which  # likewise: boards flashed before #322 have no ffmpeg
+_INSTALL = "sudo apt-get install -y ffmpeg"
+_NEEDS_FFMPEG = f"this format needs ffmpeg, which isn't installed on this board ({_INSTALL})"
 
 
 @dataclass(frozen=True)
@@ -79,6 +88,36 @@ def decode_mp3(raw: bytes) -> bytes:
         if proc.returncode != 0 or not dst.is_file() or dst.stat().st_size == 0:
             raise ValueError("could not decode the MP3 file")
         return dst.read_bytes()
+
+
+def decode_ffmpeg(raw: bytes) -> bytes:
+    """Any audio format -> mono 16-bit WAV bytes via ``ffmpeg`` (#322).
+
+    Output is cut at ``MAX_SECONDS`` + 1 so an over-long clip is still seen as
+    too long without decoding a whole 2 MB upload. Fixed argv, fixed file
+    names in a temp directory: nothing client-supplied reaches the command.
+    """
+    with tempfile.TemporaryDirectory(prefix="horn-") as tmp:
+        src, dst = Path(tmp) / "in.bin", Path(tmp) / "out.wav"
+        src.write_bytes(raw)
+        cmd = [
+            "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(src),
+            "-vn", "-t", str(MAX_SECONDS + 1), "-ac", "1", "-c:a", "pcm_s16le",
+            "-f", "wav", str(dst),
+        ]  # fmt: skip
+        try:
+            proc = _run(cmd, capture_output=True, timeout=FFMPEG_TIMEOUT, check=False)
+        except FileNotFoundError:
+            raise ValueError(_NEEDS_FFMPEG) from None
+        except subprocess.TimeoutExpired:
+            raise ValueError("the audio file took too long to decode") from None
+        if proc.returncode != 0 or not dst.is_file() or dst.stat().st_size == 0:
+            raise ValueError("could not decode the audio file")
+        return dst.read_bytes()
+
+
+def _is_wav(raw: bytes) -> bool:
+    return raw[:4] == b"RIFF" and raw[8:12] == b"WAVE"
 
 
 def _to_int16(frames: bytes, width: int) -> array.array:
@@ -142,7 +181,14 @@ def _wav_bytes(samples: array.array, rate: int) -> bytes:
 
 def normalize(raw: bytes, is_mp3: bool) -> Normalized:
     """Decode, measure and rescale an upload. Raises ValueError (fit to show)."""
-    wav_in = decode_mp3(raw) if is_mp3 else raw
+    if _which("ffmpeg"):
+        wav_in = decode_ffmpeg(raw)
+    elif is_mp3:
+        wav_in = decode_mp3(raw)
+    elif _is_wav(raw):
+        wav_in = raw
+    else:
+        raise ValueError(f"not a valid WAV or MP3 file (other formats need ffmpeg: {_INSTALL})")
     samples, rate = _read_wav(wav_in)
     seconds = len(samples) / rate
     if seconds > MAX_SECONDS:
@@ -152,7 +198,7 @@ def normalize(raw: bytes, is_mp3: bool) -> Normalized:
     peak = max(max(samples), -min(samples))
     if rms / _FULL_SCALE < 10 ** (SILENCE_RMS_DBFS / 20):
         # Keep a WAV exactly as sent; an MP3 still has to be stored as WAV.
-        wav = _wav_bytes(samples, rate) if is_mp3 else raw
+        wav = raw if wav_in is raw else _wav_bytes(samples, rate)
         return Normalized(wav, None, "stored unchanged: the file is silent or nearly silent")
 
     want = 10 ** (TARGET_RMS_DBFS / 20) * _FULL_SCALE / rms
