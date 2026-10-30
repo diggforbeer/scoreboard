@@ -245,6 +245,21 @@ favourite-only: standings, leaders, matchup, three stars, the countdown/
 preview, holiday team colours. With only `also_follow` and no favourite,
 the turns still run, then today's-games rotation as before.
 
+**Open design (not built): primary vs secondary when the favourite isn't
+playing.** Today a live secondary game replaces the favourite's idle
+rotation (countdown/preview, standings, clock) outright, even on the
+favourite's gameday before puck drop, because `_favourite_scene` returns
+the turns before it ever reaches `_rotate_idle_scenes`. Owner's intent: the
+secondary is a RedZone-style break-in, the primary is always the primary,
+so its content should stay in the mix. Decided: the idle rotation shares
+the screen with live secondaries (gameday-before-puck-drop and off days
+alike), and the intermission/held-final split becomes **equal turns**
+(drop `FAVOURITE_QUICK_TURN`'s half-share). Still open: **A** (the idle
+rotation is one more turn in the cycle, sized like a normal turn) vs **B**
+(inside `countdown_hours` the countdown holds the screen and secondaries
+only break in on goals, as when the favourite is live; outside it,
+secondaries rotate with the idle rotation). Owner leans B, A acceptable.
+
 **Broadcast delay (#301).** `scoreboard.broadcast_delay_seconds` (default 0,
 admin page Scoreboard > Timing) holds the whole board behind the API, which
 runs 30-60s ahead of a TV broadcast. Every fetch result (`score/now`, situation,
