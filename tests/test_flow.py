@@ -2056,3 +2056,18 @@ def test_a_followed_game_first_seen_mid_score_stays_quiet(fake_backend):
     app.settings.scoreboard.also_follow = ["SEA"]
     app.refresh()
     assert app.horn.ding_calls == 0
+
+
+def test_startup_horn_carries_the_wah_wah_and_ding_settings(fake_backend):
+    """The horn built at startup, not just after a config reload, honours them (#307, #311).
+
+    Every other test injects a RecordingHorn, which hid that ScoreboardApp built its
+    own GoalHornPlayer without these two flags: a board stayed silent for the opponent's
+    goals until someone saved the Audio settings.
+    """
+    on = Settings.from_dict({"audio": {"wah_wah": True, "ding": True}})
+    app = ScoreboardApp(on, client=FlowClient(), backend=fake_backend)
+    assert app.horn.wah_wah is True and app.horn.ding is True
+    off = Settings.from_dict({"audio": {"wah_wah": False, "ding": False}})
+    app = ScoreboardApp(off, client=FlowClient(), backend=fake_backend)
+    assert app.horn.wah_wah is False and app.horn.ding is False
