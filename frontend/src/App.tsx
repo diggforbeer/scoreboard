@@ -49,7 +49,7 @@ const ROTATION_SCREENS = [
   'wildcard',
   'leaders',
   'holiday',
-  'scores',
+  'scores_grid',
   'address',
 ] as const
 const ROTATION_MAX_ROWS = 8

@@ -1699,7 +1699,7 @@ def test_scores_screen_is_not_in_the_default_rotation(fake_backend):
 def test_scores_screen_pages_across_its_dwell(fake_backend):
     """One rotation slot shares its seconds between grid pages, four games per page at 128px."""
     app, clock, _client = league_night(fake_backend)
-    app.settings.rotation = [RotationEntry("scores", 8)]
+    app.settings.rotation = [RotationEntry("scores_grid", 8)]
     clock.mono = 8000.0  # slot boundary
     app.refresh()
 
@@ -1714,7 +1714,7 @@ def test_scores_screen_skipped_with_no_games_today(fake_backend):
     app, _clock, client = league_night(fake_backend)
     client.today = []
     app.refresh()
-    app.settings.rotation = [RotationEntry("scores", 8), RotationEntry("clock", 8)]
+    app.settings.rotation = [RotationEntry("scores_grid", 8), RotationEntry("clock", 8)]
     for offset in range(0, 16, 2):
         assert app._rotate_idle_scenes(None, None).kind == "clock", offset
 
