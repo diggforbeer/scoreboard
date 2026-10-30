@@ -329,6 +329,15 @@ your team's actual horn instead; it's checked first, and the default plays
 whenever a team-specific file isn't found. See `[audio]` in
 [Configuration](#configuration).
 
+**Uploaded sounds are loudness-normalized.** A horn, wah-wah or ding uploaded
+on the admin page (WAV or MP3) is decoded once, scaled to the same RMS level
+as the default horn (about -6.3 dBFS) with the peak held under -1 dBFS, and
+stored as a mono WAV, so sounds from different files play at a similar
+volume. The upload message says what was applied ("normalized, +6.0 dB"). A
+clip longer than 10 seconds is rejected, and a silent file is stored
+unchanged. MP3s need `mpg123` on the board for the decode. Uploads made
+before this stay as they were; upload them again to normalize them.
+
 ## Status page
 
 The board is headless by design, so diagnosing "why is it stuck" would

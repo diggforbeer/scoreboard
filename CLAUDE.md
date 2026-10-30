@@ -911,6 +911,21 @@ exit; with `show_logos = false` every step is just text.
   `default-horn.wav` / `wah-wah.wav`. Uploaded files only; offering the
   shipped horns is not built.
 
+- **Uploads are normalised (#322).** `audio_normalize.py` decodes an
+  upload to 16-bit PCM (WAV via `wave`; MP3 via `mpg123 -n 1000 -w` into a
+  temp file, 20s timeout, fixed argv, no client text), downmixes to mono,
+  scales so RMS hits `TARGET_RMS_DBFS` (-6.3, measured on the shipped
+  `_default.wav`: RMS 15820, peak 22936; the wah-wah and ding are quieter
+  stings, deliberately not the reference) with gain capped so the peak stays
+  under `PEAK_CEILING_DBFS` (-1), then stores a `.wav` (a stale `.mp3` is
+  removed). All constants live in that module. Pure `array`/`math`: no
+  numpy, and `audioop` is gone in 3.13. Over `MAX_SECONDS` (10) is rejected,
+  not trimmed; a near-silent file is stored unchanged (an MP3 as its decoded
+  WAV) with a note; no `mpg123` rejects the MP3. `_save_horn` runs in
+  `asyncio.to_thread` and replies `note`/`gain_db`, shown by the upload
+  message. Existing uploads are left alone (re-upload to normalise; no
+  migration or Normalize button). Playback still handles an old `.mp3`.
+  Not verified on USB audio hardware (#4).
 - **A missing horn player is explained, not just logged.** `mpg123` only
   joined the image in #208 and the in-app updater can't install apt
   packages (#284), so a board flashed earlier plays WAVs (`aplay`) but not

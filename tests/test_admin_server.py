@@ -1352,13 +1352,13 @@ def _upload(team, data):
 
 def test_upload_horn_stores_team_file(app_dir, config_path, upload_dir):
     reply = _upload("NSH", _wav_b64())
-    assert reply == {"type": "horn_uploaded", "name": "NSH.wav"}
+    assert reply["type"] == "horn_uploaded" and reply["name"] == "NSH.wav"
     assert (upload_dir / "NSH.wav").is_file()
 
 
 def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upload_dir):
     reply = _upload("default", _wav_b64())
-    assert reply == {"type": "horn_uploaded", "name": "_default.wav"}
+    assert reply["name"] == "_default.wav"
     from nhl_scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
@@ -1366,7 +1366,7 @@ def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upl
 
 def test_upload_horn_wah_wah_overrides_the_shipped_sting(app_dir, config_path, upload_dir):
     reply = _upload("wah_wah", _wav_b64())
-    assert reply == {"type": "horn_uploaded", "name": "_wah_wah.wav"}
+    assert reply["name"] == "_wah_wah.wav"
     from nhl_scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().wah_wah_path() == upload_dir / "_wah_wah.wav"
@@ -1423,20 +1423,146 @@ def _mp3_b64(id3=False):
     return base64.b64encode(tag + frame).decode()
 
 
+def _fake_decoder(monkeypatch, wav_b64=None, missing=False):
+    """Stands in for mpg123: writes a WAV to the -w path, like the real one."""
+    import base64
+    import subprocess
+
+    from nhl_scoreboard import audio_normalize
+
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        if missing:
+            raise FileNotFoundError("mpg123")
+        out = cmd[cmd.index("-w") + 1]
+        with open(out, "wb") as f:
+            f.write(base64.b64decode(wav_b64 or _tone_b64(2000)))
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(audio_normalize, "_run", run)
+    return calls
+
+
+def _tone_b64(amplitude, seconds=1.0, rate=8000):
+    import base64
+    import io
+    import math
+    import struct
+    import wave
+
+    n = int(seconds * rate)
+    frames = b"".join(
+        struct.pack("<h", round(amplitude * math.sin(2 * math.pi * 440 * i / rate)))
+        for i in range(n)
+    )
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(frames)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
 @pytest.mark.parametrize("id3", [False, True])
-def test_upload_horn_accepts_mp3(app_dir, config_path, upload_dir, id3):
+def test_upload_horn_decodes_mp3_and_stores_wav(app_dir, config_path, upload_dir, monkeypatch, id3):
+    calls = _fake_decoder(monkeypatch)
     reply = _upload("NSH", _mp3_b64(id3))
-    assert reply == {"type": "horn_uploaded", "name": "NSH.mp3"}
-    assert (upload_dir / "NSH.mp3").is_file()
+    assert reply["name"] == "NSH.wav" and "normalized" in reply["note"]
+    assert (upload_dir / "NSH.wav").is_file()
+    assert not (upload_dir / "NSH.mp3").exists()
+    assert calls[0][0] == "mpg123"
+
+
+def test_upload_horn_mp3_without_mpg123_is_rejected(app_dir, config_path, upload_dir, monkeypatch):
+    _fake_decoder(monkeypatch, missing=True)
+    reply = _upload("NSH", _mp3_b64())
+    assert reply["type"] == "error" and "mpg123" in reply["message"]
+    assert not upload_dir.exists()
 
 
 def test_upload_horn_replaces_other_format(app_dir, config_path, upload_dir):
-    _upload("NSH", _wav_b64())
-    _upload("NSH", _mp3_b64())
-    assert not (upload_dir / "NSH.wav").exists()
+    upload_dir.mkdir()
+    (upload_dir / "NSH.mp3").write_bytes(b"old")
     _upload("NSH", _wav_b64())
     assert (upload_dir / "NSH.wav").is_file()
     assert not (upload_dir / "NSH.mp3").exists()
+
+
+def _stored_levels(path):
+    import array
+    import math
+    import wave
+
+    with wave.open(str(path)) as wav:
+        data = array.array("h", wav.readframes(wav.getnframes()))
+    rms = 20 * math.log10(math.sqrt(sum(x * x for x in data) / len(data)) / 32768)
+    peak = 20 * math.log10(max(abs(x) for x in data) / 32768)
+    return rms, peak
+
+
+@pytest.mark.parametrize("amplitude", [500, 3000, 12000])
+def test_upload_horn_normalizes_to_the_target(app_dir, config_path, upload_dir, amplitude):
+    from nhl_scoreboard import audio_normalize
+
+    reply = _upload("NSH", _tone_b64(amplitude))
+    assert reply["type"] == "horn_uploaded" and reply["gain_db"] is not None
+    rms, peak = _stored_levels(upload_dir / "NSH.wav")
+    assert peak <= audio_normalize.PEAK_CEILING_DBFS + 0.1
+    # A sine's peak is 3 dB over its RMS, so the target is reachable.
+    assert abs(rms - audio_normalize.TARGET_RMS_DBFS) < 1.0
+
+
+def test_upload_horn_peak_ceiling_limits_gain(app_dir, config_path, upload_dir):
+    import base64
+    import io
+    import wave
+
+    from nhl_scoreboard import audio_normalize
+
+    # A sparse click: tiny RMS, full-scale-ish peak, so the ceiling binds.
+    frames = bytearray(b"\x00\x00" * 8000)
+    frames[0:2] = (20000).to_bytes(2, "little", signed=True)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(8000)
+        wav.writeframes(bytes(frames))
+    reply = _upload("NSH", base64.b64encode(buf.getvalue()).decode())
+    assert "limited by peak" in reply["note"]
+    _, peak = _stored_levels(upload_dir / "NSH.wav")
+    assert peak <= audio_normalize.PEAK_CEILING_DBFS + 0.1
+
+
+def test_upload_horn_silent_file_is_stored_unchanged(app_dir, config_path, upload_dir):
+    import base64
+
+    data = _wav_b64()
+    reply = _upload("NSH", data)
+    assert reply["gain_db"] is None and "silent" in reply["note"]
+    assert (upload_dir / "NSH.wav").read_bytes() == base64.b64decode(data)
+
+
+def test_upload_horn_rejects_over_long_clip(app_dir, config_path, upload_dir):
+    reply = _upload("NSH", _tone_b64(3000, seconds=11))
+    assert reply["type"] == "error" and "too long" in reply["message"]
+    assert not upload_dir.exists()
+
+
+def test_upload_horn_rejects_a_corrupt_mp3(app_dir, config_path, upload_dir, monkeypatch):
+    import subprocess
+
+    from nhl_scoreboard import audio_normalize
+
+    monkeypatch.setattr(
+        audio_normalize, "_run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, b"", b"")
+    )
+    reply = _upload("NSH", _mp3_b64())
+    assert reply["type"] == "error" and "decode" in reply["message"]
+    assert not upload_dir.exists()
 
 
 def test_upload_horn_rejects_oversize(app_dir, config_path, upload_dir, monkeypatch):
@@ -1495,7 +1621,7 @@ def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
 
     before, ack, after = asyncio.run(_serve_and_run(scenario))
     assert before == {"type": "horn_list", "horns": []}
-    assert ack == {"type": "horn_uploaded", "name": "NSH.wav"}
+    assert ack["type"] == "horn_uploaded" and ack["name"] == "NSH.wav"
     assert after == {"type": "horn_list", "horns": [{"team": "NSH", "filename": "NSH.wav"}]}
 
 
@@ -1749,7 +1875,12 @@ def test_delete_horn_rejects_unknown_team(app_dir, config_path, upload_dir, team
 def test_download_horn_round_trips_the_upload_byte_for_byte(
     app_dir, config_path, upload_dir, team, data, filename
 ):
-    _upload(team, data)
+    if filename.endswith(".mp3"):
+        # Uploads are WAV-only since #322; an MP3 is one stored before that.
+        upload_dir.mkdir()
+        (upload_dir / filename).write_bytes(base64.b64decode(data))
+    else:
+        _upload(team, data)
 
     async def scenario(client):
         await _skip_initial(client)
@@ -2002,7 +2133,7 @@ async def _serve_and_get_quiet(path):
 
 def test_upload_horn_ding_overrides_the_shipped_ding(app_dir, config_path, upload_dir):
     reply = _upload("ding", _wav_b64())
-    assert reply == {"type": "horn_uploaded", "name": "_ding.wav"}
+    assert reply["name"] == "_ding.wav"
     from nhl_scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().ding_path() == upload_dir / "_ding.wav"
