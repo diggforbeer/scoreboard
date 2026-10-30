@@ -930,6 +930,28 @@ exit; with `show_logos = false` every step is just text.
   `default-horn.wav` / `wah-wah.wav`. Uploaded files only; offering the
   shipped horns is not built.
 
+- **Uploads are normalised (#322).** `audio_normalize.py` decodes an
+  upload to 16-bit PCM, downmixes to mono, scales so RMS hits
+  `TARGET_RMS_DBFS` (-6.3, measured on the shipped `_default.wav`: RMS 15820,
+  peak 22936; the wah-wah and ding are quieter stings, deliberately not the
+  reference) with gain capped so the peak stays under `PEAK_CEILING_DBFS`
+  (-1), then stores a `.wav` (a stale `.mp3` is removed). Constants live in
+  that module. Pure `array`/`math`: `audioop` is gone in 3.13.
+  **Decoder: `ffmpeg` when on PATH** (owner's call, in the image layer; `_which`
+  seam), any format incl. M4A/OGG/FLAC, `-t` cut at `MAX_SECONDS`+1, fixed
+  argv, temp files, 30s timeout. **Fallback for boards flashed without it
+  (the updater can't install apt packages, #284):** `wave` for WAV and
+  `mpg123 -n 1000 -w` for MP3; any other format is rejected with
+  `sudo apt-get install -y ffmpeg`. Gain is deliberately an RMS match, not
+  ffmpeg's `loudnorm`: that targets integrated LUFS, a different measure
+  from the horn's RMS, and is unreliable on clips this short. `mpg123` stays
+  for playback of old `.mp3` uploads and the fallback. Over `MAX_SECONDS`
+  (10) is rejected, not trimmed; a near-silent file is stored unchanged (a
+  non-WAV as its decoded WAV) with a note. `_save_horn` runs in
+  `asyncio.to_thread` and replies `note`/`gain_db`, shown by the upload
+  message. Existing uploads are left alone (re-upload to normalise; no
+  migration). Tests fake `_run`/`_which` (an autouse fixture forces the
+  no-ffmpeg path). Not verified on USB audio hardware or the real image (#4).
 - **A missing horn player is explained, not just logged.** `mpg123` only
   joined the image in #208 and the in-app updater can't install apt
   packages (#284), so a board flashed earlier plays WAVs (`aplay`) but not

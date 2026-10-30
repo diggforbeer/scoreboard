@@ -83,6 +83,13 @@ mmdebstrap:
     # lighter. Real trixie/arm64 package per Debian's index; install on the
     # actual image not yet verified (#4).
     - mpg123
+    # Upload normalisation (#322): audio_normalize.py decodes any uploaded
+    # sound (WAV, MP3, and M4A/OGG/FLAC too) with ffmpeg, then scales it to
+    # the default horn's level. Heavy next to mpg123 (many codec libraries),
+    # a deliberate owner call. mpg123 stays: it plays any MP3 uploaded before
+    # #322 and is the decoder on boards flashed without ffmpeg. Both
+    # degrade to the stdlib/mpg123 path when ffmpeg is absent.
+    - ffmpeg
     # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
     # over I2C via this. Harmless if no sensor is wired up -- LightSensor
     # .open() degrades to None the same as a missing /dev/i2c-* would.
