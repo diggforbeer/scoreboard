@@ -543,7 +543,7 @@ one 32px column per game (`Renderer.SCORES_COLUMN_WIDTH`, so four at
 (team colour) and score in `5x7`, the status in the state's colour, and
 the period in tiny text under it. A short last page is centred. It draws
 no PP/SOG indicator. It comes in two opt-in forms, by the owner's call:
-a `"scores"` `[[rotation]]` screen (absent from `_default_rotation`;
+a `"scores_grid"` `[[rotation]]` screen (named `scores` until the admin page made that ambiguous; a saved `scores` still loads, via `ROTATION_SCREEN_ALIASES`) (absent from `_default_rotation`;
 `_page_scores` shares the slot's seconds evenly between the pages;
 skipped with no games today), and `scoreboard.scores_grid` (default
 off), which replaces `_select_base_scene`'s one-game-at-a-time fallback

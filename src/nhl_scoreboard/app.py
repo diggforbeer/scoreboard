@@ -1732,7 +1732,7 @@ class ScoreboardApp:
             return self._holiday_screen_scene()
         if screen == "address":
             return self._address_scene()
-        if screen == "scores":
+        if screen == "scores_grid":
             return Scene("scores", games=tuple(self.games)) if self.games else None
         return None
 

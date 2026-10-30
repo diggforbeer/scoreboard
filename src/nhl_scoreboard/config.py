@@ -292,7 +292,7 @@ class ScoreboardConfig:
 #: countdown_hours, same as always -- which one shows isn't a user choice,
 #: so it isn't split into two separately configurable screens (#150).
 #: "matchup" (#157), "top_west"/"top_east" (#200), "division" (#296), "wildcard" (#298),
-#: "leaders" (#201) and "holiday" (#243, the active holiday's own screen) and "scores" (#269,
+#: "leaders" (#201) and "holiday" (#243, the active holiday's own screen) and "scores_grid" (#269,
 #: today's games several to a frame) and "address" (#293, how to reach the admin
 #: page) are opt-in only: never part of the
 #: derived default list.
@@ -307,9 +307,13 @@ VALID_ROTATION_SCREENS = (
     "wildcard",
     "leaders",
     "holiday",
-    "scores",
+    "scores_grid",
     "address",
 )
+
+#: Rotation screen names a release renamed: still accepted in a saved config, mapped to the
+#: current name at load (the admin page names the screen after what it shows, #269 follow-up).
+ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 
 
 @dataclass(slots=True)
@@ -338,6 +342,7 @@ def _parse_rotation(raw: list[Any]) -> list[RotationEntry]:
             log.warning("Ignoring [[rotation]] entry that isn't a table: %r", item)
             continue
         screen = str(item.get("screen", "")).strip().lower()
+        screen = ROTATION_SCREEN_ALIASES.get(screen, screen)
         if screen not in VALID_ROTATION_SCREENS:
             log.warning(
                 "Ignoring [[rotation]] entry with unknown screen %r (must be one of %s)",
