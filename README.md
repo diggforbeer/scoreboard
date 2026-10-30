@@ -13,7 +13,7 @@
 | src/nhl\_scoreboard/blowout.py              |       23 |        0 |       10 |        0 |    100% |           |
 | src/nhl\_scoreboard/brightness.py           |        9 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/button.py               |       56 |        1 |        6 |        0 |     98% |        51 |
-| src/nhl\_scoreboard/config.py               |      330 |        4 |       62 |        1 |     99% |338-339, 728-729 |
+| src/nhl\_scoreboard/config.py               |      332 |        4 |       62 |        1 |     99% |342-343, 733-734 |
 | src/nhl\_scoreboard/delay.py                |       28 |        1 |        6 |        0 |     97% |        33 |
 | src/nhl\_scoreboard/demo.py                 |       73 |        0 |       10 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/\_\_init\_\_.py |        0 |        0 |        0 |        0 |    100% |           |
@@ -34,7 +34,7 @@
 | src/nhl\_scoreboard/updater.py              |      233 |       24 |       52 |        8 |     89% |105-106, 124, 133, 151-155, 159-164, 231-236, 240-246, 257, 324-\>326, 351-\>353, 373-\>376, 377, 381 |
 | src/nhl\_scoreboard/wifi.py                 |      140 |      109 |       28 |        0 |     18% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/nhl\_scoreboard/wifi\_join.py           |       86 |        7 |       10 |        0 |     93% |112-114, 117-118, 201-202 |
-| **TOTAL**                                   | **5733** |  **291** | **1636** |   **82** | **94%** |           |
+| **TOTAL**                                   | **5735** |  **291** | **1636** |   **82** | **94%** |           |
 
 
 ## Setup coverage badge
