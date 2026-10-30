@@ -325,6 +325,8 @@ class ScoreboardApp:
             horn_dir=settings.audio.horn_dir,
             enabled=settings.audio.enabled,
             volume=settings.audio.volume,
+            wah_wah=settings.audio.wah_wah,
+            ding=settings.audio.ding,
         )
         # Only probe the I2C bus when the feature is actually on -- a board
         # without the sensor shouldn't get I2C log noise every startup.
