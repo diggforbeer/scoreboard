@@ -74,7 +74,7 @@ def test_auto_brightness_defaults_off():
 
 def test_status_server_defaults_on(tmp_path):
     assert Settings().status.enabled is True
-    assert Settings().status.port == 8080
+    assert Settings().status.port == 80
 
     path = tmp_path / "scoreboard.toml"
     path.write_text("[status]\nenabled = false\nport = 9000\n")

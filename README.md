@@ -246,7 +246,7 @@ cover.
 |---|---|
 | Username | `scoreboard` |
 | Password | `Scoreboard1!` |
-| Host | the board's IP on your network (check your router's DHCP client list — there's no `.local`/mDNS name set up) |
+| Host | `scoreboard-xxxx.local` (`xxxx` = last four hex digits of the board's MAC, set once on first boot so it never changes; rename it on the admin page's Status page card, and `scoreboard.local` also works when no other board has it). If your device can't resolve `.local`, use the IP from your router's DHCP client list |
 
 **Change the password** (`passwd`) before putting the board on any network
 you don't fully trust — this default is baked into every flashed image and
@@ -347,7 +347,7 @@ before this stay as they were; upload them again to normalize them.
 The board is headless by design, so diagnosing "why is it stuck" would
 otherwise mean SSH-ing in and reading `journalctl -u nhl-scoreboard`. On by
 default, the board instead serves a small HTML page at
-`http://<board's-ip>:8080/` showing the current scene, the last successful
+`http://<name>.local/` (or the board's IP; `:8080` still works) showing the current scene, the last successful
 API poll, the last error (if any) and the favourite team -- enough to check
 on the board from a phone on the same network. It's
 stdlib `http.server`, no framework, and has no login: it binds the local

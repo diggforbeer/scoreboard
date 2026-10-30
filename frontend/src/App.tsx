@@ -157,6 +157,11 @@ interface ScoreboardConfig {
 interface StatusConfig {
   enabled: boolean
   port: number
+  alias_port: number
+  hostname: string
+  local_alias: boolean
+  // What the board is called right now; sent for display, never saved.
+  board_name?: string
 }
 
 // Mirrors PanelConfig (config.py) except pitch_mm -- informational only,
@@ -744,7 +749,8 @@ function App() {
     if (!status) return
     setStatusSaveStatus('saving')
     setStatusSaveError(null)
-    if (!save('status', status)) {
+    const { board_name: _boardName, ...editable } = status
+    if (!save('status', editable)) {
       setStatusSaveStatus('error')
       setStatusSaveError(NOT_CONNECTED_ERROR)
     }
@@ -1534,6 +1540,46 @@ function App() {
                 </label>
               </div>
               <div className="mb-3">
+                <label className="form-label" htmlFor="status-hostname">
+                  Board name
+                </label>
+                <div className="input-group" style={{ maxWidth: '24rem' }}>
+                  <input
+                    className="form-control"
+                    id="status-hostname"
+                    type="text"
+                    placeholder={status.board_name ?? 'scoreboard-xxxx'}
+                    value={status.hostname}
+                    onChange={(e) => setStatus({ ...status, hostname: e.target.value })}
+                  />
+                  <span className="input-group-text">.local</span>
+                </div>
+                <div className="form-text">
+                  {status.board_name ? (
+                    <>
+                      Open this page at{' '}
+                      <a href={`http://${status.board_name}.local`}>
+                        http://{status.board_name}.local
+                      </a>
+                      .{' '}
+                    </>
+                  ) : null}
+                  Letters, digits and hyphens only; leave empty to keep the default name.
+                </div>
+              </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="status-local-alias"
+                  checked={status.local_alias}
+                  onChange={(e) => setStatus({ ...status, local_alias: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="status-local-alias">
+                  Also answer to scoreboard.local (only if no other board already has it)
+                </label>
+              </div>
+              <div className="mb-3">
                 <label className="form-label" htmlFor="status-port">
                   Status page port
                 </label>
@@ -1545,6 +1591,20 @@ function App() {
                   step="1"
                   value={status.port}
                   onChange={(e) => setStatus({ ...status, port: Number(e.target.value) })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="status-alias-port">
+                  Second port (keeps old :8080 bookmarks working; 0 = off)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="status-alias-port"
+                  type="number"
+                  step="1"
+                  value={status.alias_port}
+                  onChange={(e) => setStatus({ ...status, alias_port: Number(e.target.value) })}
                 />
               </div>
               <div className="d-flex align-items-center gap-3">

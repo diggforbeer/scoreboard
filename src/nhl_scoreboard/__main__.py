@@ -49,8 +49,11 @@ def main(argv: list[str] | None = None) -> int:
     # Imported lazily so --dump works on a machine with no matrix backend.
     from .app import ScoreboardApp
     from .display.matrix import load_backend
+    from .hostname import AliasPublisher
 
     app = ScoreboardApp(settings, backend=load_backend(args.backend))
+    if not args.demo:
+        app.alias_publisher = AliasPublisher()
     app.install_signal_handlers()
     if args.demo:
         app.run_demo()

@@ -561,7 +561,7 @@ def test_goal_detail_state_pruned_with_the_rest(fake_backend, games):
 def test_admin_server_built_by_default(fake_backend, games):
     app = build_app(fake_backend, games)
     assert app.admin_server is not None
-    assert app.admin_server.port == 8080
+    assert app.admin_server.port == 80
 
 
 def test_admin_server_not_built_when_disabled(fake_backend, games):
@@ -2541,3 +2541,55 @@ def test_live_demo_does_not_override_night_blanking(fake_backend, games):
     app.set_demo_mode(True)
     app.draw()
     assert calls == []
+
+
+def test_admin_yields_port_80_to_the_setup_page_and_takes_it_back(fake_backend, games, tmp_path):
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        shared = probe.getsockname()[1]
+    state_path = tmp_path / "state.json"
+    settings = Settings()
+    settings.status.port = shared
+    settings.status.alias_port = 18080
+    settings.wifi_setup.port = shared
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=state_path,
+        hw_mapping_trial_path=tmp_path / "trial.json",
+    )
+    assert app.admin_server.port == shared
+
+    state_path.write_text(json.dumps({"ssid": "Net", "password": None}))
+    app._sync_setup_server()
+    try:
+        assert app.admin_server.port == 18080  # the setup page has the shared port
+        assert app.setup_server is not None and app.setup_server.port == shared
+    finally:
+        state_path.unlink()
+        app._sync_setup_server()
+    assert app.setup_server is None
+    assert app.admin_server.port == shared
+
+
+def test_admin_stays_off_the_setup_port_when_they_differ(fake_backend, games, tmp_path):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"ssid": "Net", "password": None}))
+    settings = Settings()
+    settings.status.port = 8080
+    settings.wifi_setup.port = 0
+    app = ScoreboardApp(
+        settings,
+        client=FakeClient(games),
+        backend=fake_backend,
+        ap_setup_state_path=state_path,
+        hw_mapping_trial_path=tmp_path / "trial.json",
+    )
+    app._sync_setup_server()
+    try:
+        assert app.admin_server.port == 8080
+    finally:
+        app.setup_server.stop()

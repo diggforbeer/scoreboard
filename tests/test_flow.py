@@ -1907,7 +1907,7 @@ def test_address_shows_for_a_minute_once_online(day):
     app._ip_lookup = lambda: "192.168.1.42"
     app._track_address()
     s = app.select_scene()
-    assert (s.kind, s.address_ip, s.address_port) == ("address", "192.168.1.42", 8080)
+    assert (s.kind, s.address_ip, s.address_port) == ("address", "192.168.1.42", 80)
     assert s.address_qr
     clock.mono += 61
     app._track_address()
@@ -1943,6 +1943,52 @@ def test_address_skipped_when_admin_page_is_off(day):
     app._ip_lookup = lambda: "10.0.0.7"
     app.settings.status.enabled = False
     assert app._rotation_screen_scene("address", None, None) is None
+
+
+def test_address_scene_carries_the_board_name(day):
+    app, _, _ = day
+    app._ip_lookup = lambda: "10.0.0.7"
+    app._hostname_lookup = lambda: "Kitchen-Scoreboard"
+    assert app._rotation_screen_scene("address", None, None).address_name == (
+        "kitchen-scoreboard.local"
+    )
+    app._hostname_lookup = lambda: "not a valid name"
+    assert app._rotation_screen_scene("address", None, None).address_name is None
+
+
+def test_status_snapshot_names_the_address(day):
+    app, _, _ = day
+    app._hostname_lookup = lambda: "scoreboard-a1b2"
+    assert app.status_snapshot()["address"] == "scoreboard-a1b2.local"
+
+
+class FakePublisher:
+    def __init__(self):
+        self.calls = []
+
+    def sync(self, wanted, ip):
+        self.calls.append((wanted, ip))
+
+    def stop(self):
+        pass
+
+
+def test_local_alias_is_wanted_unless_this_board_already_is_scoreboard(day):
+    app, _, _ = day
+    app.alias_publisher = FakePublisher()
+    app._ip_lookup = lambda: "10.0.0.7"
+    app._hostname_lookup = lambda: "scoreboard-a1b2"
+    app._sync_alias()
+    app._hostname_lookup = lambda: "scoreboard"
+    app._sync_alias()
+    app.settings.status.local_alias = False
+    app._hostname_lookup = lambda: "scoreboard-a1b2"
+    app._sync_alias()
+    assert app.alias_publisher.calls == [
+        (True, "10.0.0.7"),
+        (False, "10.0.0.7"),
+        (False, "10.0.0.7"),
+    ]
 
 
 # --------------------------------------------------------------------------

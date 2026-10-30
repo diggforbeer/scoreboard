@@ -1939,3 +1939,46 @@ so a stale one prints the wrong case. So:
 - Commit messages explain *why*; the first line under ~65 chars. Include
   what a failed CI run taught if that's what drove the change.
 - Match the surrounding comment density; comments say why, not what.
+
+## mDNS name and port 80 (#292)
+
+`avahi-daemon` advertises the board as `<name>.local`. The default name is
+`scoreboard-xxxx` (last 4 hex of the MAC), chosen once by
+`scoreboard-provision`'s `ensure_hostname()` and remembered in
+`/var/lib/nhl-scoreboard/hostname-chosen`, so boot order with a second board
+can never rename it (avahi's own clash rename isn't remembered).
+
+- **Owner name:** `[status] hostname` (admin page, Status page card) replaces
+  it. `hostname.py` validates one RFC 1123 label (`.local` and case are
+  stripped); a live save is *rejected* if invalid, the boot-time provision
+  script *ignores* an invalid one. `apply_hostname()` (admin save) and
+  `scoreboard-provision` (boot) both write `/etc/hostname`, `/etc/hosts` and
+  the state file, then restart avahi, so the MAC name is never re-derived over
+  the owner's choice.
+- **`scoreboard.local` alias:** `[status] local_alias` (default on).
+  `AliasPublisher` runs `avahi-publish-address scoreboard.local <ip>` (package
+  `avahi-utils`); without `-R` it probes and exits if another board has the
+  name, so only the first board gets it and a bookmark of that name can move
+  after a power cut -- the stored name is the stable one. Not retried until the
+  IP changes. Skipped if the board is itself called `scoreboard`. Only the real
+  entry point (`__main__`) sets `app.alias_publisher`; tests and `--demo`
+  never publish.
+- **Port decision: admin page on 80** (`status.port` default, was 8080),
+  with `status.alias_port` (8080, 0 = off) a second listener on the same
+  server so old bookmarks keep working. The WiFi setup page needs 80 during
+  AP mode, so **the admin page yields**: `_sync_setup_server()` calls
+  `_set_admin_yield()`, which rebuilds the admin server on `alias_port` alone
+  before the setup server binds (or turns it off if `alias_port = 0`) and
+  rebuilds it on `port` after the setup server has stopped. Only done for a
+  server the app built itself, and only when the two ports are equal. An
+  admin listener that can't bind (port 80 without root, as in tests and dev)
+  logs an error and leaves the app running; `setup-dev.sh` rewrites the dev
+  config to 8080. The avahi `_http._tcp` file's port follows `[status] port`.
+- **Showing it:** the `address` scene (panel) leads with `<name>.local` and
+  keeps the IP as the fallback line (the name drops `.local`, then truncates,
+  when it doesn't fit its half; without a name the old IP-only layout is
+  unchanged). The admin page's Board status has an `address` line and the
+  Status page card shows the name and a link.
+
+Unverified on hardware (#4): avahi on the image, `avahi-publish-address`
+clash behaviour with a second board, and the AP-mode port handover.
