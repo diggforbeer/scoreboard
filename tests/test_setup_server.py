@@ -43,6 +43,11 @@ def test_setup_page_lists_cached_networks():
         assert "Guest Network" in body
         assert 'name="ssid_other"' in body
         assert 'name="password"' in body
+        # Show-password toggle: unnamed so it is never submitted, and the
+        # field stays masked by default (also when JS is unavailable).
+        assert 'id="show-password"' in body
+        assert 'name="show' not in body
+        assert 'type="password" name="password"' in body
     finally:
         server.stop()
 
