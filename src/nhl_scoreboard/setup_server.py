@@ -178,7 +178,11 @@ def _render_page(
 <label>Or enter a network name manually:<br>
 <input type="text" name="ssid_other" placeholder="Network name"></label>
 <p><label>Password (leave blank for an open network):<br>
-<input type="password" name="password"></label></p>
+<input type="password" name="password" id="wifi-password"
+ autocapitalize="none" autocorrect="off" spellcheck="false"></label><br>
+<label class="hint"><input type="checkbox" id="show-password"
+ onchange="document.getElementById('wifi-password').type = this.checked ? 'text' : 'password'">
+Show password</label></p>
 <button type="submit">Join</button>
 </form>"""
     page = f"""<!doctype html>
