@@ -99,7 +99,7 @@ def ghost_pixels(canvas: AsciiCanvas) -> dict:
         (date(2026, 9, 30), None),
         (date(2026, 10, 1), "halloween"),
         (date(2026, 10, 31), "halloween"),
-        (date(2026, 11, 1), None),
+        (date(2026, 11, 1), "thanksgiving"),
     ],
 )
 def test_halloween_window_is_all_of_october(day, expected):
@@ -110,17 +110,15 @@ def test_halloween_window_is_all_of_october(day, expected):
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        # 2026: Thanksgiving is Thu Nov 26, so the window is Nov 20-26.
-        (date(2026, 11, 19), None),
-        (date(2026, 11, 20), "thanksgiving"),
+        (date(2026, 10, 31), None),
+        (date(2026, 11, 1), "thanksgiving"),
         (date(2026, 11, 26), "thanksgiving"),
-        (date(2026, 11, 27), None),
-        # 2025 moves it: Thu Nov 27, window Nov 21-27.
-        (date(2025, 11, 20), None),
+        (date(2026, 11, 30), "thanksgiving"),
+        (date(2026, 12, 1), None),
         (date(2025, 11, 27), "thanksgiving"),
     ],
 )
-def test_us_thanksgiving_is_the_week_up_to_the_fourth_thursday(day, expected):
+def test_us_thanksgiving_is_all_of_november(day, expected):
     found = active_holiday(["thanksgiving"], day)
     assert (found.name if found else None) == expected
 
@@ -158,7 +156,7 @@ def test_canadian_thanksgiving_wins_its_weekend_over_halloween(themes, day, expe
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        (date(2026, 11, 30), None),
+        (date(2026, 11, 30), "thanksgiving"),
         (date(2026, 12, 1), "christmas"),
         (date(2026, 12, 26), "christmas"),
         (date(2026, 12, 27), None),
@@ -222,10 +220,11 @@ def test_shadow_is_decided_once_per_year_and_varies_between_years():
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        (date(2027, 3, 13), None),
+        # Easter 2027 is Mar 28, so its month is under the whole window.
+        (date(2027, 3, 13), "easter"),
         (date(2027, 3, 14), "st_patricks"),
         (date(2027, 3, 17), "st_patricks"),
-        (date(2027, 3, 18), None),
+        (date(2027, 3, 18), "easter"),
     ],
 )
 def test_st_patricks_is_the_days_up_to_the_seventeenth(day, expected):
@@ -251,21 +250,26 @@ def test_easter_sunday(year, expected):
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        (date(2027, 3, 21), None),
-        (date(2027, 3, 22), "easter"),
+        # 2027: Easter is Mar 28, so the 30 days start Feb 27.
+        (date(2027, 2, 26), None),
+        (date(2027, 2, 27), "easter"),
         (date(2027, 3, 28), "easter"),
         (date(2027, 3, 29), None),
-        (date(2025, 4, 14), "easter"),
-        (date(2025, 4, 13), None),
+        # 2025: Easter is Apr 20, so the window starts Mar 22.
+        (date(2025, 3, 21), None),
+        (date(2025, 3, 22), "easter"),
+        (date(2025, 4, 20), "easter"),
+        (date(2025, 4, 21), None),
     ],
 )
-def test_easter_is_the_week_up_to_easter_sunday(day, expected):
+def test_easter_is_the_month_up_to_easter_sunday(day, expected):
     found = active_holiday(HOLIDAY_NAMES, day)
     assert (found.name if found else None) == expected
 
 
-def test_st_patricks_wins_the_rare_overlap_with_easter_week():
-    # 2008: Easter Sunday was Mar 23, so its week began on the 17th.
+def test_st_patricks_wins_the_overlap_with_easter_month():
+    # 2008: Easter Sunday was Mar 23, so its window began on Feb 23.
+    assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 14)).name == "st_patricks"
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 17)).name == "st_patricks"
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 18)).name == "easter"
 
@@ -816,7 +820,7 @@ def test_active_only_when_enabled_and_in_season(holiday_app):
     app.settings.holiday.enabled = False
     assert app.active_holiday() is None
     app.settings.holiday.enabled = True
-    now["t"] = datetime(2026, 11, 2, 18, 0, tzinfo=UTC)
+    now["t"] = datetime(2026, 12, 28, 18, 0, tzinfo=UTC)
     assert app.active_holiday() is None
 
 

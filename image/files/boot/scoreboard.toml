@@ -251,7 +251,7 @@ cooldown_minutes = 15
 # Never drawn over a GOAL / goal-detail / three-stars screen. Off by default.
 #   halloween        Oct 1-31: a ghost floats across the board now and then
 #                    (games included), and jack-o'-lanterns flank the clock.
-#   thanksgiving     The week up to US Thanksgiving: a turkey walks along the
+#   thanksgiving     Nov 1-30 (US Thanksgiving): a turkey walks along the
 #                    bottom, and autumn leaves flank the clock.
 #   thanksgiving_ca  Canadian Thanksgiving's long weekend, same turkey. Not
 #                    listed by default; while ticked it takes that weekend
@@ -266,7 +266,7 @@ cooldown_minutes = 15
 #                    and two beating hearts flank the clock.
 #   st_patricks      Mar 14-17: a leprechaun walks along the bottom picking up
 #                    gold coins, and shamrocks flank the clock.
-#   easter           The week up to Easter Sunday (calculated each year): a
+#   easter           The 30 days up to Easter Sunday (calculated each year): a
 #                    bunny hops along the bottom, and eggs in your team's
 #                    colours (plus three others, changing daily) flank the
 #                    clock.

@@ -344,13 +344,13 @@ date window in the board's timezone.
 | Holiday | Window | On a game | On the clock |
 |---|---|---|---|
 | Halloween | October | ![Halloween game](docs/screens/game_halloween.png) a ghost | ![Halloween clock](docs/screens/clock_halloween.png) pumpkins |
-| Thanksgiving | the week up to the 4th Thursday of November (US); Canadian, Fri to 2nd Monday of October, is off by default | ![Thanksgiving game](docs/screens/game_thanksgiving.png) a turkey | ![Thanksgiving clock](docs/screens/clock_thanksgiving.png) leaves |
+| Thanksgiving | all of November (US); Canadian, Fri to 2nd Monday of October, is off by default | ![Thanksgiving game](docs/screens/game_thanksgiving.png) a turkey | ![Thanksgiving clock](docs/screens/clock_thanksgiving.png) leaves |
 | Christmas | Dec 1-26 | ![Christmas game](docs/screens/game_christmas.png) Santa, dropping presents | ![Christmas clock](docs/screens/clock_christmas.png) presents and snow |
 | New Year's | Dec 31-Jan 1 | ![New Year's game](docs/screens/game_new_year.png) fireworks | ![New Year's clock](docs/screens/clock_new_year.png) champagne, confetti |
 | Groundhog Day | Feb 2 | ![Groundhog game](docs/screens/game_groundhog.png) a groundhog, who may see his shadow | ![Groundhog clock](docs/screens/clock_groundhog.png) a sun (six more weeks) or a cloud |
 | Valentine's | Feb 7-14 | ![Valentine's game](docs/screens/game_valentines.png) a beating heart | ![Valentine's clock](docs/screens/clock_valentines.png) hearts |
 | St. Patrick's | Mar 14-17 | ![St. Patrick's game](docs/screens/game_st_patricks.png) a leprechaun collecting coins | ![St. Patrick's clock](docs/screens/clock_st_patricks.png) coins and shamrocks |
-| Easter | the week up to Easter Sunday | ![Easter game](docs/screens/game_easter.png) a hopping bunny | ![Easter clock](docs/screens/clock_easter.png) eggs in team colours |
+| Easter | the 30 days up to Easter Sunday | ![Easter game](docs/screens/game_easter.png) a hopping bunny | ![Easter clock](docs/screens/clock_easter.png) eggs in team colours |
 | Canada Day | Jul 1 (off by default) | | ![Canada Day clock](docs/screens/clock_canada_day.png) fireworks and flags |
 | July 4th | Jul 4 | | ![July 4th clock](docs/screens/clock_july_4th.png) fireworks and flags |
 
