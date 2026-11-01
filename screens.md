@@ -344,7 +344,7 @@ date window in the board's timezone.
 | Holiday | Window | On a game | On the clock |
 |---|---|---|---|
 | Halloween | October | ![Halloween game](docs/screens/game_halloween.png) a ghost | ![Halloween clock](docs/screens/clock_halloween.png) pumpkins |
-| Thanksgiving | the week up to the 4th Thursday of November (US); Canadian, Fri to 2nd Monday of October, is off by default | ![Thanksgiving game](docs/screens/game_thanksgiving.png) a turkey | ![Thanksgiving clock](docs/screens/clock_thanksgiving.png) leaves |
+| Thanksgiving | Nov 1 through the 4th Thursday (US); Canadian, Fri to 2nd Monday of October, is off by default | ![Thanksgiving game](docs/screens/game_thanksgiving.png) a turkey | ![Thanksgiving clock](docs/screens/clock_thanksgiving.png) leaves |
 | Christmas | Dec 1-26 | ![Christmas game](docs/screens/game_christmas.png) Santa, dropping presents | ![Christmas clock](docs/screens/clock_christmas.png) presents and snow |
 | New Year's | Dec 31-Jan 1 | ![New Year's game](docs/screens/game_new_year.png) fireworks | ![New Year's clock](docs/screens/clock_new_year.png) champagne, confetti |
 | Groundhog Day | Feb 2 | ![Groundhog game](docs/screens/game_groundhog.png) a groundhog, who may see his shadow | ![Groundhog clock](docs/screens/clock_groundhog.png) a sun (six more weeks) or a cloud |

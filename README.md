@@ -305,8 +305,8 @@ readable.
 
 `[holiday]` adds seasonal decorations on top. In October, a ghost floats
 across the board every so often (even during games, though never over a
-GOAL screen) and jack-o'-lanterns flank the clock. The week of Thanksgiving
-(US, or Canadian if you tick it), a turkey walks along the bottom instead,
+GOAL screen) and jack-o'-lanterns flank the clock. From November 1 through
+Thanksgiving (US, or Canadian if you tick it), a turkey walks along the bottom instead,
 with autumn leaves beside the clock. Through December 26, Santa walks
 across dropping presents, and snow falls on a pile of presents beside the
 clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
