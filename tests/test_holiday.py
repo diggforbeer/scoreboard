@@ -113,12 +113,12 @@ def test_halloween_window_is_all_of_october(day, expected):
         (date(2026, 10, 31), None),
         (date(2026, 11, 1), "thanksgiving"),
         (date(2026, 11, 26), "thanksgiving"),
-        (date(2026, 11, 30), "thanksgiving"),
+        (date(2026, 11, 27), None),
         (date(2026, 12, 1), None),
         (date(2025, 11, 27), "thanksgiving"),
     ],
 )
-def test_us_thanksgiving_is_all_of_november(day, expected):
+def test_us_thanksgiving_runs_from_november_first_to_the_day(day, expected):
     found = active_holiday(["thanksgiving"], day)
     assert (found.name if found else None) == expected
 
@@ -156,7 +156,7 @@ def test_canadian_thanksgiving_wins_its_weekend_over_halloween(themes, day, expe
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        (date(2026, 11, 30), "thanksgiving"),
+        (date(2026, 11, 30), None),
         (date(2026, 12, 1), "christmas"),
         (date(2026, 12, 26), "christmas"),
         (date(2026, 12, 27), None),
@@ -220,8 +220,7 @@ def test_shadow_is_decided_once_per_year_and_varies_between_years():
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        # Easter 2027 is Mar 28, so its month is under the whole window.
-        (date(2027, 3, 13), "easter"),
+        (date(2027, 3, 13), None),
         (date(2027, 3, 14), "st_patricks"),
         (date(2027, 3, 17), "st_patricks"),
         (date(2027, 3, 18), "easter"),
@@ -250,25 +249,27 @@ def test_easter_sunday(year, expected):
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        # 2027: Easter is Mar 28, so the 30 days start Feb 27.
-        (date(2027, 2, 26), None),
-        (date(2027, 2, 27), "easter"),
+        # 2027: Easter is Mar 28, so the 14 days start Mar 15 (St. Patrick's
+        # holds Mar 14-17 itself, see below).
+        (date(2027, 3, 13), None),
+        (date(2027, 3, 18), "easter"),
         (date(2027, 3, 28), "easter"),
         (date(2027, 3, 29), None),
-        # 2025: Easter is Apr 20, so the window starts Mar 22.
-        (date(2025, 3, 21), None),
-        (date(2025, 3, 22), "easter"),
+        # 2025: Easter is Apr 20, so the window starts Apr 7.
+        (date(2025, 4, 6), None),
+        (date(2025, 4, 7), "easter"),
         (date(2025, 4, 20), "easter"),
         (date(2025, 4, 21), None),
     ],
 )
-def test_easter_is_the_month_up_to_easter_sunday(day, expected):
+def test_easter_is_the_fortnight_up_to_easter_sunday(day, expected):
     found = active_holiday(HOLIDAY_NAMES, day)
     assert (found.name if found else None) == expected
 
 
-def test_st_patricks_wins_the_overlap_with_easter_month():
-    # 2008: Easter Sunday was Mar 23, so its window began on Feb 23.
+def test_st_patricks_wins_the_overlap_with_easter_fortnight():
+    # 2008: Easter Sunday was Mar 23, so its window began on Mar 10.
+    assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 13)).name == "easter"
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 14)).name == "st_patricks"
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 17)).name == "st_patricks"
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 18)).name == "easter"

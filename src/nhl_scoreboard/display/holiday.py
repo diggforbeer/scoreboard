@@ -367,23 +367,23 @@ def easter_sunday(year: int) -> date:
     return date(year, month, day + 1)
 
 
-EASTER_LEAD_DAYS = 30
+EASTER_LEAD_DAYS = 14
 
 
-def _easter_month(day: date) -> bool:
-    """The 30 days up to and including Easter Sunday (#250, widened from a week).
+def _easter_fortnight(day: date) -> bool:
+    """The 14 days up to and including Easter Sunday (#250, widened from a week).
 
-    Easter falls Mar 22-Apr 25, so the window starts between Feb 20 and
-    Mar 26. It often overlaps St. Patrick's (Mar 14-17) in the early years;
-    registry order breaks that tie, and St. Patrick's comes first.
+    Easter falls Mar 22-Apr 25, so the window starts between Mar 9 and
+    Apr 12. It only touches St. Patrick's (Mar 14-17) when Easter is Mar 30
+    or earlier; registry order breaks that tie, and St. Patrick's comes first.
     """
     sunday = easter_sunday(day.year)
     return sunday - timedelta(days=EASTER_LEAD_DAYS - 1) <= day <= sunday
 
 
-def _us_thanksgiving_month(day: date) -> bool:
-    """All of November (#239, widened from the week up to the 4th Thursday)."""
-    return day.month == 11
+def _us_thanksgiving_run(day: date) -> bool:
+    """Nov 1 through the 4th Thursday of November (#239, widened from a week)."""
+    return day.month == 11 and day <= nth_weekday(day.year, 11, 3, 4)
 
 
 def _ca_thanksgiving_weekend(day: date) -> bool:
@@ -1345,8 +1345,8 @@ HOLIDAYS: dict[str, Holiday] = {
     "thanksgiving": Holiday(
         "thanksgiving",
         "Thanksgiving (US)",
-        "Nov 1-30",
-        _us_thanksgiving_month,
+        "Nov 1 through the 4th Thursday",
+        _us_thanksgiving_run,
         TURKEY,
         _draw_leaves,
     ),
@@ -1393,8 +1393,8 @@ HOLIDAYS: dict[str, Holiday] = {
     "easter": Holiday(
         "easter",
         "Easter",
-        "The 30 days up to Easter Sunday",
-        _easter_month,
+        "The 14 days up to Easter Sunday",
+        _easter_fortnight,
         BUNNY,
         _draw_eggs,
     ),

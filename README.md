@@ -305,14 +305,14 @@ readable.
 
 `[holiday]` adds seasonal decorations on top. In October, a ghost floats
 across the board every so often (even during games, though never over a
-GOAL screen) and jack-o'-lanterns flank the clock. All of November
-(US Thanksgiving, or Canadian if you tick it), a turkey walks along the bottom instead,
+GOAL screen) and jack-o'-lanterns flank the clock. From November 1 through
+Thanksgiving (US, or Canadian if you tick it), a turkey walks along the bottom instead,
 with autumn leaves beside the clock. Through December 26, Santa walks
 across dropping presents, and snow falls on a pile of presents beside the
 clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
 a groundhog who may or may not see his shadow; and the week up to
 Valentine's Day, hearts; St. Patrick's, a leprechaun collecting
-gold coins; and the month before Easter, a hopping bunny and eggs painted in
+gold coins; and the two weeks before Easter, a hopping bunny and eggs painted in
 team colours; and Canada Day and July 4th, fireworks and flags. Canadian
 Thanksgiving (`thanksgiving_ca`) and Canada Day (`canada_day`) are
 available but not ticked by default.
