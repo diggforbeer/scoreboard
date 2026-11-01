@@ -20,7 +20,7 @@
 | src/nhl\_scoreboard/display/\_\_init\_\_.py |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/ascii.py        |       54 |        0 |        6 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/fonts.py        |       29 |        2 |        6 |        1 |     91% |     33-34 |
-| src/nhl\_scoreboard/display/holiday.py      |      546 |        2 |      136 |        2 |     99% | 135, 1448 |
+| src/nhl\_scoreboard/display/holiday.py      |      545 |        2 |      136 |        2 |     99% | 135, 1447 |
 | src/nhl\_scoreboard/display/logos.py        |       86 |        9 |       22 |        1 |     89% |41, 91-95, 99-101 |
 | src/nhl\_scoreboard/display/matrix.py       |       43 |        0 |        4 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/mirror.py       |      148 |        5 |       42 |        3 |     96% |98, 126, 176, 197, 217 |
@@ -36,7 +36,7 @@
 | src/nhl\_scoreboard/updater.py              |      233 |       24 |       52 |        8 |     89% |105-106, 124, 133, 151-155, 159-164, 231-236, 240-246, 257, 324-\>326, 351-\>353, 373-\>376, 377, 381 |
 | src/nhl\_scoreboard/wifi.py                 |      140 |      109 |       28 |        0 |     18% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/nhl\_scoreboard/wifi\_join.py           |       86 |        7 |       10 |        0 |     93% |112-114, 117-118, 201-202 |
-| **TOTAL**                                   | **6014** |  **321** | **1706** |   **96** | **94%** |           |
+| **TOTAL**                                   | **6013** |  **321** | **1706** |   **96** | **94%** |           |
 
 
 ## Setup coverage badge
