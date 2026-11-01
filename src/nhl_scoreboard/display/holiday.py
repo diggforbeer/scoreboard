@@ -378,10 +378,9 @@ def _easter_week(day: date) -> bool:
     return sunday - timedelta(days=6) <= day <= sunday
 
 
-def _us_thanksgiving_week(day: date) -> bool:
-    """The 7 days up to and including the 4th Thursday of November (#239)."""
-    thanksgiving = nth_weekday(day.year, 11, 3, 4)
-    return thanksgiving - timedelta(days=6) <= day <= thanksgiving
+def _us_thanksgiving_run(day: date) -> bool:
+    """Nov 1 through the 4th Thursday of November (#239, widened from a week)."""
+    return day.month == 11 and day <= nth_weekday(day.year, 11, 3, 4)
 
 
 def _ca_thanksgiving_weekend(day: date) -> bool:
@@ -1343,8 +1342,8 @@ HOLIDAYS: dict[str, Holiday] = {
     "thanksgiving": Holiday(
         "thanksgiving",
         "Thanksgiving (US)",
-        "The week up to the 4th Thursday in Nov",
-        _us_thanksgiving_week,
+        "Nov 1 through the 4th Thursday",
+        _us_thanksgiving_run,
         TURKEY,
         _draw_leaves,
     ),

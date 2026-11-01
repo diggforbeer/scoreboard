@@ -251,7 +251,7 @@ cooldown_minutes = 15
 # Never drawn over a GOAL / goal-detail / three-stars screen. Off by default.
 #   halloween        Oct 1-31: a ghost floats across the board now and then
 #                    (games included), and jack-o'-lanterns flank the clock.
-#   thanksgiving     The week up to US Thanksgiving: a turkey walks along the
+#   thanksgiving     Nov 1 through US Thanksgiving: a turkey walks along the
 #                    bottom, and autumn leaves flank the clock.
 #   thanksgiving_ca  Canadian Thanksgiving's long weekend, same turkey. Not
 #                    listed by default; while ticked it takes that weekend

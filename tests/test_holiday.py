@@ -99,7 +99,7 @@ def ghost_pixels(canvas: AsciiCanvas) -> dict:
         (date(2026, 9, 30), None),
         (date(2026, 10, 1), "halloween"),
         (date(2026, 10, 31), "halloween"),
-        (date(2026, 11, 1), None),
+        (date(2026, 11, 1), "thanksgiving"),
     ],
 )
 def test_halloween_window_is_all_of_october(day, expected):
@@ -110,17 +110,15 @@ def test_halloween_window_is_all_of_october(day, expected):
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        # 2026: Thanksgiving is Thu Nov 26, so the window is Nov 20-26.
-        (date(2026, 11, 19), None),
-        (date(2026, 11, 20), "thanksgiving"),
+        (date(2026, 10, 31), None),
+        (date(2026, 11, 1), "thanksgiving"),
         (date(2026, 11, 26), "thanksgiving"),
         (date(2026, 11, 27), None),
-        # 2025 moves it: Thu Nov 27, window Nov 21-27.
-        (date(2025, 11, 20), None),
+        (date(2026, 12, 1), None),
         (date(2025, 11, 27), "thanksgiving"),
     ],
 )
-def test_us_thanksgiving_is_the_week_up_to_the_fourth_thursday(day, expected):
+def test_us_thanksgiving_runs_from_november_first_to_the_day(day, expected):
     found = active_holiday(["thanksgiving"], day)
     assert (found.name if found else None) == expected
 
@@ -816,7 +814,7 @@ def test_active_only_when_enabled_and_in_season(holiday_app):
     app.settings.holiday.enabled = False
     assert app.active_holiday() is None
     app.settings.holiday.enabled = True
-    now["t"] = datetime(2026, 11, 2, 18, 0, tzinfo=UTC)
+    now["t"] = datetime(2026, 12, 28, 18, 0, tzinfo=UTC)
     assert app.active_holiday() is None
 
 

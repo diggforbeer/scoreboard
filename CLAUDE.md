@@ -699,7 +699,7 @@ Each `Holiday` carries its own `Flyby` (frames, palette, speed,
 `align` "middle" to float or "bottom" to walk) and `corners` draw
 function, so adding one is a registry entry, not overlay code.
 Thanksgiving (#239) is two entries sharing the turkey/leaves art: US
-(`thanksgiving`, the 7 days up to the 4th Thursday of November) and
+(`thanksgiving`, Nov 1 through the 4th Thursday -- widened from the last week) and
 Canadian (`thanksgiving_ca`, Fri through the 2nd Monday of October,
 `default_on=False` so it isn't ticked unasked -- `DEFAULT_THEMES`).
 Overlaps go to the higher `Holiday.priority` (registry order is just
