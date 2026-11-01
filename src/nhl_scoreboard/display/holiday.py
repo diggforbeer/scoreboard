@@ -367,18 +367,15 @@ def easter_sunday(year: int) -> date:
     return date(year, month, day + 1)
 
 
-EASTER_LEAD_DAYS = 14
+def _easter_week(day: date) -> bool:
+    """The 7 days up to and including Easter Sunday (#250).
 
-
-def _easter_fortnight(day: date) -> bool:
-    """The 14 days up to and including Easter Sunday (#250, widened from a week).
-
-    Easter falls Mar 22-Apr 25, so the window starts between Mar 9 and
-    Apr 12. It only touches St. Patrick's (Mar 14-17) when Easter is Mar 30
-    or earlier; registry order breaks that tie, and St. Patrick's comes first.
+    Easter falls Mar 22-Apr 25, so in the rare year it's Mar 22 or 23 this
+    week reaches back into St. Patrick's (Mar 14-17); registry order breaks
+    that tie, and St. Patrick's comes first.
     """
     sunday = easter_sunday(day.year)
-    return sunday - timedelta(days=EASTER_LEAD_DAYS - 1) <= day <= sunday
+    return sunday - timedelta(days=6) <= day <= sunday
 
 
 def _us_thanksgiving_run(day: date) -> bool:
@@ -1393,8 +1390,8 @@ HOLIDAYS: dict[str, Holiday] = {
     "easter": Holiday(
         "easter",
         "Easter",
-        "The 14 days up to Easter Sunday",
-        _easter_fortnight,
+        "The week up to Easter Sunday",
+        _easter_week,
         BUNNY,
         _draw_eggs,
     ),

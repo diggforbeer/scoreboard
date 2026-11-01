@@ -312,7 +312,7 @@ across dropping presents, and snow falls on a pile of presents beside the
 clock. New Year's Eve and Day bring fireworks and champagne; Groundhog Day,
 a groundhog who may or may not see his shadow; and the week up to
 Valentine's Day, hearts; St. Patrick's, a leprechaun collecting
-gold coins; and the two weeks before Easter, a hopping bunny and eggs painted in
+gold coins; and the week before Easter, a hopping bunny and eggs painted in
 team colours; and Canada Day and July 4th, fireworks and flags. Canadian
 Thanksgiving (`thanksgiving_ca`) and Canada Day (`canada_day`) are
 available but not ticked by default.

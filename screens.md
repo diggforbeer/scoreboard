@@ -350,7 +350,7 @@ date window in the board's timezone.
 | Groundhog Day | Feb 2 | ![Groundhog game](docs/screens/game_groundhog.png) a groundhog, who may see his shadow | ![Groundhog clock](docs/screens/clock_groundhog.png) a sun (six more weeks) or a cloud |
 | Valentine's | Feb 7-14 | ![Valentine's game](docs/screens/game_valentines.png) a beating heart | ![Valentine's clock](docs/screens/clock_valentines.png) hearts |
 | St. Patrick's | Mar 14-17 | ![St. Patrick's game](docs/screens/game_st_patricks.png) a leprechaun collecting coins | ![St. Patrick's clock](docs/screens/clock_st_patricks.png) coins and shamrocks |
-| Easter | the 14 days up to Easter Sunday | ![Easter game](docs/screens/game_easter.png) a hopping bunny | ![Easter clock](docs/screens/clock_easter.png) eggs in team colours |
+| Easter | the week up to Easter Sunday | ![Easter game](docs/screens/game_easter.png) a hopping bunny | ![Easter clock](docs/screens/clock_easter.png) eggs in team colours |
 | Canada Day | Jul 1 (off by default) | | ![Canada Day clock](docs/screens/clock_canada_day.png) fireworks and flags |
 | July 4th | Jul 4 | | ![July 4th clock](docs/screens/clock_july_4th.png) fireworks and flags |
 

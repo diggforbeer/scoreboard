@@ -735,13 +735,13 @@ preview. He *collects* a row of gold coins already on the ground
 over him at each pickup): dropping things behind a walker at ground level
 read as something else entirely, and small dropped shamrocks never read at
 that size anyway (solid: hearts; outlined: acorns). Easter (#250, the
-14 days up to Easter Sunday (widened from a week) via `easter_sunday()`, the anonymous Gregorian
+week up to Easter Sunday via `easter_sunday()`, the anonymous Gregorian
 algorithm) hops: `Flyby.hop_pixels`/`hop_period` lift a bottom-aligned
 walker in an |sin| arc. Its white bunny vanished over silver/pale-teal
 logos, so its outline is black -- an unlit LED, which cuts it out of a
 bright logo and is invisible on the dark panel; red/green sprites need the
-opposite, a light ring. When Easter is Mar 30 or earlier the window reaches into
-Mar 14-17, and St. Patrick's wins by registry order. Its eggs are team-coloured (owner's
+opposite, a light ring. In the rare years Easter week reaches back to
+Mar 17, St. Patrick's wins by registry order. Its eggs are team-coloured (owner's
 idea): the favourite's first, then three other teams picked afresh each day
 (`egg_teams()`, seeded by the date) -- so `corners` functions also take the
 favourite, threaded through `HolidayOverlay.draw(favourite=...)` from

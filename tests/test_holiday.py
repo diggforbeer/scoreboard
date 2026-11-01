@@ -223,7 +223,7 @@ def test_shadow_is_decided_once_per_year_and_varies_between_years():
         (date(2027, 3, 13), None),
         (date(2027, 3, 14), "st_patricks"),
         (date(2027, 3, 17), "st_patricks"),
-        (date(2027, 3, 18), "easter"),
+        (date(2027, 3, 18), None),
     ],
 )
 def test_st_patricks_is_the_days_up_to_the_seventeenth(day, expected):
@@ -249,28 +249,21 @@ def test_easter_sunday(year, expected):
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
-        # 2027: Easter is Mar 28, so the 14 days start Mar 15 (St. Patrick's
-        # holds Mar 14-17 itself, see below).
-        (date(2027, 3, 13), None),
-        (date(2027, 3, 18), "easter"),
+        (date(2027, 3, 21), None),
+        (date(2027, 3, 22), "easter"),
         (date(2027, 3, 28), "easter"),
         (date(2027, 3, 29), None),
-        # 2025: Easter is Apr 20, so the window starts Apr 7.
-        (date(2025, 4, 6), None),
-        (date(2025, 4, 7), "easter"),
-        (date(2025, 4, 20), "easter"),
-        (date(2025, 4, 21), None),
+        (date(2025, 4, 14), "easter"),
+        (date(2025, 4, 13), None),
     ],
 )
-def test_easter_is_the_fortnight_up_to_easter_sunday(day, expected):
+def test_easter_is_the_week_up_to_easter_sunday(day, expected):
     found = active_holiday(HOLIDAY_NAMES, day)
     assert (found.name if found else None) == expected
 
 
-def test_st_patricks_wins_the_overlap_with_easter_fortnight():
-    # 2008: Easter Sunday was Mar 23, so its window began on Mar 10.
-    assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 13)).name == "easter"
-    assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 14)).name == "st_patricks"
+def test_st_patricks_wins_the_rare_overlap_with_easter_week():
+    # 2008: Easter Sunday was Mar 23, so its week began on the 17th.
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 17)).name == "st_patricks"
     assert active_holiday(HOLIDAY_NAMES, date(2008, 3, 18)).name == "easter"
 

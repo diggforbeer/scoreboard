@@ -266,7 +266,7 @@ cooldown_minutes = 15
 #                    and two beating hearts flank the clock.
 #   st_patricks      Mar 14-17: a leprechaun walks along the bottom picking up
 #                    gold coins, and shamrocks flank the clock.
-#   easter           The 14 days up to Easter Sunday (calculated each year): a
+#   easter           The week up to Easter Sunday (calculated each year): a
 #                    bunny hops along the bottom, and eggs in your team's
 #                    colours (plus three others, changing daily) flank the
 #                    clock.
