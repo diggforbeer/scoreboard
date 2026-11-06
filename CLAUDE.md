@@ -237,7 +237,9 @@ screen drops in for `FAVOURITE_QUICK_TURN` (half) of that each cycle, so
 its score stays in view without hogging time from games actually being
 played. With the favourite not playing, live followed games take equal
 turns (intermissions included -- skipping them was considered and not
-chosen). Timed by monotonic time, not `self.index`. An
+chosen); if the favourite's game today hasn't started, its countdown/preview
+joins as a `FAVOURITE_QUICK_TURN` so a live followed team can't hide it
+for the whole pregame (#331). Timed by monotonic time, not `self.index`. An
 `also_follow` team's final is not held; the favourite's three stars
 interrupt a followed game's turn like a goal does (below), so the turns
 can't swallow them. Everything else stays
