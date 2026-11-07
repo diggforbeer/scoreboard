@@ -1425,9 +1425,11 @@ def followed(day):
     return app, clock, client
 
 
-def test_a_followed_teams_live_game_shows_while_the_favourite_is_idle(followed):
-    app, _clock, _client = followed
-    assert scene(app) == ("game", 9), "SEA is live: no preview of tonight's NSH game"
+def test_a_followed_teams_live_game_shares_the_screen_with_the_favourites_preview(followed):
+    """#331: SEA live must not hide tonight's NSH game for the whole pregame."""
+    app, clock, _client = followed
+    app.settings.scoreboard.rotate_seconds = 10
+    assert _seconds_on_screen(app, clock, 15) == {("game", 9): 10, ("preview", 1): 5}
 
 
 def test_unfollowed_live_games_never_displace_the_favourites_idle_rotation(day):
@@ -1476,7 +1478,12 @@ def test_followed_games_take_equal_turns_while_the_favourite_is_not_playing(foll
     app.settings.scoreboard.also_follow = ["SEA", "DAL"]
     client.today.append(game(7, "DAL", "COL", PUCK_DROP - timedelta(hours=1), "LIVE", period=1))
     tick(app, clock, seconds=1)
-    assert _seconds_on_screen(app, clock, 60) == {("game", 9): 30, ("game", 7): 30}
+    # Two 25s cycles: each live game gets a full turn, the pregame favourite half of one.
+    assert _seconds_on_screen(app, clock, 50) == {
+        ("game", 9): 20,
+        ("game", 7): 20,
+        ("preview", 1): 10,
+    }
 
 
 def test_once_the_followed_game_ends_the_favourite_rotation_returns(followed):

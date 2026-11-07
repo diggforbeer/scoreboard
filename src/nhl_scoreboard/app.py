@@ -2233,9 +2233,9 @@ class ScoreboardApp:
             position = self.monotonic() % sum(seconds for _, seconds in turns)
             for game, seconds in turns:
                 if position < seconds:
-                    return Scene("game", game)
+                    return self._turn_scene(game)
                 position -= seconds
-            return Scene("game", turns[-1][0])
+            return self._turn_scene(turns[-1][0])
         if not cfg.favourite_team:
             return None
         today = self.favourite_game_today()
@@ -2246,6 +2246,10 @@ class ScoreboardApp:
         )
         standings = self._standings_scene(allow_fetch=allow_fetch)
         return self._rotate_idle_scenes(upcoming, standings, allow_fetch=allow_fetch)
+
+    def _turn_scene(self, game: Game) -> Scene:
+        """A turn's screen: a game not yet started is its countdown/preview."""
+        return self._countdown_or_preview(game) if game.is_pregame else Scene("game", game)
 
     def _followed_turns(self) -> list[tuple[Game, float]]:
         """Which followed games are on screen now, each with its dwell in seconds.
@@ -2280,6 +2284,10 @@ class ScoreboardApp:
             for g in self.games
             if g.is_live and g is not today and self._is_followed(g)
         ]
+        if favourite_game is None and today is not None and today.is_pregame and others:
+            # A followed team already live must not erase the favourite's
+            # countdown/preview for the hours before puck drop.
+            favourite_game = today
         if favourite_game is None:
             return others
         return [(favourite_game, cfg.rotate_seconds * FAVOURITE_QUICK_TURN), *others]
