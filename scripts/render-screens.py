@@ -52,6 +52,8 @@ DECEMBER = datetime(2026, 12, 20, 19, 30, tzinfo=ZoneInfo("America/Chicago"))
 FLYBY_STILL_SECONDS = 2.0
 #: Seconds into a shootout step: past the pop-in, so the settled grid shows.
 SHOOTOUT_SETTLED_SECONDS = 2.0
+#: Seconds into the goal light: everything has landed and the shimmer is mid-GOAL.
+GOAL_STILL_SECONDS = 3.3
 
 CELL = 8  # output pixels per LED
 UNLIT = (14, 14, 14)
@@ -125,6 +127,9 @@ def capture(app: ScoreboardApp, step) -> Frame:
     app._set_demo_logos(step.use_logos)
     app._start_demo_holiday(step)
     app._start_demo_shootout(step)
+    app._start_demo_goal(step)
+    if step.animate_goal:
+        app._now[0] += GOAL_STILL_SECONDS
     if step.holiday:
         app._now[0] += FLYBY_STILL_SECONDS
     if step.animate_shootout:
@@ -134,6 +139,7 @@ def capture(app: ScoreboardApp, step) -> Frame:
     # Mid-animation frames are held back from snapshots, which is right for
     # the live view but not for a still of an animated screen.
     app._overlay_animating = app._shootout_animating = app._scroll_animating = False
+    app._goal_building = False
     app.mirror.requested = True
     before = app.mirror.latest()
     app.draw_scene(scene)

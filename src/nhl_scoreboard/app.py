@@ -37,6 +37,7 @@ from .config import (
     resolve_timezone,
 )
 from .delay import DelayQueue
+from .display import goal_light
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
@@ -425,6 +426,12 @@ class ScoreboardApp:
         self._scroll_animating = False
         #: Demo only: when the current step's newest attempt "appeared".
         self._demo_shootout_started: float | None = None
+        #: Demo only: when the current step's goal light "started".
+        self._demo_goal_started: float | None = None
+        #: The favourite's goal light is on screen (fast loop); _goal_building
+        #: is its first BUILD_SECONDS, which a live-view snapshot waits out.
+        self._goal_animating = False
+        self._goal_building = False
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
         #: if we watched it finish; estimated from the start time otherwise.
         self.ended_at: dict[int, datetime] = {}
@@ -580,7 +587,12 @@ class ScoreboardApp:
         self.shutdown()
 
     def frame_interval(self) -> float:
-        animating = self._overlay_animating or self._shootout_animating or self._scroll_animating
+        animating = (
+            self._overlay_animating
+            or self._shootout_animating
+            or self._scroll_animating
+            or self._goal_animating
+        )
         return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
     def run_demo(self) -> None:
@@ -610,10 +622,11 @@ class ScoreboardApp:
                 self._set_demo_logos(step.use_logos)
                 self._start_demo_holiday(step)
                 self._start_demo_shootout(step)
+                self._start_demo_goal(step)
                 if step.scroll_seconds:
                     self._play_scrolling_demo_step(step.scene, step.scroll_seconds)
                     continue
-                if self._demo_holiday is not None or step.animate_shootout:
+                if self._demo_holiday is not None or step.animate_shootout or step.animate_goal:
                     self._play_animated_demo_step(step.scene)
                     continue
                 self.draw_scene(step.scene)
@@ -637,6 +650,29 @@ class ScoreboardApp:
     def _start_demo_shootout(self, step: DemoStep) -> None:
         """Make a step's newest shootout attempt pop in as the step starts (#259)."""
         self._demo_shootout_started = self.monotonic() if step.animate_shootout else None
+
+    def _start_demo_goal(self, step: DemoStep) -> None:
+        """Start a step's goal light as the step starts."""
+        self._demo_goal_started = self.monotonic() if step.animate_goal else None
+
+    def _goal_age(self, scene: Scene) -> float | None:
+        """Seconds into the favourite's goal light, or ``None`` for the quick
+        static goal screen: followed teams' goals are quick updates (#260),
+        and a goal scene with no goal behind it (a direct draw) has no age."""
+        if scene.kind != "goal":
+            return None
+        favourite = self.settings.scoreboard.favourite_team
+        if april_fools.active(favourite, self.clock().astimezone(self.tz)):
+            favourite = april_fools.PRANK_AS
+        if not favourite or (scene.goal_team or favourite) != favourite:
+            return None
+        if self._demo_goal_started is not None:
+            return self.monotonic() - self._demo_goal_started
+        if self.last_goal is not None and scene.game is not None:
+            game_id, goal_time, _team = self.last_goal
+            if game_id == scene.game.id:
+                return max(0.0, self.monotonic() - goal_time)
+        return None
 
     def _play_animated_demo_step(self, scene: Scene) -> None:
         """Redraw every frame for DEMO_SCENE_SECONDS, so the fly-by actually moves."""
@@ -672,6 +708,7 @@ class ScoreboardApp:
             self._set_demo_logos(step.use_logos)
             self._start_demo_holiday(step)
             self._start_demo_shootout(step)
+            self._start_demo_goal(step)
             self._demo_scene = step.scene
         self._demo_drawing = True
         try:
@@ -2544,6 +2581,7 @@ class ScoreboardApp:
             self.swap_canvas()
             self._overlay_animating = False
             self._shootout_animating = False
+            self._goal_animating = self._goal_building = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -2571,7 +2609,12 @@ class ScoreboardApp:
             return
         if key == self._mirror_key and not mirror.requested:
             return
-        if self._overlay_animating or self._shootout_animating or self._scroll_animating:
+        if (
+            self._overlay_animating
+            or self._shootout_animating
+            or self._scroll_animating
+            or self._goal_building
+        ):
             return
         mirror.requested = False
         self._mirror_key = key
@@ -2611,6 +2654,9 @@ class ScoreboardApp:
         r = self.renderer
         self._shootout_animating = False
         self._scroll_animating = scene.scrolling
+        goal_age = self._goal_age(scene)
+        self._goal_animating = goal_age is not None
+        self._goal_building = goal_age is not None and goal_age < goal_light.BUILD_SECONDS
         favourite = self.settings.scoreboard.favourite_team
         if self.april_fools_active():
             favourite = april_fools.PRANK_AS
@@ -2629,7 +2675,7 @@ class ScoreboardApp:
             else:
                 r.draw_game(self.canvas, game)
         elif scene.kind == "goal":
-            r.draw_goal(self.canvas, scene.game, scene.goal_team or favourite)
+            r.draw_goal(self.canvas, scene.game, scene.goal_team or favourite, goal_age)
         elif scene.kind == "goal_detail":
             r.draw_goal_detail(self.canvas, scene.game, scene.goal_event)
         elif scene.kind == "three_stars":

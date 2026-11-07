@@ -85,10 +85,28 @@ below it (`2ND 08:17`, `INT2`, `OT`, `FINAL`, `FINAL/OT`, `FINAL/SO`).
 
 ![Goal](docs/screens/goal.png)
 
-"GOAL" and the scoring team's city name in its colours, the score below in
-white, for `goal_flash_seconds`. If the name doesn't fit (a single 64px
-panel) it falls back to the abbreviation. The horn plays the moment the goal
-is detected, whatever is on screen.
+An arena goal light, for `goal_flash_seconds` (6s by default). A white
+flash, then one big caged lamp in the middle strobes while beams sweep the
+whole panel; the lamp slides left and shrinks, GOAL drops in one letter at a
+time in the team's colour, a lamp pulses at each edge (alternating), and the
+team's city name fades in small along the bottom. A white shimmer then sweeps
+across the letters until the screen ends. It takes the whole panel: no
+logos and no score (that is `goal_detail`'s job), so it looks the same with
+or without logos. It is a function of the seconds since the goal, so it runs
+the fast animation loop while it is up; the live view waits until the letters
+have landed (3s) before taking its snapshot, and the picture above is that
+settled look. On a single 64px panel the edge lamps are dropped. If the name
+doesn't fit it falls back to the abbreviation. The horn plays the moment the
+goal is detected, whatever is on screen.
+
+### `goal` for a followed team
+
+![Goal, followed team](docs/screens/goal_followed.png)
+
+A followed team's goal (`also_follow`, #260) is a quick update, so it keeps
+the plain screen: "GOAL" and the scoring team's city name in its colours
+between the two logos, the score below in white. The text layout (no logos)
+is the same screen across the whole panel.
 
 - **Only** the favourite's own goals count in its own game; a followed team
   scoring on the favourite gets no screen. Two followed teams playing each
@@ -360,13 +378,13 @@ off-season. The Christmas tree screen above is separate and opt-in.
 ## Variants that apply to most screens
 
 **Logo layout and text layout.** With `show_logos` on and logo art
-available, the game, goal, goal detail, three stars, preview, countdown,
+available, the game, goal (a followed team's), goal detail, three stars, preview, countdown,
 matchup, standings and leaders screens put a 32px logo at each edge. Without
 logos they fall back to team abbreviations, and use the whole width:
 
 | | |
 |---|---|
-| ![Live, text layout](docs/screens/game_live_text.png) | ![Goal, text layout](docs/screens/goal_text.png) |
+| ![Live, text layout](docs/screens/game_live_text.png) | ![Followed goal, text layout](docs/screens/goal_followed_text.png) |
 | ![Goal detail, text layout](docs/screens/goal_detail_text.png) | ![Three stars, text layout](docs/screens/three_stars_text.png) |
 | ![Final, text layout](docs/screens/game_final_text.png) | ![Standings, text layout](docs/screens/standings_text.png) |
 | ![Leaders, text layout](docs/screens/leaders_text.png) | ![Matchup, text layout](docs/screens/matchup_text.png) |

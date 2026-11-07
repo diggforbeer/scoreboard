@@ -98,6 +98,7 @@ def test_every_demo_scene_mirrors_pixel_for_pixel(app, tmp_path):
         app.draw()
         frame = app.mirror.latest()
         if frame is None or frame.seq == last_seq:
+            app.now[0] += DEMO_SCENE_SECONDS / 2
             continue  # held back mid-animation
         last_seq = frame.seq
         shown = app.matrix.shown
@@ -105,6 +106,27 @@ def test_every_demo_scene_mirrors_pixel_for_pixel(app, tmp_path):
         compared += bool(shown.pixels)
         app.now[0] += DEMO_SCENE_SECONDS / 2
     assert compared > 40
+
+
+def test_the_goal_light_is_mirrored_once_it_has_landed(app, tmp_path):
+    """Held back while it builds (a half-dropped GOAL isn't worth a still),
+    then snapshotted, and identical to what the panel got (the beams and
+    glow are additive, so this is the frame most likely to drift)."""
+    from nhl_scoreboard.demo import demo_steps
+
+    step = next(
+        s for s in demo_steps("NSH", datetime(2026, 10, 14, 23, tzinfo=UTC)) if s.animate_goal
+    )
+    app.mirror.watching = True
+    app._demo_goal_started = app.monotonic()
+    app.draw_scene(step.scene)
+    assert snapshots(app) == 0, "held back while GOAL is still dropping in"
+
+    app.now[0] += 3.3
+    app.draw_scene(step.scene)
+    frame = app.mirror.latest()
+    assert frame is not None
+    assert as_pixels(frame.pixels) == app.matrix.shown.pixels
 
 
 def snapshots(app) -> int:
