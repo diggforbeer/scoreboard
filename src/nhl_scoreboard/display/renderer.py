@@ -26,6 +26,7 @@ from ..nhl.models import (
     Star,
     TeamLeaders,
 )
+from . import goal_light
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_name, team_secondary_color
@@ -66,6 +67,8 @@ class Renderer:
         self.tz = tz
         self.logos = logos
         self._colors: dict[tuple[int, int, int], Any] = {}
+        #: goal_light's GOAL letters, rasterised once.
+        self.goal_glyphs: dict[str, Any] = {}
 
     # -- primitives ------------------------------------------------------
 
@@ -442,13 +445,21 @@ class Renderer:
         for i in range(-reach, -reach + math.ceil(span * second)):
             canvas.SetPixel(cx + i, cy - i, *LOSS)
 
-    def draw_goal(self, canvas: Any, game: Game, scorer: str) -> None:
+    def draw_goal(self, canvas: Any, game: Game, scorer: str, age: float | None = None) -> None:
         """A goal celebration: GOAL and the scoring team's name in its colour (#265).
+
+        With ``age`` (seconds since the goal) it is the favourite's animated
+        goal light instead (``goal_light``): the whole panel, no logos and no
+        score -- that is the goal-detail screen's job. Without it, the quick
+        static screen below, which a followed team's goal gets.
 
         ``scorer`` is the scoring team's abbreviation -- the favourite's, or
         an ``also_follow`` team's (#260) -- so a red-zone goal from another
         game says who scored. The current score sits on the bottom line.
         """
+        if age is not None:
+            goal_light.draw(self, canvas, scorer, age)
+            return
         if self.logos is not None:
             away = self.logos.get(game.away.abbrev)
             home = self.logos.get(game.home.abbrev)

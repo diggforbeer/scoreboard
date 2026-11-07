@@ -97,6 +97,8 @@ class DemoStep(NamedTuple):
     holiday: str | None = None
     #: Pop the newest shootout attempt in as the step starts (#259).
     animate_shootout: bool = False
+    #: Play the favourite's goal light from the start of the step.
+    animate_goal: bool = False
     #: Scroll the scene's table over this many seconds (``conference_leaders``).
     scroll_seconds: float = 0.0
     #: A unique, file-safe name (``game_live``, ``game_live_text``), which
@@ -193,8 +195,9 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ("game_empty_net", Scene("game", empty_net), {}),
         ("game_intermission", Scene("game", intermission), {}),
         ("game_overtime", Scene("game", overtime), {}),
-        ("goal", Scene("goal", goal, goal_team=home), {}),
-        ("goal_text", Scene("goal", goal, goal_team=home), {"use_logos": False}),
+        ("goal", Scene("goal", goal, goal_team=home), {"animate_goal": True}),
+        ("goal_followed", Scene("goal", goal, goal_team=away), {}),
+        ("goal_followed_text", Scene("goal", goal, goal_team=away), {"use_logos": False}),
         ("goal_detail", Scene("goal_detail", goal, goal_event=goal_event), {}),
         (
             "goal_detail_text",
