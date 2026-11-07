@@ -21,6 +21,7 @@ from websockets.sync.client import connect
 
 from nhl_scoreboard import updater
 from nhl_scoreboard.app import (
+    ANIMATION_FRAME_INTERVAL,
     DEMO_SCENE_SECONDS,
     FRAME_INTERVAL,
     STALE_AFTER_SECONDS,
@@ -1906,14 +1907,44 @@ def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, game
 def test_draw_scene_dispatches_goal_without_the_horn(fake_backend, games):
     app, _src = demo_app(fake_backend, games)
     drawn = []
-    app.renderer.draw_goal = lambda canvas, game, team: drawn.append((game, team))
+    app.renderer.draw_goal = lambda canvas, game, team, age: drawn.append((game, team, age))
     live = next(g for g in games if g.is_live)
 
     app.draw_scene(Scene("goal", live, goal_team="SEA"))
 
-    assert drawn == [(live, "SEA")]
+    assert drawn == [(live, "SEA", None)]  # no goal behind it, so no animation
     assert app.horn.calls == []
     assert app.matrix.swaps == 1
+
+
+def test_the_favourites_goal_plays_the_goal_light_from_the_moment_of_the_goal(fake_backend, games):
+    app, src = demo_app(fake_backend, games)
+    drawn = []
+    app.renderer.draw_goal = lambda canvas, game, team, age: drawn.append(age)
+    live = next(g for g in games if g.is_live)
+    favourite = app.settings.scoreboard.favourite_team
+    app.last_goal = (live.id, app.monotonic(), favourite)
+
+    app.draw_scene(Scene("goal", live, goal_team=favourite))
+    assert drawn == [0.0]
+    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL, "the light needs the fast loop"
+
+    src.sleep(2.5)
+    app.draw_scene(Scene("goal", live, goal_team=favourite))
+    assert drawn[-1] == pytest.approx(2.5)
+
+
+def test_a_followed_teams_goal_stays_the_quick_static_screen(fake_backend, games):
+    app, _src = demo_app(fake_backend, games)
+    drawn = []
+    app.renderer.draw_goal = lambda canvas, game, team, age: drawn.append(age)
+    live = next(g for g in games if g.is_live)
+    app.last_goal = (live.id, app.monotonic(), "SEA")
+
+    app.draw_scene(Scene("goal", live, goal_team="SEA"))
+
+    assert drawn == [None]
+    assert app.frame_interval() != ANIMATION_FRAME_INTERVAL
 
 
 # --------------------------------------------------------------------------

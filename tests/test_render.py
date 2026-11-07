@@ -71,6 +71,7 @@ SNAPSHOTS = Path(__file__).parent / "snapshots"
 SCORE_BASELINE = 13
 RULE_Y = 19  # preview/countdown/goal only -- _draw_upcoming/draw_goal, untouched by #70
 STATUS_TOP = RULE_Y + 1
+GOAL_TOP, GOAL_BOTTOM = 3, 25  # the animated goal light: GOAL at 2x, name below
 GOAL_BASELINE = 11  # goal screen's GOAL line; the team name sits below it (#265)
 TEXT_LEFT = 3
 TEXT_RIGHT_PAD = 3
@@ -949,6 +950,110 @@ def test_text_layout_goal(games, update_snapshots):
     assert_centered(c, STATUS_TOP, H - 1, "score line")
     assert status_color(c) == {WHITE}
     check_snapshot("text_goal", art, update_snapshots)
+
+
+# -- the favourite's goal light (goal_light.py) -----------------------------
+
+GOAL_LIGHT_FRAMES = {
+    "flash": 0.05,  # the white wash, big lamp lit
+    "beams": 0.6,  # beams sweeping, big lamp strobing
+    "handoff": 1.8,  # lamp sliding left, first letters dropping
+    "landed": 2.8,  # GOAL down, both edge lamps lit, name fading in
+    "shimmer": 3.3,  # settled, with the white shimmer mid-GOAL
+}
+
+
+def goal_light(age: float, width: int = W, abbrev: str = "NSH") -> AsciiCanvas:
+    c = AsciiCanvas(width, H)
+    r = Renderer(graphics, FontSet(graphics), width, H, TZ)
+    r.draw_goal(c, None, abbrev, age)  # the game is only for the static screen
+    return c
+
+
+@pytest.mark.parametrize("name,age", GOAL_LIGHT_FRAMES.items())
+def test_goal_light_snapshots(name, age, update_snapshots):
+    art = show(f"goal light, NSH, {age}s", goal_light(age))
+    check_snapshot(f"goal_light_{name}", art, update_snapshots)
+
+
+@pytest.mark.parametrize("width", [128, 64])
+def test_goal_light_stays_on_the_panel_at_every_age(width):
+    """The letters drop in from above the panel and the beams cross all of it:
+    every frame, on both panel sizes, must be clipped before it is drawn."""
+    for tenth in range(0, 90):
+        c = goal_light(tenth / 10, width)
+        assert not c.out_of_bounds, f"{tenth / 10}s drew off-panel"
+        assert c.pixels, f"{tenth / 10}s is a blank frame"
+
+
+def test_goal_light_is_a_pure_function_of_age():
+    assert goal_light(2.3).pixels == goal_light(2.3).pixels
+    assert goal_light(2.3).pixels != goal_light(2.4).pixels
+
+
+def test_goal_light_letters_land_centred_in_the_scoring_teams_colour():
+    team = team_color("NSH")
+    c = goal_light(2.8)  # past the drops, before the shimmer
+    letters = {
+        p for p, rgb in c.lit(MID_LEFT, GOAL_TOP, MID_RIGHT - 1, GOAL_BOTTOM).items() if rgb == team
+    }
+    box = BBox(
+        min(x for x, _ in letters), min(y for _, y in letters),
+        max(x for x, _ in letters), max(y for _, y in letters),
+    )  # fmt: skip
+    assert abs(box.center_x - (W - 1) / 2) <= 1, "GOAL not centred"
+    assert box.width >= 50, "GOAL is 2x the 7x13 font"
+    other = goal_light(2.8, abbrev="CGY")
+    assert team_color("CGY") in other.colors(MID_LEFT, GOAL_TOP, MID_RIGHT - 1, GOAL_BOTTOM)
+    assert WHITE not in c.colors(MID_LEFT, GOAL_TOP, MID_RIGHT - 1, GOAL_BOTTOM), "no shimmer yet"
+    assert WHITE in goal_light(3.3).colors(MID_LEFT, GOAL_TOP, MID_RIGHT - 1, GOAL_BOTTOM) or any(
+        min(rgb) > team_color("NSH")[2] + 60
+        for rgb in goal_light(3.3).lit(MID_LEFT, GOAL_TOP, MID_RIGHT - 1, GOAL_BOTTOM).values()
+    ), "the shimmer lifts letters towards white"
+
+
+def test_goal_light_letters_drop_in_one_at_a_time():
+    team = team_color("NSH")
+
+    def landed(age):
+        c = goal_light(age)
+        return sum(1 for rgb in c.lit(30, 0, 97, GOAL_BOTTOM).values() if rgb == team)
+
+    assert landed(1.7) < landed(1.9) < landed(2.8), "letters should arrive one after another"
+
+
+def test_goal_light_has_a_lamp_at_each_edge_once_landed():
+    c = goal_light(2.8)
+    for x0, x1 in ((0, 28), (W - 29, W - 1)):
+        assert c.lit(x0, 0, x1, H - 1), "edge lamp missing"
+    left, right = c.lit(0, 0, 31, H - 1), c.lit(W - 32, 0, W - 1, H - 1)
+    mirrored = {(W - 1 - x, y): v for (x, y), v in right.items()}
+    assert left != mirrored, "the two lamps pulse in alternation, not in step"
+
+
+def test_goal_light_names_the_team_below_the_letters_and_secondary_to_them():
+    c = goal_light(3.6)
+    name = c.bbox(MID_LEFT, GOAL_BOTTOM + 1, MID_RIGHT - 1, H - 1)
+    assert name is not None, "team name missing"
+    assert abs(name.center_x - (W - 1) / 2) <= 1, "name not centred"
+    assert name.height <= 7, "the name is the small font"
+    assert goal_light(2.0).lit(MID_LEFT, GOAL_BOTTOM + 1, MID_RIGHT - 1, H - 1) == {}, (
+        "the name waits for the letters"
+    )
+
+
+def test_goal_light_has_no_logos_and_no_score(games, synthetic_logos):
+    c = AsciiCanvas(W, H)
+    r = make_renderer(logos=synthetic_logos)
+    r.draw_goal(c, games["live"], "SEA", 3.6)
+    assert not c.colors(0, 0, 2, H - 1) - {team_color("SEA")}, "the logo's colour isn't on screen"
+    assert WHITE not in c.colors(MID_LEFT, GOAL_BOTTOM + 1, MID_RIGHT - 1, H - 1), "no score line"
+
+
+def test_goal_light_on_a_single_panel_skips_the_edge_lamps():
+    c = goal_light(2.8, width=64)
+    letters = c.bbox(0, GOAL_TOP, 63, GOAL_BOTTOM)
+    assert letters is not None and abs(letters.center_x - 31.5) <= 1
 
 
 def test_every_team_has_a_goal_screen_name_that_fits_between_the_logos():

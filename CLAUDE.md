@@ -296,6 +296,24 @@ single 64px panel's 32px middle column). The baseline
 score for a game is recorded on first sighting *without* firing, so a game
 already 3-1 at startup does not celebrate.
 
+**The favourite's goal light (`display/goal_light.py`).** The favourite's own
+goal gets an animated arena goal light, by the owner's call modelled on the
+Predators' pennant: big strobing lamp and sweeping beams, GOAL dropping in
+letter by letter (7x13B at 2x), a lamp at each edge pulsing in alternation, the
+team name small and secondary, then a looping shimmer -- the whole panel, no
+logos, no score (`goal_detail` has that). Only the favourite's: followed teams'
+goals stay the quick static screen (`draw_goal` with `age=None`). It is a pure
+function of `age`; the app derives it (`_goal_age`: `last_goal`'s monotonic
+stamp, or the demo step's `animate_goal` start) rather than putting it in
+`Scene`, so the scene key stays stable. `_goal_animating` holds the fast
+loop for the whole screen; `_goal_building` (the first `BUILD_SECONDS`) makes
+the live view wait for the letters to land before snapshotting. Everything is
+clipped in `goal_light._Buffer`, so a frame never records off-panel pixels.
+Tests: `goal_light_*` snapshots at five ages plus structural assertions in
+`test_render.py`; the screen guide image is the settled look
+(`GOAL_STILL_SECONDS` in `render-screens.py`). Not verified on hardware (#4):
+the cost of the beams on a Pi 4 at 20fps.
+
 The `three_stars` scene (#156) is the NHL's three stars of the favourite's
 game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
 present on a real final game; `NHLClient.three_stars()`, a third reader
