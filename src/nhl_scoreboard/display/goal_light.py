@@ -26,7 +26,8 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
-from .ascii import AsciiCanvas
+from .fonts import font_path, text_width
+from .mirror import parse_bdf
 from .teams import team_color, team_name
 
 if TYPE_CHECKING:
@@ -93,25 +94,28 @@ def draw(r: Renderer, canvas: Any, scorer: str, age: float) -> None:
             _lamp(buf, SIDE_LAMP_INSET, 4, 13, 20, colour, pulse)
             _lamp(buf, width - 1 - SIDE_LAMP_INSET, 4, 13, 20, colour, 1 - pulse)
         _letters(r, buf, colour, age)
-        if age >= NAME_START:
-            _name(r, buf, scorer, colour, age)
 
     buf.flush(canvas)
+    if age >= NAME_START:  # after the flush: DrawText needs the real canvas
+        _name(r, canvas, scorer, colour, age)
 
 
 # -- text --------------------------------------------------------------------
 
 
 def _glyph(r: Renderer, ch: str) -> tuple[frozenset[tuple[int, int]], int]:
-    """A letter's lit pixels (origin at its top-left) and its advance, cached."""
+    """A letter's lit pixels (origin at its top-left) and its advance, cached.
+
+    Read from the BDF file, not drawn: on the board ``graphics.DrawText`` is
+    C++ and only accepts the panel's real canvas, never a scratch one.
+    """
     cache = r.goal_glyphs
-    if ch not in cache:
-        probe = AsciiCanvas(40, 32)
-        advance = r.text(probe, r.fonts.large, 0, 20, WHITE, ch)
-        x0 = min(x for x, _ in probe.pixels)
-        y0 = min(y for _, y in probe.pixels)
-        cache[ch] = (frozenset((x - x0, y - y0) for x, y in probe.pixels), advance)
-    return cache[ch]
+    if not cache:
+        cache.update(parse_bdf(font_path("7x13B.bdf")))
+    glyph = cache[ord(ch)]
+    x0 = min(x for x, _ in glyph.lit)
+    y0 = min(y for _, y in glyph.lit)
+    return frozenset((x - x0, y - y0) for x, y in glyph.lit), glyph.advance
 
 
 def _letters(r: Renderer, buf: _Buffer, colour: RGB, age: float) -> None:
@@ -146,17 +150,16 @@ def _shimmer(age: float, x: int) -> float:
     return max(0.0, 1 - abs(x - 28 - front) / 9)
 
 
-def _name(r: Renderer, buf: _Buffer, scorer: str, colour: RGB, age: float) -> None:
+def _name(r: Renderer, canvas: Any, scorer: str, colour: RGB, age: float) -> None:
+    """The team name, drawn straight onto ``canvas`` (the real one: see ``_glyph``)."""
     name = team_name(scorer)
-    if r.text(AsciiCanvas(1, 1), r.fonts.small, 0, 0, WHITE, name) > r.width:
+    if text_width(r.fonts.small, name) > r.width:
         name = scorer
     fade = _ease((age - NAME_START) / NAME_FADE_SECONDS)
-    probe = AsciiCanvas(r.width, r.height)
-    baseline = r.height - NAME_BASELINE_FROM_BOTTOM
     shade = _scaled(colour, 0.35 + 0.65 * fade)
-    r.text_center(probe, r.fonts.small, r.width // 2, baseline, shade, name)
-    for (x, y), rgb in probe.pixels.items():
-        buf.set(x, y, rgb)
+    r.text_center(
+        canvas, r.fonts.small, r.width // 2, r.height - NAME_BASELINE_FROM_BOTTOM, shade, name
+    )
 
 
 # -- lamp and beams ----------------------------------------------------------
