@@ -986,6 +986,36 @@ def test_goal_light_stays_on_the_panel_at_every_age(width):
         assert c.pixels, f"{tenth / 10}s is a blank frame"
 
 
+class PanelOnlyGraphics:
+    """The emulator's graphics, but ``DrawText``/``DrawLine`` refuse any canvas
+    that isn't the panel's own -- as the C++ binding does ("Argument 'c' has
+    incorrect type (expected rgbmatrix.core.Canvas, got AsciiCanvas)"), which
+    the pure-Python emulator never complains about."""
+
+    def __init__(self, panel: AsciiCanvas) -> None:
+        self._panel = panel
+
+    def __getattr__(self, name):
+        real = getattr(graphics, name)
+        if name not in ("DrawText", "DrawLine"):
+            return real
+
+        def guarded(canvas, *args):
+            assert canvas is self._panel, f"{name} was handed a scratch canvas, not the panel's"
+            return real(canvas, *args)
+
+        return guarded
+
+
+@pytest.mark.parametrize("age", [0.05, 1.8, 2.8, 3.6, 5.0])
+def test_goal_light_only_draws_text_on_the_real_canvas(age):
+    c = AsciiCanvas(W, H)
+    fonts = FontSet(graphics)
+    r = Renderer(PanelOnlyGraphics(c), fonts, W, H, TZ)
+    r.draw_goal(c, None, "NSH", age)
+    assert c.pixels
+
+
 def test_goal_light_is_a_pure_function_of_age():
     assert goal_light(2.3).pixels == goal_light(2.3).pixels
     assert goal_light(2.3).pixels != goal_light(2.4).pixels
