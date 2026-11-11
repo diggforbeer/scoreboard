@@ -615,12 +615,44 @@ def test_goal_detail_fires_after_the_goal_scene_once_landing_catches_up(day):
     event = goal_event()
     client.goal_events[1] = (event,)
     app.refresh_goal_details()
+    assert scene(app) == ("goal", 1), "the favourite's goal light plays out first (#338)"
 
+    clock.advance(seconds=app.settings.scoreboard.goal_flash_seconds)
     assert scene(app) == ("goal_detail", 1)
     assert app.select_scene().goal_event == event
 
 
-def test_goal_detail_wins_over_the_goal_flash_when_both_are_pending(day):
+def test_the_favourites_goal_light_plays_its_full_window_before_the_scorer(day):
+    """#338: landing usually names the scorer within seconds of the goal, and the
+    scorer screen used to replace the goal light the moment it did -- cutting
+    the animation to about 2s. Now the light plays all of goal_flash_seconds,
+    then the scorer screen gets all of goal_detail_seconds from the light's end."""
+    app, clock, client = day
+    app.settings.scoreboard.live_poll_seconds = 0
+    app.settings.scoreboard.goal_flash_seconds = 6
+    app.settings.scoreboard.goal_detail_seconds = 8
+    _score_the_favourite(client)
+    tick(app, clock, hours=6)
+    client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
+    tick(app, clock, seconds=1)
+    app.refresh_goal_details()  # baseline
+    clock.advance(seconds=2)
+    client.goal_events[1] = (goal_event(),)
+    app.refresh_goal_details()  # the scorer arrives 2s into the light
+
+    assert scene(app) == ("goal", 1), "the scorer waits for the light"
+    clock.advance(seconds=3.9)
+    assert scene(app) == ("goal", 1), "still inside the light's 6s"
+    clock.advance(seconds=0.2)
+    assert scene(app) == ("goal_detail", 1), "the light is over: the scorer follows"
+    clock.advance(seconds=7.7)
+    assert scene(app) == ("goal_detail", 1), "8s of scorer, counted from the light's end"
+    clock.advance(seconds=0.4)
+    assert scene(app) == ("game", 1)
+
+
+def test_a_scorer_that_arrives_after_the_light_shows_at_once(day):
+    """The usual late case is unchanged: the scorer shows when it arrives."""
     app, clock, client = day
     app.settings.scoreboard.live_poll_seconds = 0
     _score_the_favourite(client)
@@ -628,9 +660,10 @@ def test_goal_detail_wins_over_the_goal_flash_when_both_are_pending(day):
     client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
     tick(app, clock, seconds=1)
     app.refresh_goal_details()  # baseline
+    clock.advance(seconds=app.settings.scoreboard.goal_flash_seconds + 3)
+    assert scene(app) == ("game", 1), "the light is over and no scorer yet"
     client.goal_events[1] = (goal_event(),)
-    app.refresh_goal_details()  # landing already caught up within the same flash window
-
+    app.refresh_goal_details()
     assert scene(app) == ("goal_detail", 1)
 
 
@@ -645,6 +678,7 @@ def test_goal_detail_reverts_to_the_game_scene_after_goal_detail_seconds(day):
     app.refresh_goal_details()  # baseline
     client.goal_events[1] = (goal_event(),)
     app.refresh_goal_details()
+    clock.advance(seconds=app.settings.scoreboard.goal_flash_seconds)  # past the goal light
     assert scene(app) == ("goal_detail", 1)
 
     clock.advance(seconds=9)
@@ -701,6 +735,7 @@ def test_draw_dispatches_goal_detail_scene(day):
     app.refresh_goal_details()  # baseline
     client.goal_events[1] = (goal_event(),)
     app.refresh_goal_details()
+    clock.advance(seconds=app.settings.scoreboard.goal_flash_seconds)  # past the goal light
     assert scene(app) == ("goal_detail", 1)
     app.draw()  # must not raise; exercises Renderer.draw_goal_detail via the real dispatch
     assert app.matrix.swaps >= 1
@@ -1517,6 +1552,24 @@ def test_a_followed_teams_goal_interrupts_whichever_game_is_up_without_the_horn(
     assert scene(app) == ("goal", 9)
     assert app.select_scene().goal_team == "SEA", "the screen says who scored (#265)"
     assert app.horn.calls == [], "the horn is the favourite's alone"
+
+
+def test_a_followed_teams_scorer_still_replaces_its_quick_goal_flash_at_once(followed):
+    """#338 holds only the favourite's goal light: a followed team's goal is a
+    quick update, so its scorer screen still replaces the plain flash as soon
+    as landing names the scorer."""
+    app, clock, client = followed
+    app.settings.scoreboard.live_poll_seconds = 0
+    client.today[1] = _live(client.today[1])
+    tick(app, clock, hours=6)
+    app.refresh_goal_details()  # baseline both live followed games
+
+    client.today[0] = _live(client.today[0], away=1)  # SEA scores at CGY
+    tick(app, clock, seconds=1)
+    assert scene(app) == ("goal", 9)
+    client.goal_events[9] = (goal_event(team="SEA", scorer="J. EBERLE"),)
+    app.refresh_goal_details()
+    assert scene(app) == ("goal_detail", 9), "inside the flash window, no waiting"
 
 
 def test_the_favourites_goal_still_sounds_the_horn_while_following_others(followed):
