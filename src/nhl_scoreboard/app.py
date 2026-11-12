@@ -2216,10 +2216,14 @@ class ScoreboardApp:
         that game, whichever one is up -- and so do the favourite's three
         stars, or a live followed game's turn could swallow them. A game no followed team is in
         (today's-games rotation) is never interrupted.
-        goal_detail wins when both are pending: it fires strictly after the
-        goal scene's own score-increase trigger (see refresh_goal_details),
-        so by the time it is ready there is no point re-showing the plainer
-        "GOAL" + score flash for the same goal.
+        For a followed team's goal, goal_detail wins when both are pending:
+        it fires strictly after the goal scene's own score-increase trigger
+        (see refresh_goal_details), so by the time it is ready there is no
+        point re-showing the plain "GOAL" + score flash for the same goal.
+        The favourite's goal is the exception: its animated goal light is the
+        celebration, so it plays its full goal_flash_seconds and the scorer
+        screen follows it (see _goal_detail_override). The scorer is usually
+        ready within seconds, which used to cut the light to about 2s (#338).
 
         three_stars (#156) is the last layer: it only arms once the game is
         final, so it's temporally disjoint from the other two in practice.
@@ -2256,12 +2260,36 @@ class ScoreboardApp:
         if self._goal_detail is None:
             return None
         detail_game_id, detail_time, event = self._goal_detail
-        if self.monotonic() - detail_time >= self.settings.scoreboard.goal_detail_seconds:
+        now = self.monotonic()
+        start = detail_time
+        light_end = self._goal_light_end(detail_game_id)
+        if light_end is not None and detail_time < light_end:
+            # The favourite's goal light plays its whole window first; the
+            # scorer screen then gets its own full window from the light's end.
+            if now < light_end:
+                return None
+            start = light_end
+        if now - start >= self.settings.scoreboard.goal_detail_seconds:
             return None
         game = next((g for g in self.games if g.id == detail_game_id), None)
         if game is None or game.in_shootout:
             return None
         return Scene("goal_detail", game, goal_event=event)
+
+    def _goal_light_end(self, game_id: int) -> float | None:
+        """When the favourite's animated goal light in ``game_id`` ends
+        (monotonic), or ``None`` if the last goal there wasn't the favourite's.
+
+        Only the favourite's goal is held ahead of the scorer screen: a
+        followed team's goal is a quick static flash (#260), which the scorer
+        screen still replaces as soon as it is ready."""
+        if self.last_goal is None:
+            return None
+        goal_game_id, goal_time, goal_team = self.last_goal
+        favourite = self.settings.scoreboard.favourite_team
+        if goal_game_id != game_id or not favourite or goal_team != favourite:
+            return None
+        return goal_time + self.settings.scoreboard.goal_flash_seconds
 
     def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         cfg = self.settings.scoreboard

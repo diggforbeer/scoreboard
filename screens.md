@@ -125,6 +125,11 @@ season goal total and points, and up to two assists (or `UNASSISTED`). The
 text sits between the logos; a long name can run into a cropped logo on a
 single 64px panel, which is accepted rather than truncated (#122).
 
+It shows once the NHL names the scorer, usually seconds after the goal. For
+the favourite's goal it waits for the goal light to finish its
+`goal_flash_seconds`, then gets its own full `goal_detail_seconds` (#338). A
+followed team's quick goal flash is replaced as soon as the scorer is ready.
+
 ### `three_stars`: the NHL's three stars
 
 ![Three stars](docs/screens/three_stars.png)

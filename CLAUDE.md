@@ -328,6 +328,19 @@ Tests: `goal_light_*` snapshots at five ages plus structural assertions in
 `test_render.py`; the screen guide image is the settled look
 (`GOAL_STILL_SECONDS` in `render-screens.py`). Not verified on hardware (#4):
 the cost of the beams on a Pi 4 at 20fps.
+**The scorer screen waits for the light (#338).** `_apply_goal_override`
+checks `goal_detail` first, and landing usually names the scorer within
+seconds, so the scorer used to replace the light almost at once (seen live:
+"looked great but was 2 seconds", no error logged). `_goal_detail_override` now
+holds the favourite's scorer screen until `_goal_light_end()` (the favourite's
+`last_goal` stamp plus `goal_flash_seconds`) and counts its
+`goal_detail_seconds` from there. Favourite only, by the owner's call: a
+followed team's static flash is still replaced as soon as the scorer is ready.
+`goal_flash_seconds` is held to 4-15s (`GOAL_FLASH_MIN/MAX_SECONDS`, config.py):
+under 4 the light is cut before the team name lands, over 15 it only repeats
+while the score and scorer wait. The boot TOML clamps with a warning; a live
+admin save outside the range is rejected (`_FieldSpec.minimum/maximum`), and
+the page's input carries the same bounds (`NUMBER_LIMITS`, App.tsx).
 
 The `three_stars` scene (#156) is the NHL's three stars of the favourite's
 game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified

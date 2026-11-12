@@ -713,6 +713,36 @@ def test_scoreboard_save_rejects_the_wrong_type(app_dir, config_path):
     assert config_path.read_text() == ""
 
 
+@pytest.mark.parametrize("seconds", [3.9, 15.5])
+def test_scoreboard_save_rejects_a_goal_flash_outside_4_to_15(app_dir, config_path, seconds):
+    """#338: rejected with a message rather than clamped, so the page shows
+    why; the boot TOML clamps instead (test_config)."""
+
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "goal_flash_seconds": seconds}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error"
+    assert "goal_flash_seconds" in message["message"]
+    assert "between 4 and 15" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_accepts_the_goal_flash_bounds_themselves(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "goal_flash_seconds": 15}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] != "error"
+    assert "goal_flash_seconds = 15" in config_path.read_text()
+
+
 def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)

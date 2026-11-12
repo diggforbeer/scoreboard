@@ -309,6 +309,13 @@ type ServerMessage =
   | { type: 'horn_download'; team: string; filename: string; data: string }
   | PanelFrame
 
+// Bounds the server enforces on a live save (admin_server.py's _FieldSpec
+// minimum/maximum, from config.py's GOAL_FLASH_MIN/MAX_SECONDS, #338). Shown
+// here so the box itself steers away from a value the save would reject.
+const NUMBER_LIMITS: Partial<Record<string, { min: number; max: number }>> = {
+  goal_flash_seconds: { min: 4, max: 15 },
+}
+
 function connectionBadge(state: ConnectionState) {
   const variant = state === 'open' ? 'success' : state === 'connecting' ? 'secondary' : 'danger'
   return <span className={`badge text-bg-${variant}`}>{state}</span>
@@ -1147,7 +1154,7 @@ function App() {
                   ['shootout_poll_seconds', 'Shootout poll interval (seconds)'],
                   ['countdown_hours', 'Countdown window before puck drop (hours)'],
                   ['final_hold_minutes', 'Final score hold time (minutes)'],
-                  ['goal_flash_seconds', 'Goal celebration duration (seconds)'],
+                  ['goal_flash_seconds', 'Goal celebration duration (seconds, 4–15)'],
                   ['goal_detail_seconds', 'Goal detail duration (seconds)'],
                   ['three_stars_seconds', 'Three stars duration (seconds)'],
                   ['broadcast_delay_seconds', 'TV broadcast delay (seconds)'],
@@ -1163,6 +1170,7 @@ function App() {
                     id={`sb-${key}`}
                     type="number"
                     step="any"
+                    {...(NUMBER_LIMITS[key] ?? {})}
                     value={scoreboard[key]}
                     onChange={(e) =>
                       numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
