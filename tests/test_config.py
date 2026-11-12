@@ -151,6 +151,17 @@ def test_bad_poll_intervals_are_floored_instead_of_defeating_rate_limiting(tmp_p
     assert "poll_seconds" in caplog.text
 
 
+@pytest.mark.parametrize(("written", "used"), [(2, 4.0), (0, 4.0), (60, 15.0), (6, 6.0), (4, 4.0)])
+def test_goal_flash_seconds_is_kept_between_4_and_15(tmp_path, caplog, written, used):
+    """#338: under 4s the goal light is cut off before the team name lands;
+    over 15s it only repeats while the score and scorer wait. A boot TOML
+    out of range is clamped with a warning, never fatal."""
+    path = tmp_path / "scoreboard.toml"
+    path.write_text(f"[scoreboard]\ngoal_flash_seconds = {written}\n")
+    assert Settings.load(path).scoreboard.goal_flash_seconds == used
+    assert ("goal_flash_seconds" in caplog.text) == (written != used)
+
+
 def test_bad_brightness_poll_seconds_is_floored(caplog):
     from nhl_scoreboard.config import PanelConfig
 

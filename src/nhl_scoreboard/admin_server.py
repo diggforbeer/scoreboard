@@ -291,6 +291,8 @@ from .audio import (
 from .audio_normalize import Normalized, normalize
 from .config import (
     FLYBY_FREQUENCIES,
+    GOAL_FLASH_MAX_SECONDS,
+    GOAL_FLASH_MIN_SECONDS,
     PANEL_HARDWARE_MAPPING_CHOICES,
     VALID_ROTATION_SCREENS,
     ConfigWriteError,
@@ -394,6 +396,10 @@ class _FieldSpec:
     #: "wrong hardware_mapping is a silent failure" hardware note). Purely
     #: informational for the frontend to badge; doesn't change validation.
     restart_required: bool = False
+    #: Inclusive bounds for a "float"/"int" field; a live save outside them is
+    #: rejected (the boot TOML clamps instead, so a typo never stops a boot).
+    minimum: float | None = None
+    maximum: float | None = None
 
 
 #: Mirrors AudioConfig's own fields (config.py) -- kept as an explicit spec
@@ -422,7 +428,9 @@ _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
     "prefer_favourite": _FieldSpec("bool"),
     "show_logos": _FieldSpec("bool"),
     "logo_variant": _FieldSpec("select", choices=("dark", "light")),
-    "goal_flash_seconds": _FieldSpec("float"),
+    "goal_flash_seconds": _FieldSpec(
+        "float", minimum=GOAL_FLASH_MIN_SECONDS, maximum=GOAL_FLASH_MAX_SECONDS
+    ),
     "goal_detail_seconds": _FieldSpec("float"),
     "three_stars_seconds": _FieldSpec("float"),
     "broadcast_delay_seconds": _FieldSpec("float"),
@@ -1241,9 +1249,22 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             not isinstance(value, list) or not all(t in TEAM_COLORS for t in value)
         ):
             errors[key] = "must be a list of team abbreviations"
+        elif spec.kind in ("float", "int") and (
+            (spec.minimum is not None and value < spec.minimum)
+            or (spec.maximum is not None and value > spec.maximum)
+        ):
+            errors[key] = _range_message(spec)
     if errors:
         raise ValueError(json.dumps(errors))
     return data
+
+
+def _range_message(spec: _FieldSpec) -> str:
+    if spec.minimum is not None and spec.maximum is not None:
+        return f"must be between {spec.minimum:g} and {spec.maximum:g}"
+    if spec.minimum is not None:
+        return f"must be at least {spec.minimum:g}"
+    return f"must be at most {spec.maximum:g}"
 
 
 def _coerce_rotation(data: object) -> list[dict[str, object]]:

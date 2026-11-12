@@ -69,7 +69,8 @@ show_logos = true
 logo_variant = "dark"
 
 # How long the GOAL screen stays up after your team scores before returning
-# to the normal live score.
+# to the normal live score. 4 to 15 seconds: shorter cuts the goal light off
+# before the team name appears, longer only repeats it.
 goal_flash_seconds = 6
 
 # How long the follow-up scorer/assist detail screen stays up once it

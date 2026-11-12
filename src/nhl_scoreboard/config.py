@@ -70,6 +70,13 @@ DEFAULT_CONFIG_PATHS = (
 #: poll_seconds, defeating the whole point of a poll interval (#64).
 MIN_INTERVAL_SECONDS = 1.0
 
+#: Bounds for scoreboard.goal_flash_seconds (#338). Below 4s the favourite's
+#: goal light is cut off before its team name lands (the build-up takes 3s,
+#: display/goal_light.py's BUILD_SECONDS); above 15s it only repeats its pulse
+#: while the live score and the scorer screen wait behind it.
+GOAL_FLASH_MIN_SECONDS = 4.0
+GOAL_FLASH_MAX_SECONDS = 15.0
+
 
 def _clamp_interval(section: str, name: str, value: float) -> float:
     if value < MIN_INTERVAL_SECONDS:
@@ -226,7 +233,7 @@ class ScoreboardConfig:
     show_logos: bool = True
     logo_variant: str = "dark"
     #: How long a goal celebration screen stays up before returning to the
-    #: normal game scene.
+    #: normal game scene. Clamped to GOAL_FLASH_MIN/MAX_SECONDS (#338).
     goal_flash_seconds: float = 6.0
     #: How long the scorer/assist detail screen (#122 phase 2) stays up once
     #: it fires. Longer than goal_flash_seconds by default: there is
@@ -280,6 +287,16 @@ class ScoreboardConfig:
             "scoreboard", "shootout_poll_seconds", self.shootout_poll_seconds
         )
         self.rotate_seconds = _clamp_interval("scoreboard", "rotate_seconds", self.rotate_seconds)
+        flash = min(max(self.goal_flash_seconds, GOAL_FLASH_MIN_SECONDS), GOAL_FLASH_MAX_SECONDS)
+        if flash != self.goal_flash_seconds:
+            log.warning(
+                "scoreboard.goal_flash_seconds (%s) is outside %s-%s seconds; using %s",
+                self.goal_flash_seconds,
+                GOAL_FLASH_MIN_SECONDS,
+                GOAL_FLASH_MAX_SECONDS,
+                flash,
+            )
+            self.goal_flash_seconds = flash
 
     @property
     def followed_teams(self) -> list[str]:
