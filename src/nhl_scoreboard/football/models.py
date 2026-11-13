@@ -217,6 +217,50 @@ class FbSituation:
         )
 
 
+def _leaders(comp: dict[str, Any]) -> tuple[FbLeader, ...]:
+    out = []
+    for cat in _list(comp.get("leaders")):
+        leader = FbLeader.from_api(_str(_dict(cat).get("name")), cat)
+        if leader is not None:
+            out.append(leader)
+    return tuple(out)
+
+
+@dataclass(frozen=True, slots=True)
+class FbLeader:
+    """A game's passing, rushing or receiving leader, as the scoreboard names it (#420).
+
+    **Only a finished game's leaders are that game's**: a scheduled game carries the same
+    categories as season totals, so ``FbGame.from_api`` keeps them for a final only.
+    """
+
+    #: ``passingYards``, ``rushingYards`` or ``receivingYards``.
+    category: str
+    #: ``J.J. McCarthy``: the feed's short name (a full first initial form, not just a surname).
+    name: str
+    jersey: str
+    position: str
+    team_id: int | None
+    #: A ready string: ``23/36, 293 YDS, 1 TD, 1 INT``.
+    display: str
+
+    @staticmethod
+    def from_api(category: str, raw: Any) -> FbLeader | None:
+        row = _dict(next(iter(_list(_dict(raw).get("leaders"))), None))
+        athlete = _dict(row.get("athlete"))
+        name = _str(athlete.get("shortName") or athlete.get("fullName"))
+        if not name:
+            return None
+        return FbLeader(
+            category=category,
+            name=name,
+            jersey=_str(athlete.get("jersey")),
+            position=_str(_dict(athlete.get("position")).get("abbreviation")),
+            team_id=_int(_dict(row.get("team")).get("id"), None),
+            display=_str(row.get("displayValue")),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class FbGame:
     id: int
@@ -238,6 +282,12 @@ class FbGame:
     venue: str
     week: int | None
     situation: FbSituation | None
+    #: ``1`` preseason, ``2`` regular season, ``3`` postseason (#421).
+    season_type: int | None = None
+    #: Who shows it: ``("Prime Video",)``, ``("FOX",)``; empty when the feed gives none.
+    broadcasts: tuple[str, ...] = ()
+    #: The game's top passer, rusher and receiver; **only for a final** (see ``FbLeader``).
+    leaders: tuple[FbLeader, ...] = ()
 
     @staticmethod
     def from_api(raw: Any) -> FbGame:
@@ -272,6 +322,14 @@ class FbGame:
             venue=_str(_dict(comp.get("venue")).get("fullName")),
             week=_int(_dict(event.get("week")).get("number"), None),
             situation=FbSituation.from_api(comp.get("situation")),
+            season_type=_int(_dict(event.get("season")).get("type"), None),
+            broadcasts=tuple(
+                name
+                for b in _list(comp.get("broadcasts"))
+                for name in (_str(n) for n in _list(_dict(b).get("names")))
+                if name
+            ),
+            leaders=_leaders(comp) if _str(stype.get("state")) == POST else (),
         )
 
     # -- state ---------------------------------------------------------

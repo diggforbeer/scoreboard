@@ -17,6 +17,14 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .idle import (
+    Scoreboard,
+    Standings,
+    TeamSchedule,
+    schedule_from_payload,
+    scoreboard_from_payload,
+    standings_from_payload,
+)
 from .models import FbGame, Play
 from .people import RosterPlayer, roster_from_payload
 
@@ -25,6 +33,8 @@ log = logging.getLogger(__name__)
 BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
 #: The core API: per-play ``participants`` (who did it) and the ``Coin Toss`` play (#354).
 CORE_URL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl"
+#: The standings live on ``/apis/v2/``, not ``/apis/site/v2/`` (football_api.md, "Between games").
+STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/football/nfl"
 #: Plays asked for per core page. A game has 150-200, so one page covers it; longer ones follow
 #: ``pageCount``.
 CORE_PAGE_LIMIT = 300
@@ -86,19 +96,57 @@ class NflClient:
     def __exit__(self, *_exc: object) -> None:
         self.close()
 
+    def scoreboard(
+        self, date: str | None = None, week: int | None = None, season_type: int | None = None
+    ) -> Scoreboard | None:
+        """A scoreboard response: its games (best-first) and its week, byes and calendar (#421).
+
+        ``date`` is one day (``YYYYMMDD``; a range is a 400); ``week`` with ``season_type`` (1, 2
+        or 3) asks for a whole week. ``None`` is no data, as for ``scores``; an empty slate gives
+        a ``Scoreboard`` with no games.
+        """
+        params: dict[str, str] = {}
+        if date:
+            params["dates"] = date
+        if week is not None:
+            params["week"] = str(week)
+            params["seasontype"] = str(season_type or 2)
+        payload = self._get("/scoreboard", params or None)
+        if payload is None:
+            return None
+        games = _parse_events(payload.get("events"))
+        games.sort(key=FbGame.sort_key)
+        return scoreboard_from_payload(payload, games)
+
     def scores(self, date: str | None = None) -> list[FbGame] | None:
         """Every game on ``date`` (``YYYYMMDD``; default today's slate), best-first.
 
         ``None`` means no data (network error, bad status, not JSON, not the
         shape expected); ``[]`` means ESPN answered and there are no games.
         """
-        params = {"dates": date} if date else None
-        payload = self._get("/scoreboard", params)
+        board = self.scoreboard(date)
+        return None if board is None else list(board.games)
+
+    def week(self, number: int, season_type: int = 2) -> Scoreboard | None:
+        """The whole week's games in one request (``week=N&seasontype=T``) and its byes."""
+        return self.scoreboard(week=number, season_type=season_type)
+
+    def schedule(self, team_id: int | str) -> TeamSchedule | None:
+        """A team's regular-season schedule and bye week (~300 KB: fetch daily at most).
+
+        ``None`` is no data, **or a season with no events** (next season's is unpublished).
+        """
+        payload = self._get(f"/teams/{team_id}/schedule")
         if payload is None:
             return None
-        games = _parse_events(payload.get("events"))
-        games.sort(key=FbGame.sort_key)
-        return games
+        return schedule_from_payload(int(team_id), payload)
+
+    def standings(self) -> Standings | None:
+        """Each conference's divisions with every team's record, seed and streak (~160 KB)."""
+        payload = self._get("/standings", {"level": "3"}, base=STANDINGS_URL)
+        if payload is None:
+            return None
+        return standings_from_payload(payload)
 
     def plays(self, event_id: int | str) -> list[Play] | None:
         """Every play of a game so far, in the order they happened (#353).

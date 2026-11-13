@@ -182,6 +182,26 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
   not the end of the season.
 - **Not yet checked:** a game in progress's leaders (no game was live), and the real bracket once set.
 
+## Built: the data layer (#421)
+
+`football/idle.py` parses and caches what these screens read; nothing draws yet. `NflClient` gained
+`scoreboard()` (the games **and** the week, the teams on a bye and the season calendar; `scores()` is
+now its games), `week(number, season_type)` (a whole week in one request), `schedule(team_id)` and
+`standings()` (on the `/apis/v2/` base, `?level=3`). The feed worker publishes an immutable
+`IdleSnapshot` on `FeedSnapshot.idle`; the render loop only reads it.
+
+- **Cadences:** a team's schedule **daily**, the standings **hourly**, the week's games every
+  **5 minutes**; each only when due. The schedule is fetched for the favourite and the followed teams
+  (NFL teams only), the standings only when someone is followed, the week whenever the board is idle.
+- **Nothing is fetched while any game is live**; the last data is kept, and the week, byes and calendar
+  from the poll the worker makes anyway still update.
+- **A failed fetch keeps the last good data** and is retried after 60 seconds, not every frame; data older
+  than **twice its window is stale** and the snapshot's accessors (`schedule(team_id, now)`,
+  `standings(now)`, `week(now)`) return `None` rather than present it as fresh.
+- `FbGame` now carries `season_type`, `broadcasts` and, **for a final only**, `leaders` (a scheduled game's
+  `leaders` are season totals: #420). A team's `TeamSchedule` has `next_game(now)` and `upcoming(now)`; the
+  standings have `division_of`, `conference_of`, and per conference `seeds()` and `unseeded()`.
+
 ## Decisions (owner, 2026-11-13)
 
 - [x] **Its own rotation.** NFL mode has its own idle rotation under `[football]` (NFL screen names),
@@ -229,7 +249,7 @@ None left. The next step is the build, one story each (see the todo).
 - [ ] The default idle rotation and its settings; the admin page's rotation card for NFL mode.
 
 ### Build (after the design is agreed, one story each)
-- [ ] The schedule and standings fetch and cache (daily and hourly, off the render thread), using the findings above.
+- [x] The schedule, standings and week fetch and cache (#421, `football/idle.py`).
 - [ ] `fb_countdown`, `fb_preview`, `fb_bye`
 - [ ] `fb_final` (the hold, and the recap if kept)
 - [ ] `fb_standings`, `fb_week`, `fb_schedule`
