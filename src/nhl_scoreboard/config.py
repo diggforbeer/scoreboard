@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
@@ -467,6 +468,18 @@ class UpdateConfig:
     """
 
     enabled: bool = True
+    #: Which branch's releases this board follows (#341). ``main`` is the
+    #: stable channel (GitHub's "latest release"); any other name follows
+    #: that branch's own pre-releases, e.g. ``football``. Lower-case letters,
+    #: digits and hyphens, as CI turns the branch name into a tag suffix.
+    branch: str = "main"
+
+    def __post_init__(self) -> None:
+        name = str(self.branch).strip().lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
+            log.warning("update.branch %r is not a valid branch name; using main", self.branch)
+            name = "main"
+        self.branch = name
 
 
 @dataclass(slots=True)

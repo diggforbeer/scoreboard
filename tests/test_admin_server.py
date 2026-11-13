@@ -444,6 +444,8 @@ def test_sends_the_current_update_config_on_connect(app_dir, config_path, state_
             "applicable": True,
             "last_apply": "",
             "image_changes": None,
+            "branch": "main",
+            "channels": ["main"],
         },
     }
 
@@ -2319,3 +2321,31 @@ def test_update_payload_exposes_the_image_comparison(state_file, status):
     )
     state_file.write_text(json.dumps(dict(available=True, image_changes=changes)))
     assert admin_server._update_payload()["data"]["image_changes"] == changes
+
+
+def test_save_update_branch_writes_the_file_and_reports_it(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(
+            json.dumps({"type": "save", "section": "update", "data": {"branch": "Football"}})
+        )
+        return await client.recv(), await client.recv()
+
+    saved, config = asyncio.run(_serve_and_run(scenario))
+    assert json.loads(saved) == {"type": "saved", "section": "update"}
+    assert json.loads(config)["data"]["branch"] == "football"
+    assert 'branch = "football"' in config_path.read_text()
+
+
+def test_save_update_branch_rejects_a_path_like_name(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(
+            json.dumps({"type": "save", "section": "update", "data": {"branch": "../etc"}})
+        )
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error"
+    assert "branch" in message["message"]
+    assert config_path.read_text() == ""
