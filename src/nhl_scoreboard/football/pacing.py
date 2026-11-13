@@ -41,7 +41,9 @@ def yards_gained(play: Play) -> int:
     return play.stat_yardage
 
 
-@pacer(PlayKind.RUSH, PlayKind.RUSHING_TOUCHDOWN)
+@pacer(
+    PlayKind.RUSH, PlayKind.RUSHING_TOUCHDOWN, PlayKind.PASS_COMPLETE, PlayKind.PASSING_TOUCHDOWN
+)
 def run_seconds(play: Play) -> float:
-    """A run scales with its yardage: 2s for a short one, up to 4s for a long one."""
+    """A run or a completed pass scales with its yardage: 2s when short, up to 4s when long."""
     return max(MIN_SECONDS, min(MAX_SECONDS, 2.0 + abs(yards_gained(play)) / 10))
