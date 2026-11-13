@@ -118,7 +118,9 @@ list (`FB_SCENE_KINDS`) and a test keeps this section, that list and the rendere
 | `fb_connecting` | The feed has not answered yet | `NFL` over `CONNECTING` |
 | `fb_no_data` | The last **successful** fetch is over 15 minutes old, or the feed has been failing for 15 minutes without ever answering | `NO DATA` over `NFL CHECK NETWORK` |
 | `fb_no_games` | The feed answered and there are no games on the slate (a bye, the off-season) | `NO GAMES` over `NFL` |
-| `fb_scores` | There is a game to show | One game as text (below) |
+| `fb_scores` | A game before kickoff or once it is final | One game as text (below) |
+| `fb_field` | A game that is live (between plays) | The resting field (below) |
+| `fb_halftime` | A game at the half | The halftime card (below) |
 
 **`fb_scores`** (`display/football_scenes.py`): away on the left half and home on the right,
 each abbreviation in its **NFL team colour** (never the NHL one) with its score in white at
@@ -435,6 +437,18 @@ Per-play notes, from real text:
   `WARNING` / `2:00` with an amber icon. The tiny font has no usable `#`, so `timeout #2` reads
   `2ND`. A 64px panel drops the logo and the `LEFT` caption. Stoppage cards are dropped first
   when the queue is behind (already the queue's rule).
+- **Built (story #388, `display/football_period.py` and `draw_fb_halftime`).**
+  `End Period`, `End of Half`, `End of Regulation` and `End of Game` share one 3s card: the field
+  stays under it (the ball where the play left it) and a black card **wipes out from the middle**
+  (0-35%) with the headline in the large font, held for the rest: `END Q1` (amber), `END Q2` at
+  the half, `FINAL` (white) at the end of the game. The quarter number is read from the text
+  (`END QUARTER 2`; the fixtures' own period number is not reliable on these plays), with `END
+  OT` after the fourth. **What follows is the resting scene, not this stage:** a game at the half
+  rests on the new **`fb_halftime`** card (`HALFTIME` in the large font, both teams' 16px logos
+  at the edges on a 128px panel, the score under it, in the small font and dropping to the tiny
+  one for a long score on a narrow panel) until play resumes and the game stops being at the half;
+  a finished game rests on `fb_scores` (the final scoreboard), held as before. Halftime, the end of
+  regulation and the end of the game are never dropped by the queue (already so).
 - **Stoppages:** `Official Timeout at 11:12.`, `Two-Minute Warning`, `END QUARTER 1`,
   `END QUARTER 2` (type `End of Half`), `END GAME`.
 
@@ -980,6 +994,17 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Official](docs/football/timeout_official.png) | ![Two-minute warning](docs/football/timeout_two_minute.png) |
 | An official timeout: neutral, no team. | The two-minute warning: amber. |
 
+**The end of a quarter, the half and the game** (#388):
+
+| | |
+|---|---|
+| ![Wiping open](docs/football/end_quarter_wipe.png) | ![End of the quarter](docs/football/end_quarter.png) |
+| The card wipes out from the middle of the field. | Held: `END Q1`. |
+| ![End of the half](docs/football/end_half.png) | ![End of the game](docs/football/end_game.png) |
+| `END Q2`; then the board rests on the halftime card. | `FINAL`; then the board rests on the final scoreboard. |
+| ![Halftime](docs/football/halftime.png) | |
+| `fb_halftime`: held from the end of the half until play resumes. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1008,7 +1033,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play` and `timeout`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter` and `halftime`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1282,7 +1307,7 @@ added later.
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
 - [x] Incompletion (#384), sack (#385) and penalty (#386) animations, including a play wiped out by a penalty
-- [~] Timeout, official timeout and two-minute warning cards done (#387); end-of-period and halftime cards still to do
+- [x] Timeout, official timeout, two-minute warning (#387), end-of-period, halftime and final cards (#388)
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
 - [x] Play-text layout and scrolling (#379)

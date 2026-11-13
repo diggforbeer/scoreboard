@@ -46,6 +46,8 @@ WHITE = (255, 255, 255)
 GAIN = (0, 235, 90)
 LOSS = (235, 50, 50)
 NEUTRAL = (255, 176, 0)
+#: The amber of a card headline (the end of a quarter, the half).
+AMBER_CARD = (255, 176, 0)
 DIM = (120, 120, 120)
 #: How much of a generic play's time the ball spends moving; the rest it rests at the end spot.
 TRAVEL = 0.8
@@ -79,6 +81,7 @@ SCREEN_MODULES = (
     "football_sack",
     "football_penalty",
     "football_stoppage",
+    "football_period",
 )
 _loaded = False
 

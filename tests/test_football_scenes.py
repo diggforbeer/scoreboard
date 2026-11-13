@@ -420,6 +420,7 @@ def test_every_nfl_scene_kind_is_known_and_documented():
         "fb_no_games",
         "fb_scores",
         "fb_field",
+        "fb_halftime",
         "fb_play",
         "fb_playtext",
         "fb_event",
@@ -431,6 +432,8 @@ def test_every_nfl_scene_kind_is_known_and_documented():
 @pytest.mark.parametrize("kind", FB_SCENE_KINDS)
 def test_the_app_draws_every_nfl_scene_kind(kind, app):
     scene = Scene(kind, fb_game=GAMES["live"] if kind in ("fb_scores", "fb_field") else None)
+    if kind == "fb_halftime":
+        scene = Scene(kind, fb_game=game("WSH", "NYG", "in", 10, 17, name="STATUS_HALFTIME"))
     if kind in ("fb_play", "fb_playtext", "fb_event"):
         from nhl_scoreboard.football.demo import nfl_demo_steps
 

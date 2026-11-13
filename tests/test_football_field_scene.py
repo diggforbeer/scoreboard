@@ -186,7 +186,7 @@ def rest_kind(state, **kw):
 def test_a_live_game_rests_on_the_field_and_everything_else_on_the_text_scoreboard():
     assert rest_kind("in", situation=situation(40)) == "fb_field"
     assert rest_kind("in") == "fb_field", "a live game with no situation yet (a kickoff)"
-    assert rest_kind("in", short="Halftime", name="STATUS_HALFTIME") == "fb_scores"
+    assert rest_kind("in", short="Halftime", name="STATUS_HALFTIME") == "fb_halftime"
     assert rest_kind("post", short="Final", name="STATUS_FINAL") == "fb_scores"
     assert rest_kind("pre", short="x", name="STATUS_SCHEDULED") == "fb_scores"
 

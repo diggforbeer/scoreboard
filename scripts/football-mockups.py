@@ -309,26 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def halftime() -> Panel:
-    p = Panel()
-    p.center("7x13B", 15, WHITE, "HALFTIME")
-    p.logo(14, 16, HOME, 7)
-    p.logo(p.w - 15, 16, AWAY, 7)
-    p.center("5x7", 28, WHITE, "NYG 10   WSH 7")
-    return p
-
-
-def end_quarter() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    f.markers(46, 1)
-    f.ball(46)
-    p.rect(20, 10, 107, 26, (0, 0, 0))
-    p.center("7x13B", 22, AMBER, "END Q1")
-    return p
-
-
 def cointoss_flip() -> Panel:
     p = Panel()
     p.text("4x6", 2, 7, DIM, "COIN TOSS")
@@ -466,8 +446,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "halftime": halftime,
-    "end_quarter": end_quarter,
     "cointoss_flip": cointoss_flip,
     "cointoss_result": cointoss_result,
     "touchdown": touchdown,

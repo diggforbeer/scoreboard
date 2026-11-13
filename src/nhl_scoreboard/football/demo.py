@@ -192,6 +192,10 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     timeout = _play("Timeout", "Timeout #2 by NYG at 00:45.", 40, 40, HOME, 0)
     official = _play("Official Timeout", "Official Timeout at 11:12.", 40, 40, HOME, 0)
     warning = _play("Two-Minute Warning", "Two-Minute Warning", 40, 40, HOME, 0)
+    halftime_game = _game(now, "in", 10, 17, "Halftime", name="STATUS_HALFTIME")
+    end_q = _play("End Period", "END QUARTER 1", 46, 46, HOME, 0)
+    end_half = _play("End of Half", "END QUARTER 2", 46, 46, HOME, 0)
+    end_game = _play("End of Game", "END GAME", 46, 46, HOME, 0)
     kneel = _play("Rush", "D.Jones kneels to NYG 22 for -1 yards.", 23, 22, HOME, -1)
     loss = _play(
         "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
@@ -293,6 +297,11 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(kickoff, 3.8, meyers), name="kickoff_return"),
         DemoStep(run(touchback, 3.2, None), name="kickoff_touchback"),
         DemoStep(run(onside, 1.2, None), name="kickoff_onside"),
+        DemoStep(run(end_q, 0.5), name="end_quarter_wipe"),
+        DemoStep(run(end_q, 2.0), name="end_quarter"),
+        DemoStep(run(end_half, 2.0), name="end_half"),
+        DemoStep(run(end_game, 2.0), name="end_game"),
+        DemoStep(Scene("fb_halftime", fb_game=halftime_game), name="halftime"),
         DemoStep(run(timeout, 0.5, jones), name="timeout_spin"),
         DemoStep(run(timeout, 2.0, jones), name="timeout"),
         DemoStep(run(official, 2.0), name="timeout_official"),

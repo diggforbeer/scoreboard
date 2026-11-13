@@ -180,3 +180,43 @@ def _score(r: Renderer, canvas: Any, game: FbGame, baseline: int) -> None:
     for (text, color), gap in zip(parts, gaps, strict=True):
         r.text(canvas, font, x, baseline, color, text)
         x += text_width(font, text) + gap
+
+
+def draw_fb_halftime(r: Renderer, canvas: Any, game: FbGame) -> None:
+    """The halftime card (#388): what the board holds on from the end of the half until play
+    resumes. ``HALFTIME`` in the large font, both teams' logos at the edges (128px only, 16px,
+    else their abbreviations) and the score under it."""
+    canvas.Clear()
+    wide = r.width >= 128
+    cx = r.width // 2
+    font = r.fonts.large
+    r.text_center(canvas, font, cx, 15, WHITE, "HALFTIME")
+    if wide:
+        for side, x in ((game.away, 14), (game.home, r.width - 15)):
+            logo = (
+                r.nfl_logos.get(side.abbrev, 16)
+                if r.nfl_logos is not None and side.is_nfl
+                else None
+            )
+            if logo is not None:
+                ox, oy = x - logo.width // 2, 16 - logo.height // 2
+                for dx, dy, (red, green, blue) in logo.pixels:
+                    canvas.SetPixel(ox + dx, oy + dy, red, green, blue)
+            else:
+                r.text_center(canvas, r.fonts.small, x, 19, side_color(side), side.abbrev)
+    parts = [
+        (game.away.abbrev, side_color(game.away)),
+        (str(game.away.score), WHITE),
+        (game.home.abbrev, side_color(game.home)),
+        (str(game.home.score), WHITE),
+    ]
+    gaps = (2, 6, 2, 0)
+    font = r.fonts.small
+    total = sum(text_width(font, t) for t, _ in parts) + sum(gaps)
+    if total > r.width - 2:  # a long score on a narrow panel: drop to the smaller font
+        font = r.fonts.tiny
+        total = sum(text_width(font, t) for t, _ in parts) + sum(gaps)
+    x = max(0, (r.width - total) // 2)
+    for (text, color), gap in zip(parts, gaps, strict=True):
+        r.text(canvas, font, x, 29, color, text)
+        x += text_width(font, text) + gap
