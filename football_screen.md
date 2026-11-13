@@ -14,7 +14,7 @@ Documentation first: nothing below is built yet.
   endpoints, field meanings, the `yardLine` orientation, play types,
   participants and jersey numbers, caveats. Technical reference.
 - **[`screens_not_during_games.md`](screens_not_during_games.md)**: what the board shows
-  when no game is on (before kickoff, after the final, a bye week, the off-season) and
+  when no game is on (before kickoff, after the final, a bye week) and
   which NHL idle screens carry over. A proposal, with its own todo.
 
 The first two are meant to be read and updated together. A screen design here that

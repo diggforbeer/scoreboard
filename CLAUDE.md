@@ -96,7 +96,7 @@ together: **`football_screen.md`** (screens, timing, open questions, the todo
 list) and **`football_api.md`** (what ESPN's undocumented feed returns, checked
 against real games). Read both before touching football code, tick the todo
 list in the PR that does the work, and put new findings about the feed in
-`football_api.md`. What the board shows with no game on (pregame, bye, off-season, the idle
+`football_api.md`. What the board shows with no game on (pregame, bye, the idle
 rotation) is proposed in **`screens_not_during_games.md`**. Boards only get this branch's builds if the owner picks
 `football` under Software update (see README, "Following a branch").
 

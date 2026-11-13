@@ -1,7 +1,7 @@
 # Football (NFL) screens when no game is on: design and todo
 
 What an NFL board shows **between games**: before kickoff, after the final whistle, on
-a bye week, and through the long off-season. It is the NFL counterpart of the NHL
+and on a bye week. It is the NFL counterpart of the NHL
 guide's "Before a game" and "Between games" sections in [`screens.md`](screens.md)
 (`preview`, `countdown`, `standings`, the idle rotation, `clock`).
 
@@ -26,7 +26,7 @@ board falls back to these, and only these:
 | At the half | `fb_halftime` (#388) |
 | Once final | `fb_scores`: the score and `FINAL`, grey, held until the slate moves on |
 | Games today, none involve the favourite or followed teams | every game takes a turn, `rotate_seconds` each (`NflMode.pick_game`) |
-| The feed answered and the slate is empty (a bye, the off-season) | `fb_no_games`: `NO GAMES` over `NFL` |
+| The feed answered and the slate is empty (a bye week) | `fb_no_games`: `NO GAMES` over `NFL` |
 | The feed is stale or never answered | `fb_no_data` / `fb_connecting` |
 
 So on a bye week or in March the board says `NO GAMES NFL` and nothing else, and the
@@ -87,15 +87,6 @@ for a set time (the NHL's `final_hold_minutes`), then the rotation resumes. Opti
 **recap** line (the winning team, the margin, the leading passer or rusher). Data: the
 final score; leaders would need the summary or box score (unverified).
 
-### `fb_offseason`: the long gap
-
-From the end of the season to kickoff: the favourite's logo, `NEXT GAME`, and the days
-to the opener (`SEP 6 · 142 DAYS`), with a few fixed dates worth marking (the draft, the
-start of training camp) if the owner wants them. Data: the season calendar (`leagues[0].calendar`, on every scoreboard response in season) says
-when the **regular season starts** (this year Sep 6). The **next season's schedule is not
-published** until ESPN releases it (`?season=2027` returned no events), so before then the
-opener's matchup is unknowable; only the start date can be shown.
-
 ### `fb_standings`: the playoff picture
 
 The favourite's **division** (four teams, W-L-T, the favourite highlighted) and, as a
@@ -143,9 +134,8 @@ Highest first; the first that has something to show wins, as in the NHL list in
    `fb_preview`, `fb_standings`, `fb_week`, `fb_schedule`, then the clock), a screen with
    nothing to show skipped.
 5. The favourite is on a bye: `fb_bye` joins the rotation.
-6. In the off-season: `fb_offseason` joins the rotation.
-7. With no favourite set: every game of the week, as `pick_game` does today.
-8. Otherwise the clock, else `fb_no_games`.
+6. With no favourite set: every game of the week, as `pick_game` does today.
+7. Otherwise the clock, else `fb_no_games`.
 
 ## Data needs and research
 
@@ -158,14 +148,10 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 - **The whole week's games** come from `scoreboard?week=N&seasontype=2` (one request): `fb_week`.
   A date **range is a 400**; `dates=YYYY` returns a calendar year's games.
 - **The schedule** is per team (`/teams/{id}/schedule`, ~300 KB, regular season only, the bye as
-  a missing week): `fb_preview`, `fb_schedule`, the next game on `fb_bye`. Fetch it daily. The
-  **next season's schedule is not published** (`?season=2027` is empty), so `fb_offseason` can
-  show the season's start date from the calendar but not the opener's matchup.
+  a missing week): `fb_preview`, `fb_schedule`, the next game on `fb_bye`. Fetch it daily.
 - **Standings** are on `/apis/v2/...` (not `/apis/site/v2/`), ~158 KB: the two conferences by
   default, the four divisions each with `?level=3`. Each entry has `overall`, `playoffSeed`,
   `streak` and points for and against. Fetch hourly at most.
-- **The off-season looks like a quiet day**: a 200 with `events: []` and *no* `season` or `week`
-  keys. The calendar or the schedule is what tells the two apart.
 - **The postseason** is `seasontype=3`: until the bracket is set its games read `TBD @ TBD`.
 - **Not yet checked:** leaders for a recap line (the scoreboard has per-event `leaders`), the real
   postseason bracket once set, and what the scoreboard does in the gaps between playoff rounds.
@@ -183,10 +169,8 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
       playoff game is skipped until its teams are known.
 - [x] **Records on the preview and the countdown**, read from the scoreboard events' `records`
       (`overall`) when the game is in the polled week; omitted when it is not. No extra request.
-- [x] **The off-season marks the draft and training camp** as well as the season start. The season
-      start comes from the feed's calendar; the draft and camp dates are **owner-set in `[football]`
-      with built-in defaults** for the current year (a past date drops off by itself), because the
-      feed does not carry them and they change every year.
+- [x] **No off-season screens.** The board is not in football mode in the off-season, so there is
+      no `fb_offseason`, no draft or training-camp dates and no setting for them.
 - [x] **128px only.** These screens are skipped on a single 64px panel (it shows the clock, or
       `fb_no_games`). The in-game screens keep their 64px layouts.
 - [x] **Primetime and holiday games** get a tag on the preview (`THU NIGHT`, `MON NIGHT`,
@@ -195,7 +179,6 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 
 ## Open questions
 
-- [ ] The exact defaults for the draft and camp dates, and their setting names.
 - [ ] Which holiday overlays apply to a game on that day (the holiday overlay still uses NHL team
       colours with NFL abbreviations, a known gap in `CLAUDE.md`).
 - [ ] The default order and seconds of the NFL idle rotation.
@@ -204,7 +187,7 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 
 ### Research
 - [x] Verify the schedule, standings and week-view endpoints; added to `football_api.md`.
-- [x] Capture the off-season and bye-week responses (fixtures in `tests/fixtures/football/`).
+- [x] Capture the bye-week responses (fixtures in `tests/fixtures/football/`).
 - [ ] Check the per-event `leaders` for a recap line, and the playoff gaps (see above).
 
 ### Design
@@ -215,7 +198,7 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 
 ### Build (after the design is agreed, one story each)
 - [ ] The schedule and standings fetch and cache (daily and hourly, off the render thread), using the findings above.
-- [ ] `fb_countdown`, `fb_preview`, `fb_bye`, `fb_offseason`
+- [ ] `fb_countdown`, `fb_preview`, `fb_bye`
 - [ ] `fb_final` (the hold, and the recap if kept)
 - [ ] `fb_standings`, `fb_week`, `fb_schedule`
 - [ ] The NFL idle rotation and the scene selection above, with the clock as the fallback
