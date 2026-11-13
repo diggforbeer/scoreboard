@@ -147,6 +147,18 @@ class EventDetector:
         else:
             self._scores[game_id] = (baseline.away_score, baseline.home_score)
 
+    def retract(self, game_id: int, away_points: int, home_points: int) -> None:
+        """Take points back off a game's running score after a reversal (#357).
+
+        A reversed touchdown leaves the tracked score too high: the next play's score comes
+        from a game in which it never happened, so without this its real touchdown would show
+        no change and go uncelebrated. Subtracting only the reversed points (not resetting to
+        the rewritten play's score) keeps later, still-valid scores intact.
+        """
+        away, home = self._scores.get(game_id, (0, 0))
+        if game_id in self._scores:
+            self._scores[game_id] = (max(0, away - away_points), max(0, home - home_points))
+
     def forget(self, keep: Callable[[int], bool]) -> None:
         """Drop games ``keep`` rejects (a game left the slate)."""
         for game_id in [g for g in self._scores if not keep(g)]:
