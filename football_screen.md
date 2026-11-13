@@ -554,6 +554,22 @@ beyond that (`won the toss`, `deferred`, `chose to receive`) is out of scope.
 - It ends by itself and the board moves to `fb_field` for the opening kickoff, the
   same way the goal screen hands back to the game.
 
+#### Built (story #389, `display/football_cointoss.py`)
+
+An `@event_screen(CoinToss, EVENT)` screen (the `CoinToss` event and its 6s stage come from the
+detector and director), a pure function of the seconds since the stage began:
+
+| Share of the stage | What is drawn |
+|---|---|
+| 0-8% | `COIN TOSS` in small type; the coin grows at the centre |
+| 8-50% | the coin flips: its width squeezes to a line and back six times, **fast then slow**, rising up to 5px and falling; gold on one face, silver on the other |
+| 50-58% | it lands face-up showing the receiving team's 16px logo (its abbreviation without art) |
+| 58-100% | `<TEAM> RECEIVE` fades in under it in the team's colour; the kicking team's 12px logo fades in dimmed at the right edge with `KICK` |
+
+Following the mockups (not the ASCII sketch above): the logo stays at the centre where the coin
+landed and the receive line sits under it. A 64px panel drops the kicking team and `KICK`. An
+overtime toss reads `OT COIN TOSS` (an event whose play is in period 5 or later). Silent.
+
 #### Not designed here
 
 - A **pre-game** toss screen. The feed has no plays before kickoff, so there is
@@ -1005,6 +1021,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Halftime](docs/football/halftime.png) | |
 | `fb_halftime`: held from the end of the half until play resumes. | |
 
+**The coin toss** (#389; flipping, landed on the logo, the result):
+
+| | |
+|---|---|
+| ![Flipping](docs/football/cointoss_flip.png) | ![Landed](docs/football/cointoss_landed.png) |
+| The coin edge-on mid-flip. | Landed face-up: the receiving team's logo. |
+| ![Result](docs/football/cointoss_result.png) | |
+| `NYG RECEIVE`; the kicking team small at the edge with `KICK`. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1015,10 +1040,8 @@ test does the same. Nothing here touches `docs/screens/`.
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
 | ![Event detail](docs/football/fb_event_detail.png) | ![Missed field goal card](docs/football/fb_event_fg_miss.png) |
 | `fb_event` (stage `detail`): the play's text under the headline. | A missed field goal. |
-| ![Turnover card](docs/football/fb_event_turnover.png) | ![Coin toss card](docs/football/fb_event_cointoss.png) |
-| A turnover alert. | The coin toss: who receives. |
-| ![Reversal card](docs/football/fb_event_reversal.png) | |
-| `fb_event` (stage `reversal`): the correction and its reason. | |
+| ![Turnover card](docs/football/fb_event_turnover.png) | ![Reversal card](docs/football/fb_event_reversal.png) |
+| A turnover alert. | `fb_event` (stage `reversal`): the correction and its reason. |
 
 `fb_field` and `fb_field_redzone` (the resting field, below) are real renders too: the same
 names as their mockups, which they replaced.
@@ -1033,7 +1056,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter` and `halftime`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip` and `cointoss_result`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1301,7 +1324,7 @@ added later.
       rosters, participants and jersey numbers done (#354, `football/people.py`). Not wired into
       the loop yet: the worker will fetch the core feed when the site summary shows a new play
 - [x] `fb_field` renderer: live games rest on it, with the band, red zone and 64px layout (#378)
-- [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
+- [x] `fb_cointoss` (the event, from the first kickoff, #356; the screen, #389)
 - [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
       event screens, registries (#377)
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations

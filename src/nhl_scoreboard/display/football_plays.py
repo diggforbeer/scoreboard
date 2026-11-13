@@ -82,6 +82,7 @@ SCREEN_MODULES = (
     "football_penalty",
     "football_stoppage",
     "football_period",
+    "football_cointoss",
 )
 _loaded = False
 
