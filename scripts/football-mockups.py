@@ -309,18 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def sack() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    f.markers(31, 10)
-    trail(p, f, 25, 19, 20, AMBER)
-    burst(p, round(f.x(19)), 20, RED)
-    f.number(25, 17, "3")
-    band(p, "Q1 09:21", "SACK -6  (95)", WHITE, RED)
-    return p
-
-
 def penalty() -> Panel:
     p = Panel()
     f = Field(p)
@@ -514,7 +502,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "sack": sack,
     "penalty": penalty,
     "penalty_no_play": penalty_no_play,
     "timeout": timeout,

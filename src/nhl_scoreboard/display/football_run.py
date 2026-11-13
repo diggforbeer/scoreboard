@@ -125,7 +125,10 @@ def draw_trail(canvas: Any, layout: FieldLayout, start: float, here: float, y: f
         canvas.SetPixel(x, row, shade, shade, shade)
 
 
-def draw_carrier(r: Renderer, canvas: Any, layout: FieldLayout, here: float, y: float, label: str):
+def draw_carrier(
+    r: Renderer, canvas: Any, layout: FieldLayout, here: float, y: float, label: str,
+    color: tuple[int, int, int] = WHITE,
+):  # fmt: skip
     """The number (or name) beside the ball: below it in the top half of the field, above it in
     the bottom half, so it never runs into the band or the bottom edge."""
     if not label:
@@ -136,4 +139,4 @@ def draw_carrier(r: Renderer, canvas: Any, layout: FieldLayout, here: float, y: 
     x = max(layout.left + 1, min(layout.right - width - 1, x))
     by = round(y)
     baseline = by + 9 if by < layout.mid_y else by - 3
-    r.text(canvas, font, x, baseline, WHITE, label)
+    r.text(canvas, font, x, baseline, color, label)
