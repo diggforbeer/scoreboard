@@ -356,13 +356,13 @@ def test_mode_polls_fast_while_live_and_slow_otherwise_never_below_the_feed_cach
     assert mode._interval(quiet_snap) == MIN_POLL_SECONDS
 
 
-def test_mode_shows_connecting_until_the_first_result_then_the_stub():
+def test_mode_shows_connecting_until_the_first_result_then_the_scoreboard():
     mode = NflMode(client_factory=lambda: ScriptedClient(GAMES))
     assert mode.scene().kind == "fb_connecting" and not mode.ready
     mode.refresh()  # the app's poll hook is a no-op
     assert mode.scene().kind == "fb_connecting"
     mode.worker.poll_once()
-    assert mode.scene().kind == "fb_stub" and mode.ready
+    assert mode.scene().kind == "fb_scores" and mode.ready
     assert mode.snapshot.games == tuple(GAMES)
 
 
@@ -435,7 +435,7 @@ def test_the_render_loop_keeps_drawing_while_a_fetch_is_in_flight(app_factory):
         assert time.monotonic() - started < 2.0, "drawing must not wait for the feed"
         assert app.select_scene().kind == "fb_connecting"
         client.release.set()
-        assert wait_for(lambda: app.select_scene().kind == "fb_stub")
+        assert wait_for(lambda: app.select_scene().kind == "fb_scores")
         app.draw()
     finally:
         client.release.set()

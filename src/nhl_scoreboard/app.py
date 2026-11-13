@@ -51,6 +51,7 @@ from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
 from .football.mode import NflMode
+from .football.models import FbGame
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
@@ -207,6 +208,9 @@ class Scene:
     ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
     ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
+
+    NFL mode (football) adds the ``fb_`` kinds listed in ``football.mode.FB_SCENE_KINDS``,
+    documented in ``football_screen.md`` rather than ``screens.md``.
     """
 
     kind: str
@@ -254,6 +258,8 @@ class Scene:
     #: The board's mDNS name (``<host>.local``, #292), None when unknown.
     address_name: str | None = None
     address_qr: tuple[tuple[bool, ...], ...] | None = None
+    #: Set only for ``fb_scores`` (#352) -- the NFL game to show.
+    fb_game: FbGame | None = None
     #: Set only for ``conference_leaders`` -- pixels the list has scrolled up.
     scroll_px: int = 0
     #: True while ``scroll_px`` is still moving, so the loop runs fast.
@@ -767,6 +773,7 @@ class ScoreboardApp:
             lambda: self.settings.scoreboard,
             client_factory=self._nfl_client_factory,
             monotonic=self.monotonic,
+            football=lambda: self.settings.football,
         )
 
     def current_mode(self) -> str:
@@ -2667,6 +2674,8 @@ class ScoreboardApp:
         the two threads must not race into duplicate fetches.
         """
         scene = self.select_scene(allow_fetch=False)
+        if self._nfl is not None:
+            return self._nfl_status(scene)
         cfg = self.settings.scoreboard
         return {
             "version": installed_version() or "unknown (factory image)",
@@ -2681,6 +2690,33 @@ class ScoreboardApp:
             "last error at": self._error_time_label(),
         }
 
+    def _nfl_status(self, scene: Scene) -> dict[str, str]:
+        """The status box in NFL mode (#352): the feed worker's snapshot in the NHL keys' place.
+
+        The snapshot's times are monotonic, so they are turned into wall-clock times here.
+        """
+        snap = self._nfl.snapshot if self._nfl is not None else None
+        cfg = self.settings.football
+
+        def wall(mono: float | None) -> datetime | None:
+            if mono is None:
+                return None
+            return self.clock() - timedelta(seconds=self.monotonic() - mono)
+
+        failed_at = wall(snap.last_error_at) if snap is not None else None
+        return {
+            "version": installed_version() or "unknown (factory image)",
+            "address": self._board_name() or "(unknown)",
+            "demo mode": "on" if self._demo_mode else "off",
+            "scene": "demo" if self._demo_mode else scene.kind,
+            "current game": self._scene_game_label(scene),
+            "favourite team": cfg.favourite_team or "(none)",
+            "also following": ", ".join(cfg.also_follow) or "(none)",
+            "last successful poll": self._format_time(wall(snap.fetched_at) if snap else None),
+            "last error": (snap.last_error if snap else "") or "(none)",
+            "last error at": self._format_time(failed_at) if failed_at else "(none)",
+        }
+
     def _error_time_label(self) -> str:
         if self.last_error_at is None:
             return ""
@@ -2692,6 +2728,8 @@ class ScoreboardApp:
 
     @staticmethod
     def _scene_game_label(scene: Scene) -> str:
+        if scene.fb_game is not None:
+            return f"{scene.fb_game.away.abbrev} @ {scene.fb_game.home.abbrev}"
         if scene.game is None:
             return ", ".join(f"{g.away.abbrev} @ {g.home.abbrev}" for g in scene.games)
         return f"{scene.game.away.abbrev} @ {scene.game.home.abbrev}"
@@ -2788,8 +2826,12 @@ class ScoreboardApp:
         goal_age = self._goal_age(scene)
         self._goal_animating = goal_age is not None
         self._goal_building = goal_age is not None and goal_age < goal_light.BUILD_SECONDS
-        favourite = self.settings.scoreboard.favourite_team
-        if self.april_fools_active():
+        favourite = (
+            self.settings.football.favourite_team
+            if self._nfl is not None
+            else self.settings.scoreboard.favourite_team
+        )
+        if self._nfl is None and self.april_fools_active():
             favourite = april_fools.PRANK_AS
             scene = self._april_fools_scene(scene)
         if scene.kind == "game":
@@ -2845,8 +2887,12 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "fb_connecting":
             r.draw_message(self.canvas, "NFL", "CONNECTING")
-        elif scene.kind == "fb_stub":
-            r.draw_message(self.canvas, "NFL MODE")
+        elif scene.kind == "fb_no_data":
+            r.draw_message(self.canvas, "NO DATA", "NFL CHECK NETWORK")
+        elif scene.kind == "fb_no_games":
+            r.draw_message(self.canvas, "NO GAMES", "NFL")
+        elif scene.kind == "fb_scores":
+            r.draw_fb_scores(self.canvas, scene.fb_game)
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), favourite)
         elif scene.kind == "christmas_tree":
