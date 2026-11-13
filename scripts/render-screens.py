@@ -206,7 +206,11 @@ def _render(real_logos: bool, sport: str) -> dict[str, Image.Image]:
                 app.renderer.nfl_logos = LogoSet("nfl")
             else:
                 base = write_synthetic_nfl_logos(root / "nfl-logos") / "nfl"
-                libraries = {12: LogoLibrary([base / "12" / "dark"], 12)}
+                # Every size a screen asks for must be synthetic: a size missing here would fall
+                # back to the real (git-ignored) artwork and end up in the committed images.
+                libraries = {
+                    size: LogoLibrary([base / str(size) / "dark"], size) for size in (12, 16)
+                }
                 app.renderer.nfl_logos = LogoSet("nfl", "dark", libraries)
             steps = nfl_demo_steps(NOW)
         else:

@@ -425,6 +425,16 @@ Per-play notes, from real text:
 - **Timeouts:** `Timeout #1 by CIN at 01:10.` carries the team, the timeout number
   and the clock. Timeouts left is `3 - number`, which should be checked against the
   situation block's `homeTimeouts` / `awayTimeouts`.
+- **Built (story #387, `display/football_stoppage.py`).** A full-panel card (there is no ball
+  movement). A clock icon whose hand **spins, slows and freezes** (0-35% of the 3s stage, then
+  the ring flashes and holds). `Timeout`: the calling team's logo (16px, else its abbreviation in
+  its colour), `TIMEOUT` / `NYG 2ND` / the clock, the icon in the team's colour, and **its
+  timeouts left as three dots** (`3 - number`, replaced by the situation's `homeTimeouts` /
+  `awayTimeouts` when the feed gives them, held to 0-3). `Official Timeout`: `OFFICIAL` /
+  `TIMEOUT` with a neutral grey icon and no team or dots. `Two-Minute Warning`: `2-MIN` /
+  `WARNING` / `2:00` with an amber icon. The tiny font has no usable `#`, so `timeout #2` reads
+  `2ND`. A 64px panel drops the logo and the `LEFT` caption. Stoppage cards are dropped first
+  when the queue is behind (already the queue's rule).
 - **Stoppages:** `Official Timeout at 11:12.`, `Two-Minute Warning`, `END QUARTER 1`,
   `END QUARTER 2` (type `End of Half`), `END GAME`.
 
@@ -961,6 +971,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Declined](docs/football/penalty_declined.png) | |
 | Declined: the flag, the ball stays. | |
 
+**Stoppages** (#387; the clock spinning, frozen, an official timeout, the two-minute warning):
+
+| | |
+|---|---|
+| ![Spinning](docs/football/timeout_spin.png) | ![Frozen](docs/football/timeout.png) |
+| The hand spins as the clock stops. | Frozen: the team, which timeout, timeouts left as dots. |
+| ![Official](docs/football/timeout_official.png) | ![Two-minute warning](docs/football/timeout_two_minute.png) |
+| An official timeout: neutral, no team. | The two-minute warning: amber. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -989,7 +1008,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty` and `penalty_no_play`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play` and `timeout`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1263,7 +1282,7 @@ added later.
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
 - [x] Incompletion (#384), sack (#385) and penalty (#386) animations, including a play wiped out by a penalty
-- [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
+- [~] Timeout, official timeout and two-minute warning cards done (#387); end-of-period and halftime cards still to do
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
 - [x] Play-text layout and scrolling (#379)
