@@ -16,8 +16,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, tzinfo
+from enum import StrEnum
 from typing import Any
 
+from .playtext import PlayText, parse_text
 from .teams import team_by_id
 
 #: ``status.type.state`` values the feed uses; anything else is kept as sent.
@@ -281,3 +283,187 @@ class FbGame:
             local = self.start_utc.astimezone(tz)
             return f"{local:%a} {local.month}/{local.day} {local:%I:%M %p}".replace(" 0", " ")
         return self.short_detail or self.detail or self.status_name
+
+
+# -- plays (#353) --------------------------------------------------------------
+
+
+class PlayKind(StrEnum):
+    """What sort of play ESPN says it was, from ``type.text``.
+
+    Only the types in the sample are named. Anything else is ``UNKNOWN`` with the
+    raw type kept on the ``Play``, never lost and never an error. Some things the
+    animation cares about are *not* kinds because ESPN does not make them types:
+    a kneel is a ``RUSH``, a spike and an intentional grounding are a
+    ``PASS_INCOMPLETE`` (see ``Play.info``).
+    """
+
+    RUSH = "rush"
+    PASS_COMPLETE = "pass_complete"
+    PASS_INCOMPLETE = "pass_incomplete"
+    SACK = "sack"
+    KICKOFF = "kickoff"
+    PUNT = "punt"
+    FIELD_GOAL_GOOD = "field_goal_good"
+    FIELD_GOAL_MISSED = "field_goal_missed"
+    PENALTY = "penalty"
+    TIMEOUT = "timeout"
+    OFFICIAL_TIMEOUT = "official_timeout"
+    TWO_MINUTE_WARNING = "two_minute_warning"
+    END_PERIOD = "end_period"
+    END_HALF = "end_half"
+    END_REGULATION = "end_regulation"
+    END_GAME = "end_game"
+    COIN_TOSS = "coin_toss"
+    RUSHING_TOUCHDOWN = "rushing_touchdown"
+    PASSING_TOUCHDOWN = "passing_touchdown"
+    INTERCEPTION_RETURN = "interception_return"
+    INTERCEPTION_TOUCHDOWN = "interception_touchdown"
+    FUMBLE_RECOVERY_OWN = "fumble_recovery_own"
+    FUMBLE_RECOVERY_OPPONENT = "fumble_recovery_opponent"
+    SACK_FUMBLE = "sack_fumble"
+    MUFFED_PUNT = "muffed_punt"
+    OTHER_TOUCHDOWN = "other_touchdown"
+    UNKNOWN = "unknown"
+
+
+_KINDS: dict[str, PlayKind] = {
+    "rush": PlayKind.RUSH,
+    "pass reception": PlayKind.PASS_COMPLETE,
+    "pass incompletion": PlayKind.PASS_INCOMPLETE,
+    "sack": PlayKind.SACK,
+    "kickoff": PlayKind.KICKOFF,
+    "punt": PlayKind.PUNT,
+    "field goal good": PlayKind.FIELD_GOAL_GOOD,
+    "field goal missed": PlayKind.FIELD_GOAL_MISSED,
+    "penalty": PlayKind.PENALTY,
+    "timeout": PlayKind.TIMEOUT,
+    "official timeout": PlayKind.OFFICIAL_TIMEOUT,
+    "two-minute warning": PlayKind.TWO_MINUTE_WARNING,
+    "end period": PlayKind.END_PERIOD,
+    "end of half": PlayKind.END_HALF,
+    "end of regulation": PlayKind.END_REGULATION,
+    "end of game": PlayKind.END_GAME,
+    "coin toss": PlayKind.COIN_TOSS,
+    "rushing touchdown": PlayKind.RUSHING_TOUCHDOWN,
+    "passing touchdown": PlayKind.PASSING_TOUCHDOWN,
+    "pass interception return": PlayKind.INTERCEPTION_RETURN,
+    "interception return touchdown": PlayKind.INTERCEPTION_TOUCHDOWN,
+    "fumble recovery (own)": PlayKind.FUMBLE_RECOVERY_OWN,
+    "fumble recovery (opponent)": PlayKind.FUMBLE_RECOVERY_OPPONENT,
+    "sack opp fumble recovery": PlayKind.SACK_FUMBLE,
+    "muffed punt recovery (opponent)": PlayKind.MUFFED_PUNT,
+}
+
+
+def classify(type_text: str) -> PlayKind:
+    """The kind for ESPN's ``type.text``; ``UNKNOWN`` for anything not recognised."""
+    key = " ".join(str(type_text or "").lower().split())
+    if key in _KINDS:
+        return _KINDS[key]
+    if "touchdown" in key:  # a type not seen yet, but a touchdown all the same
+        return PlayKind.OTHER_TOUCHDOWN
+    return PlayKind.UNKNOWN
+
+
+@dataclass(frozen=True, slots=True)
+class FieldPos:
+    """Where the ball is, before or after a play. ``yard_line`` as the feed sends it."""
+
+    #: 0-100 from the HOME goal line (not the offence's). See ``football_api.md``.
+    yard_line: int | None
+    #: Yards to the goal the offence is attacking, relative to the offence.
+    yards_to_endzone: int | None
+    down: int | None
+    distance: int | None
+    down_distance_text: str
+    short_down_distance_text: str
+    possession_text: str
+    #: ESPN id of the team the position is for (the offence), if sent.
+    team_id: int | None
+
+    @staticmethod
+    def from_api(raw: Any) -> FieldPos | None:
+        pos = _dict(raw)
+        if not pos:
+            return None
+        return FieldPos(
+            yard_line=_int(pos.get("yardLine"), None),
+            yards_to_endzone=_int(pos.get("yardsToEndzone"), None),
+            down=_int(pos.get("down"), None),
+            distance=_int(pos.get("distance"), None),
+            down_distance_text=_str(pos.get("downDistanceText")),
+            short_down_distance_text=_str(pos.get("shortDownDistanceText")),
+            possession_text=_str(pos.get("possessionText")),
+            team_id=_int(_dict(pos.get("team")).get("id"), None),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Play:
+    #: ESPN's play id (digits as a string). Stable per play: what the queue de-duplicates on.
+    id: str
+    #: ``sequenceNumber``: the order plays happened in. Ids are not guaranteed to sort.
+    sequence: int
+    kind: PlayKind
+    #: The raw ``type.text``, kept even when ``kind`` is ``UNKNOWN``.
+    type: str
+    text: str
+    period: int
+    clock: str
+    wallclock: datetime | None
+    stat_yardage: int
+    scoring_play: bool
+    is_turnover: bool
+    is_penalty: bool
+    #: The score after the play.
+    away_score: int
+    home_score: int
+    yards_after_catch: int | None
+    start: FieldPos | None
+    end: FieldPos | None
+    #: What the text says (kick distance, returner, penalty, review ...), parsed defensively.
+    info: PlayText
+
+    @staticmethod
+    def from_api(raw: Any) -> Play:
+        p = _dict(raw)
+        play_id = str(p.get("id", "")).strip()
+        if not play_id:
+            raise ValueError("play has no id")
+        type_text = _str(_dict(p.get("type")).get("text"))
+        text = _str(p.get("text")).strip()
+        return Play(
+            id=play_id,
+            sequence=_int(p.get("sequenceNumber")) or 0,
+            kind=classify(type_text),
+            type=type_text,
+            text=text,
+            period=_int(_dict(p.get("period")).get("number")) or 0,
+            clock=_str(_dict(p.get("clock")).get("displayValue")),
+            wallclock=_parse_time(p.get("wallclock")),
+            stat_yardage=_int(p.get("statYardage")) or 0,
+            scoring_play=_bool(p.get("scoringPlay")),
+            is_turnover=_bool(p.get("isTurnover")),
+            is_penalty=_bool(p.get("isPenalty")),
+            away_score=_int(p.get("awayScore")) or 0,
+            home_score=_int(p.get("homeScore")) or 0,
+            yards_after_catch=_int(p.get("yardsAfterCatch"), None),
+            start=FieldPos.from_api(p.get("start")),
+            end=FieldPos.from_api(p.get("end")),
+            info=parse_text(type_text, text),
+        )
+
+    @property
+    def is_touchdown(self) -> bool:
+        return self.kind in (
+            PlayKind.RUSHING_TOUCHDOWN,
+            PlayKind.PASSING_TOUCHDOWN,
+            PlayKind.INTERCEPTION_TOUCHDOWN,
+            PlayKind.OTHER_TOUCHDOWN,
+        )
+
+    def sort_key(self) -> tuple[int, float, str]:
+        """Play order: ``sequenceNumber``, then time, then id as a last tie-break."""
+        when = self.wallclock.timestamp() if self.wallclock else 0.0
+        return (self.sequence, when, self.id)

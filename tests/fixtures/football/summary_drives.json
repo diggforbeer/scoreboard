@@ -1,0 +1,571 @@
+{
+ "drives": {
+  "previous": [
+   {
+    "id": "1",
+    "description": "drive one",
+    "result": "PUNT",
+    "plays": [
+     {
+      "id": "4018730381948",
+      "sequenceNumber": "194800",
+      "text": "Timeout #1 by CIN at 01:10.",
+      "period": {
+       "number": 2
+      },
+      "clock": {
+       "displayValue": "1:10"
+      },
+      "wallclock": "2026-11-08T15:50:54Z",
+      "statYardage": 0,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 21,
+      "homeScore": 10,
+      "type": {
+       "id": "21",
+       "text": "Timeout",
+       "abbreviation": "TO"
+      },
+      "start": {
+       "yardLine": 46,
+       "yardsToEndzone": 0,
+       "down": 3,
+       "distance": 5,
+       "downDistanceText": "3rd & 5 at ATL 46",
+       "shortDownDistanceText": "3rd & 5",
+       "possessionText": "ATL 46",
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 46,
+       "yardsToEndzone": 54,
+       "down": 3,
+       "distance": 5,
+       "downDistanceText": "3rd & 5 at ATL 46",
+       "shortDownDistanceText": "3rd & 5",
+       "possessionText": "ATL 46",
+       "team": {
+        "id": "1"
+       }
+      }
+     },
+     {
+      "id": "4018730381329",
+      "sequenceNumber": "132900",
+      "text": "J.Bailey punts 53 yards to CIN 12, Center-L.McCullough, fair catch by D.Meyers.",
+      "period": {
+       "number": 2
+      },
+      "clock": {
+       "displayValue": "10:53"
+      },
+      "wallclock": "2026-11-08T15:23:47Z",
+      "statYardage": 0,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 14,
+      "homeScore": 10,
+      "type": {
+       "id": "52",
+       "text": "Punt",
+       "abbreviation": "PUNT"
+      },
+      "start": {
+       "yardLine": 35,
+       "yardsToEndzone": 35,
+       "down": 4,
+       "distance": 6,
+       "downDistanceText": "4th & 6 at ATL 35",
+       "shortDownDistanceText": "4th & 6",
+       "possessionText": "ATL 35",
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 88,
+       "yardsToEndzone": 88,
+       "down": 1,
+       "distance": 10,
+       "downDistanceText": "1st & 10 at CIN 12",
+       "shortDownDistanceText": "1st & 10",
+       "possessionText": "CIN 12",
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "4018730381164",
+      "sequenceNumber": "116400",
+      "text": "J.Burrow left guard for 1 yard, TOUCHDOWN. E.McPherson extra point is GOOD, Center-W.Wagner, Holder-R.Rehkow.",
+      "period": {
+       "number": 2
+      },
+      "clock": {
+       "displayValue": "12:56"
+      },
+      "wallclock": "2026-11-08T15:16:40Z",
+      "statYardage": 1,
+      "scoringPlay": true,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 14,
+      "homeScore": 10,
+      "type": {
+       "id": "68",
+       "text": "Rushing Touchdown",
+       "abbreviation": "TD"
+      },
+      "start": {
+       "yardLine": 1,
+       "yardsToEndzone": 1,
+       "down": 2,
+       "distance": 1,
+       "downDistanceText": "2nd & Goal at ATL 1",
+       "shortDownDistanceText": "2nd & Goal",
+       "possessionText": "ATL 1",
+       "team": {
+        "id": "4"
+       }
+      },
+      "end": {
+       "yardLine": 0,
+       "yardsToEndzone": 0,
+       "down": -1,
+       "distance": 10,
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "4018730381047",
+      "sequenceNumber": "104700",
+      "text": "END QUARTER 1",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "0:00"
+      },
+      "wallclock": "2026-11-08T15:10:39Z",
+      "statYardage": 0,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 7,
+      "homeScore": 10,
+      "type": {
+       "id": "2",
+       "text": "End Period",
+       "abbreviation": "EP"
+      },
+      "start": {
+       "yardLine": 30,
+       "yardsToEndzone": 30,
+       "down": 1,
+       "distance": 10,
+       "team": {
+        "id": "4"
+       }
+      },
+      "end": {
+       "yardLine": 30,
+       "yardsToEndzone": 30,
+       "down": 1,
+       "distance": 10,
+       "downDistanceText": "1st & 10 at ATL 30",
+       "shortDownDistanceText": "1st & 10",
+       "possessionText": "ATL 30",
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "401873038843",
+      "sequenceNumber": "84300",
+      "text": "N.Folk 31 yard field goal is GOOD, Center-L.McCullough, Holder-J.Bailey.",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "2:56"
+      },
+      "wallclock": "2026-11-08T15:03:29Z",
+      "statYardage": 31,
+      "scoringPlay": true,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 7,
+      "homeScore": 10,
+      "type": {
+       "id": "59",
+       "text": "Field Goal Good",
+       "abbreviation": "FG"
+      },
+      "start": {
+       "yardLine": 87,
+       "yardsToEndzone": 13,
+       "down": 4,
+       "distance": 13,
+       "downDistanceText": "4th & Goal at CIN 13",
+       "shortDownDistanceText": "4th & Goal",
+       "possessionText": "CIN 13",
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 100,
+       "yardsToEndzone": 0,
+       "down": -1,
+       "distance": 10,
+       "team": {
+        "id": "1"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "id": "0",
+    "description": "opening",
+    "result": "TD",
+    "plays": [
+     {
+      "id": "40187303873",
+      "sequenceNumber": "7300",
+      "text": "(Shotgun) M.Penix pass short right to J.Dotson to ATL 32 for 12 yards (D.Knight).",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "14:54"
+      },
+      "wallclock": "2026-11-08T14:36:05Z",
+      "statYardage": 12,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 0,
+      "homeScore": 0,
+      "yardsAfterCatch": 4,
+      "type": {
+       "id": "24",
+       "text": "Pass Reception",
+       "abbreviation": "REC"
+      },
+      "start": {
+       "yardLine": 20,
+       "yardsToEndzone": 80,
+       "down": 1,
+       "distance": 10,
+       "downDistanceText": "1st & 10 at ATL 20",
+       "shortDownDistanceText": "1st & 10",
+       "possessionText": "ATL 20",
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 32,
+       "yardsToEndzone": 68,
+       "down": 1,
+       "distance": 10,
+       "downDistanceText": "1st & 10 at ATL 32",
+       "shortDownDistanceText": "1st & 10",
+       "possessionText": "ATL 32",
+       "team": {
+        "id": "1"
+       }
+      }
+     },
+     {
+      "id": "401873038150",
+      "sequenceNumber": "15000",
+      "text": "(Shotgun) B.Robinson left guard to CIN 40 for 2 yards (J.Battle).",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "13:13"
+      },
+      "wallclock": "2026-11-08T14:37:53Z",
+      "statYardage": 2,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 0,
+      "homeScore": 0,
+      "type": {
+       "id": "5",
+       "text": "Rush",
+       "abbreviation": "RUSH"
+      },
+      "start": {
+       "yardLine": 58,
+       "yardsToEndzone": 42,
+       "down": 2,
+       "distance": 3,
+       "downDistanceText": "2nd & 3 at CIN 42",
+       "shortDownDistanceText": "2nd & 3",
+       "possessionText": "CIN 42",
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 60,
+       "yardsToEndzone": 40,
+       "down": 3,
+       "distance": 1,
+       "downDistanceText": "3rd & 1 at CIN 40",
+       "shortDownDistanceText": "3rd & 1",
+       "possessionText": "CIN 40",
+       "team": {
+        "id": "1"
+       }
+      }
+     },
+     {
+      "id": "401873038306",
+      "sequenceNumber": "30600",
+      "text": "N.Folk kicks 60 yards from ATL 35 to CIN 5. D.Meyers to CIN 25 for 20 yards (N.Muse).",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "11:12"
+      },
+      "wallclock": "2026-11-08T14:44:58Z",
+      "statYardage": 20,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 0,
+      "homeScore": 7,
+      "type": {
+       "id": "53",
+       "text": "Kickoff",
+       "abbreviation": "K"
+      },
+      "start": {
+       "yardLine": 35,
+       "yardsToEndzone": 65,
+       "down": 0,
+       "distance": 0,
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 75,
+       "yardsToEndzone": 75,
+       "down": 1,
+       "distance": 10,
+       "downDistanceText": "1st & 10 at CIN 25",
+       "shortDownDistanceText": "1st & 10",
+       "possessionText": "CIN 25",
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "401873038582",
+      "sequenceNumber": "58200",
+      "text": "(Shotgun) M.Penix pass incomplete short left to K.Pitts.",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "7:20"
+      },
+      "wallclock": "2026-11-08T14:55:22Z",
+      "statYardage": 0,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 7,
+      "homeScore": 7,
+      "type": {
+       "id": "3",
+       "text": "Pass Incompletion"
+      },
+      "start": {
+       "yardLine": 55,
+       "yardsToEndzone": 45,
+       "down": 2,
+       "distance": 10,
+       "downDistanceText": "2nd & 10 at CIN 45",
+       "shortDownDistanceText": "2nd & 10",
+       "possessionText": "CIN 45",
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 55,
+       "yardsToEndzone": 45,
+       "down": 3,
+       "distance": 10,
+       "downDistanceText": "3rd & 10 at CIN 45",
+       "shortDownDistanceText": "3rd & 10",
+       "possessionText": "CIN 45",
+       "team": {
+        "id": "1"
+       }
+      }
+     }
+    ]
+   }
+  ],
+  "current": {
+   "id": "2",
+   "description": "in progress",
+   "plays": [
+    {
+     "id": "4018730382244",
+     "sequenceNumber": "224400",
+     "text": "END QUARTER 2",
+     "period": {
+      "number": 2
+     },
+     "clock": {
+      "displayValue": "0:00"
+     },
+     "wallclock": "2026-11-08T16:02:59Z",
+     "statYardage": 0,
+     "scoringPlay": false,
+     "isTurnover": false,
+     "isPenalty": false,
+     "awayScore": 24,
+     "homeScore": 10,
+     "type": {
+      "id": "65",
+      "text": "End of Half",
+      "abbreviation": "EH"
+     },
+     "start": {
+      "yardLine": 40,
+      "yardsToEndzone": 0,
+      "down": 0,
+      "distance": 0,
+      "team": {
+       "id": "1"
+      }
+     },
+     "end": {
+      "yardLine": 40,
+      "yardsToEndzone": 60,
+      "down": 1,
+      "distance": 10,
+      "team": {
+       "id": "1"
+      }
+     }
+    },
+    {
+     "id": "4018730383392",
+     "sequenceNumber": "339200",
+     "text": "(Shotgun) J.Burrow sacked at CIN 31 for -6 yards (L.London).",
+     "period": {
+      "number": 4
+     },
+     "clock": {
+      "displayValue": "10:13"
+     },
+     "wallclock": "2026-11-08T17:03:44Z",
+     "statYardage": -6,
+     "scoringPlay": false,
+     "isTurnover": false,
+     "isPenalty": false,
+     "awayScore": 31,
+     "homeScore": 17,
+     "type": {
+      "id": "7",
+      "text": "Sack"
+     },
+     "start": {
+      "yardLine": 63,
+      "yardsToEndzone": 63,
+      "down": 3,
+      "distance": 1,
+      "downDistanceText": "3rd & 1 at CIN 37",
+      "shortDownDistanceText": "3rd & 1",
+      "possessionText": "CIN 37",
+      "team": {
+       "id": "4"
+      }
+     },
+     "end": {
+      "yardLine": 69,
+      "yardsToEndzone": 69,
+      "down": 4,
+      "distance": 7,
+      "downDistanceText": "4th & 7 at CIN 31",
+      "shortDownDistanceText": "4th & 7",
+      "possessionText": "CIN 31",
+      "team": {
+       "id": "4"
+      }
+     }
+    },
+    {
+     "id": "4018730394324",
+     "sequenceNumber": "432400",
+     "text": "A.Szmyt kicks 65 yards from CLV 35 to end zone, Touchback to the NO 35.",
+     "period": {
+      "number": 4
+     },
+     "clock": {
+      "displayValue": "0:08"
+     },
+     "wallclock": "2026-11-08T21:07:14Z",
+     "statYardage": 0,
+     "scoringPlay": false,
+     "isTurnover": false,
+     "isPenalty": false,
+     "awayScore": 16,
+     "homeScore": 16,
+     "type": {
+      "id": "53",
+      "text": "Kickoff",
+      "abbreviation": "K"
+     },
+     "start": {
+      "yardLine": 65,
+      "yardsToEndzone": 65,
+      "down": 0,
+      "distance": 0,
+      "team": {
+       "id": "5"
+      }
+     },
+     "end": {
+      "yardLine": 35,
+      "yardsToEndzone": 65,
+      "down": 1,
+      "distance": 10,
+      "downDistanceText": "1st & 10 at NO 35",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "NO 35",
+      "team": {
+       "id": "18"
+      }
+     }
+    }
+   ]
+  }
+ },
+ "header": {
+  "id": "401873038"
+ }
+}

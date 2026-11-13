@@ -230,10 +230,13 @@ return several plays at once, and a kickoff follows a score within seconds.
 - The animation clock starts when the play is **shown**, not at its `wallclock`, so
   `broadcast_delay_seconds` shifts everything together.
 
-**Not seen in the sample, so unverified:** the type names for a QB kneel (5 kneels
-in the text, type unknown), a spike (1), an onside kick (0), a safety (0), a
-blocked kick (0), a two-point attempt, an intentional grounding (1) and a free
-kick. Each falls back to the plain play-text layout until its type is seen.
+**What 2,441 real plays (13 games, `football_api.md`) settled:** a QB kneel is a
+`Rush` ("J.Burrow kneels to ATL 9"), a spike and an intentional grounding are a
+`Pass Incompletion` (the grounding's penalty is in the text, not the type), an onside
+kick is a `Kickoff` ("kicks onside 19 yards"), and a two-point attempt rides on the
+touchdown play's text. So none of these need their own animation type: the animation
+reads the flags off the play. **Still not seen:** a safety, a blocked kick, a free kick
+and a turnover on downs. Each falls back to the plain play-text layout until it is seen.
 
 ### `fb_cointoss`: the opening coin toss
 
@@ -571,11 +574,27 @@ green or red: this is neither good nor bad news yet, it is a correction.
   progress is unknown, and showing one would need a field that has not been
   seen. It is left out until real data shows one.
 
-**Unverified.** None of the detection above has been seen on a real reversed
-play. The first rule (score drops) is the likeliest to work; the other two are
-guesses at how the feed represents a removed play. Capturing a real one is a
-research todo, and the detector should log every case it matches so the rules
-can be tightened from real games.
+**What the real feed shows (nine reversed plays in 13 finished games, #353).** ESPN does
+not remove a reversed play and does not drop the score line: it **rewrites the play in
+place**. The play's `type` and flags become the *final* ruling, and the text keeps the
+original call, then a sentence, then the corrected play:
+
+> `D.Prescott pass short right to C.Lamb for 11 yards, TOUCHDOWN.` `The Replay Official
+> reviewed the pass completion ruling, and the play was REVERSED.` `D.Prescott pass
+> incomplete short right to C.Lamb.` (type `Pass Incompletion`, `scoringPlay` false, score
+> unchanged)
+
+So in the finished feed a reversed touchdown looks like an ordinary incompletion whose text
+says it was reversed. That makes rule 2 (the flag turned false) and rule 3 (the type
+changed) the likely ones, and adds a fourth, much cheaper signal that needs no memory of
+the earlier play: **the text contains `the play was REVERSED`** (`PlayText.review.reversed`,
+with the original call and the corrected play split apart). Upheld reviews also appear
+(`the play was Upheld. The ruling on the field stands.`) and must not count. A challenge
+by a team names the team and costs a timeout (`(Timeout #1.)`).
+
+**Still unverified:** what the feed shows *while* a review is in progress, and how long
+after the original call it is rewritten. Those need a live game; the detector should log
+every case it matches so the rules can be tightened.
 
 ## Mockups
 
@@ -782,12 +801,13 @@ added later.
       touchdown, field goal, interception, fumble) into the repo as fixtures
 - [ ] Coin toss: find out when the feed publishes the toss play before kickoff, whether
       overtime gets a second `Coin Toss` play (the overtime check errored)
-- [ ] Find the type names for QB kneel, spike, onside kick, intentional grounding and
-      free kick (the sample's text mentions kneels, a spike and a grounding)
-- [ ] Capture the play types not yet seen: safety, two-point conversion, pick-six
-      and other return touchdowns, turnover on downs, muffed punt, blocked kick
-- [ ] Capture a real reviewed or reversed scoring play, and what the feed does with it
-      (score drop? play removed? type changed?), to confirm the three detection rules
+- [x] Type names for QB kneel, spike, onside kick, intentional grounding: found in 2,441
+      real plays (#353); see `football_api.md`
+- [~] Play types not yet seen: still a safety, a blocked kick, a free kick and a turnover
+      on downs. Pick-sixes, two-point attempts and muffed punts are now seen
+- [~] What the feed does with a reviewed or reversed scoring play: **finished games
+      answered it** (the play is rewritten in place, with the reversal in its text); what it
+      shows during a review, and how fast, still needs a live game
 - [ ] Decide the polling interval and how to stay under ESPN's tolerance
 - [ ] Measure on a **Pi 4** with the real panel: frame rate during the heaviest
       animations (kickoff and punt arcs, the touchdown strobe, the coin flip), CPU use,
@@ -818,7 +838,8 @@ added later.
 ### Build (after the design is agreed)
 
 - [~] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport nfl`
-      done (#350); plays, rosters and participants still to do
+      done (#350); play feed, `Play` model, play-text parser and `--dump-plays` done (#353);
+      rosters and participants (jersey numbers) still to do
 - [ ] `fb_field` renderer
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [ ] Play detection and the animation queue

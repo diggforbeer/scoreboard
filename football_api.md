@@ -69,9 +69,11 @@ Play types seen:
 
 Also `Coin Toss` (the first play, `text` is just `GAME`, no yardage).
 
-Not yet seen (names unconfirmed): fumble, safety, blocked kick, two-point
-attempt. The sample is two games, so fall back to the plain play-text screen for
-unknown types.
+More types turned up in a 13-game survey (see "Play text" and "The play feed" below):
+`End of Regulation`, `Interception Return Touchdown`, `Muffed Punt Recovery (Opponent)`,
+`Fumble Recovery (Own)`, `Fumble Recovery (Opponent)` and `Sack Opp Fumble Recovery`.
+Still unseen: safety, blocked kick, free kick, turnover on downs. Unknown types fall back
+to the plain play-text screen.
 
 **Abbreviations differ between fields.** Washington is `WSH` in `team.abbreviation`
 and `possessionText` ("WSH 20"), but `WAS` in some play text ("kicks 64 yards
@@ -156,9 +158,8 @@ Counts are from about 690 plays across the 4 games.
   **Official Timeout** (58): `Official Timeout at 11:12.`
 - **Stoppages:** `Two-Minute Warning`, `END QUARTER 1`, `END QUARTER 2` (type
   `End of Half`), `END GAME`.
-- **Not seen as their own types, so unconfirmed:** QB kneel (5 mentions in text,
-  type unknown), spike (1), intentional grounding (1), onside kick, safety, blocked
-  kick, two-point attempt.
+- **Answered by the 13-game survey (below):** a QB kneel is a `Rush`, a spike and an
+  intentional grounding are a `Pass Incompletion`, an onside kick is a `Kickoff`.
 - Plays were about 35-60s apart by `wallclock` in the live game, and the feed returns
   several at once when polled less often than that.
 
@@ -186,4 +187,58 @@ payloads in `tests/fixtures/football/`.
   as sent and ranks it after the known ones.
 - **Team ids** map to the 32 NFL teams (`football/teams.py`); an id that is not one of
   them (a Pro Bowl side) keeps ESPN's own abbreviation and is flagged `is_nfl = False`.
+
+## The play feed (#353, 13 finished games from 2026-11-08, 2,441 plays)
+
+Parsed by `football/models.py` (`Play`, `PlayKind`) and `football/playtext.py`; one real play
+per case is in `tests/fixtures/football/play_cases.json`.
+
+**Type counts:** Rush 664, Pass Reception 489, Pass Incompletion 285, Official Timeout 188,
+Penalty 153, Kickoff 139, Timeout 101, Punt 99, Sack 69, Field Goal Good 54, Passing
+Touchdown 39, Two-minute warning 27, End Period 26, Rushing Touchdown 21, Pass Interception
+Return 20, End of Half 13, End of Game 13, Fumble Recovery (Opponent) 13, Fumble Recovery
+(Own) 13, Field Goal Missed 7, Sack Opp Fumble Recovery 5, then one each of End of
+Regulation, Muffed Punt Recovery (Opponent) and Interception Return Touchdown. None was
+unknown to the parser. `sequenceNumber` is a string of digits and orders plays; ids are not
+guaranteed to.
+
+**The type is not the whole story.** Things the animation needs that are *not* types:
+
+- A **kneel** is a `Rush` ("J.Burrow kneels to ATL 9 for -1 yards", 19 of them).
+- A **spike** is a `Pass Incompletion` ("S.Sanders spiked the ball to stop the clock", 5).
+- An **intentional grounding** is a `Pass Incompletion` with the penalty in the text (3).
+- An **onside kick** is a `Kickoff` ("kicks onside 19 yards from PHI 35 to NYG 46", 2).
+- A **two-point attempt** rides on the touchdown's text: `TWO-POINT CONVERSION ATTEMPT ...
+  ATTEMPT FAILS` or `ATTEMPT SUCCEEDS` (7). So does the **extra point** (`extra point is GOOD`).
+- A **penalty rides on almost any play type**, not only `Penalty`: the text is the play,
+  then `PENALTY on ATL-M.Bergeron, Offensive Holding, 10 yards, enforced at CIN 7 - No Play`.
+  153 are typed `Penalty` (154 plays say `No Play`), but penalties turn up inside Pass
+  Reception, Rush, Kickoff, Punt and touchdowns. A penalty can be accepted, `declined` (26
+  plays) or `offsetting`, and there can be two on one play.
+
+**Penalty text shapes:** `PENALTY on ATL-M.Bergeron, Offensive Holding, 10 yards, enforced
+at CIN 7 - No Play`; the same lowercase (`Penalty on NO-E.McCoy, ..., declined.`); a penalty
+on a whole team with no player (`PENALTY on ATL, Delay of Game, 5 yards, enforced at ATL 32 -
+No Play`); and a kickoff penalty with no yardage (`PENALTY on NYJ-A.Beck, Kickoff Out of
+Bounds, placed at KC 40`). The team in the penalty text is the text's own abbreviation, which
+is **not always ESPN's**: seen `HST` (HOU), `ARZ` (ARI), `CLV` (CLE).
+
+**Names** are `M.Penix`, but also `Mi.Wilson` (a two-letter initial when two players share
+one) and `D.St. Brown`. Midfield is written as a bare `50` (`sacked at 50`, `to 50`).
+
+**Reviews and reversals: the play is rewritten in place** (20 plays mention a challenge or
+review, 9 were reversed). The play's `type` and flags show the **final ruling**; the text is
+the original call, then `The Replay Official reviewed the pass completion ruling, and the play
+was REVERSED.` (or `Indianapolis challenged the runner was down by contact ruling, and the play
+was REVERSED.`), then the corrected play. An upheld review reads `... and the play was Upheld.
+The ruling on the field stands.` and a team's challenge adds `(Timeout #1.)`. A reversed
+touchdown therefore looks like a plain incompletion (`scoringPlay` false, score unchanged)
+whose text says it was reversed. This is how finished games look; **what the feed shows during
+a review is not known**. See the reversal design in `football_screen.md`.
+
+**Kickoff touchbacks** read `kicks 65 yards from CLV 35 to end zone, Touchback to the NO 35.`
+(21 of 139 kickoffs), and punts `... to end zone, Center-T.Ott, Touchback.`; a punt ends in
+`fair catch by`, `out of bounds`, `downed by`, a return (`O.Zaccheaus to ATL 24 for -3 yards`)
+or a muff (`MUFFS catch, RECOVERED by`). A lateral reads `Lateral to R.Stevenson pushed ob at
+NE 38 for 6 yards`.
 
