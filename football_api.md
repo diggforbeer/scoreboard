@@ -242,3 +242,12 @@ a review is not known**. See the reversal design in `football_screen.md`.
 or a muff (`MUFFS catch, RECOVERED by`). A lateral reads `Lateral to R.Stevenson pushed ob at
 NE 38 for 6 yards`.
 
+## Feed lag, one real observation (#355, 2026-11-13)
+
+Watching a live game with `nhl-scoreboard --watch-nfl 401873052` (polling every 10s), a new
+play (a Q4 incompletion) was first shown **30.2s after its `wallclock`**: the feed, plus up to
+10s of polling, ran about half a minute behind the play. One play in one game, so a hint, not
+a measurement: the Pi 4 measurement todo is still what answers the deferred animation-pace
+question. The queue logs `lag=` for every play it shows, so a full game's worth can be read
+from the journal (`journalctl -u nhl-scoreboard | grep "play shown"`).
+

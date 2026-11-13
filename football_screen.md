@@ -220,11 +220,15 @@ Per-play notes, from real text:
 return several plays at once, and a kickoff follows a score within seconds.
 
 - Animations play **in play order** (`sequenceNumber`), one at a time.
-- A backlog of more than **two** plays is caught up by playing the oldest at double
-  speed and skipping straight to the newest. The ball always lands where the
-  newest play puts it, so the field is never wrong.
-- Stoppage cards (timeouts, two-minute warning, end of period) are **dropped first**
-  when there is a backlog, because they carry no ball movement.
+- A backlog of more than **two** plays is caught up: stoppage cards are dropped first
+  (oldest first), then the oldest plays are skipped until two remain, and the one shown is
+  played at double speed. The ball always lands where the newest play puts it, so the field
+  is never wrong. Implemented in `football/queue.py` (#355).
+- Stoppage cards (timeouts, official timeouts, two-minute warning, end of a quarter) are
+  **dropped first** when there is a backlog, because they carry no ball movement.
+  **Halftime, the end of regulation and the end of the game are never dropped** (they carry
+  state: a card, the final), and neither is the newest ball-moving play, so a long enough
+  burst can leave more than two waiting when those are all that is left.
 - A board that starts mid-game draws the current field and does **not** replay the
   plays before startup (same baseline rule as goal detection).
 - The animation clock starts when the play is **shown**, not at its `wallclock`, so
@@ -847,7 +851,8 @@ added later.
 - [ ] Kickoff and punt animations (arc, return, fair catch, out of bounds, touchback)
 - [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
-- [ ] Animation queue: ordering, double-speed catch-up, dropping stoppages first
+- [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
+      `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
 - [ ] Play-text layout and scrolling
 - [ ] Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight

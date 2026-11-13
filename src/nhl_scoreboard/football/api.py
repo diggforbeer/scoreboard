@@ -103,25 +103,7 @@ class NflClient:
         payload = self._get("/summary", {"event": str(event_id)})
         if payload is None:
             return None
-        drives = payload.get("drives")
-        drives = drives if isinstance(drives, dict) else {}
-        groups = (
-            list(drives.get("previous") or []) if isinstance(drives.get("previous"), list) else []
-        )
-        if isinstance(drives.get("current"), dict):
-            groups.append(drives["current"])
-        plays: dict[str, Play] = {}
-        for group in groups:
-            for item in (group.get("plays") if isinstance(group, dict) else None) or []:
-                try:
-                    play = Play.from_api(item)
-                except (ValueError, TypeError, AttributeError, KeyError) as exc:
-                    log.warning("Skipping unusable play: %s", exc)
-                    continue
-                plays[play.id] = (
-                    play  # the later copy wins, e.g. a play ESPN re-sent after a review
-                )
-        return sorted(plays.values(), key=Play.sort_key)
+        return plays_from_summary(payload)
 
     # -- plumbing --------------------------------------------------------
 
@@ -151,6 +133,31 @@ class NflClient:
             log.debug("ESPN scoreboard still unavailable: %s", message)
         self.last_error = message
         return None
+
+
+def plays_from_summary(payload: dict[str, Any]) -> list[Play]:
+    """The plays in a site ``summary`` payload, de-duplicated by id and in play order.
+
+    ``drives.previous[].plays`` plus ``drives.current.plays``; drives are only a grouping,
+    so the order ESPN lists them in never matters. A play listed twice keeps the later copy
+    (ESPN rewrites a play in place after a review). Unusable plays are skipped.
+    """
+    drives = payload.get("drives")
+    drives = drives if isinstance(drives, dict) else {}
+    previous = drives.get("previous")
+    groups = list(previous) if isinstance(previous, list) else []
+    if isinstance(drives.get("current"), dict):
+        groups.append(drives["current"])
+    plays: dict[str, Play] = {}
+    for group in groups:
+        for item in (group.get("plays") if isinstance(group, dict) else None) or []:
+            try:
+                play = Play.from_api(item)
+            except (ValueError, TypeError, AttributeError, KeyError) as exc:
+                log.warning("Skipping unusable play: %s", exc)
+                continue
+            plays[play.id] = play
+    return sorted(plays.values(), key=Play.sort_key)
 
 
 def _parse_events(raw: Any) -> list[FbGame]:
