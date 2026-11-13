@@ -414,14 +414,20 @@ def test_an_empty_slate_is_no_games_not_no_data():
 
 def test_every_nfl_scene_kind_is_known_and_documented():
     guide = (ROOT / "football_screen.md").read_text()
-    assert set(FB_SCENE_KINDS) == {"fb_connecting", "fb_no_data", "fb_no_games", "fb_scores"}
+    assert set(FB_SCENE_KINDS) == {
+        "fb_connecting",
+        "fb_no_data",
+        "fb_no_games",
+        "fb_scores",
+        "fb_field",
+    }
     missing = [k for k in FB_SCENE_KINDS if f"`{k}`" not in guide]
     assert missing == [], f"football_screen.md never mentions: {missing}"
 
 
 @pytest.mark.parametrize("kind", FB_SCENE_KINDS)
 def test_the_app_draws_every_nfl_scene_kind(kind, app):
-    scene = Scene(kind, fb_game=GAMES["live"] if kind == "fb_scores" else None)
+    scene = Scene(kind, fb_game=GAMES["live"] if kind in ("fb_scores", "fb_field") else None)
     app.draw_scene(scene)
     assert app.matrix.shown.pixels, f"{kind} drew nothing"
     assert not app.matrix.shown.out_of_bounds

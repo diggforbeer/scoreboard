@@ -26,9 +26,10 @@ if TYPE_CHECKING:
     from ..app import Scene
     from ..config import FootballConfig, ScoreboardConfig
 
-#: Every scene kind NFL mode produces. Documented in ``football_screen.md`` ("Base scenes");
-#: a test keeps that list, this tuple and the renderer in step.
-FB_SCENE_KINDS = ("fb_connecting", "fb_no_data", "fb_no_games", "fb_scores")
+#: Every scene kind NFL mode draws (``fb_field`` is so far only shown by the demo, #359).
+#: Documented in ``football_screen.md`` ("Base scenes"); a test keeps that list, this tuple and
+#: the renderer in step.
+FB_SCENE_KINDS = ("fb_connecting", "fb_no_data", "fb_no_games", "fb_scores", "fb_field")
 
 #: Seconds each game stays up when more than one is on the rotation, if no settings are given.
 DEFAULT_ROTATE_SECONDS = 8.0

@@ -140,6 +140,7 @@ nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
 # ~4s each, until Ctrl-C -- also works on the real panel with no network
 nhl-scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
+# (with sport = "nfl" in the config it loops the NFL screens instead; never any sound)
 
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team NSH

@@ -80,3 +80,29 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
 
     text = r._fit_text(r.fonts.small, status_text(game, r), r.width - 4)
     r.text_center(canvas, r.fonts.small, half, status_baseline, status_color(game), text)
+
+
+def draw_fb_field(r: Renderer, canvas: Any, game: FbGame) -> None:
+    """The resting field (#359): turf, end zones, the markers and the ball, under a one-line band.
+
+    Only what the situation alone says: the ball at ``yardLine``, the first-down line ``distance``
+    yards ahead in the direction of play, the possessing team's logo bright. The animated plays
+    (run, pass, kicks) build on this; they are separate screens.
+    """
+    from ..football.geometry import FieldLayout
+    from . import football_field as ff
+
+    canvas.Clear()
+    layout = FieldLayout.for_panel(r.width)
+    sit = game.situation
+    side = ff.possession_of(game, sit.possession_team_id) if sit is not None else None
+    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    if sit is not None and side is not None and sit.yard_line is not None:
+        ff.draw_markers(r, canvas, layout, sit.yard_line, sit.distance or 0, side)
+        ff.draw_ball(canvas, layout, sit.yard_line)
+    text = (sit.short_down_distance_text if sit is not None else "").upper()
+    color = RED_ZONE if sit is not None and sit.is_red_zone else SITUATION
+    clock = r._fit_text(r.fonts.tiny, status_text(game, r), r.width // 2 - 2)
+    r.text(canvas, r.fonts.tiny, 1, 6, status_color(game), clock)
+    if text:
+        r.text_right(canvas, r.fonts.tiny, r.width - 1, 6, color, text)

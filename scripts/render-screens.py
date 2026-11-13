@@ -10,6 +10,14 @@ drift from it.
     python scripts/render-screens.py            # write docs/screens/*.png
     python scripts/render-screens.py --check    # fail if the committed ones are stale
     python scripts/render-screens.py --real-logos   # use assets/logos (not for committing)
+    python scripts/render-screens.py --sport nfl    # write docs/football/*.png (#359)
+    python scripts/render-screens.py --sport nfl --check
+
+``--sport nfl`` does the same for ``football.demo.nfl_demo_steps()`` and never touches
+``docs/screens/``. A football step named like a hand-drawn mockup (``scripts/football-mockups.py``)
+replaces it; mockups with no real screen yet stay, and are not reported as orphans. When the last
+mockup is replaced, delete ``scripts/football-mockups.py`` (a test fails while it lists a name that
+a real step also produces, so the two never overlap).
 
 Team logos are NHL artwork and git-ignored, so the committed images use plain
 circles in each team's colours, as the tests do.
@@ -43,6 +51,8 @@ from nhl_scoreboard.display.mirror import Frame  # noqa: E402
 from nhl_scoreboard.display.teams import TEAM_COLORS, team_color  # noqa: E402
 
 DEFAULT_OUT = REPO_ROOT / "docs" / "screens"
+NFL_OUT = REPO_ROOT / "docs" / "football"
+MOCKUPS = REPO_ROOT / "scripts" / "football-mockups.py"
 #: A fixed clock keeps every image reproducible: the clock face, the
 #: countdown and the "in two days" preview read the same on every run.
 NOW = datetime(2026, 10, 14, 19, 30, tzinfo=ZoneInfo("America/Chicago"))
@@ -168,14 +178,37 @@ def to_image(frame: Frame) -> Image.Image:
     return img
 
 
-def render_all(out: Path, real_logos: bool = False) -> dict[str, Image.Image]:
+def render_all(out: Path, real_logos: bool = False, sport: str = "nhl") -> dict[str, Image.Image]:
+    previous = logging.root.manager.disable
     logging.disable(logging.CRITICAL)
+    try:
+        return _render(real_logos, sport)
+    finally:
+        logging.disable(previous)  # a test calling this must not mute the rest of the suite
+
+
+def _render(real_logos: bool, sport: str) -> dict[str, Image.Image]:
     with tempfile.TemporaryDirectory() as tmp:
-        logos = LogoLibrary.default() if real_logos else synthetic_logos(Path(tmp))
+        root = Path(tmp)
+        logos = LogoLibrary.default() if real_logos else synthetic_logos(root)
         app = make_app(logos)
-        images = {}
-        for step in demo_steps(app.settings.scoreboard.favourite_team, NOW):
-            images[step.name] = to_image(capture(app, step))
+        if sport == "nfl":
+            from nhl_scoreboard.display.logos import LogoSet
+            from nhl_scoreboard.football.demo import nfl_demo_steps
+
+            sys.path.insert(0, str(REPO_ROOT / "tests"))
+            from nfl_logos import write_synthetic_nfl_logos
+
+            if real_logos:
+                app.renderer.nfl_logos = LogoSet("nfl")
+            else:
+                base = write_synthetic_nfl_logos(root / "nfl-logos") / "nfl"
+                libraries = {12: LogoLibrary([base / "12" / "dark"], 12)}
+                app.renderer.nfl_logos = LogoSet("nfl", "dark", libraries)
+            steps = nfl_demo_steps(NOW)
+        else:
+            steps = demo_steps(app.settings.scoreboard.favourite_team, NOW)
+        images = {step.name: to_image(capture(app, step)) for step in steps}
     return images
 
 
@@ -183,8 +216,25 @@ def same_pixels(a: Image.Image, b: Image.Image) -> bool:
     return a.size == b.size and a.convert("RGB").tobytes() == b.convert("RGB").tobytes()
 
 
-def stale(out: Path, images: dict[str, Image.Image]) -> list[str]:
-    """Names whose committed PNG is missing or differs, plus orphaned files."""
+def mockup_names() -> set[str]:
+    """The hand-drawn football mockups still standing (empty once that script is deleted)."""
+    if not MOCKUPS.exists():
+        return set()
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("football_mockups", MOCKUPS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return set(module.SCREENS)
+
+
+def stale(
+    out: Path, images: dict[str, Image.Image], keep: frozenset[str] | set[str] = frozenset()
+) -> list[str]:
+    """Names whose committed PNG is missing or differs, plus orphaned files.
+
+    ``keep`` names files that belong to something else and are not orphans (the football mockups).
+    """
     problems = []
     for name, img in images.items():
         path = out / f"{name}.png"
@@ -193,34 +243,41 @@ def stale(out: Path, images: dict[str, Image.Image]) -> list[str]:
     problems += [
         f"{p.name} belongs to no demo step"
         for p in sorted(out.glob("*.png"))
-        if p.stem not in images
+        if p.stem not in images and p.stem not in keep
     ]
     return problems
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output directory")
+    parser.add_argument("--sport", choices=("nhl", "nfl"), default="nhl", help="Which demo steps")
+    parser.add_argument("--out", type=Path, default=None, help="Output directory")
     parser.add_argument("--check", action="store_true", help="Compare, don't write")
     parser.add_argument("--real-logos", action="store_true", help="Use assets/logos")
     args = parser.parse_args(argv)
 
-    images = render_all(args.out, args.real_logos)
+    nfl = args.sport == "nfl"
+    out = args.out or (NFL_OUT if nfl else DEFAULT_OUT)
+    keep = mockup_names() if nfl else set()
+    images = render_all(out, args.real_logos, args.sport)
     if args.check:
-        problems = stale(args.out, images)
+        problems = stale(out, images, keep)
         for problem in problems:
             print(problem, file=sys.stderr)
         if problems:
-            print("Run: python scripts/render-screens.py", file=sys.stderr)
+            print(
+                "Run: python scripts/render-screens.py" + (" --sport nfl" if nfl else ""),
+                file=sys.stderr,
+            )
         return 1 if problems else 0
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    for old in args.out.glob("*.png"):
-        if old.stem not in images:
+    out.mkdir(parents=True, exist_ok=True)
+    for old in out.glob("*.png"):
+        if old.stem not in images and old.stem not in keep:
             old.unlink()
     for name, img in images.items():
-        img.save(args.out / f"{name}.png", optimize=True)
-    print(f"Wrote {len(images)} images to {args.out}")
+        img.save(out / f"{name}.png", optimize=True)
+    print(f"Wrote {len(images)} images to {out}")
     return 0
 
 

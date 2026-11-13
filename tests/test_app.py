@@ -2624,3 +2624,21 @@ def test_admin_stays_off_the_setup_port_when_they_differ(fake_backend, games, tm
         assert app.admin_server.port == 8080
     finally:
         app.setup_server.stop()
+
+
+def test_demo_in_nfl_mode_loops_the_nfl_steps_and_stays_silent(fake_backend, games):
+    from nhl_scoreboard.football.demo import nfl_demo_steps
+
+    app, src = demo_app(fake_backend, games)
+    app._sport = "nfl"
+    stub_renderer(app)
+    calls = spy_draw_scene(app)
+    horn = []
+    app._on_goal = lambda *a, **k: horn.append(a)  # type: ignore[method-assign]
+    steps = nfl_demo_steps(DEMO_NOW)
+
+    run_demo_for_frames(app, src, 2 * TICKS_PER_SCENE)
+
+    assert [c[0].kind for c in calls] == [s.scene.kind for s in steps[:2]]
+    assert all(c[0].kind.startswith("fb_") for c in calls)
+    assert horn == []

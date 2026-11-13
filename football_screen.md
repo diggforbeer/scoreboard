@@ -705,12 +705,41 @@ celebrated. It compares **outcomes**, and reports the rules that fired: `play_go
   broadcast delay lets a poll in, so a reversal appears the same delay after the celebration.
 - Only celebrated plays are watched, so an opponent's score, or a game nobody follows, is silent.
 
+## Real renders
+
+Screens the board actually draws are rendered from the code, not by hand:
+`python scripts/render-screens.py --sport nfl` walks `football.demo.nfl_demo_steps()` (the
+same steps `nhl-scoreboard --demo` loops when `sport = "nfl"`) through the real app and writes
+`docs/football/<step name>.png` with synthetic team-coloured circles for logos and a fixed clock,
+so they are reproducible. `--sport nfl --check` fails when a committed image is stale, and a
+test does the same. Nothing here touches `docs/screens/`.
+
+| | |
+|---|---|
+| ![Connecting](docs/football/fb_connecting.png) | ![No data](docs/football/fb_no_data.png) |
+| `fb_connecting`: the feed has not answered yet. | `fb_no_data`: nothing fresh for 15 minutes. |
+| ![No games](docs/football/fb_no_games.png) | ![Pregame](docs/football/fb_scores_pregame.png) |
+| `fb_no_games`: nothing on the slate. | `fb_scores`, before kickoff: start time along the bottom. |
+| ![Live](docs/football/fb_scores_live.png) | ![Red zone](docs/football/fb_scores_redzone.png) |
+| `fb_scores`, live: down and distance, clock and quarter. | `fb_scores` in the red zone: the situation line turns red. |
+| ![Halftime](docs/football/fb_scores_halftime.png) | ![Final](docs/football/fb_scores_final.png) |
+| `fb_scores` at halftime. | `fb_scores`, final. |
+
+`fb_field` and `fb_field_redzone` (the resting field, below) are real renders too: the same
+names as their mockups, which they replaced.
+
+**Retiring the mockups.** A designed screen that gets a real renderer adds its steps to
+`football/demo.py`; a step named like a mockup replaces that image, and
+`scripts/football-mockups.py` stops rewriting it. When the last mockup is replaced, delete
+`scripts/football-mockups.py` and this paragraph's mockups section.
+
 ## Mockups
 
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py`.
+`python scripts/football-mockups.py` (except `fb_field` and `fb_field_redzone`, which are real
+renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
 no football renderer exists yet, so each frame is drawn pixel by pixel by that
