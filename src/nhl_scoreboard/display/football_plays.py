@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from ..football import textlayout as tl
 from ..football.director import DETAIL, EVENT, REVERSAL
 from ..football.events import CoinToss, FieldGoal, GenericScore, Touchdown, Turnover
 from ..football.geometry import FieldLayout
@@ -153,22 +154,56 @@ def r_fit(text: str, width: int, font: Any) -> str:
 
 
 def draw_playtext(r: Renderer, canvas: Any, scene: Scene) -> None:
-    """The field on the left half with the ball where the play left it, and the feed's own
-    sentence on the right. (The designed layout, with scrolling, replaces this.)"""
-    game, play = scene.fb_game, scene.fb_play
+    """The field and the feed's own sentence (#379).
+
+    128px: the field in the left half with the ball where the play left it, the sentence on the
+    right three lines at a time (it scrolls a line at a time when longer), and the new down and
+    distance under it. 64px: the field and the text take turns (``football.textlayout``).
+    """
+    play = scene.fb_play
     canvas.Clear()
-    half = r.width // 2
-    layout = FieldLayout.for_panel(r.width, 0, half)
+    wide = r.width >= 128
+    pos = play.end or play.start
+    down = pos.short_down_distance_text.upper() if pos else ""
+    if wide:
+        half = r.width // 2
+        _field_half(r, canvas, scene, 0, half)
+        x = half + 3
+        lines = wrap(play.text.upper(), r.width - x - 1, r.fonts.tiny, 99)
+        _text_lines(r, canvas, lines, x, tl.WIDE_LINES, scene.fb_elapsed, down)
+        return
+    visible = NARROW_LINES
+    lines = wrap(play.text.upper(), r.width - 3, r.fonts.tiny, 99)
+    view, t = tl.narrow_view(scene.fb_elapsed, len(lines), visible)
+    if view == "field":
+        _field_half(r, canvas, scene, 0, r.width)
+    else:
+        _text_lines(r, canvas, lines, 2, visible, t, down)
+
+
+#: Lines of text a 64px panel shows at once: three, with the down and distance under them.
+NARROW_LINES = 3
+
+
+def _field_half(r: Renderer, canvas: Any, scene: Scene, left: int, right: int) -> None:
+    """The field in ``left..right`` with the ball where the play left it, and its label."""
+    game, play = scene.fb_game, scene.fb_play
+    layout = FieldLayout.for_panel(r.width, left, right)
     pos = play.end or play.start
     side = _side(game, pos.team_id if pos else None)
     ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=None)
     if pos is not None and pos.yard_line is not None:
         ff.draw_ball(canvas, layout, pos.yard_line)
     label, color = play_label(scene)
-    r.text(canvas, r.fonts.tiny, 1, 6, color, r_fit(label, half - 2, r.fonts.tiny))
-    down = pos.short_down_distance_text.upper() if pos else ""
-    x = half + 3
-    for i, line in enumerate(wrap(play.text.upper(), r.width - x - 1, r.fonts.tiny, 3)):
+    r.text(canvas, r.fonts.tiny, left + 1, 6, color, r_fit(label, right - left - 2, r.fonts.tiny))
+
+
+def _text_lines(
+    r: Renderer, canvas: Any, lines: list[str], x: int, visible: int, elapsed: float, down: str
+) -> None:
+    """``visible`` lines of text from where the scroll has got to, with the down under them."""
+    first = tl.first_line(elapsed, len(lines), visible)
+    for i, line in enumerate(lines[first : first + visible]):
         r.text(canvas, r.fonts.tiny, x, 6 + 7 * i, WHITE, line)
     if down:
         r.text(
