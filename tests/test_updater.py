@@ -544,3 +544,40 @@ def test_invalid_branch_name_falls_back_to_main(tmp_path):
     cfg = tmp_path / "scoreboard.toml"
     cfg.write_text('[update]\nbranch = "../etc"\n')
     assert Settings.load(str(cfg)).update.branch == "main"
+
+
+def test_latest_for_branch_picks_the_highest_version_not_the_first_listed():
+    # GitHub lists by tag name, so ".9" arrives before ".21" (seen on the real
+    # listing). The newest by version must win whatever the order.
+    listing = [
+        _release("v2026.11.13"),
+        _release("v2026.11.13.9-football", prerelease=True),
+        _release("v2026.11.13.8-football", prerelease=True),
+        _release("v2026.11.13.21-football", prerelease=True),
+        _release("v2026.11.13.20-football", prerelease=True),
+        _release("v2026.11.13.2-football", prerelease=True),
+        _release("v2026.11.14-football", prerelease=True),
+        _release("v2026.11.14.1-football", draft=True),
+    ]
+    assert updater.latest_for_branch(listing, "football")["tag_name"] == "v2026.11.14-football"
+    without_next_day = [r for r in listing if not r["tag_name"].startswith("v2026.11.14")]
+    assert (
+        updater.latest_for_branch(without_next_day, "football")["tag_name"]
+        == "v2026.11.13.21-football"
+    )
+    assert (
+        updater.latest_for_branch(list(reversed(without_next_day)), "football")["tag_name"]
+        == "v2026.11.13.21-football"
+    )
+
+
+def test_check_on_a_branch_offers_the_highest_version(env, monkeypatch):
+    listing = [
+        _release("v2026.11.13"),
+        _release("v2026.11.13.9-football", prerelease=True),
+        _release("v2026.11.13.21-football", prerelease=True),
+    ]
+    _fake_listing(monkeypatch, listing)
+    state = updater.check("football")
+    assert state["latest"] == "v2026.11.13.21-football"
+    assert state["bundle_url"] == "http://b/v2026.11.13.21-football/bundle"

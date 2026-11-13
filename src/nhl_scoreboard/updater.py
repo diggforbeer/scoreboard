@@ -221,16 +221,26 @@ def channels(releases: Any) -> list[str]:
 
 
 def latest_for_branch(releases: Any, branch: str) -> dict[str, Any]:
-    """The newest release published for ``branch`` (GitHub lists newest first)."""
+    """The newest release published for ``branch``, by version.
+
+    Not "the first one listed": GitHub orders the listing by tag name, so
+    ``v2026.11.13.9-football`` comes before ``v2026.11.13.21-football``.
+    """
+    best: dict[str, Any] | None = None
+    best_key: tuple[int, ...] = ()
     if isinstance(releases, list):
         for item in releases:
-            if (
-                isinstance(item, dict)
-                and not item.get("draft")
-                and tag_branch(str(item.get("tag_name", ""))) == branch
-            ):
-                return item
-    raise KeyError(f"no release has been published for branch {branch!r}")
+            if not isinstance(item, dict) or item.get("draft"):
+                continue
+            tag = str(item.get("tag_name", ""))
+            if tag_branch(tag) != branch:
+                continue
+            key = _version_key(tag) or ()
+            if best is None or key > best_key:
+                best, best_key = item, key
+    if best is None:
+        raise KeyError(f"no release has been published for branch {branch!r}")
+    return best
 
 
 def configured_branch(config_path: str | None = None) -> str:
