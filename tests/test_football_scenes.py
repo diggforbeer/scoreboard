@@ -382,15 +382,15 @@ def test_connecting_then_scores_then_no_data_when_the_last_good_fetch_goes_stale
     assert m.scene().kind == "fb_connecting"
     m.worker.poll_once()
     scene = m.scene()
-    assert scene.kind == "fb_scores" and scene.fb_game == GAMES["live"]
+    assert scene.kind == "fb_field" and scene.fb_game == GAMES["live"]
     clock.t += STALE_AFTER_SECONDS - 1
     m.worker.poll_once()  # a failure: the last good games are kept
-    assert m.scene().kind == "fb_scores", "a blip does not blank the panel"
+    assert m.scene().kind == "fb_field", "a blip does not blank the panel"
     clock.t += 2
     assert m.scene().kind == "fb_no_data", "15 minutes after the last SUCCESS"
     feed.answers = [[GAMES["live"]]]
     m.worker.poll_once()
-    assert m.scene().kind == "fb_scores"
+    assert m.scene().kind == "fb_field"
 
 
 def test_a_feed_that_never_answers_is_connecting_for_15_minutes_then_no_data():
@@ -527,7 +527,7 @@ def test_the_status_box_reports_the_nfl_feed(app):
     app.feed.answers = [[GAMES["live"]]]
     app._nfl.worker.poll_once()
     snap = app.status_snapshot()
-    assert snap["scene"] == "fb_scores" and snap["last successful poll"] != "never"
+    assert snap["scene"] == "fb_field" and snap["last successful poll"] != "never"
     assert snap["last error"] == "(none)"
     assert snap["also following"] == "(none)"
 

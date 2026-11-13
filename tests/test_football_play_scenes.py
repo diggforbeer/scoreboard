@@ -102,7 +102,7 @@ def kinds_until_rest(app, clock, limit=400):
         scene = app.select_scene()
         if not seen or seen[-1] != (scene.kind, scene.fb_stage):
             seen.append((scene.kind, scene.fb_stage))
-        if scene.kind == "fb_scores":
+        if scene.kind == "fb_field":
             return seen
         app.draw_scene(scene)
         assert not app.matrix.shown.out_of_bounds, f"{scene.kind}/{scene.fb_stage} drew off-panel"
@@ -203,16 +203,16 @@ def test_a_failure_in_collecting_plays_never_blanks_the_scores(rig):
 
     espn.plays = boom
     app._nfl.worker.poll_once()
-    assert app._nfl.snapshot.games is not None and app.select_scene().kind == "fb_scores"
+    assert app._nfl.snapshot.games is not None and app.select_scene().kind == "fb_field"
 
 
 # -- a play through the real app ----------------------------------------------------------------
 
 
-def test_an_ordinary_play_runs_animation_then_text_then_returns_to_the_scores(rig):
+def test_an_ordinary_play_runs_animation_then_text_then_returns_to_the_field(rig):
     app, espn, clock = rig
     land(app, espn, rush(1))
-    assert app.select_scene().kind == "fb_scores", "the first poll is the baseline"
+    assert app.select_scene().kind == "fb_field", "the first poll is the baseline"
     land(app, espn, rush(1), rush(2))
     scene = app.select_scene()
     assert (scene.kind, scene.fb_stage, scene.animating) == ("fb_play", "play", True)
@@ -222,7 +222,7 @@ def test_an_ordinary_play_runs_animation_then_text_then_returns_to_the_scores(ri
     assert kinds_until_rest(app, clock) == [
         ("fb_play", "play"),
         ("fb_playtext", "playtext"),
-        ("fb_scores", ""),
+        ("fb_field", ""),
     ]
     app.draw_scene(app.select_scene())
     assert app.frame_interval() == FRAME_INTERVAL, "back to the slow loop at rest"
@@ -234,7 +234,7 @@ def test_a_favourite_touchdown_runs_the_whole_celebration(rig):
     land(app, espn, rush(1), make_play(2, "rush_td_pat", score=(0, 7), off="NYG"))
     assert kinds_until_rest(app, clock) == [
         ("fb_play", "play"), ("fb_event", "event"), ("fb_event", "detail"),
-        ("fb_playtext", "playtext"), ("fb_scores", ""),
+        ("fb_playtext", "playtext"), ("fb_field", ""),
     ]  # fmt: skip
 
 

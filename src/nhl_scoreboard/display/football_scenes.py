@@ -13,10 +13,12 @@ emulator, tests and the admin Live view all see the same pixels.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from ..football.models import FbGame, FbTeam
 from ..football.teams import team_color
+from .fonts import text_width
 
 if TYPE_CHECKING:
     from .renderer import Renderer
@@ -83,11 +85,16 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
 
 
 def draw_fb_field(r: Renderer, canvas: Any, game: FbGame) -> None:
-    """The resting field (#359): turf, end zones, the markers and the ball, under a one-line band.
+    """The resting field (#378): the screen between plays.
 
-    Only what the situation alone says: the ball at ``yardLine``, the first-down line ``distance``
-    yards ahead in the direction of play, the possessing team's logo bright. The animated plays
-    (run, pass, kicks) build on this; they are separate screens.
+    Turf, end zones tinted in team colours with the logos, the ball at ``yardLine``, the line of
+    scrimmage and the first-down line ``distance`` yards ahead **in the direction the offence
+    drives** (``yardLine`` runs from the home goal line, so the away team drives toward 0), and a
+    one-line band over it: the clock and quarter on the left, the down and distance on the right
+    (red in the red zone, which is also tinted on the field), and on a 128px panel the score
+    between them, because nothing else on this screen says it. No situation (a kickoff, between
+    quarters) draws the plain field. On a single 64px panel the end zones are 7px with no logo and
+    the band is the clock and ``2&7`` only.
     """
     from ..football.geometry import FieldLayout
     from . import football_field as ff
@@ -96,13 +103,80 @@ def draw_fb_field(r: Renderer, canvas: Any, game: FbGame) -> None:
     layout = FieldLayout.for_panel(r.width)
     sit = game.situation
     side = ff.possession_of(game, sit.possession_team_id) if sit is not None else None
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
-    if sit is not None and side is not None and sit.yard_line is not None:
-        ff.draw_markers(r, canvas, layout, sit.yard_line, sit.distance or 0, side)
+    in_red_zone = sit is not None and sit.is_red_zone and side is not None
+    ff.draw_field(
+        r,
+        canvas,
+        layout,
+        game.home.abbrev,
+        game.away.abbrev,
+        side,
+        logos=r.nfl_logos,
+        red_zone=side if in_red_zone else None,
+    )
+    if sit is not None and sit.yard_line is not None:
+        if side is not None:
+            ff.draw_markers(r, canvas, layout, sit.yard_line, sit.distance or 0, side)
         ff.draw_ball(canvas, layout, sit.yard_line)
-    text = (sit.short_down_distance_text if sit is not None else "").upper()
-    color = RED_ZONE if sit is not None and sit.is_red_zone else SITUATION
-    clock = r._fit_text(r.fonts.tiny, status_text(game, r), r.width // 2 - 2)
-    r.text(canvas, r.fonts.tiny, 1, 6, status_color(game), clock)
-    if text:
-        r.text_right(canvas, r.fonts.tiny, r.width - 1, 6, color, text)
+    _band(r, canvas, game, sit, in_red_zone)
+
+
+def _band(r: Renderer, canvas: Any, game: FbGame, sit: Any, in_red_zone: bool) -> None:
+    font, baseline = r.fonts.tiny, 6
+    wide = r.width >= 128
+    down = ""
+    if sit is not None:
+        down = (_tight(sit.short_down_distance_text) if wide else _compact_down(sit)).upper()
+    color = RED_ZONE if in_red_zone else SITUATION
+    right = r._fit_text(font, down, r.width // 2 - 2) if down else ""
+    if right:
+        r.text_right(canvas, font, r.width - 1, baseline, color, right)
+    left_room = r.width - text_width(font, right) - 3 - (56 if wide else 0)
+    clock = r._fit_text(font, band_clock(game, r), max(left_room, 8))
+    r.text(canvas, font, 1, baseline, status_color(game), clock)
+    if wide:
+        _score(r, canvas, game, baseline)
+
+
+_LIVE_CLOCK = re.compile(r"^\s*(\d{1,2}:\d{2})\s*-\s*(\d)(?:st|nd|rd|th)\s*$", re.I)
+
+
+def band_clock(game: FbGame, r: Renderer) -> str:
+    """``3RD 12:24`` for a live game (the feed says ``12:24 - 3rd``): short enough to leave the
+    middle of the band for the score, and not ``Q3`` because the 4x6 ``Q`` reads as a zero.
+    Anything else (halftime, OT wording) is shown as the feed words it."""
+    match = _LIVE_CLOCK.match(game.short_detail or game.detail or "") if game.is_live else None
+    if not match:
+        return status_text(game, r)
+    n = int(match.group(2))
+    ordinal = {1: "1ST", 2: "2ND", 3: "3RD"}.get(n, f"{n}TH")
+    return f"{ordinal} {match.group(1)}"
+
+
+def _tight(text: str) -> str:
+    """``1ST & GOAL`` -> ``1ST&GOAL`` when it would crowd the score."""
+    return text.replace(" & ", "&") if len(text) > 7 else text
+
+
+def _compact_down(sit: Any) -> str:
+    """``2&7`` for a 64px band; empty when there is no down."""
+    if sit.down is None or sit.distance is None:
+        return sit.short_down_distance_text
+    return f"{sit.down}&{sit.distance}"
+
+
+def _score(r: Renderer, canvas: Any, game: FbGame, baseline: int) -> None:
+    """``WSH 10 NYG 17`` centred in the band, each abbreviation in its team's colour."""
+    font = r.fonts.tiny
+    parts = [
+        (game.away.abbrev, side_color(game.away)),
+        (str(game.away.score), WHITE),
+        (game.home.abbrev, side_color(game.home)),
+        (str(game.home.score), WHITE),
+    ]
+    gaps = (2, 4, 2, 0)  # abbreviation-score, between the teams, abbreviation-score
+    total = sum(text_width(font, t) for t, _ in parts) + sum(gaps)
+    x = (r.width - total) // 2
+    for (text, color), gap in zip(parts, gaps, strict=True):
+        r.text(canvas, font, x, baseline, color, text)
+        x += text_width(font, text) + gap

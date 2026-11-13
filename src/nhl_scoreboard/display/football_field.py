@@ -36,6 +36,9 @@ MID_FIELD: RGB = (0, 150, 60)
 SCRIMMAGE: RGB = (70, 130, 255)
 FIRST_DOWN: RGB = (255, 225, 0)
 BALL: RGB = (214, 130, 54)
+#: The red zone: the 20 yards in front of the goal line the offence is attacking.
+RED_ZONE_TINT: RGB = (90, 0, 0)
+RED_ZONE_YARDS = 20
 #: A team that is not one of the 32: drawn plain, like the NHL default.
 UNKNOWN_TEAM: RGB = (220, 220, 220)
 #: How much of a team's colour tints its end zone.
@@ -67,13 +70,16 @@ def draw_field(
     logos: LogoSet | None = None,
     scrimmage: float | None = None,
     first_down: float | None = None,
+    red_zone: str | None = None,
 ) -> None:
     """Draw the field for ``home`` (left) versus ``away`` (right).
 
     ``possession`` is ``HOME``, ``AWAY`` or ``None`` (nobody has the ball yet: both logos at full
     brightness). ``scrimmage`` and ``first_down`` are yard lines (0-100 from the home goal line)
-    for the two markers; leave them out for a plain field. ``logos`` supplies the end-zone art;
-    without it, or without a team's logo, the abbreviation is drawn instead where it fits.
+    for the two markers; leave them out for a plain field. ``red_zone`` is the side whose offence
+    is inside the opponent's 20, and tints the 20 yards it attacks. ``logos`` supplies the
+    end-zone art; without it, or without a team's logo, the abbreviation is drawn instead where
+    it fits.
     """
     colors = {HOME: team_rgb(home), AWAY: team_rgb(away)}
     names = {HOME: home, AWAY: away}
@@ -85,6 +91,12 @@ def draw_field(
         tint = _scale(colors[side], END_ZONE_TINT)
         for y in range(layout.top, layout.bottom + 1):
             r.hline(canvas, first, last, y, tint)
+
+    if red_zone in (HOME, AWAY):
+        # The offence drives toward 100 when it is the home team (see geometry.drive_direction).
+        near, far = (100 - RED_ZONE_YARDS, 100) if red_zone == HOME else (0, RED_ZONE_YARDS)
+        for y in range(layout.top, layout.bottom + 1):
+            r.hline(canvas, layout.px(near), layout.px(far), y, RED_ZONE_TINT)
 
     for yard in range(0, 101, 10):
         color = MID_FIELD if yard in (0, 50, 100) else YARD_LINE
