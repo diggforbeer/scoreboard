@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import FrameType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import qrcode
 
@@ -282,6 +282,7 @@ class ScoreboardApp:
         ip_lookup: Callable[[], str | None] | None = None,
         hostname_lookup: Callable[[], str] | None = None,
         alias_publisher: AliasPublisher | None = None,
+        nfl_client_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.settings = settings
         self._hostname_lookup = hostname_lookup or current_hostname
@@ -525,7 +526,8 @@ class ScoreboardApp:
         #: ``_switch_sport`` changes it, so ``current_mode()`` is the one
         #: place that decides which sport's code runs.
         self._sport = settings.scoreboard.sport
-        self._nfl: NflMode | None = NflMode() if self._sport == "nfl" else None
+        self._nfl_client_factory = nfl_client_factory
+        self._nfl: NflMode | None = self._new_nfl() if self._sport == "nfl" else None
         #: Set by a sport switch so run() fetches on its next pass rather than
         #: leaving the new sport on ``connecting`` for a whole poll interval.
         self._poll_asap = False
@@ -565,6 +567,8 @@ class ScoreboardApp:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
         self.swap_canvas()
+        if self._nfl is not None:
+            self._nfl.start()
 
         next_poll = 0.0
         next_rotate = 0.0
@@ -739,6 +743,8 @@ class ScoreboardApp:
 
     def shutdown(self) -> None:
         try:
+            if self._nfl is not None:
+                self._nfl.stop()
             if self.admin_server is not None:
                 self.admin_server.stop()
             if self.setup_server is not None:
@@ -754,6 +760,15 @@ class ScoreboardApp:
 
     # -- data ------------------------------------------------------------
 
+    def _new_nfl(self) -> NflMode:
+        """A fresh NFL mode over the live settings. Its feed thread is not started here:
+        ``run()`` starts it, and a live sport switch starts it once the loop is running."""
+        return NflMode(
+            lambda: self.settings.scoreboard,
+            client_factory=self._nfl_client_factory,
+            monotonic=self.monotonic,
+        )
+
     def current_mode(self) -> str:
         """``nhl`` or ``nfl``: the one place that says which sport is running (#346)."""
         return self._sport
@@ -768,8 +783,12 @@ class ScoreboardApp:
         owner's, not the sport's, so it survives.
         """
         log.info("Switching sport %s -> %s", self._sport, sport)
+        if self._nfl is not None:
+            self._nfl.stop()  # its feed thread must not outlive the mode
         self._sport = sport
-        self._nfl = NflMode() if sport == "nfl" else None
+        self._nfl = self._new_nfl() if sport == "nfl" else None
+        if self._nfl is not None and self._running:
+            self._nfl.start()
         self._poll_asap = True
         self.games = []
         self.index = 0

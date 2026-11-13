@@ -80,6 +80,21 @@ picker. There is no mixing, no priority between the two sports, and no
   `address`, `connecting`, `no_data`, `no_games`, and the idle clock. How much of
   the idle rotation (standings and so on) carries over is for the NFL side to
   decide; the NHL-only ones (NHL standings, matchup, leaders) do not apply.
+- **NFL mode fetches off the render thread** (story #351). A feed worker
+  (`football/worker.py`) owns the ESPN client and polls on its own thread; the render
+  loop only reads the latest immutable snapshot, so a slow request never freezes the
+  panel or an animation. The NHL side still fetches on the render loop (#267), so this is
+  a difference between the sports on purpose. How it behaves:
+  - It starts when the board enters NFL mode (or when `run()` starts in NFL mode) and
+    stops on a switch back to NHL or on exit; nothing runs, and nothing fetches, otherwise.
+  - A failed fetch **keeps the last good games** and records the error, so the panel does
+    not blank on a blip. Failures back off (the poll interval, doubling, capped at 120s).
+  - The data is **stale** when the last *successful* fetch is over 15 minutes old, the same
+    window as NHL. Before the first success it is "connecting", not stale.
+  - It polls at `live_poll_seconds` while a game is live and `poll_seconds` otherwise,
+    never faster than every 10s (the feed caches for 7-9s). Changes on the admin page
+    apply at the next poll.
+  - A fetch slower than 3s is logged at WARNING with its duration.
 - The picker keeps all sport-specific code behind one switch, which is what lets
   the branch merge to `main` later without changing NHL boards.
 

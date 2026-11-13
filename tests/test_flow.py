@@ -190,6 +190,18 @@ def fake_backend() -> Backend:
     return Backend("fake", FakeMatrix, FakeOptions, FakeGraphics)
 
 
+class FakeNflClient:
+    """Stands in for the ESPN client: an empty slate, instantly, no network."""
+
+    last_error = ""
+
+    def scores(self, date=None):
+        return []
+
+    def close(self):
+        pass
+
+
 def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -> ScoreboardApp:
     settings = Settings()
     settings.scoreboard.favourite_team = FAV
@@ -202,6 +214,7 @@ def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -
         clock=lambda: clock.now,
         monotonic=lambda: clock.mono,
         horn=horn or RecordingHorn(),
+        nfl_client_factory=FakeNflClient,
     )
 
 
@@ -2216,7 +2229,8 @@ def test_switching_to_nfl_shows_connecting_then_the_stub_and_back(day):
     switch_sport(app, "nfl")
     assert app.current_mode() == "nfl"
     assert app.select_scene().kind == "fb_connecting"
-    app.refresh()
+    # The feed lands on the worker's own thread in real life; here one fetch is run by hand.
+    app._nfl.worker.poll_once()
     assert app.select_scene().kind == "fb_stub"
     app.draw()  # draws through the real renderer without error
 
