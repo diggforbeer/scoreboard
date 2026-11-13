@@ -675,8 +675,35 @@ with the original call and the corrected play split apart). Upheld reviews also 
 by a team names the team and costs a timeout (`(Timeout #1.)`).
 
 **Still unverified:** what the feed shows *while* a review is in progress, and how long
-after the original call it is rewritten. Those need a live game; the detector should log
-every case it matches so the rules can be tightened.
+after the original call it is rewritten. Those need a live game; the detector logs every case
+it matches so the rules can be tightened.
+
+**Built (story #357, `football/reversals.py`).** A `ReversalDetector` remembers every celebrated
+score and turnover and compares each poll's plays (rewritten ones included) with what was
+celebrated. It compares **outcomes**, and reports the rules that fired: `play_gone`,
+`flag_cleared` (no longer scores, or no longer a turnover), `type_changed`, `score_dropped`, and
+`possession_restored` (a turnover on downs that is not one any more). Decisions it embodies:
+
+- **The review sentence is not a rule on its own.** A review can go the *other* way: an
+  incompletion reversed into a touchdown is a touchdown the board celebrated, correctly. So
+  `the play was REVERSED` only supplies the reason, and a review that is upheld, or reversed in
+  the play's favour, is not a reversal. A text-only edit is not one either.
+- **The reason is the feed's own words:** the corrected play with formation and substitution
+  noise trimmed (`D.Prescott pass incomplete short right to C.Lamb.`), else the accepted penalty
+  (`OFFENSIVE HOLDING ON ATL, NO PLAY`), else the ruling (`PASS COMPLETION RULING REVERSED`), else
+  `PLAY CHANGED ON REVIEW`. The title is `TOUCHDOWN OVERTURNED`, `FIELD GOAL NEGATED`, `SCORE
+  OVERTURNED` or `TURNOVER OVERTURNED`; the scope is the celebration's own; it never has a sound.
+- **Reported once.** After it fires the play is forgotten; a later change is a new play.
+- **A failed fetch is not a reversal:** an empty poll never makes a play "disappear".
+- **A reversal that lands while the celebration is still waiting in the queue** (the poll with
+  the rewritten play is applied first) is reported as soon as the celebration is remembered.
+- **The running score is corrected.** A reversed touchdown leaves the event detector's tracked
+  score 7 too high, which would make the *next* real touchdown show no change and go
+  uncelebrated. The reversal takes back only its own points (`EventDetector.retract`), so later
+  valid scores stay.
+- **Same clock as the celebration:** `PlayWatcher` takes an `on_applied` hook, called when the
+  broadcast delay lets a poll in, so a reversal appears the same delay after the celebration.
+- Only celebrated plays are watched, so an opponent's score, or a game nobody follows, is silent.
 
 ## Mockups
 
@@ -942,7 +969,7 @@ added later.
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
 - [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
       support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
-- [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
+- [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)
 - [ ] `fb_reversal` screen
 - [x] Live sport switch: tear down the old sport's state and baseline the new one cleanly
 - [x] `[scoreboard] sport` setting and the admin page picker (#345); NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode (#348)

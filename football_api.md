@@ -266,3 +266,24 @@ from the journal (`journalctl -u nhl-scoreboard | grep "play shown"`).
 - `Fumble Recovery (Own)` can still change `end.team` (a fumble on a punt return that the
   returning team recovers), and is **not** flagged: only `Fumble Recovery (Opponent)` is a turnover.
 
+## Reversals: unverified while in progress (#357)
+
+Finished games show a reversed play **rewritten in place** (see "The play feed"). What nobody
+has seen is the feed **during** a review, or how long after the original call the rewrite
+arrives. `football/reversals.py` is built on the finished shape and logs every match at INFO
+(`reversal detected: play=... kind=... rules=... review=yes|no reason=...`), which is how the
+live behaviour gets learned.
+
+**To capture one from a live game** (a review happens in perhaps one game in three):
+
+1. Find the event id on `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`.
+2. Poll it and keep every answer: `while true; do curl -s "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=<id>" > "cap-$(date +%s).json"; sleep 10; done`
+3. When the broadcast shows a review, compare the captures on either side of it for the play's
+   `id`, `type.text`, `scoringPlay`, `isTurnover`, the score and `text` (for example `jq` on
+   `.drives.current.plays[-3:]`). The questions to answer: does the original play stay as it was
+   until the ruling and then change, does it vanish for a poll, and how many seconds pass?
+4. Keep the captures as fixtures under `tests/fixtures/football/` and add a test; if the rules
+   in `reversals.py` do not match what is there, fix them from the evidence.
+
+`nhl-scoreboard --watch-nfl <id>` also runs the play queue against the live feed and logs.
+

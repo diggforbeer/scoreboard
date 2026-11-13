@@ -228,7 +228,11 @@ class PlayWatcher:
         utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
         backlog: int = BACKLOG,
         speedup: float = SPEEDUP,
+        on_applied: Callable[[int | str, Sequence[Play]], None] | None = None,
     ) -> None:
+        #: Called with each poll's plays when the broadcast delay lets them in, so a reversal
+        #: detector sees a rewritten play on the same clock as the celebration of it (#357).
+        self._on_applied = on_applied
         self._monotonic = monotonic
         self._delay_seconds = delay_seconds
         self._utc_now = utc_now
@@ -251,7 +255,13 @@ class PlayWatcher:
     def on_fetch(self, game_id: int | str, plays: Sequence[Play]) -> None:
         """A poll's plays arrived. They are applied after the broadcast delay."""
         queue = self.queue(game_id)
-        self._delay.submit(game_id, self._delay_seconds(), lambda: queue.offer(plays))
+
+        def apply() -> None:
+            queue.offer(plays)
+            if self._on_applied is not None:
+                self._on_applied(game_id, plays)
+
+        self._delay.submit(game_id, self._delay_seconds(), apply)
 
     @property
     def waiting(self) -> int:
