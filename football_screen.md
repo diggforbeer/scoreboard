@@ -364,6 +364,16 @@ Per-play notes, from real text:
 - **Sacks:** `sacked at CIN 31 for -6 yards (L.London)`. A sack for 0 yards
   (`for 0 yards`) is seen too: the burst plays with no slide. A sack that ends in a
   fumble is `Sack Opp Fumble Recovery` and goes to the turnover screen.
+- **Built (story #382, `display/football_kickoff.py`).** The ball sits on the tee, **arcs
+  high** to the landing spot (tee plus the printed kick distance in the kicking team's
+  direction, so no team names need parsing; the apex is kept on the field), then the returner's
+  number **runs it back** to `end.yardLine` with a trail; on a **touchback** it lands in the end
+  zone and **steps out** to the spot; an **onside kick** is the same animation with a low arc.
+  Shares of the stage: tee 0-8%, flight 8-50%, down 50-55%, return or step-out 55-90%, settled
+  90-100% (the markers appear then). Labels `KICKOFF 59 YD`, then `RETURN 24 YD` (green, red
+  for a loss) or `TOUCHBACK`, `ONSIDE KICK 19 YD`. 5s with a return, 4s for a touchback or onside
+  kick (`football/pacing.py`). A penalty changes where the ball finally sits, not the printed
+  return: it runs the printed return and **finishes at `end.yardLine`**.
 - **Penalties:** type `Penalty` is used **even when a play happened**. One sample is
   a QB scramble that gained 6 yards and was then wiped out by a hold
   (`scrambles up the middle to CIN 1 for 6 yards ... PENALTY on ATL-M.Bergeron,
@@ -862,6 +872,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Deep](docs/football/fb_pass_deep.png) | |
 | A deep pass arcs higher. | |
 
+**Kickoffs** (#382; in the air, returned, a touchback, an onside kick):
+
+| | |
+|---|---|
+| ![Kick in the air](docs/football/kickoff_air.png) | ![Return](docs/football/kickoff_return.png) |
+| The kick on its high arc with the dotted path behind it. | The returner's number runs it back, the markers at the new spot. |
+| ![Touchback](docs/football/kickoff_touchback.png) | ![Onside](docs/football/kickoff_onside.png) |
+| Down in the end zone, the ball steps out to the spot. | An onside kick: a short, low line drive. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -890,7 +909,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run` and `fb_pass`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air` and `kickoff_return`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1162,7 +1181,7 @@ added later.
 - [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
       event screens, registries (#377)
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
-- [ ] Kickoff and punt animations (arc, return, fair catch, out of bounds, touchback)
+- [~] Kickoff animation done (#382); punt animations still to do
 - [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;

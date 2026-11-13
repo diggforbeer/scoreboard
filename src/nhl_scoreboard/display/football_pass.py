@@ -112,7 +112,7 @@ def draw_pass(r: Renderer, canvas: Any, scene: Scene) -> None:
         x, y = arc_point(layout.x(start), layout.x(caught), qb_y + (target_y - qb_y) * t, height, t)
         y = max(layout.top + 1.0, y)
         here = layout.yard_at(x)
-        _dotted_arc(canvas, layout, start, caught, qb_y, target_y, height, t)
+        draw_dotted_arc(canvas, layout, start, caught, qb_y, target_y, height, t)
         label, at = "", (here, y)
     else:
         t = eased((share - CATCH) / (RUN_END - CATCH))
@@ -128,7 +128,7 @@ def draw_pass(r: Renderer, canvas: Any, scene: Scene) -> None:
     r.text_right(canvas, r.fonts.tiny, r.width - 1, 6, DIM, clock)
 
 
-def _dotted_arc(
+def draw_dotted_arc(
     canvas: Any, layout: FieldLayout, start: float, caught: float, y0: float, y1: float,
     height: float, upto: float,
 ) -> None:  # fmt: skip

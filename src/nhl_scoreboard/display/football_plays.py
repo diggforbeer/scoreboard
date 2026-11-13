@@ -277,4 +277,4 @@ def draw_generic_event(r: Renderer, canvas: Any, scene: Scene) -> None:
 
 
 # Each designed screen lives in its own module and registers itself on import.
-from . import football_pass, football_run  # noqa: E402,F401
+from . import football_kickoff, football_pass, football_run  # noqa: E402,F401
