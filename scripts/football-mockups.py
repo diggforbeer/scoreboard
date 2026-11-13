@@ -309,27 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def kickoff_air() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(AWAY)
-    arc(p, f, 65, 1, 20, 11, upto=0.55)
-    f.ball(35, 11)
-    band(p, "Q1 15:00", "KICKOFF 64 YD", WHITE, AMBER)
-    return p
-
-
-def kickoff_return() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    trail(p, f, 1, 20, 20)
-    f.ball(20)
-    f.number(20, 17, "29")
-    band(p, "Q1 15:00", "RETURN 24 YD", WHITE, GREEN)
-    return p
-
-
 def punt_fair_catch() -> Panel:
     p = Panel()
     f = Field(p)
@@ -571,8 +550,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "kickoff_air": kickoff_air,
-    "kickoff_return": kickoff_return,
     "punt_fair_catch": punt_fair_catch,
     "punt_return": punt_return,
     "incomplete": incomplete,

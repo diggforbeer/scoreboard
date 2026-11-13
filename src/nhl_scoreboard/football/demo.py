@@ -147,6 +147,21 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         "Pass Reception", "(Shotgun) D.Jones pass deep left to W.Robinson to WSH 33 for 28 yards.",
         39, 67, HOME, 28, yac=12,
     )  # fmt: skip
+    kickoff = _play(
+        "Kickoff",
+        "N.Folk kicks 60 yards from NYG 35 to WSH 5. D.Meyers to WSH 25 for 20 yards (N.Muse).",
+        35, 75, HOME, 0, end_team=AWAY,
+    )  # fmt: skip
+    touchback = _play(
+        "Kickoff", "A.Szmyt kicks 65 yards from WSH 35 to end zone, Touchback to the NYG 35.",
+        65, 35, AWAY, 0, end_team=HOME,
+    )  # fmt: skip
+    onside = _play(
+        "Kickoff",
+        "N.Folk kicks onside 19 yards from NYG 35 to WSH 46. M.Nabers (didn't try to advance) "
+        "to WSH 46 for no gain.",
+        35, 54, HOME, 0, end_team=AWAY,
+    )  # fmt: skip
     kneel = _play("Rush", "D.Jones kneels to NYG 22 for -1 yards.", 23, 22, HOME, -1)
     loss = _play(
         "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
@@ -181,6 +196,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     )  # fmt: skip
 
     carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
+    meyers = Person("returner", 4, "D. Meyers", "11", "WR", True)
     robinson = Person("rusher", 9, "B. Robinson", "9", "RB", True)
     qb = Person("passer", 9, "M. Penix", "9", "QB", True)
     dotson = Person("receiver", 1, "J. Dotson", "1", "WR", True)
@@ -211,6 +227,10 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(outside, 1.2, robinson), name="fb_run_outside"),
         DemoStep(run(loss, 1.2, carrier), name="fb_run_loss"),
         DemoStep(run(kneel, 1.0, None), name="fb_run_kneel"),
+        DemoStep(run(kickoff, 1.5, meyers), name="kickoff_air"),
+        DemoStep(run(kickoff, 3.8, meyers), name="kickoff_return"),
+        DemoStep(run(touchback, 3.2, None), name="kickoff_touchback"),
+        DemoStep(run(onside, 1.2, None), name="kickoff_onside"),
         DemoStep(run(pass_play, 0.2, qb, dotson), name="fb_pass_snap"),
         DemoStep(run(pass_play, 1.0, qb, dotson), name="fb_pass"),
         DemoStep(run(pass_play, 2.2, qb, dotson), name="fb_pass_catch"),
