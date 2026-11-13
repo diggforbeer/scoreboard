@@ -25,7 +25,7 @@ which one shows; `ScoreboardApp.draw_scene()` hands it to a `Renderer.draw_*`
 method.
 
 - [How a screen gets chosen](#how-a-screen-gets-chosen)
-- [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `three_stars`, shootout, `scores`
+- [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `penalty`, `three_stars`, shootout, `scores`
 - [Before a game](#before-a-game): `preview`, `countdown`, `matchup`, `matchup_meetings`
 - [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`
 - [Setup and status screens](#setup-and-status-screens): `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games`
@@ -40,7 +40,7 @@ Highest priority first:
 1. `wifi_join`: while a Wi-Fi join from the setup page is running, and for 15s after.
 2. `ap_setup`: while the board has no network and is broadcasting its own setup network.
 3. Night-mode blanking, if `dim_brightness = 0`: nothing is drawn at all.
-4. Goal override: `goal`, then `goal_detail`, or `three_stars` after a final.
+4. Goal override: `goal`, then `goal_detail`; then `penalty`, or `three_stars` after a final.
 5. Followed teams' live games (the favourite, plus `also_follow`).
 6. The favourite's own screen: live, then the held final, then a game today, then the next game from the schedule.
 7. With nothing live or upcoming, the **idle rotation**: a list of screens, each for its own number of seconds, set by `[[rotation]]` entries in `scoreboard.toml` or the admin page's Idle rotation card. A screen with nothing to show right now is skipped, never shown blank.
@@ -129,6 +129,29 @@ It shows once the NHL names the scorer, usually seconds after the goal. For
 the favourite's goal it waits for the goal light to finish its
 `goal_flash_seconds`, then gets its own full `goal_detail_seconds` (#338). A
 followed team's quick goal flash is replaced as soon as the scorer is ready.
+
+### `penalty`: who took it, and for what (#340)
+
+![Penalty](docs/screens/penalty.png)
+![Fight](docs/screens/penalty_fight.png)
+
+When a penalty is called in the favourite's live game, on **either** team (an
+opponent's penalty is good news), the board shows `PENALTY` and the team, the
+player (`#29 MACKINNON`, in the team's colour), and the call with its length
+(`SLASHING  2:00`). It takes the whole panel, no logos. A hazard-tape border
+and an amber strobe open it, a whistle shakes in with rings rippling out,
+then the text fades in; the picture above is the settled frame. Minors are
+amber, majors red, misconducts dim red. It runs 6.5s (2.5s of entrance).
+
+- A fight's four entries collapse into one `FIGHT` screen: `FIGHTING 5:00`,
+  no single name. A bench minor reads `BENCH MINOR`; a double minor is one
+  `4:00` screen.
+- The first fetch for a game is a baseline, so a restart mid-game doesn't
+  replay old penalties. Goal screens win over it, and it never shows over
+  idle screens, a shootout or a final. It follows the broadcast delay.
+- Read from `summary.penalties` in the same `landing` payload as the scorer
+  (no extra request), on `live_poll_seconds`, only for the favourite's live game.
+- Not verified on a live game (does `landing` lag the whistle?) or on hardware (#4).
 
 ### `three_stars`: the NHL's three stars
 
@@ -357,7 +380,7 @@ date window in the board's timezone.
 
 - A **fly-by** sprite crosses the panel now and then (`flyby_frequency`:
   `rare` about 1 an hour, `occasional` about 3, `frequent` about 6), even
-  during a game, but never over `goal`, `goal_detail`, `three_stars`,
+  during a game, but never over `goal`, `goal_detail`, `penalty`, `three_stars`,
   `ap_setup` or `wifi_join`.
 - **Static decorations** (pumpkins, presents and so on) go only on `clock` and
   `no_games`: the logos fill both edges of every game, countdown and preview.

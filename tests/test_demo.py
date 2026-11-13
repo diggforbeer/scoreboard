@@ -20,6 +20,7 @@ EVERY_KIND = {
     "game",
     "goal",
     "goal_detail",
+    "penalty",
     "three_stars",
     "standings",
     "matchup",

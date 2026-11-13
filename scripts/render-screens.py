@@ -54,6 +54,8 @@ FLYBY_STILL_SECONDS = 2.0
 SHOOTOUT_SETTLED_SECONDS = 2.0
 #: Seconds into the goal light: everything has landed and the shimmer is mid-GOAL.
 GOAL_STILL_SECONDS = 3.3
+#: Past the penalty screen's entrance, so the still is the settled frame.
+PENALTY_STILL_SECONDS = 3.0
 
 CELL = 8  # output pixels per LED
 UNLIT = (14, 14, 14)
@@ -128,6 +130,9 @@ def capture(app: ScoreboardApp, step) -> Frame:
     app._start_demo_holiday(step)
     app._start_demo_shootout(step)
     app._start_demo_goal(step)
+    app._start_demo_penalty(step)
+    if step.animate_penalty:
+        app._now[0] += PENALTY_STILL_SECONDS
     if step.animate_goal:
         app._now[0] += GOAL_STILL_SECONDS
     if step.holiday:
@@ -139,11 +144,14 @@ def capture(app: ScoreboardApp, step) -> Frame:
     # Mid-animation frames are held back from snapshots, which is right for
     # the live view but not for a still of an animated screen.
     app._overlay_animating = app._shootout_animating = app._scroll_animating = False
-    app._goal_building = False
+    app._goal_building = app._penalty_building = False
     app.mirror.requested = True
     before = app.mirror.latest()
     app.draw_scene(scene)
     frame = app.mirror.latest()
+    if step.animate_penalty:
+        # Give the time back: the shared clock also times the later holiday steps.
+        app._now[0] -= PENALTY_STILL_SECONDS
     if frame is None or frame is before:
         raise RuntimeError(f"{step.name}: no frame was snapshotted")
     return frame
