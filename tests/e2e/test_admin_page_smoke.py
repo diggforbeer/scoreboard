@@ -360,3 +360,69 @@ def test_live_view_shows_a_snapshot_and_refreshes(live_admin_page):
             assert not mirror.watching, "closing the live view must stop the snapshots"
         finally:
             browser.close()
+
+
+def _wait_until(condition, timeout=15.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return
+        time.sleep(0.1)
+    raise AssertionError("condition never became true")
+
+
+def test_nfl_mode_has_its_own_favourite_and_followed_teams(admin_page):
+    """#348: in NFL mode the Scoreboard card shows the NFL pickers, backed by the separate
+    ``[football]`` section. Switching sport swaps the pickers without losing either set of
+    choices, and BUF as the NHL favourite and BUF as the NFL favourite are two settings."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#sb-favourite-team", timeout=15000)
+
+            # NHL mode: the NHL pickers, and no NFL ones.
+            assert page.locator("#fb-favourite-team").count() == 0
+            page.select_option("#sb-favourite-team", "BUF")
+            _wait_until(lambda: admin_page.config()["scoreboard"].get("favourite_team") == "BUF")
+
+            # Switching to NFL swaps the pickers.
+            page.select_option("#sb-sport", "nfl")
+            page.wait_for_selector("#fb-favourite-team", timeout=15000)
+            assert page.locator("#sb-favourite-team").count() == 0
+            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "nfl")
+            # All 32 NFL teams are offered, plus "(none)", and there is no default favourite.
+            assert page.locator("#fb-favourite-team option").count() == 33
+            assert page.input_value("#fb-favourite-team") == ""
+
+            page.select_option("#fb-favourite-team", "BUF")  # the same abbreviation, NFL's team
+            page.check("#fb-follow-NYG")
+            page.check("#fb-follow-WSH")
+            _wait_until(
+                lambda: admin_page.config().get("football", {}).get("also_follow") == ["NYG", "WSH"]
+            )
+            football = admin_page.config()["football"]
+            assert football["favourite_team"] == "BUF"
+            assert admin_page.config()["scoreboard"]["favourite_team"] == "BUF"  # NHL's, untouched
+
+            # The favourite is not also offered as a followed team.
+            assert page.locator("#fb-follow-BUF").count() == 0
+
+            # A reload keeps the sport and the NFL choices.
+            page.reload()
+            page.wait_for_selector("#fb-favourite-team", timeout=15000)
+            assert page.input_value("#fb-favourite-team") == "BUF"
+            assert page.is_checked("#fb-follow-NYG") and page.is_checked("#fb-follow-WSH")
+
+            # Back to NHL: its own favourite is still there, and the NFL choices are kept on disk.
+            page.select_option("#sb-sport", "nhl")
+            page.wait_for_selector("#sb-favourite-team", timeout=15000)
+            assert page.input_value("#sb-favourite-team") == "BUF"
+            assert page.locator("#fb-favourite-team").count() == 0
+            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "nhl")
+            assert admin_page.config()["football"]["also_follow"] == ["NYG", "WSH"]
+        finally:
+            browser.close()

@@ -302,6 +302,7 @@ from .config import (
 from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
+from .football import teams as nfl_teams
 from .hostname import (
     apply_hostname,
     current_hostname,
@@ -389,7 +390,9 @@ WS_MAX_SIZE = HORN_MAX_BYTES * 4 // 3 + 4096
 
 @dataclasses.dataclass(frozen=True)
 class _FieldSpec:
-    kind: str  # "bool" | "str" | "float" | "int" | "select" | "teams"
+    #: "bool" | "str" | "float" | "int" | "select" | "teams" (NHL abbreviations) |
+    #: "nfl_team" (one NFL abbreviation, or empty) | "nfl_teams" (a list of them)
+    kind: str
     choices: tuple[str, ...] = ()
     #: Mirrors status_server.py's own per-field flag (#178 story 7) -- a
     #: value that only takes effect after nhl-scoreboard.service restarts,
@@ -458,6 +461,13 @@ _STATUS_FIELDS: dict[str, _FieldSpec] = {
 #: it's informational only, the driver never reads it (CLAUDE.md). The
 #: five brightness-related fields hot-apply; every other field here is
 #: restart_required, since it's baked into the constructed RGBMatrix.
+#: ``[football]`` (#348): the NFL favourite and followed teams, validated against the NFL
+#: table, not the NHL one (abbreviations like BUF overlap but mean different teams).
+_FOOTBALL_FIELDS: dict[str, _FieldSpec] = {
+    "favourite_team": _FieldSpec("nfl_team"),
+    "also_follow": _FieldSpec("nfl_teams"),
+}
+
 _PANEL_FIELDS: dict[str, _FieldSpec] = {
     "brightness": _FieldSpec("int"),
     "auto_brightness": _FieldSpec("bool"),
@@ -574,6 +584,24 @@ def _holiday_payload(settings: Settings) -> dict[str, object]:
         "frequencies": [
             {"name": name, "label": f.label, "description": f.description}
             for name, f in FLYBY_FREQUENCIES.items()
+        ],
+    }
+
+
+def _football_payload(settings: Settings) -> dict[str, object]:
+    """``[football]`` plus the 32 teams it picks from (#348).
+
+    ``available`` comes from the NFL table itself, so the page has no second copy of the
+    team list to drift out of date (the NHL picker still has one, in ``App.tsx``).
+    """
+    cfg = settings.football
+    return {
+        "type": "config",
+        "section": "football",
+        "data": {"favourite_team": cfg.favourite_team, "also_follow": list(cfg.also_follow)},
+        "available": [
+            {"abbrev": t.abbrev, "name": f"{t.city} {t.nickname}"}
+            for t in sorted(nfl_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
         ],
     }
 
@@ -866,6 +894,13 @@ async def _send_holiday_config(
 async def _send_wifi_config(connection: ServerConnection, settings: Settings | None = None) -> None:
     settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_wifi_payload(settings)))
+
+
+async def _send_football_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_football_payload(settings)))
 
 
 async def _send_snapshot(connection: ServerConnection) -> None:
@@ -1258,6 +1293,15 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             not isinstance(value, list) or not all(t in TEAM_COLORS for t in value)
         ):
             errors[key] = "must be a list of team abbreviations"
+        elif spec.kind == "nfl_team" and (
+            not isinstance(value, str) or (value != "" and not nfl_teams.is_team(value))
+        ):
+            errors[key] = "must be an NFL team abbreviation, or empty for none"
+        elif spec.kind == "nfl_teams" and (
+            not isinstance(value, list)
+            or not all(isinstance(t, str) and nfl_teams.is_team(t) for t in value)
+        ):
+            errors[key] = "must be a list of NFL team abbreviations"
         elif spec.kind in ("float", "int") and (
             (spec.minimum is not None and value < spec.minimum)
             or (spec.maximum is not None and value > spec.maximum)
@@ -1354,6 +1398,7 @@ _SEND_AFTER_SAVE = {
     "rotation": _send_rotation_config,
     "holiday": _send_holiday_config,
     "update": _send_update_config,
+    "football": _send_football_config,
 }
 
 
@@ -1413,6 +1458,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_holiday(message.get("data"))
         elif section == "update":
             values = _coerce_update(message.get("data"))
+        elif section == "football":
+            values = _coerce_scalar_fields(message.get("data"), _FOOTBALL_FIELDS)
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
@@ -1451,6 +1498,8 @@ async def _handle(connection: ServerConnection) -> None:
         # included) that counts the initial messages up to the snapshot
         # keeps working unchanged.
         await _send_holiday_config(connection, settings)
+        # After holiday for the same reason: nothing that counts the earlier messages moves.
+        await _send_football_config(connection, settings)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:
