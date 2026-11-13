@@ -6,15 +6,18 @@ is tracked: tick boxes here, in the PR that does the work.
 
 Documentation first: nothing below is built yet.
 
-## Companion files: read both
+## Companion files: read all three
 
 - **`football_screen.md`** (this file): what the board shows, when, for how
   long, and the todo list. Product design.
 - **[`football_api.md`](football_api.md)**: what ESPN's feed actually returns:
   endpoints, field meanings, the `yardLine` orientation, play types,
   participants and jersey numbers, caveats. Technical reference.
+- **[`screens_not_during_games.md`](screens_not_during_games.md)**: what the board shows
+  when no game is on (before kickoff, after the final, a bye week) and
+  which NHL idle screens carry over. A proposal, with its own todo.
 
-The two are meant to be read and updated together. A screen design here that
+The first two are meant to be read and updated together. A screen design here that
 depends on a data field should point at the section of `football_api.md` that
 verifies it; a new finding about the feed goes in `football_api.md` and, if it
 changes a design, is reflected here. When they disagree, check the live feed and
@@ -1485,7 +1488,7 @@ added later.
 - [~] Mockups: `fb_touchdown` (128px and 64px), `fb_score_detail`, `fb_fieldgoal`
       (favourite and opponent), `fb_fg_miss`, `fb_turnover`, `fb_reversal` drawn at
       128px. Still to draw at 64px: all but the touchdown
-- [ ] Which non-sport screens and idle-rotation entries carry over to the NFL mode, written down
+- [~] Which non-sport screens and idle-rotation entries carry over to the NFL mode: proposed in `screens_not_during_games.md`, awaiting the owner
 
 ### Build (after the design is agreed)
 
