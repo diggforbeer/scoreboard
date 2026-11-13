@@ -37,6 +37,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print every play of an NFL game (ESPN event id) in order and exit",
     )
     parser.add_argument(
+        "--watch-nfl",
+        metavar="EVENT_ID",
+        help="Print the plays of an NFL game as the animation queue would show them",
+    )
+    parser.add_argument(
+        "--fixture",
+        metavar="FILE",
+        help="With --watch-nfl: replay a saved summary file instead of polling ESPN",
+    )
+    parser.add_argument(
+        "--chunk",
+        type=int,
+        default=3,
+        help="With --fixture: how many more plays each simulated poll reveals (default 3)",
+    )
+    parser.add_argument(
         "--sport",
         choices=["nhl", "nfl"],
         help="Which sport --dump prints (default: the configured [scoreboard] sport)",
@@ -53,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     settings = Settings.load(args.config)
 
+    if args.watch_nfl:
+        return _watch_nfl(args.watch_nfl, args.fixture, args.chunk, settings)
     if args.dump_plays:
         return _dump_plays(args.dump_plays)
     if args.dump:
@@ -117,6 +135,23 @@ def _dump_nfl(settings: Settings) -> int:
         if game.is_live and sit and sit.down_distance_text:
             line += f"  | {sit.down_distance_text}"
         print(line)
+    return 0
+
+
+def _watch_nfl(event_id: str, fixture: str | None, chunk: int, settings: Settings) -> int:
+    """Show an NFL game's plays as the animation queue would hand them out (#355)."""
+    from .football import watch as w
+    from .football.api import NflClient
+
+    delay = settings.scoreboard.broadcast_delay_seconds
+    if fixture:
+        feed = w.FixtureFeed.from_file(fixture, chunk)
+        monotonic, sleep, utc_now = w.simulated()
+        w.watch(feed, event_id, delay_seconds=delay, exhausted=lambda: feed.exhausted,
+                monotonic=monotonic, sleep=sleep, utc_now=utc_now)  # fmt: skip
+        return 0
+    with NflClient() as client:
+        w.watch(lambda: client.plays(event_id), event_id, delay_seconds=delay)
     return 0
 
 
