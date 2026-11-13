@@ -84,6 +84,89 @@ left ~64px, text on the right ~64px. On a single 64px panel it alternates
 between the two. Plays that are not a run or a pass (penalty, punt, kickoff,
 sack, field goal, timeout) skip the animation and go straight to this layout.
 
+### `fb_cointoss`: the opening coin toss
+
+The first screen of a game. It shows a coin flipping, settling on the team that
+**receives the opening kickoff**, then `<TEAM> RECEIVE`.
+
+#### What the feed gives us (checked 2026-11-12, two finished/live games)
+
+- The toss is a play of type `Coin Toss` (type id `70`) in the **core** `plays`
+  endpoint, first in the list, `sequenceNumber` 100, period 1, clock `15:00`.
+  Its text is just `GAME`.
+- The **site `summary` leaves it out**: `drives.previous[0]` starts at the
+  kickoff. So a board reading only the site endpoints never sees a toss play.
+- The play does **not** say who won the toss, what they called, or whether they
+  chose to receive, defer, or pick an end. None of that is in any field I could
+  find (no `participants`, and no text on the play or anywhere in `summary` or the
+  competition object).
+- What it does carry is the **result**: `team` and `end.team` are the team that
+  receives, `start.team` is the team that kicks. The first `Kickoff` play agrees
+  (`start.team` kicks, `end.team` receives), so the receiver can also be read
+  from the site `summary` without the core endpoint.
+- **Timing:** a game days away returns 0 plays. In a game that was live, the toss
+  play's `modified` time was within a minute of the opening kickoff's
+  `wallclock`, so the feed appears to publish it **at kickoff, not at the real
+  toss** (which happens about three minutes before). Unverified for the
+  pre-kickoff window of a game starting in minutes.
+
+So the screen can honestly say who **receives**. It cannot say who **won** or
+**deferred**, and must not imply it. Anything beyond that (`won the toss`,
+`deferred`, `chose to receive`) needs another source and is out of scope.
+
+#### When it shows
+
+- Triggered by the first `Coin Toss` play seen for a game the board follows (the
+  favourite, or an `also_follow` team), when the game goes live.
+- Not shown for a game that is already in progress at startup (baselined on first
+  sight, like goals), or one that is not followed.
+- Overtime has its own toss in the real game. Whether the feed publishes a second
+  `Coin Toss` play in period 5 is **unverified**. If one arrives with a new id and
+  `period >= 5`, it gets the same screen with the label `OT COIN TOSS`. If it
+  does not, no screen.
+- If the core endpoint is not being polled, the screen is built from the first
+  `Kickoff` play's receiving team instead, a little later but with the same result.
+
+#### What it looks like (about 6s, proposed `fb_cointoss_seconds`)
+
+```
+ 0.0-0.5s   COIN TOSS in small type; a coin appears at centre
+ 0.5-3.0s   the coin flips: width squeezes to a line and back, spinning faster
+            then slower, rising and falling a few pixels
+ 3.0-3.5s   it lands face-up; the face is the receiving team's logo
+ 3.5-6.0s   <TEAM> RECEIVE in team colour; the kicking team's logo fades small
+            at the other edge with KICK
+```
+
+```
++----------------------------------------------------------------+
+|   COIN TOSS                                                    |
+|              (  o  )          <- coin mid-flip, narrow         |
++----------------------------------------------------------------+
+|  [logo]            NYG RECEIVE                      [logo]     |
+|  receives                                           kicks      |
++----------------------------------------------------------------+
+```
+
+- Whole panel, like the other celebration screens; it is a pure function of the
+  seconds since it started, so it runs the fast animation loop while up.
+- Team colours for the settled coin and text. Without logos the coin face is the
+  three-letter abbreviation in team colour.
+- On a single 64px panel the kicking team's logo and the `KICK` caption drop, and
+  only `<TEAM> RECEIVE` remains.
+- It plays **no horn**: there is nothing to celebrate yet. A soft sound is an
+  open question.
+- It ends by itself and the board moves to `fb_field` for the opening kickoff, the
+  same way the goal screen hands back to the game.
+
+#### Not designed here
+
+- A **pre-game** toss screen. The feed has no plays before kickoff, so there is
+  nothing to show before then; whatever the board shows pregame (countdown or
+  preview) is unchanged.
+- **Heads or tails**, the winner, or the defer decision, for the reason above.
+- The second-half kickoff, which has no toss. It plays as an ordinary kickoff.
+
 ### Scoring and turnovers
 
 These are the football equivalents of the NHL `goal` / `goal_detail` pair: a
@@ -336,6 +419,7 @@ can be tightened from real games.
 | `fb_field` | Resting state between plays | Until the next play arrives |
 | `fb_run` / `fb_pass` | New play detected | 2-4s, scaled by yardage |
 | Play-text layout | After the animation | Until the next play, at least ~5s |
+| `fb_cointoss` | First `Coin Toss` play for a followed game | `fb_cointoss_seconds`, 6s |
 | `fb_touchdown` / `fb_fieldgoal` | Favourite's score | `fb_score_seconds`, 6s (held to 4-15s) |
 | `fb_score_detail` | After the celebration | `fb_score_detail_seconds`, 8s |
 | `fb_fg_miss` | Missed field goal in a followed game | 3s |
@@ -351,6 +435,9 @@ can be tightened from real games.
 - [ ] Which other plays get their own animation (punt, kickoff, field goal,
       sack)?
 - [ ] Which team(s) does a board follow, and where is that set?
+- [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
+      "`<TEAM>` RECEIVE" enough, or is a source for the winner worth finding?
+- [ ] Coin toss: any sound (a soft ding for the favourite receiving), or silent?
 - [ ] Celebration scoping: favourite only gets the full screen and horn, a
       followed team gets the quick screen, opponents nothing. Confirm.
 - [ ] Should the favourite **giving away** the ball (interception, fumble) make
@@ -373,6 +460,9 @@ can be tightened from real games.
 - [ ] Measure feed delay against a live broadcast
 - [ ] Capture sample payloads for each play type (punt, sack, penalty,
       touchdown, field goal, interception, fumble) into the repo as fixtures
+- [ ] Coin toss: find out when the feed publishes the toss play before kickoff, whether
+      overtime gets a second `Coin Toss` play (the overtime check errored), and whether
+      any source names the toss winner
 - [ ] Capture the play types not yet seen: safety, two-point conversion, pick-six
       and other return touchdowns, turnover on downs, muffed punt, blocked kick
 - [ ] Capture a real reviewed or reversed scoring play, and what the feed does with it
@@ -383,6 +473,7 @@ can be tightened from real games.
 
 - [ ] Football section in `screens.md`: how each screen is chosen and how long
       it stays up
+- [ ] Mockup of `fb_cointoss`, on 128px and 64px
 - [ ] Mockup of `fb_field`
 - [ ] Mockup of `fb_run`
 - [ ] Mockup of `fb_pass`
@@ -396,6 +487,7 @@ can be tightened from real games.
 
 - [ ] Data layer: ESPN client and models
 - [ ] `fb_field` renderer
+- [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [ ] Play detection and the animation queue
 - [ ] `fb_run` and `fb_pass` animations
 - [ ] Play-text layout and scrolling

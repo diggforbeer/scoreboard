@@ -44,7 +44,9 @@ notice. Parse defensively and tolerate missing fields.
 `yardLine` runs 0-100 from the **home** team's goal line, not the offense's.
 Washington (away) at "WSH 20" is `yardLine: 80`; "NYG 25" is 25. The away team
 drives toward 0, so the field view must flip direction by `homeAway`. Each
-play's `start`/`end` also carry `yardsToEndzone`, relative to the offense. The
+play's `start`/`end` also carry `yardsToEndzone`, relative to the offense
+(confirmed on a NYG rush: `yardLine` 28 -> 37 while `yardsToEndzone` fell
+72 -> 63; for an away-team drive `yardLine` falls as `yardsToEndzone` falls). The
 first-down marker is `yardLine +/- distance`, sign set by drive direction.
 
 ## Play data
@@ -65,9 +67,20 @@ Play types seen:
 - Stoppages: `Penalty`, `Timeout`, `Official Timeout`, `Two-minute warning`,
   `End Period`, `End of Half`, `End of Game`
 
+Also `Coin Toss` (the first play, `text` is just `GAME`, no yardage).
+
 Not yet seen (names unconfirmed): fumble, safety, blocked kick, two-point
 attempt. The sample is two games, so fall back to the plain play-text screen for
 unknown types.
+
+**Abbreviations differ between fields.** Washington is `WSH` in `team.abbreviation`
+and `possessionText` ("WSH 20"), but `WAS` in some play text ("kicks 64 yards
+from WAS 35"). Match teams by `team.id`, never by parsing abbreviations out of
+text.
+
+**Scoring plays:** a completed game's `summary` has a top-level `scoringPlays[]`
+(type, text, scores after the play, team). It was absent from the live game's
+summary while the score was 0-0, so treat it as optional.
 
 Drive objects add `result` (`TD`, `FG`, `PUNT`, `INT`, `MISSED FG`,
 `END OF HALF`, `END OF GAME`), `yards`, `offensivePlays`, elapsed time.
@@ -81,14 +94,38 @@ Drive objects add `result` (`TD`, `FG`, `PUNT`, `INT`, `MISSED FG`,
 - Cheaper: cache each team's roster as athlete id -> jersey and position
   (roster entries have a jersey for 74 of 79 players; the rest are likely
   inactive or practice squad), and take athlete ids from core `participants`.
-- Only `passer` and `receiver` participant types are confirmed. The type given
-  to a rusher was not checked.
+- Participant `type` values seen across the live game's 37 plays: `passer`,
+  `receiver`, `rusher`, `tackler`, `assistedBy`, `kicker`, `punter`, `returner`,
+  `holder`, `snapper`, `penalized`, `other`. A rush has a `rusher`.
+- The jersey count (74 of 79) is from one team's roster (ATL), not all 32.
+- Plays also carry `teamParticipants` (`offense` / `defense` team ids).
 
 ## Caveats
 
-- **Lag:** the latest play appeared within about a minute of its `wallclock`.
+- **Lag:** the latest play appeared within about a minute of its `wallclock`
+  (re-checked: last play `01:43:28Z`, seen at `01:44:26Z`). `modified` is only
+  minute-resolution; use `wallclock`.
   TV delay is separate, so `broadcast_delay_seconds` still applies.
 - **`$ref` hosts:** core `$ref` URLs sometimes use the host `espn.pvt`; rewrite
   to `espn.com` before fetching.
 - **Offseason:** no live data outside game windows, so tests need recorded
   fixtures.
+
+## Coin toss
+
+Checked 2026-11-12 on two games (CIN vs ATL final, WSH @ NYG live).
+
+- A `Coin Toss` play (type id `70`) is the first play in the **core** `plays`
+  list: `sequenceNumber` 100, period 1, clock `15:00`, text `GAME`. The site
+  `summary` omits it; its `drives` start at the opening `Kickoff`.
+- It names **no winner, call or choice**. No `participants`, no text.
+- It does carry the result: `team` and `end.team` are the team that **receives**,
+  `start.team` the team that **kicks**. The opening `Kickoff` play has the same
+  `start.team` / `end.team`, so the receiver can be read from site data alone.
+- `teamParticipants` labels the receiver `defense` and the kicker `offense` (the
+  kickoff's own offence/defence), which reads backwards; use `start`/`end`.
+- A game days away returns 0 plays, so there is no toss data before kickoff.
+  In a live game the play's `modified` time was within a minute of the kickoff's
+  `wallclock`: the feed seems to publish it at kickoff, not at the real toss.
+- Unverified: whether overtime gets a second `Coin Toss` play (the check errored).
+
