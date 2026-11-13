@@ -16,7 +16,7 @@ from typing import Any
 
 from ..app import Scene
 from ..demo import DemoStep
-from .events import CoinToss, Event, FieldGoal, Scope, Touchdown, Turnover
+from .events import CoinToss, Event, FieldGoal, GenericScore, Scope, Touchdown, Turnover
 from .models import FbGame, Play
 from .pacing import animation_seconds
 from .people import Person
@@ -306,6 +306,18 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     on_downs = event(
         Turnover, downs_play, AWAY, reason="on_downs", lost_by=HOME, favourite="neither"
     )
+    safety_play = _play(
+        "Safety",
+        "(Shotgun) M.Penix sacked in End Zone for a SAFETY. The ball is free kicked to WSH.",
+        4, 2, AWAY, -2, (10, 19),
+    )  # fmt: skip
+    safety = event(GenericScore, safety_play, points=2, home_score=19)
+    two_point_play = _play(
+        "Two-Point Conversion",
+        "TWO-POINT CONVERSION ATTEMPT. D.Jones pass to K.Pitts is complete. ATTEMPT SUCCEEDS.",
+        98, 100, HOME, 2, (10, 26),
+    )  # fmt: skip
+    two_point = event(GenericScore, two_point_play, points=2, home_score=26, scope=Scope.QUICK)
     toss = event(CoinToss, rush, HOME, kicker=AWAY)
     reversal = event(
         Reversal, td, original=touchdown, original_kind="touchdown", title="TOUCHDOWN OVERTURNED",
@@ -402,6 +414,13 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(scene("fb_event", "event", td, touchdown, at=4.2, seconds=6.0), name="touchdown"),
         DemoStep(
             scene("fb_event", "event", td, quick_td, at=2.0, seconds=4.0), name="touchdown_quick"
+        ),
+        DemoStep(
+            scene("fb_event", "event", safety_play, safety, at=1.0, seconds=6.0), name="fb_score"
+        ),
+        DemoStep(
+            scene("fb_event", "event", two_point_play, two_point, at=1.0, seconds=4.0),
+            name="fb_score_quick",
         ),
         DemoStep(
             scene(
