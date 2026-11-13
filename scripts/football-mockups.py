@@ -309,33 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def fieldgoal() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    for x in (round(f.x(100)) + 2, round(f.x(100)) + 10):  # uprights
-        p.vline(x, 8, 22, YELLOW)
-    p.vline(round(f.x(100)) + 6, 22, 30, YELLOW)
-    p.line(round(f.x(100)) + 2, 22, round(f.x(100)) + 10, 22, YELLOW)
-    arc(p, f, 83, 104, 23, 17, upto=0.85)
-    f.ball(98, 8)
-    band(p, "Q1 04:11", "FIELD GOAL 31 YD", WHITE, GREEN)
-    return p
-
-
-def fieldgoal_opponent() -> Panel:
-    p2 = Panel()
-    f = Field(p2)
-    f.draw(AWAY)
-    for x in (round(f.x(0)) - 11, round(f.x(0)) - 3):
-        p2.vline(x, 8, 22, scale(YELLOW, 0.5))
-    p2.line(round(f.x(0)) - 11, 22, round(f.x(0)) - 3, 22, scale(YELLOW, 0.5))
-    arc(p2, f, 17, -4, 23, 17, upto=0.85)
-    f.ball(2, 8)
-    band(p2, "Q2 01:03", "WSH FIELD GOAL 38 YD", WHITE, DIM)
-    return p2
-
-
 def fg_miss() -> Panel:
     p = Panel()
     f = Field(p)
@@ -404,8 +377,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "fieldgoal": fieldgoal,
-    "fieldgoal_opponent": fieldgoal_opponent,
     "fg_miss": fg_miss,
     "turnover": turnover,
     "reversal": reversal,

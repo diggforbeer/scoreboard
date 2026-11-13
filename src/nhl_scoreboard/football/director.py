@@ -260,7 +260,10 @@ class Director:
         for event in own:
             if isinstance(event, CoinToss):
                 out.append(stage(EVENT, timings.cointoss, event))
-        out.append(stage(PLAY, animation_seconds(play, timings.play)))
+        # A made field goal's kick animation knows how it was scored (its scope), so the plain
+        # kick of a team nobody follows can be dimmer than the favourite's (#392).
+        kick = next((e for e in own if isinstance(e, FieldGoal) and e.made), None)
+        out.append(stage(PLAY, animation_seconds(play, timings.play), kick))
         for event in own:
             if not isinstance(event, CoinToss):
                 out.extend(self._event_stages(event, stage, timings, undone))

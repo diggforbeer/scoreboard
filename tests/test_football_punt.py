@@ -172,7 +172,7 @@ def test_the_markers_appear_at_the_end_spot_only_when_settled():
 
 def test_it_is_registered_for_punts():
     assert fp.PLAY_SCREENS[PlayKind.PUNT] is fpunt.draw_punt
-    assert PlayKind.FIELD_GOAL_GOOD not in fp.PLAY_SCREENS
+    assert fp.PLAY_SCREENS.get(PlayKind.FIELD_GOAL_GOOD) is not fpunt.draw_punt
     assert fk.kicker_direction  # the helpers are shared with the kickoff screen
 
 

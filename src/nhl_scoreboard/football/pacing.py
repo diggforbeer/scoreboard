@@ -77,3 +77,12 @@ PENALTY_SECONDS = 4.0
 @pacer(PlayKind.PENALTY)
 def penalty_seconds(play: Play) -> float:
     return PENALTY_SECONDS
+
+
+#: A made field goal's kick: the ball arcs through the uprights (the celebration is its own stage).
+FIELD_GOAL_SECONDS = 4.0
+
+
+@pacer(PlayKind.FIELD_GOAL_GOOD)
+def field_goal_seconds(play: Play) -> float:
+    return FIELD_GOAL_SECONDS
