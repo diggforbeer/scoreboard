@@ -13,9 +13,18 @@ name: Release
 # which defeats "automatic". Tags avoid the problem entirely: refs/tags/*
 # isn't covered by the branch ruleset (which only governs refs/heads/main),
 # so this workflow never needs to push a commit to main at all.
+#
+# Branch channels (#341): a push to any other branch listed below publishes a
+# *pre-release* tagged vYYYY.MM.DD.N-<branch> (e.g. v2026.11.13.2-football)
+# with the app-update bundle attached and no flashable image. Boards that
+# chose that branch under "Software update" on the admin page follow those
+# pre-releases; GitHub's "latest release", which the stable channel and the
+# image downloads use, never returns a pre-release, so these never reach
+# anyone on main. To add a channel, add its branch name here (lower-case
+# letters, digits and hyphens, as it becomes part of the tag).
 on:
   push:
-    branches: [main]
+    branches: [main, football]
 
 permissions:
   contents: write
@@ -46,9 +55,23 @@ jobs:
           set -euo pipefail
           today="$(date -u +%Y.%m.%d)"
           base="v${today}"
+          branch="${GITHUB_REF_NAME}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if [ "$branch" != "main" ]; then
+            # Branch channel: v<date>.<n>-<branch>, numbered from 1 per day.
+            n=1
+            while git ls-remote --exit-code --tags origin "refs/tags/${base}.${n}-${branch}" >/dev/null 2>&1; do
+              n=$((n + 1))
+            done
+            tag="${base}.${n}-${branch}"
+            echo "Next tag: $tag"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Query the remote directly rather than trust local tag refs --
           # robust regardless of checkout's own tag-fetching behaviour.
-          existing="$(git ls-remote --tags origin "refs/tags/${base}*" | wc -l)"
+          # Branch-channel tags (v...-football) are not main's and don't count.
+          existing="$({ git ls-remote --tags origin "refs/tags/${base}*" | grep -v -- '-[a-z0-9-]*$' || true; } | wc -l)"
           if [ "$existing" -eq 0 ]; then
             tag="$base"
           else
@@ -68,6 +91,7 @@ jobs:
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create the release
+        if: steps.version.outputs.branch == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -76,7 +100,33 @@ jobs:
             --title "${{ steps.version.outputs.tag }}" \
             --generate-notes
 
+      # Branch channels: a pre-release carrying only the app bundle. No image
+      # build -- flash a main image once, then follow the branch from the
+      # admin page. --prerelease is what keeps it out of "latest".
+      - name: Set up Node (branch build)
+        if: steps.version.outputs.branch != 'main'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Create the branch pre-release with its app bundle
+        if: steps.version.outputs.branch != 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+          (cd frontend && npm ci && npm run build)
+          python3 scripts/build-app-bundle.py --version "$tag" --out dist
+          gh release create "$tag" \
+            --title "$tag" \
+            --prerelease \
+            --generate-notes \
+            --notes "Test build from the \`${{ steps.version.outputs.branch }}\` branch. Not a stable release: it is only offered to boards that chose this branch under Software update." \
+            dist/nhl-scoreboard-app.tar.gz dist/manifest.json
+
       - name: Trigger the image build for this tag
+        if: steps.version.outputs.branch == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

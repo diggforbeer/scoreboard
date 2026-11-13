@@ -71,6 +71,14 @@ RELEASE_URL = os.environ.get(
     "NHL_SCOREBOARD_RELEASE_URL",
     "https://api.github.com/repos/diggforbeer/scoreboard/releases/latest",
 )
+#: Every release, newest first, pre-releases included. Branch channels (#341)
+#: live here: ``latest`` never returns a pre-release, which is the point of
+#: keeping a branch's builds off the stable channel.
+RELEASES_URL = os.environ.get(
+    "NHL_SCOREBOARD_RELEASES_URL",
+    "https://api.github.com/repos/diggforbeer/scoreboard/releases?per_page=50",
+)
+STABLE_BRANCH = "main"
 #: Where admin_server.py serves the built React page from; same env var, so
 #: the updater and the server can't disagree about it. The bundle's optional
 #: top-level ``admin/`` directory (frontend/dist) is swapped in here (#185).
@@ -82,7 +90,9 @@ HEALTH_SECONDS = float(os.environ.get("NHL_SCOREBOARD_UPDATE_HEALTH_SECONDS", "2
 HEALTH_POLL_SECONDS = float(os.environ.get("NHL_SCOREBOARD_UPDATE_HEALTH_POLL", "1"))
 HTTP_TIMEOUT = 30
 
-_CALVER = re.compile(r"^v(\d{4})\.(\d{2})\.(\d{2})(?:\.(\d+))?$")
+#: ``v2026.11.12``, ``v2026.11.12.3`` and, for a branch channel (#341),
+#: ``v2026.11.12.3-football``: the branch name rides after a hyphen.
+_CALVER = re.compile(r"^v(\d{4})\.(\d{2})\.(\d{2})(?:\.(\d+))?(?:-([a-z0-9][a-z0-9-]*))?$")
 
 
 # -- state ---------------------------------------------------------------
@@ -122,12 +132,23 @@ def _version_key(tag: str) -> tuple[int, ...] | None:
     match = _CALVER.match(tag)
     if not match:
         return None
-    return tuple(int(part or 0) for part in match.groups())
+    return tuple(int(part or 0) for part in match.groups()[:4])
+
+
+def tag_branch(tag: str) -> str:
+    """The branch a release tag was built from: ``football`` for ``v2026.11.12.3-football``,
+    ``main`` for a plain CalVer tag (or anything unrecognised)."""
+    match = _CALVER.match(tag)
+    return (match.group(5) if match else None) or STABLE_BRANCH
 
 
 def is_newer(latest: str, installed: str) -> bool:
     if not installed:
         return True  # unknown -- a freshly flashed image carries no VERSION
+    if tag_branch(latest) != tag_branch(installed):
+        # Switching channel: the dates of two different lines of work say
+        # nothing about which is "newer", and the owner asked for this one.
+        return True
     latest_key, installed_key = _version_key(latest), _version_key(installed)
     if latest_key is None or installed_key is None:
         return latest != installed
@@ -188,13 +209,64 @@ def image_changes(release: Any) -> dict[str, Any] | None:
     return {"status": status, "files": files, "packages": packages, "command": command}
 
 
-def check() -> dict[str, Any]:
-    """Look up the latest release and record whether it can be applied."""
+def channels(releases: Any) -> list[str]:
+    """Branches that have published releases, ``main`` first, from a releases listing."""
+    found: set[str] = set()
+    if isinstance(releases, list):
+        for item in releases:
+            if isinstance(item, dict) and not item.get("draft"):
+                found.add(tag_branch(str(item.get("tag_name", ""))))
+    found.discard(STABLE_BRANCH)
+    return [STABLE_BRANCH, *sorted(found)]
+
+
+def latest_for_branch(releases: Any, branch: str) -> dict[str, Any]:
+    """The newest release published for ``branch`` (GitHub lists newest first)."""
+    if isinstance(releases, list):
+        for item in releases:
+            if (
+                isinstance(item, dict)
+                and not item.get("draft")
+                and tag_branch(str(item.get("tag_name", ""))) == branch
+            ):
+                return item
+    raise KeyError(f"no release has been published for branch {branch!r}")
+
+
+def configured_branch(config_path: str | None = None) -> str:
+    try:
+        from .config import Settings
+
+        return Settings.load(config_path).update.branch
+    except Exception:  # a broken config must not stop an update check
+        log.warning("Could not read update.branch; following %s", STABLE_BRANCH)
+        return STABLE_BRANCH
+
+
+def check(branch: str | None = None) -> dict[str, Any]:
+    """Look up the latest release on ``branch`` and record whether it can be applied."""
+    branch = branch or configured_branch()
     state = read_state()
     state["checked_at"] = _now()
     state["installed"] = installed_version()
+    state["branch"] = branch
     try:
-        release = _fetch_json(RELEASE_URL)
+        # One listing serves both the channel picker and a non-stable branch's
+        # release; the stable channel keeps using GitHub's own "latest".
+        try:
+            listing = _fetch_json(RELEASES_URL)
+            state["channels"] = channels(listing)
+        except (OSError, ValueError):
+            listing = None
+            state.setdefault("channels", [STABLE_BRANCH])
+        if branch not in state["channels"]:
+            state["channels"] = [*state["channels"], branch]
+        if branch == STABLE_BRANCH:
+            release = _fetch_json(RELEASE_URL)
+        elif listing is None:
+            raise ValueError("could not list releases")
+        else:
+            release = latest_for_branch(listing, branch)
         tag = str(release["tag_name"])
         assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
         state.update(
@@ -363,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("action", choices=("check", "apply"))
     parser.add_argument("--force", action="store_true", help="check even if [update] is disabled")
     parser.add_argument("--config", default=None)
+    parser.add_argument("--branch", default=None, help="follow this branch for this check only")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -373,7 +446,8 @@ def main(argv: list[str] | None = None) -> int:
             if not Settings.load(args.config).update.enabled:
                 log.info("Update checks are disabled ([update] enabled = false)")
                 return 0
-        return 0 if not check().get("error") else 1
+        branch = args.branch or configured_branch(args.config)
+        return 0 if not check(branch).get("error") else 1
     return 0 if apply() else 1
 
 

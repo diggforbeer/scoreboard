@@ -213,13 +213,13 @@ def test_wait_until_healthy_fails_on_first_inactive_poll(monkeypatch):
 def test_cli_check_honours_disabled_setting(env, monkeypatch, tmp_path):
     cfg = tmp_path / "scoreboard.toml"
     cfg.write_text("[update]\nenabled = false\n")
-    monkeypatch.setattr(updater, "check", lambda: pytest.fail("should not check"))
+    monkeypatch.setattr(updater, "check", lambda *a: pytest.fail("should not check"))
     assert updater.main(["check", "--config", str(cfg)]) == 0
 
 
 def test_cli_check_force_ignores_disabled_setting(env, monkeypatch):
     called = []
-    monkeypatch.setattr(updater, "check", lambda: called.append(1) or {})
+    monkeypatch.setattr(updater, "check", lambda *a: called.append(1) or {})
     assert updater.main(["check", "--force"]) == 0
     assert called
 
@@ -427,3 +427,120 @@ def test_build_app_bundle_manifest_carries_the_image_fingerprint(tmp_path):
     module.build("v2026.09.29", tmp_path)
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     assert manifest["image"] == _load_script("image_manifest.py").build()
+
+
+# -- branch channels (#341) ----------------------------------------------
+
+
+def _release(tag, *, prerelease=False, draft=False):
+    return {
+        "tag_name": tag,
+        "prerelease": prerelease,
+        "draft": draft,
+        "assets": [
+            {"name": updater.BUNDLE_ASSET, "browser_download_url": f"http://b/{tag}/bundle"},
+            {
+                "name": updater.MANIFEST_ASSET,
+                "browser_download_url": f"http://b/{tag}/manifest.json",
+            },
+        ],
+    }
+
+
+LISTING = [
+    _release("v2026.11.13.2-football", prerelease=True),
+    _release("v2026.11.13.1"),
+    _release("v2026.11.12.1-football", prerelease=True),
+    _release("v2026.11.12.4-draft-thing", draft=True),
+    _release("v2026.11.12"),
+]
+
+
+def _fake_listing(monkeypatch, listing=LISTING, latest="v2026.11.13.1"):
+    def fetch(url):
+        if url.endswith("manifest.json"):
+            return {"driver_commit": "abc1234", "sha256": "deadbeef"}
+        if url == updater.RELEASES_URL:
+            return listing
+        return _release(latest)
+
+    monkeypatch.setattr(updater, "_fetch_json", fetch)
+
+
+def test_tag_branch_reads_the_suffix():
+    assert updater.tag_branch("v2026.11.13.2-football") == "football"
+    assert updater.tag_branch("v2026.11.13") == "main"
+    assert updater.tag_branch("v2026.11.13.2-two-words") == "two-words"
+    assert updater.tag_branch("nonsense") == "main"
+
+
+def test_is_newer_orders_within_a_branch_and_switches_across_branches():
+    assert updater.is_newer("v2026.11.13.2-football", "v2026.11.12.1-football")
+    assert not updater.is_newer("v2026.11.12.1-football", "v2026.11.13.2-football")
+    # Different channel: always offered, even when the date is older.
+    assert updater.is_newer("v2026.11.12.1-football", "v2026.11.13.1")
+    assert updater.is_newer("v2026.11.12", "v2026.11.13.2-football")
+
+
+def test_channels_lists_main_first_and_skips_drafts():
+    assert updater.channels(LISTING) == ["main", "football"]
+    assert updater.channels({"not": "a list"}) == ["main"]
+
+
+def test_check_on_a_branch_follows_its_newest_prerelease(env, monkeypatch):
+    _fake_listing(monkeypatch)
+    state = updater.check("football")
+    assert state["branch"] == "football"
+    assert state["latest"] == "v2026.11.13.2-football"
+    assert state["available"] and state["applicable"]
+    assert state["bundle_url"] == "http://b/v2026.11.13.2-football/bundle"
+    assert state["channels"] == ["main", "football"]
+
+
+def test_check_on_main_still_uses_latest_and_ignores_prereleases(env, monkeypatch):
+    _fake_listing(monkeypatch)
+    state = updater.check("main")
+    assert state["latest"] == "v2026.11.13.1"
+    assert state["channels"] == ["main", "football"]
+
+
+def test_switching_back_to_main_from_a_branch_build_is_offered(env, monkeypatch):
+    (updater.APP_DIR / "VERSION").write_text("v2026.11.13.2-football\n")
+    _fake_listing(monkeypatch, latest="v2026.11.12")
+    state = updater.check("main")
+    assert state["available"]
+    assert state["latest"] == "v2026.11.12"
+
+
+def test_branch_with_no_releases_is_reported_not_raised(env, monkeypatch):
+    _fake_listing(monkeypatch)
+    state = updater.check("nothing-here")
+    assert "nothing-here" in state["error"]
+    assert not state.get("available")
+    assert "nothing-here" in state["channels"]
+
+
+def test_listing_failure_does_not_break_the_stable_check(env, monkeypatch):
+    def fetch(url):
+        if url == updater.RELEASES_URL:
+            raise OSError("rate limited")
+        return _release("v2026.11.13.1") if "latest" in url else {"sha256": "x"}
+
+    monkeypatch.setattr(updater, "_fetch_json", fetch)
+    state = updater.check("main")
+    assert state["latest"] == "v2026.11.13.1"
+    assert state["channels"] == ["main"]
+
+
+def test_configured_branch_reads_the_update_section(tmp_path):
+    cfg = tmp_path / "scoreboard.toml"
+    cfg.write_text('[update]\nbranch = "football"\n')
+    assert updater.configured_branch(str(cfg)) == "football"
+
+
+def test_invalid_branch_name_falls_back_to_main(tmp_path):
+    from nhl_scoreboard.config import Settings
+
+    cfg = tmp_path / "scoreboard.toml"
+    cfg.write_text('[update]\nbranch = "../etc"\n')
+    assert Settings.load(str(cfg)).update.branch == "main"
