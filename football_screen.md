@@ -255,20 +255,79 @@ touchdown wins, because it is the bigger event, and the detail line says
 A turnover is step 1, then `fb_turnover` for 4s, then back to the play-text
 layout.
 
-#### Reviews and reversals
+#### Reviews and reversals: celebrate now, explain if it changes
 
-Scoring plays and turnovers are the plays most often reviewed. One of the
-sample plays above had a challenge in its own text. A celebration for a play
-that is then overturned is bad, and the feed may remove or change the play
-after the fact.
+Decided by the owner: **celebrate immediately**, with no hold. Scoring plays
+and turnovers are the plays most often reviewed, so if the feed later changes
+one that was celebrated, the board says so on its own screen instead of
+quietly correcting the score, then goes back to normal.
 
-- Proposed: hold the celebration until the play has survived **one more poll**,
-  and skip it if the text contains `REVERSED` or `challenged` and the score did
-  not change.
-- If the score later drops, no screen is shown for the reversal; the board
-  just returns to normal and the score band corrects itself.
-- Open question: whether a delay of a few seconds is acceptable here, given the
-  feed already runs ahead of TV (`broadcast_delay_seconds` partly covers this).
+**Detecting a change.** For every play that got a celebration (a touchdown,
+field goal or turnover, favourite or followed team), the app remembers the play
+`id`, the scoring team, the points, the score before it, and the text. On each
+poll it compares that against the feed. It is a **reversal** if any of these is
+true:
+
+1. The game score is now **lower** than the score the celebration announced
+   (`awayScore` / `homeScore` dropped).
+2. The play is gone from the feed, or its `scoringPlay` / `isTurnover` flag has
+   become false.
+3. The play's `type` has changed (for example `Passing Touchdown` becoming
+   `Pass Incompletion` or `Penalty`).
+
+The score drop is the main signal, because the feed reports the score on every
+play. The others cover a play that is replaced without the score moving yet.
+A play whose text merely changes while its type, flags and score stay the same
+(a corrected spelling, or an extra-point line added) is **not** a reversal.
+
+**What it shows.** `fb_reversal`, for `fb_reversal_seconds` (5s proposed),
+preempting whatever is on screen like the celebration did. It is amber, not
+green or red: this is neither good nor bad news yet, it is a correction.
+
+```
++----------------------------------------------------------------+
+| [logo]        TOUCHDOWN OVERTURNED                [logo]       |
+|      OFFENSIVE PASS INTERFERENCE ON ATL-14                     |
+|      SCORE BACK TO  ATL 0   CIN 0              (old score)     |
++----------------------------------------------------------------+
+```
+
+- **Title** from what was reversed: `TOUCHDOWN OVERTURNED`, `FIELD GOAL
+  NEGATED`, `TURNOVER OVERTURNED`. Uses the original play's kind, which the app
+  remembered.
+- **Reason line** is the feed's own replacement text, trimmed: for example the
+  penalty wording or the new play's text. The app does not try to understand it;
+  it shows the first line, scrolling if it is long. If the feed gives no usable
+  text, the line reads `PLAY CHANGED ON REVIEW`.
+- **Score line** shows the score being restored and the new down and distance if
+  the feed has them. On a single 64px panel the reason line goes first, then the
+  score.
+- **Then back to normal.** After `fb_reversal_seconds` the board returns to
+  `fb_field`, with the ball at the restored spot, exactly as for any play. The
+  score band is already corrected.
+
+**Details and limits**
+
+- It only shows for plays that were celebrated. A reversal on an opponent's
+  score or an unfollowed game is silent, because nothing was announced.
+- The horn cannot be unplayed. The board accepts that the favourite's horn may
+  sound for a touchdown that is then overturned. The reversal screen is what
+  makes that understandable.
+- If the celebration is still on screen when the change arrives (a very quick
+  flag), the reversal screen **replaces it at once** and the detail screen is
+  skipped.
+- A reversed play is shown once. If the play is then changed again (a score put
+  back after a second review), it is treated as a new play: it celebrates
+  again as a fresh score.
+- There is no "under review" screen. Whether the feed shows a review in
+  progress is unknown, and showing one would need a field that has not been
+  seen. It is left out until real data shows one.
+
+**Unverified.** None of the detection above has been seen on a real reversed
+play. The first rule (score drops) is the likeliest to work; the other two are
+guesses at how the feed represents a removed play. Capturing a real one is a
+research todo, and the detector should log every case it matches so the rules
+can be tightened from real games.
 
 ## Timing (proposed, tune on hardware)
 
@@ -281,6 +340,7 @@ after the fact.
 | `fb_score_detail` | After the celebration | `fb_score_detail_seconds`, 8s |
 | `fb_fg_miss` | Missed field goal in a followed game | 3s |
 | `fb_turnover` | `isTurnover` | `fb_turnover_seconds`, 4s |
+| `fb_reversal` | A celebrated play is reversed by review or penalty | `fb_reversal_seconds`, 5s |
 
 ## Open questions
 
@@ -295,8 +355,8 @@ after the fact.
       followed team gets the quick screen, opponents nothing. Confirm.
 - [ ] Should the favourite **giving away** the ball (interception, fumble) make
       a sound? Proposed default is silent; taking the ball plays the ding.
-- [ ] Is a few seconds' hold to survive a review acceptable, or celebrate at once
-      and accept the occasional overturned touchdown?
+- [x] Reviews: celebrate immediately, and show a `fb_reversal` screen explaining
+      the change if the play is overturned, then swap back (decided)
 - [ ] Opponent's missed field goal: show the `NO GOOD` screen (proposed) or skip?
 
 ## Todo
@@ -315,7 +375,8 @@ after the fact.
       touchdown, field goal, interception, fumble) into the repo as fixtures
 - [ ] Capture the play types not yet seen: safety, two-point conversion, pick-six
       and other return touchdowns, turnover on downs, muffed punt, blocked kick
-- [ ] Check what the feed does with a reviewed or reversed scoring play
+- [ ] Capture a real reviewed or reversed scoring play, and what the feed does with it
+      (score drop? play removed? type changed?), to confirm the three detection rules
 - [ ] Decide the polling interval and how to stay under ESPN's tolerance
 
 ### Documentation
@@ -344,7 +405,9 @@ after the fact.
 - [ ] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser
 - [ ] `fb_fg_miss`
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
-- [ ] Horn and ding wiring, and the review hold
+- [ ] Horn and ding wiring
+- [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
+- [ ] `fb_reversal` screen
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
 - [ ] Tests
