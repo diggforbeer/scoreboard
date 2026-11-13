@@ -562,6 +562,96 @@ guesses at how the feed represents a removed play. Capturing a real one is a
 research todo, and the detector should log every case it matches so the rules
 can be tightened from real games.
 
+## Mockups
+
+First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
+panel), drawn in the same round-LED style as the NHL guide. All are in
+[`docs/football/`](docs/football/) and are produced by
+`python scripts/football-mockups.py`.
+
+**What these are and are not.** They are **design mockups, not renderer output**:
+no football renderer exists yet, so each frame is drawn pixel by pixel by that
+script, using the project's own BDF fonts and dot rendering so type size and pitch
+are true to the panel. Teams are real NFL abbreviations (NYG and WSH) with plain
+colour circles for logos, as the NHL guide does, because the crests are artwork
+and are not committed. They are stills: a ball arc is drawn partway along its path,
+a coin mid-flip, a touchdown at its settled look. When the real renderer lands,
+the images should come from it and the script should be deleted.
+
+**Layout decisions the mockups make**, which differ from the NHL screens and are
+open for the owner's review:
+
+- **The logos sit in the end zones**, about 12px, instead of 32px at each panel
+  edge as in NHL. A 32px logo at each edge would leave only 64px for the field.
+  With 14px end zones the playing field is exactly **100px for 100 yards**, one
+  pixel a yard, which makes the maths and the animation easy. The team with the
+  ball has its logo at full brightness and the other is dimmed.
+- **A one-line band across the top** (tiny 4x6 type): clock and quarter on the
+  left, the down and distance or the play label on the right, in a colour that
+  says the kind of play (green gain, red loss, amber neutral).
+- **The field is 23px tall** under the band. Line of scrimmage is blue, the
+  first-down line is yellow, the ball is a small orange-brown dot.
+- **A number rides on the play** (the carrier or receiver), drawn above the ball
+  or at the catch. The tiny font has no usable `#`, so the number is plain digits.
+- **`yardLine` runs from the home goal line**, so the home team's end zone is
+  always on the left and the view flips its drive arrow and first-down line by
+  who has the ball (see `football_api.md`). In every mockup NYG (home, left) is
+  the favourite.
+
+### The field and scrimmage plays
+
+| | |
+|---|---|
+| ![Field](docs/football/fb_field.png) | ![Red zone](docs/football/fb_field_redzone.png) |
+| `fb_field`: the resting screen. Clock, quarter, down and distance; ball, line of scrimmage and first-down line. | The same screen in the red zone (away team has the ball, so the drive runs the other way). |
+| ![Run](docs/football/fb_run.png) | ![Pass](docs/football/fb_pass.png) |
+| `fb_run`: the ball carrier's number moves with a fading trail. | `fb_pass`: an arc from the quarterback to the receiver's number. |
+| ![Play text](docs/football/fb_playtext.png) | ![Field at 64px](docs/football/fb_field_64.png) |
+| Play-text layout: the field on the left half, the feed's own text on the right. | `fb_field` on a single 64px panel. |
+
+### Kicks, incompletions, sacks and penalties
+
+| | |
+|---|---|
+| ![Kickoff](docs/football/kickoff_air.png) | ![Kickoff return](docs/football/kickoff_return.png) |
+| Kickoff: the ball in the air on a high arc. | Kickoff return: the returner's number runs it back. |
+| ![Punt, fair catch](docs/football/punt_fair_catch.png) | ![Punt return](docs/football/punt_return.png) |
+| Punt, fair catch: long hang, a flag marks the catch. | Punt returned: the returner's number runs back, `RETURN -3`. |
+| ![Incomplete](docs/football/incomplete.png) | ![Sack](docs/football/sack.png) |
+| Incompletion: the ball drops short of the target number; the marker stays put. | Sack: the quarterback's number, a burst at the spot, the marker slides back. |
+| ![Penalty](docs/football/penalty.png) | ![Penalty, no play](docs/football/penalty_no_play.png) |
+| Penalty: a yellow flag at the spot. | Penalty card when the down is nullified (`NO PLAY`). |
+
+### Stoppages, the toss and the end of a half
+
+| | |
+|---|---|
+| ![Timeout](docs/football/timeout.png) | ![End of quarter](docs/football/end_quarter.png) |
+| Timeout: clock icon, team, which timeout, and timeouts left as dots. | End of quarter, over the field. |
+| ![Halftime](docs/football/halftime.png) | ![Coin toss, flipping](docs/football/cointoss_flip.png) |
+| Halftime card with the score. | `fb_cointoss`, the coin mid-flip (narrow, rising). |
+| ![Coin toss, result](docs/football/cointoss_result.png) | ![Coin toss at 64px](docs/football/cointoss_result_64.png) |
+| `fb_cointoss` settled: the receiving team's logo and `NYG RECEIVE`; the kicking team small at the edge. | The same on a single 64px panel (the kicking team is dropped). |
+
+### Scores, turnovers and reversals
+
+| | |
+|---|---|
+| ![Touchdown](docs/football/touchdown.png) | ![Touchdown at 64px](docs/football/touchdown_64.png) |
+| `fb_touchdown`: TOUCHDOWN at double size in the team colour, strobe rays behind, city name along the bottom. | At 64px it wraps to two lines. |
+| ![Score detail](docs/football/score_detail.png) | ![Field goal](docs/football/fieldgoal.png) |
+| `fb_score_detail`: scorer's number and name, how, the extra point and the new score. | `fb_fieldgoal`: the ball arcs over the uprights at the end of the field. |
+| ![Opponent field goal](docs/football/fieldgoal_opponent.png) | ![Field goal missed](docs/football/fg_miss.png) |
+| An opponent's made kick: the same animation, plainer, dim, no sound. | `fb_fg_miss`: `NO GOOD`, the distance and direction. |
+| ![Turnover](docs/football/turnover.png) | ![Reversal](docs/football/reversal.png) |
+| `fb_turnover`: red title, an arrow toward the team that now has the ball, who took it and where. | `fb_reversal`: amber `TOUCHDOWN OVERTURNED`, the reason, the restored score. |
+
+**Rough edges to know about:** the touchdown letters are wide and nearly touch at
+double size; the 5x7 and 4x6 text is small to read at a distance; the opponent's
+field goal differs from the favourite's only by being dim, which may be too subtle;
+and none of the animation can be judged from stills. The Pi 4 measurement (see
+the deferred pace question) is where motion gets judged.
+
 ## Sounds
 
 Decided by the owner: to start, sounds only for **touchdowns** and **field goals**,
@@ -694,16 +784,20 @@ added later.
 
 - [ ] Football section in `screens.md`: how each screen is chosen and how long
       it stays up
-- [ ] Mockup of `fb_cointoss`, on 128px and 64px
-- [ ] Mockup of `fb_field`
-- [ ] Mockup of `fb_run`
-- [ ] Mockup of `fb_pass`
-- [ ] Mockups: kickoff, punt (fair catch / returned / out of bounds / touchback), incompletion,
-      sack, penalty (flag), timeout, end of period, halftime
-- [ ] Mockup of the play-text layout, on 128px and 64px panels
+- [x] Mockup of `fb_cointoss` (128px, and the settled look at 64px); first drafts,
+      see "Mockups"
+- [x] Mockup of `fb_field` (128px and 64px)
+- [x] Mockup of `fb_run`
+- [x] Mockup of `fb_pass`
+- [~] Mockups: kickoff, punt (fair catch, returned), incompletion, sack, penalty,
+      timeout, end of period, halftime drawn. Still to draw: punt out of bounds and
+      touchback, kickoff touchback, official timeout, two-minute warning
+- [~] Mockup of the play-text layout: 128px drawn; the 64px version (alternating
+      halves) is not
 - [x] Scoring and turnover screens designed (see Scoring and turnovers)
-- [ ] Mockups: `fb_touchdown`, `fb_score_detail`, `fb_fieldgoal`, `fb_fg_miss`,
-      `fb_turnover`, on 128px and 64px
+- [~] Mockups: `fb_touchdown` (128px and 64px), `fb_score_detail`, `fb_fieldgoal`
+      (favourite and opponent), `fb_fg_miss`, `fb_turnover`, `fb_reversal` drawn at
+      128px. Still to draw at 64px: all but the touchdown
 - [ ] Which non-sport screens and idle-rotation entries carry over to the NFL mode, written down
 
 ### Build (after the design is agreed)
