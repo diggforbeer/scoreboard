@@ -86,3 +86,12 @@ FIELD_GOAL_SECONDS = 4.0
 @pacer(PlayKind.FIELD_GOAL_GOOD)
 def field_goal_seconds(play: Play) -> float:
     return FIELD_GOAL_SECONDS
+
+
+#: A missed field goal is one 3s screen: the kick, the miss and its words (``fb_fg_miss``).
+FIELD_GOAL_MISS_SECONDS = 3.0
+
+
+@pacer(PlayKind.FIELD_GOAL_MISSED)
+def field_goal_miss_seconds(play: Play) -> float:
+    return FIELD_GOAL_MISS_SECONDS

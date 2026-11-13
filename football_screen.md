@@ -794,6 +794,25 @@ a short **3s** screen: the ball arcs and drifts off to the side the text names
 `38 YD  WIDE LEFT`. It is the same screen for the favourite's miss and the
 opponent's.
 
+**Built (story #393, `display/football_fgmiss.py`).** One 3s screen, the play's own stage
+(`@play_screen(FIELD_GOAL_MISSED)`), the same for the favourite's miss and the opponent's, in a
+followed game, with no card after it (the director no longer adds a separate event stage for a
+miss) and no sound. In red, with the band `NO GOOD 38 YD` on the left and the reason on the
+right (the clock is dropped to make room). The ball is placed at the kick spot and arcs toward
+the posts, then by what the text says:
+
+| Text | What the ball does |
+|---|---|
+| `Wide Left` | veers up the panel (the kicker's left when driving right; down when driving left) and passes outside the posts |
+| `Wide Right` | veers down the panel (up when driving left) |
+| `Short` | comes down on the field before it reaches the end zone |
+| `Blocked` | goes up a few pixels and falls back behind the line of scrimmage |
+| anything else | drawn like a short kick; the band still reads `NO GOOD`, the distance and the feed's own words |
+
+The drawing is a side view with the posts as a miniature goalpost, so "outside the posts" is the
+ball ending at the top or bottom of the field beside them; which post it hit is not drawn (the
+feed does not say).
+
 #### `fb_turnover`: interception or fumble lost
 
 Triggered by `isTurnover` true. Runs for `fb_turnover_seconds` (4s proposed).
@@ -1114,6 +1133,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Celebration](docs/football/fieldgoal_celebration.png) | ![Quick](docs/football/fieldgoal_quick.png) |
 | The favourite's celebration (this frame is a dark strobe step). | A followed team's: no strobe. |
 
+**The missed field goal** (#393; wide left, wide right, short, blocked):
+
+| | |
+|---|---|
+| ![Wide left](docs/football/fg_miss.png) | ![Wide right](docs/football/fg_miss_right.png) |
+| The ball veers up past the posts. | The ball veers down. |
+| ![Short](docs/football/fg_miss_short.png) | ![Blocked](docs/football/fg_miss_blocked.png) |
+| Comes down short of the end zone. | Knocked back behind the line. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1122,8 +1150,6 @@ test does the same. Nothing here touches `docs/screens/`.
 | `fb_play` for a play with no screen of its own yet (a blocked punt, which has no screen of its own): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
-| ![Missed field goal card](docs/football/fb_event_fg_miss.png) | |
-| A missed field goal (a generic card until its own story). | |
 | ![Turnover card](docs/football/fb_event_turnover.png) | ![Reversal card](docs/football/fb_event_reversal.png) |
 | A turnover alert. | `fb_event` (stage `reversal`): the correction and its reason. |
 
@@ -1140,7 +1166,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal` and `fieldgoal_opponent`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal`, `fieldgoal_opponent` and `fg_miss`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1422,7 +1448,7 @@ added later.
       first sight
 - [x] `fb_touchdown` (#390) and `fb_fieldgoal` (#392) celebrations
 - [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
-- [ ] `fb_fg_miss`
+- [x] `fb_fg_miss` (#393)
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
 - [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
       support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")

@@ -309,19 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def fg_miss() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    for x in (round(f.x(100)) + 2, round(f.x(100)) + 10):
-        p.vline(x, 8, 22, YELLOW)
-    p.line(round(f.x(100)) + 2, 22, round(f.x(100)) + 10, 22, YELLOW)
-    arc(p, f, 80, 106, 24, 14, upto=0.9, c=RED)
-    f.ball(103, 11, RED)
-    band(p, "Q3 09:05", "NO GOOD  38 YD  WIDE LEFT", WHITE, RED)
-    return p
-
-
 def turnover() -> Panel:
     p = Panel()
     p.logo(11, 16, HOME, 8, 0.5)
@@ -377,7 +364,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "fg_miss": fg_miss,
     "turnover": turnover,
     "reversal": reversal,
     "fb_field_64": fb_field_64,
