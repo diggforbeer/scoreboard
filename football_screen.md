@@ -598,9 +598,9 @@ can be tightened from real games.
 - [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
       "`<TEAM>` RECEIVE" enough, or is a source for the winner worth finding?
 - [ ] Coin toss: any sound (a soft ding for the favourite receiving), or silent?
-- [ ] Celebration scoping: favourite only gets the full screen and horn, a
-      followed team gets the quick screen, opponents nothing. Confirm. (This is the
-      NHL rule; "teams work like NHL" suggests yes, but it was not asked directly.)
+- [x] Celebration scoping (confirmed by the owner): the favourite gets the full
+      screen and horn, a followed team gets the quick screen, opponents and
+      unfollowed games get nothing. Same as the NHL rule.
 - [ ] Should the favourite **giving away** the ball (interception, fumble) make
       a sound? Proposed default is silent; taking the ball plays the ding.
 - [x] Reviews: celebrate immediately, and show a `fb_reversal` screen explaining
