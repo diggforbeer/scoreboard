@@ -648,7 +648,7 @@ added later.
       source.
 - [x] Sounds (decided): only **touchdowns and field goals**, **per team**, to start.
       The coin toss, turnovers, reversals and everything else are silent. See "Sounds".
-- [ ] Sounds: does a **followed** team's touchdown or field goal play its own team
+- [~] (Deferred by the owner; silent is the working assumption.) Sounds: does a **followed** team's touchdown or field goal play its own team
       sound, or stay silent? The NHL rule is horn for the favourite only, and the
       celebration-scoping decision above gives followed teams a quiet quick screen,
       so silent is assumed. "Per team" could also mean followed teams get theirs.
