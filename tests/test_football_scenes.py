@@ -405,11 +405,18 @@ def test_a_feed_that_never_answers_is_connecting_for_15_minutes_then_no_data():
     assert m.scene().kind == "fb_no_data"
 
 
-def test_an_empty_slate_is_no_games_not_no_data():
+def test_an_empty_slate_is_the_clock_or_no_games_not_no_data():
     clock = Clock()
     m = feed_mode(Feed([]), clock)
     m.worker.poll_once()
-    assert m.scene().kind == "fb_no_games"
+    assert m.scene().kind == "clock", "the default idle rotation has a clock (#422)"
+    narrow = NflMode(client_factory=lambda: Feed([]), monotonic=clock, wide=lambda: False)
+    narrow.worker.poll_once()
+    assert narrow.scene().kind == "clock"
+    no_clock = FootballConfig(rotation=[{"screen": "fb_week", "seconds": 8}])
+    bare = NflMode(client_factory=lambda: Feed([]), monotonic=clock, football=lambda: no_clock)
+    bare.worker.poll_once()
+    assert bare.scene().kind == "fb_no_games"
 
 
 def test_every_nfl_scene_kind_is_known_and_documented():

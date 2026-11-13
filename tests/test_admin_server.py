@@ -95,9 +95,9 @@ async def _serve_and_get(path):
         return await asyncio.to_thread(_get)
 
 
-async def _skip_initial(client, n=13):
+async def _skip_initial(client, n=14):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update/horn_list/snapshot/holiday/football messages every connection
+    rotation/update/horn_list/snapshot/holiday/football/football_rotation messages every connection
     opens with."""
     for _ in range(n):
         await client.recv()
@@ -1315,6 +1315,7 @@ def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch
                     first = json.loads(await client.recv())
                     await client.recv()  # holiday, sent after the snapshot
                     await client.recv()  # football, sent after holiday
+                    await client.recv()  # football_rotation, sent after football
                     state["scene"] = "game"
                     second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
                     return first, second
@@ -1749,7 +1750,8 @@ def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
         before = json.loads(await client.recv())  # horn_list
         await client.recv()  # snapshot
         await client.recv()  # holiday
-        await client.recv()  # football, the 13th and last initial message
+        await client.recv()  # football, the 13th initial message
+        await client.recv()  # football_rotation, the 14th and last
         await client.send(json.dumps({"type": "upload_horn", "team": "NSH", "data": _wav_b64()}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1953,7 +1955,8 @@ def test_delete_horn_removes_the_file_and_broadcasts_the_updated_list(
         before = json.loads(await client.recv())  # horn_list
         await client.recv()  # snapshot
         await client.recv()  # holiday
-        await client.recv()  # football, the 13th and last initial message
+        await client.recv()  # football, the 13th initial message
+        await client.recv()  # football_rotation, the 14th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "NSH"}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1980,7 +1983,8 @@ def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_pat
         await client.recv()  # the list with the override still present
         await client.recv()  # snapshot
         await client.recv()  # holiday
-        await client.recv()  # football, the 13th and last initial message
+        await client.recv()  # football, the 13th initial message
+        await client.recv()  # football_rotation, the 14th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "default"}))
         return await client.recv()
 
@@ -2395,7 +2399,7 @@ async def _save_football(client, data):
     return await _next(client)
 
 
-def test_sends_the_football_config_last_with_all_32_teams(app_dir, config_path):
+def test_sends_the_football_config_with_all_32_teams(app_dir, config_path):
     config_path.write_text('[football]\nfavourite_team = "KC"\nalso_follow = ["NYG"]\n')
 
     async def scenario(client):
@@ -2499,3 +2503,86 @@ def test_the_nfl_and_nhl_favourites_are_saved_independently(app_dir, config_path
     asyncio.run(_serve_and_run(scenario))
     settings = Settings.load(config_path)
     assert settings.scoreboard.favourite_team == "BUF" and settings.football.favourite_team == "KC"
+
+
+# -- [[football.rotation]]: NFL idle rotation (#422) ---------------------------------
+
+
+async def _save_football_rotation(client, data):
+    message = {"type": "save", "section": "football_rotation", "data": data}
+    await client.send(json.dumps(message))
+    return await _next(client)
+
+
+def test_sends_the_nfl_rotation_last_with_the_defaults_and_screens(app_dir, config_path):
+    config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=13)
+        return await _next(client)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["section"] == "football_rotation"
+    assert message["data"] == {
+        "rotation": [],
+        "final_hold_minutes": 30.0,
+        "countdown_minutes": 60.0,
+    }
+    assert [d["screen"] for d in message["defaults"]] == [
+        "fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock",
+    ]  # fmt: skip
+    assert message["screens"] == ["fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock"]
+
+
+def test_saving_the_nfl_rotation_writes_football_rotation_tables(app_dir, config_path):
+    config_path.write_text('[football]\nfavourite_team = "NYG"\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        saved = await _save_football_rotation(
+            client,
+            {
+                "rotation": [
+                    {"screen": "fb_week", "seconds": 12},
+                    {"screen": "clock", "seconds": 4},
+                ],
+                "final_hold_minutes": 45,
+            },
+        )
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "football_rotation"}
+    assert echo["data"]["rotation"] == [
+        {"screen": "fb_week", "seconds": 12.0}, {"screen": "clock", "seconds": 4.0},
+    ]  # fmt: skip
+    assert "[[football.rotation]]" in config_path.read_text()
+    football = Settings.load(config_path).football
+    assert football.favourite_team == "NYG" and football.final_hold_minutes == 45.0
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"rotation": "fb_week"},
+        {"rotation": [{"screen": "scores_grid", "seconds": 5}]},
+        {"rotation": [{"screen": "fb_week", "seconds": 0}]},
+        {"rotation": [{"screen": "fb_week", "seconds": True}]},
+        {"rotation": [{"screen": "fb_week", "seconds": 5}] * 9},
+        {"final_hold_minutes": 0},
+        {"countdown_minutes": 99999},
+        {"final_hold_minutes": "soon"},
+        "nope",
+    ],
+)
+def test_a_bad_nfl_rotation_save_is_rejected_and_writes_nothing(app_dir, config_path, data):
+    config_path.write_text("[football]\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        return await _save_football_rotation(client, data)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and message["section"] == "football_rotation"
+    assert "rotation" not in config_path.read_text()
+    assert Settings.load(config_path).football.final_hold_minutes == 60.0

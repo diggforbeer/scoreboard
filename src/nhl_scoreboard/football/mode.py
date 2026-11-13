@@ -72,6 +72,7 @@ class NflMode:
         delay_seconds: Callable[[], float] = lambda: 0.0,
         utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
         timings: Callable[[], Timings] | None = None,
+        wide: Callable[[], bool] = lambda: True,
     ) -> None:
         """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
         settings (read at each poll and each frame, so an admin-page change applies without a
@@ -85,6 +86,12 @@ class NflMode:
         self._monotonic = monotonic
         self._client_factory = client_factory
         self._utc_now = utc_now
+        #: Whether the panel is 128px wide: the idle screens are drawn for that width only.
+        self._wide = wide
+        #: Final games' first sighting while live, per game id, so the hold after the whistle is
+        #: timed from the end of the game we watched (a board that joins late gets no hold).
+        self._seen_live: set[int] = set()
+        self._final_since: dict[int, float] = {}
         #: The idle screens' data cache (#421): the feed worker's thread owns it.
         self._idle_cache = IdleCache(monotonic)
         self.worker = FeedWorker(
@@ -261,6 +268,9 @@ class NflMode:
         if snap.is_stale(now):
             return Scene("fb_no_data")
         games = snap.games or ()
+        idle_kind = self._idle_kind(games, snap, now)
+        if idle_kind is not None:
+            return self._idle_scene(idle_kind, games)
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
@@ -273,6 +283,91 @@ class NflMode:
         if current is None:
             return base
         return self._play_scene(current, base)
+
+    # -- the idle selection (#422) -----------------------------------------------
+
+    def _idle_kind(self, games: Sequence[FbGame], snap: FeedSnapshot, now: float) -> str | None:
+        """The idle screen to show, or None to fall through to the game scenes.
+
+        In order: a live game (followed, or any when nobody is followed) always wins; the
+        favourite's game inside the kickoff window shows ``fb_countdown``; its final, within the
+        hold, ``fb_final``; then, with a favourite set, the idle rotation; an empty slate shows the
+        rotation's clock (or ``fb_no_games``). 128px panels only: on 64px this returns None except
+        for the empty slate's clock.
+        """
+        from .idle_screens import IDLE_SCREENS, IdleContext
+
+        cfg = self._football() if self._football else _no_football()
+        followed = cfg.followed_teams
+        for game in games:
+            if game.is_live:
+                self._seen_live.add(game.id)
+            elif game.is_final and game.id in self._seen_live:
+                self._final_since.setdefault(game.id, now)
+        playing = [g for g in games if g.is_live]
+        if any(any(g.involves(t) for t in followed) for g in playing) or (playing and not followed):
+            return None
+        wide = self._wide()
+        if not wide:
+            return "clock" if not games and _has_clock(cfg) else None
+        favourite = cfg.favourite_team
+        ctx = IdleContext(now, self._utc_now(), games, snap.idle, cfg)
+        mine = next((g for g in games if favourite and g.involves(favourite)), None)
+        if mine is not None and "fb_countdown" in IDLE_SCREENS and self._in_countdown(mine, cfg):
+            return "fb_countdown"
+        if (
+            mine is not None
+            and "fb_final" in IDLE_SCREENS
+            and mine.is_final
+            and now - self._final_since.get(mine.id, -1e18) < cfg.final_hold_minutes * 60
+        ):
+            return "fb_final"
+        if favourite:
+            slots = self._rotation(cfg, ctx, favourite)
+            if slots:
+                return _slot_at(slots, now)
+        if not games:
+            return "clock" if _has_clock(cfg) else None
+        return None
+
+    def _in_countdown(self, game: FbGame, cfg: FootballConfig) -> bool:
+        if not game.is_pregame or game.start_utc is None:
+            return False
+        until = game.start_utc - self._utc_now()
+        return timedelta(0) <= until <= timedelta(minutes=cfg.countdown_minutes)
+
+    def _rotation(self, cfg: FootballConfig, ctx: Any, favourite: str) -> list[tuple[str, float]]:
+        """The rotation's slots that can show right now, as (screen, seconds).
+
+        A screen drops out unless it is registered and its ``should_show`` is true; the clock only
+        counts when another screen resolved (a lone clock is the empty-slate case, not a rotation);
+        ``fb_bye`` joins when the favourite is on a bye.
+        """
+        from .idle_screens import IDLE_SCREENS
+
+        slots: list[tuple[str, float]] = []
+        clock: list[tuple[str, float]] = []
+        for entry in cfg.idle_rotation:
+            if entry.screen == "clock":
+                clock.append((entry.screen, entry.seconds))
+            elif entry.screen in IDLE_SCREENS and IDLE_SCREENS[entry.screen](ctx):
+                slots.append((entry.screen, entry.seconds))
+        scoreboard = ctx.idle.scoreboard
+        if (
+            scoreboard is not None
+            and scoreboard.on_bye(favourite)
+            and "fb_bye" in IDLE_SCREENS
+            and IDLE_SCREENS["fb_bye"](ctx)
+        ):
+            slots.append(("fb_bye", 8.0))
+        return slots + clock if slots else []
+
+    def _idle_scene(self, kind: str, games: Sequence[FbGame]) -> Scene:
+        from ..app import Scene
+
+        favourite = self._football().favourite_team if self._football else ""
+        mine = next((g for g in games if favourite and g.involves(favourite)), None)
+        return Scene(kind, fb_game=mine if kind in ("fb_countdown", "fb_final") else None)
 
     def _play_scene(self, current: Any, base: Scene) -> Scene:
         """The scene for the stage on screen (#377), over the game's latest score."""
@@ -330,6 +425,22 @@ def resting_kind(game: FbGame) -> str:
     if game.is_halftime:
         return "fb_halftime"
     return "fb_field" if game.is_live else "fb_scores"
+
+
+def _slot_at(slots: Sequence[tuple[str, float]], now: float) -> str:
+    """The slot on screen at monotonic time ``now``: a pure function of the clock, so a refresh
+    that changes the slots never makes the board lose its place by more than one turn."""
+    total = sum(seconds for _, seconds in slots)
+    at = now % total
+    for screen, seconds in slots:
+        if at < seconds:
+            return screen
+        at -= seconds
+    return slots[-1][0]
+
+
+def _has_clock(cfg: FootballConfig) -> bool:
+    return any(entry.screen == "clock" for entry in cfg.idle_rotation)
 
 
 def _no_football() -> FootballConfig:

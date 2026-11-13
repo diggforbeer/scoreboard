@@ -432,3 +432,45 @@ def test_nfl_mode_has_its_own_favourite_and_followed_teams(admin_page):
             assert admin_page.config()["football"]["also_follow"] == ["NYG", "WSH"]
         finally:
             browser.close()
+
+
+def test_nfl_mode_has_its_own_idle_rotation_card(admin_page):
+    """#422: the NFL idle rotation card replaces the NHL one in NFL mode, saves
+    ``[[football.rotation]]`` and the two timers, and leaves the NHL ``[[rotation]]`` alone."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#sb-sport", timeout=15000)
+            assert page.get_by_role("heading", name="NFL idle rotation").count() == 0
+            assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 1
+
+            page.select_option("#sb-sport", "nfl")
+            page.get_by_role("heading", name="NFL idle rotation").wait_for(timeout=15000)
+            assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 0
+
+            page.get_by_role("button", name="Add row").click()
+            page.select_option('[aria-label="NFL rotation screen 1"]', "fb_week")
+            page.fill('[aria-label="NFL rotation seconds 1"]', "12")
+            page.fill("#nfl-final-hold", "45")
+            page.keyboard.press("Tab")
+            _wait_until(
+                lambda: (
+                    admin_page.config().get("football", {}).get("rotation")
+                    == [{"screen": "fb_week", "seconds": 12}]
+                )
+            )
+            _wait_until(lambda: admin_page.config()["football"].get("final_hold_minutes") == 45)
+            assert "rotation" not in admin_page.config() or admin_page.config()["rotation"] != [
+                {"screen": "fb_week", "seconds": 12}
+            ]
+
+            page.reload()
+            page.wait_for_selector("#nfl-final-hold", timeout=15000)
+            assert page.input_value("#nfl-final-hold") == "45"
+            assert page.input_value('[aria-label="NFL rotation screen 1"]') == "fb_week"
+        finally:
+            browser.close()

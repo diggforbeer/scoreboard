@@ -348,6 +348,19 @@ VALID_ROTATION_SCREENS = (
 #: current name at load (the admin page names the screen after what it shows, #269 follow-up).
 ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 
+#: The screens NFL mode's own idle rotation (``[[football.rotation]]``, #422) can list. ``fb_bye``,
+#: ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself when they
+#: apply (a bye week, the kickoff window, the hold after a game).
+NFL_ROTATION_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock")
+#: What NFL mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
+DEFAULT_NFL_ROTATION: tuple[tuple[str, float], ...] = (
+    ("fb_preview", 8.0),
+    ("fb_standings", 8.0),
+    ("fb_week", 10.0),
+    ("fb_schedule", 8.0),
+    ("clock", 6.0),
+)
+
 
 @dataclass(slots=True)
 class RotationEntry:
@@ -362,38 +375,48 @@ class RotationEntry:
     seconds: float
 
 
-def _parse_rotation(raw: list[Any]) -> list[RotationEntry]:
+def _parse_rotation(
+    raw: list[Any],
+    valid: tuple[str, ...] | None = None,
+    label: str = "[[rotation]]",
+) -> list[RotationEntry]:
     """Parse ``[[rotation]]`` (an array of tables), dropping invalid entries.
+
+    ``valid`` and ``label`` let NFL mode's own list (``[[football.rotation]]``, #422) use the
+    same rules with its own screen names.
 
     Per #150's decision 3, an invalid entry is never displayed on the panel
     but is not fatal either -- logged as a warning and skipped, same
     typo-tolerant convention as every other config value in this module.
     """
+    valid = VALID_ROTATION_SCREENS if valid is None else valid
     entries: list[RotationEntry] = []
     for item in raw:
+        if isinstance(item, RotationEntry):
+            entries.append(item)
+            continue
         if not isinstance(item, dict):
-            log.warning("Ignoring [[rotation]] entry that isn't a table: %r", item)
+            log.warning("Ignoring %s entry that isn't a table: %r", label, item)
             continue
         screen = str(item.get("screen", "")).strip().lower()
         screen = ROTATION_SCREEN_ALIASES.get(screen, screen)
-        if screen not in VALID_ROTATION_SCREENS:
+        if screen not in valid:
             log.warning(
-                "Ignoring [[rotation]] entry with unknown screen %r (must be one of %s)",
+                "Ignoring %s entry with unknown screen %r (must be one of %s)",
+                label,
                 item.get("screen"),
-                ", ".join(VALID_ROTATION_SCREENS),
+                ", ".join(valid),
             )
             continue
         seconds = item.get("seconds")
         try:
             seconds_value = float(seconds)
         except (TypeError, ValueError):
-            log.warning(
-                "Ignoring [[rotation]] entry %r with non-numeric seconds %r", screen, seconds
-            )
+            log.warning("Ignoring %s entry %r with non-numeric seconds %r", label, screen, seconds)
             continue
         if seconds_value <= 0:
             log.warning(
-                "Ignoring [[rotation]] entry %r with non-positive seconds %r", screen, seconds_value
+                "Ignoring %s entry %r with non-positive seconds %r", label, screen, seconds_value
             )
             continue
         entries.append(RotationEntry(screen=screen, seconds=seconds_value))
@@ -473,6 +496,19 @@ class WifiSetupConfig:
     port: int = 80
 
 
+def _positive_minutes(value: Any, default: float, name: str) -> float:
+    """A positive number of minutes, else ``default`` with a warning (a typo never stops a boot)."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        log.warning("Ignoring non-numeric %s %r", name, value)
+        return default
+    if number <= 0:
+        log.warning("Ignoring non-positive %s %r", name, value)
+        return default
+    return number
+
+
 @dataclass(slots=True)
 class FootballConfig:
     """Which NFL teams the board follows in NFL mode (#348).
@@ -491,8 +527,26 @@ class FootballConfig:
     favourite_team: str = ""
     #: More NFL teams to follow, like ``scoreboard.also_follow``.
     also_follow: list[str] = field(default_factory=list)
+    #: NFL mode's own idle rotation (``[[football.rotation]]``, #422): NFL screen names only.
+    #: Empty means ``DEFAULT_NFL_ROTATION``; read it through ``idle_rotation``.
+    rotation: list[Any] = field(default_factory=list)
+    #: How long the favourite's final stays up before the idle rotation resumes (decided: 60).
+    final_hold_minutes: float = 60.0
+    #: The kickoff window: how long before kickoff the favourite's game shows its countdown.
+    countdown_minutes: float = 60.0
 
     def __post_init__(self) -> None:
+        self.rotation = _parse_rotation(
+            self.rotation if isinstance(self.rotation, list) else [],
+            NFL_ROTATION_SCREENS,
+            "[[football.rotation]]",
+        )
+        self.final_hold_minutes = _positive_minutes(
+            self.final_hold_minutes, 60.0, "football.final_hold_minutes"
+        )
+        self.countdown_minutes = _positive_minutes(
+            self.countdown_minutes, 60.0, "football.countdown_minutes"
+        )
         favourite = str(self.favourite_team).strip().upper()
         if favourite and not nfl_team_exists(favourite):
             log.warning("Ignoring unknown football.favourite_team %r", self.favourite_team)
@@ -512,6 +566,13 @@ class FootballConfig:
     def followed_teams(self) -> list[str]:
         """The favourite (if any) first, then ``also_follow``."""
         return [self.favourite_team, *self.also_follow] if self.favourite_team else self.also_follow
+
+    @property
+    def idle_rotation(self) -> list[RotationEntry]:
+        """The idle rotation in force: the configured list, else the built-in default."""
+        if self.rotation:
+            return list(self.rotation)
+        return [RotationEntry(screen, seconds) for screen, seconds in DEFAULT_NFL_ROTATION]
 
 
 @dataclass(slots=True)
@@ -821,6 +882,16 @@ class Settings:
                 table = tomlkit.table()
                 doc[section] = table
             for key, value in values.items():
+                if section == "football" and key == "rotation":
+                    # ``[[football.rotation]]``: a sequence of tables, replaced whole (#422).
+                    aot = tomlkit.aot()
+                    for entry in value:
+                        row = tomlkit.table()
+                        row["screen"] = entry["screen"]
+                        row["seconds"] = entry["seconds"]
+                        aot.append(row)
+                    table[key] = aot
+                    continue
                 table[key] = value
             for key in RETIRED_KEYS.get(section, {}):
                 if key in table:

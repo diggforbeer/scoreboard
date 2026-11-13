@@ -290,9 +290,11 @@ from .audio import (
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
+    DEFAULT_NFL_ROTATION,
     FLYBY_FREQUENCIES,
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
+    NFL_ROTATION_SCREENS,
     PANEL_HARDWARE_MAPPING_CHOICES,
     SPORT_CHOICES,
     VALID_ROTATION_SCREENS,
@@ -606,6 +608,26 @@ def _football_payload(settings: Settings) -> dict[str, object]:
     }
 
 
+def _football_rotation_payload(settings: Settings) -> dict[str, object]:
+    """NFL mode's idle rotation (``[[football.rotation]]``) and its two timers (#422).
+
+    ``defaults`` is what the board rotates through when the list is empty, so the page can show
+    it as the starting point rather than a blank list.
+    """
+    cfg = settings.football
+    return {
+        "type": "config",
+        "section": "football_rotation",
+        "data": {
+            "rotation": [dataclasses.asdict(entry) for entry in cfg.rotation],
+            "final_hold_minutes": cfg.final_hold_minutes,
+            "countdown_minutes": cfg.countdown_minutes,
+        },
+        "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_NFL_ROTATION],
+        "screens": list(NFL_ROTATION_SCREENS),
+    }
+
+
 def _wifi_payload(settings: Settings) -> dict[str, object]:
     return {"type": "config", "section": "wifi", "data": dataclasses.asdict(settings.wifi)}
 
@@ -901,6 +923,13 @@ async def _send_football_config(
 ) -> None:
     settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_football_payload(settings)))
+
+
+async def _send_football_rotation_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_football_rotation_payload(settings)))
 
 
 async def _send_snapshot(connection: ServerConnection) -> None:
@@ -1350,6 +1379,47 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
     return entries
 
 
+#: Bounds for NFL mode's two timers (minutes), so a typo cannot hold a final for a week.
+_FOOTBALL_MINUTES = {"final_hold_minutes": (1.0, 720.0), "countdown_minutes": (1.0, 720.0)}
+
+
+def _coerce_football_rotation(data: object) -> dict[str, object]:
+    """Validate a ``football_rotation`` save: the rows (rejected whole on the first bad one, like
+    ``_coerce_rotation``) and the two timers. A missing key is left alone."""
+    if not isinstance(data, dict):
+        raise ValueError(json.dumps({"football_rotation": "must be an object"}))
+    values: dict[str, object] = {}
+    if "rotation" in data:
+        rows = data["rotation"]
+        if not isinstance(rows, list):
+            raise ValueError(json.dumps({"rotation": "must be a list"}))
+        if len(rows) > ROTATION_MAX_ROWS:
+            raise ValueError(json.dumps({"rotation": f"at most {ROTATION_MAX_ROWS} rows"}))
+        entries: list[dict[str, object]] = []
+        for i, item in enumerate(rows):
+            if not isinstance(item, dict):
+                raise ValueError(json.dumps({f"row {i + 1}": "must be an object"}))
+            screen = item.get("screen")
+            if screen not in NFL_ROTATION_SCREENS:
+                choices = ", ".join(NFL_ROTATION_SCREENS)
+                raise ValueError(json.dumps({f"row {i + 1}": f"screen must be one of {choices}"}))
+            seconds = item.get("seconds")
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0:
+                raise ValueError(json.dumps({f"row {i + 1}": "seconds must be a positive number"}))
+            entries.append({"screen": screen, "seconds": float(seconds)})
+        values["rotation"] = entries
+    for key, (low, high) in _FOOTBALL_MINUTES.items():
+        if key not in data:
+            continue
+        minutes = data[key]
+        if not isinstance(minutes, (int, float)) or isinstance(minutes, bool):
+            raise ValueError(json.dumps({key: "must be a number of minutes"}))
+        if not low <= minutes <= high:
+            raise ValueError(json.dumps({key: f"must be between {low:g} and {high:g}"}))
+        values[key] = float(minutes)
+    return values
+
+
 #: The scalar half of ``[holiday]``; ``themes`` is a list, checked by
 #: _coerce_holiday itself.
 _HOLIDAY_FIELDS: dict[str, _FieldSpec] = {
@@ -1399,6 +1469,7 @@ _SEND_AFTER_SAVE = {
     "holiday": _send_holiday_config,
     "update": _send_update_config,
     "football": _send_football_config,
+    "football_rotation": _send_football_rotation_config,
 }
 
 
@@ -1460,11 +1531,16 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_update(message.get("data"))
         elif section == "football":
             values = _coerce_scalar_fields(message.get("data"), _FOOTBALL_FIELDS)
+        elif section == "football_rotation":
+            values = _coerce_football_rotation(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
             return
-        Settings.load(CONFIG_PATH).save({section: values})
+        # The NFL rotation lives in ``[football]``; it has its own page section only.
+        Settings.load(CONFIG_PATH).save(
+            {"football" if section == "football_rotation" else section: values}
+        )
     except (ValueError, ConfigWriteError) as exc:
         error = {"type": "error", "section": section, "message": str(exc)}
         await connection.send(json.dumps(error))
@@ -1500,6 +1576,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_holiday_config(connection, settings)
         # After holiday for the same reason: nothing that counts the earlier messages moves.
         await _send_football_config(connection, settings)
+        await _send_football_rotation_config(connection, settings)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:

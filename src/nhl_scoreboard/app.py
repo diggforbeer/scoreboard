@@ -807,6 +807,7 @@ class ScoreboardApp:
             football=lambda: self.settings.football,
             delay_seconds=self._delay_seconds,
             utc_now=self.clock,
+            wide=lambda: self.renderer.width >= 128,
         )
 
     def current_mode(self) -> str:
@@ -2936,7 +2937,8 @@ class ScoreboardApp:
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
         elif scene.kind == "clock":
-            r.draw_clock(self.canvas, self.clock(), favourite)
+            # The clock's colours are keyed on NHL abbreviations: an NFL abbreviation is no key.
+            r.draw_clock(self.canvas, self.clock(), "" if self._sport == "nfl" else favourite)
         elif scene.kind == "christmas_tree":
             r.draw_christmas_tree(self.canvas, self.clock(), favourite)
         elif scene.kind == "address":
