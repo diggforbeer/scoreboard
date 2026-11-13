@@ -176,12 +176,18 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 - [x] **Primetime and holiday games** get a tag on the preview (`THU NIGHT`, `MON NIGHT`,
       `THANKSGIVING`, `CHRISTMAS`, from the feed's broadcast and date) **and the existing holiday
       overlay** on Thanksgiving and Christmas games.
+- [x] **Holiday decorations on Thanksgiving and Christmas games only**, using the existing holiday
+      overlays, drawn in the playing teams' **NFL** colours (the overlay still uses the NHL colour
+      table with NFL abbreviations, a known gap in `CLAUDE.md`, to be fixed as part of this). No other
+      holiday touches a game screen.
+- [x] **The default NFL idle rotation:** `fb_preview` 8s, `fb_standings` 8s (the division, then the
+      conference), `fb_week` 10s, `fb_schedule` 8s, then the clock 6s. A screen with nothing to show is
+      skipped. `fb_bye` joins the loop on a bye week and `fb_final` holds for its 60 minutes after a
+      game. All are settings under `[football]` and the admin page's NFL rotation card.
 
 ## Open questions
 
-- [ ] Which holiday overlays apply to a game on that day (the holiday overlay still uses NHL team
-      colours with NFL abbreviations, a known gap in `CLAUDE.md`).
-- [ ] The default order and seconds of the NFL idle rotation.
+None left. The next step is the build, one story each (see the todo).
 
 ## Todo
 
