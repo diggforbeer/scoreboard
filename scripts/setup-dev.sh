@@ -39,6 +39,14 @@ else
         "libcairo2/network are available if you want real crests."
 fi
 
+echo "==> Fetching NFL team logos (best-effort: needs network)"
+if "${VENV}/bin/python" "${REPO_ROOT}/scripts/fetch-logos.py" --sport nfl; then
+    echo "==> NFL logos fetched"
+else
+    echo "==> NFL logo fetch failed -- not fatal, NFL mode falls back to text" \
+        "abbreviations. Re-run: scripts/fetch-logos.py --sport nfl"
+fi
+
 cat <<'EOF'
 
 ==> Ready. Activate the venv, then:

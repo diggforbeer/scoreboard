@@ -729,6 +729,16 @@ open for the owner's review:
   With 14px end zones the playing field is exactly **100px for 100 yards**, one
   pixel a yard, which makes the maths and the animation easy. The team with the
   ball has its logo at full brightness and the other is dimmed.
+- **Logo sizes and variant (decided in #349, from contact sheets of the real logos on turf):**
+  **12px** in each end zone, **16px** for the larger uses (coin toss, score detail), the
+  **dark** variant (the Giants' navy crest all but vanishes in ESPN's default art on turf; the
+  dark art is readable, the same reason NHL uses it). 12px reads for most teams and 16px for all;
+  **8px and below is a blob**, so on a single 64px panel the 7px end zones carry **no logo**, only
+  the team-colour tint. Carolina's crest is a black panther and measures 31 (0-255) at 12px
+  against 62 or more for every other team, so the fetch script **brightens a crest that dim**
+  (CAR is the only one at present), the same idea as lifting navy team colours on the NHL side.
+  Washington, Houston, Atlanta and the Jets are the next dimmest but read fine. A hand-picked
+  override for any crest can go in `assets/logos/nfl/overrides/<size>/<variant>/`.
 - **A one-line band across the top** (tiny 4x6 type): clock and quarter on the
   left, the down and distance or the play label on the right, in a colour that
   says the kind of play (green gain, red loss, amber neutral).
@@ -945,6 +955,9 @@ added later.
 - [ ] Which non-sport screens and idle-rotation entries carry over to the NFL mode, written down
 
 ### Build (after the design is agreed)
+
+- [x] NFL logos: `scripts/fetch-logos.py --sport nfl` (12px and 16px, dark), `LogoSet` for a team
+      at several sizes, kept apart from the NHL art (#349)
 
 - [x] Base scenes: the status screens and a plain text scoreboard with the favourite and
       followed-team selection (#352); see "Base scenes"

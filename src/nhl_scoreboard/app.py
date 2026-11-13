@@ -46,7 +46,7 @@ from .display.holiday import (
     active_holiday,
     christmas_countdown,
 )
-from .display.logos import LogoLibrary
+from .display.logos import LogoLibrary, LogoSet
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
@@ -396,6 +396,7 @@ class ScoreboardApp:
             tz=self.tz,
             logos=logos,
         )
+        self.renderer.nfl_logos = self._make_nfl_logos(settings)
         self.games: list[Game] = []
         self.index = 0
         #: Fetch results waiting out ``broadcast_delay_seconds`` (#301), and the
@@ -766,6 +767,14 @@ class ScoreboardApp:
 
     # -- data ------------------------------------------------------------
 
+    @staticmethod
+    def _make_nfl_logos(settings: Settings) -> LogoSet | None:
+        """The NFL logo set, or ``None`` with logos switched off (#349). Cheap: the files
+        are only read when a screen first asks for a team at a size."""
+        if not settings.scoreboard.show_logos:
+            return None
+        return LogoSet("nfl", settings.scoreboard.logo_variant)
+
     def _new_nfl(self) -> NflMode:
         """A fresh NFL mode over the live settings. Its feed thread is not started here:
         ``run()`` starts it, and a live sport switch starts it once the loop is running."""
@@ -1104,6 +1113,7 @@ class ScoreboardApp:
                     variant=new_settings.scoreboard.logo_variant,
                 )
             self.renderer.logos = logos
+            self.renderer.nfl_logos = self._make_nfl_logos(new_settings)
 
         if auto_brightness_changed:
             # Same lazy probe as __init__: only touch the I2C bus when the

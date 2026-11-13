@@ -161,6 +161,46 @@ jobs:
           python3 -m pip install --user --quiet cairosvg pillow requests
           python3 scripts/fetch-logos.py --size 32 --variant both
 
+      # NFL logos (#349). Best effort, unlike the NHL ones: ESPN is a third party and the
+      # board falls back to team abbreviations without these, so a failed fetch warns and
+      # must not fail the image build. The cache is saved only after a *successful* fetch,
+      # or one transient failure would pin an incomplete set under the key for good (a
+      # plain actions/cache step saves whatever is on disk when the job ends).
+      - name: Restore NFL logos
+        id: nfl-logo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            scoreboard/assets/logos/nfl/12
+            scoreboard/assets/logos/nfl/16
+          key: >-
+            logos-nfl-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
+            'scoreboard/src/nhl_scoreboard/football/teams.py') }}
+
+      - name: Rasterise NFL logos
+        id: nfl-logos
+        if: steps.nfl-logo-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        working-directory: scoreboard
+        run: |
+          python3 -m pip install --user --quiet pillow requests
+          python3 scripts/fetch-logos.py --sport nfl
+
+      - name: Save NFL logos
+        if: steps.nfl-logos.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            scoreboard/assets/logos/nfl/12
+            scoreboard/assets/logos/nfl/16
+          key: >-
+            logos-nfl-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
+            'scoreboard/src/nhl_scoreboard/football/teams.py') }}
+
+      - name: Warn that the NFL logos could not be fetched
+        if: steps.nfl-logos.outcome == 'failure'
+        run: echo "::warning title=NFL logos::Could not fetch the NFL logos; this image falls back to team abbreviations in NFL mode"
+
       # Node never touches the image itself -- same "build tools are
       # CI-only" stance as the rgbmatrix compiler toolchain purged post-
       # build below. frontend/dist is a plain build product the layer's

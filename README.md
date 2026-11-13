@@ -433,6 +433,11 @@ per team. `scripts/fetch-logos.py` downloads the SVGs and rasterises them to
 32×32 PNGs; CI runs it before every image build. The PNGs are git-ignored, so
 this repository never redistributes the artwork.
 
+NFL mode (the `football` branch) has its own logos, fetched the same way from ESPN's team list:
+`scripts/fetch-logos.py --sport nfl` writes 12px (for the end zones) and 16px PNGs under
+`assets/logos/nfl/`, also git-ignored. They are kept apart from the NHL art because abbreviations
+such as `BUF`, `CAR`, `DAL`, `DET` and `MIN` are different teams in each league.
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE). Bundled BDF fonts come from
