@@ -843,6 +843,22 @@ A turnover that is also a score (a pick-six) shows `fb_touchdown` only. The
 touchdown wins, because it is the bigger event, and the detail line says
 `INT RETURN`.
 
+**Built (story #394, `display/football_turnover.py`).** An `@event_screen(Turnover, EVENT)`
+screen, `fb_turnover_seconds` (4s), silent. Between the two teams' 16px logos (the home team on
+the left, as on the field): the headline in the large font (`INTERCEPTION`, `FUMBLE`,
+`SACK-FUMBLE`, `MUFFED PUNT`, `ON DOWNS`, else `TURNOVER`), an **arrow drawn from the team that
+lost the ball toward the team that gained it** with a ball riding its tip, and at the moment it
+lands the **possession logo swaps**: the team that now has the ball brightens and the other dims.
+Last, who took it and where, `INT  B.CARTER  ATL 43` (the interception spot the text gives, else
+where the new possession starts; a turnover on downs reads `WSH  BALL` and the spot).
+
+The **colour** is by what it means for the favourite, which the event now says
+(`Turnover.favourite`: `gained`, `lost` or `neither`, set by the detector): green when the
+favourite gains the ball, red when it loses it, amber between two teams that are not the
+favourite. A 64px panel has no logos and uses the smaller type. Return yards of a long return
+are not drawn: the feed's text does not give them as a figure. A pick-six is the touchdown's
+screen only (the detector emits no turnover for it).
+
 #### Rules for anything unrecognised
 
 1. A score is any play where `awayScore` / `homeScore` changed. If the type
@@ -1142,6 +1158,17 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Short](docs/football/fg_miss_short.png) | ![Blocked](docs/football/fg_miss_blocked.png) |
 | Comes down short of the end zone. | Knocked back behind the line. |
 
+**The turnover** (#394; the arrow drawing, settled with the favourite losing it, gaining it, a fumble and a turnover on downs):
+
+| | |
+|---|---|
+| ![Arrow](docs/football/turnover_arrow.png) | ![Lost](docs/football/turnover.png) |
+| The arrow drawing toward the team that gains the ball. | Settled, red: the favourite threw it away. |
+| ![Gained](docs/football/turnover_gained.png) | ![Fumble](docs/football/turnover_fumble.png) |
+| Green: the favourite picked it off (the arrow points left). | A fumble lost. |
+| ![On downs](docs/football/turnover_on_downs.png) | |
+| Amber: neither team is the favourite; a turnover on downs. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1150,8 +1177,8 @@ test does the same. Nothing here touches `docs/screens/`.
 | `fb_play` for a play with no screen of its own yet (a blocked punt, which has no screen of its own): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
-| ![Turnover card](docs/football/fb_event_turnover.png) | ![Reversal card](docs/football/fb_event_reversal.png) |
-| A turnover alert. | `fb_event` (stage `reversal`): the correction and its reason. |
+| ![Reversal card](docs/football/fb_event_reversal.png) | |
+| `fb_event` (stage `reversal`): the correction and its reason. | |
 
 `fb_field` and `fb_field_redzone` (the resting field, below) are real renders too: the same
 names as their mockups, which they replaced.
@@ -1166,7 +1193,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal`, `fieldgoal_opponent` and `fg_miss`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal`, `fieldgoal_opponent`, `fg_miss` and `turnover`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1449,7 +1476,7 @@ added later.
 - [x] `fb_touchdown` (#390) and `fb_fieldgoal` (#392) celebrations
 - [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
 - [x] `fb_fg_miss` (#393)
-- [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
+- [~] `fb_turnover` done, including the on-downs title (#394); the generic `fb_score` fallback still to do
 - [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
       support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
 - [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)

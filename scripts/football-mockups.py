@@ -309,18 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def turnover() -> Panel:
-    p = Panel()
-    p.logo(11, 16, HOME, 8, 0.5)
-    p.logo(p.w - 12, 16, AWAY, 8)
-    p.center("7x13B", 14, RED, "INTERCEPTION", 22, p.w - 22)
-    p.line(34, 22, 92, 22, scale(RED, 0.6))
-    p.line(92, 22, 88, 19, scale(RED, 0.6))
-    p.line(92, 22, 88, 25, scale(RED, 0.6))
-    p.center("4x6", 31, WHITE, "INT  B.CARTER  ATL 43", 22, p.w - 22)
-    return p
-
-
 def reversal() -> Panel:
     p = Panel()
     p.logo(10, 16, HOME, 7)
@@ -364,7 +352,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "turnover": turnover,
     "reversal": reversal,
     "fb_field_64": fb_field_64,
     "cointoss_result_64": cointoss_result_64,

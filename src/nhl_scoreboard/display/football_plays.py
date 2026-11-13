@@ -87,6 +87,7 @@ SCREEN_MODULES = (
     "football_score_detail",
     "football_fieldgoal",
     "football_fgmiss",
+    "football_turnover",
 )
 _loaded = False
 

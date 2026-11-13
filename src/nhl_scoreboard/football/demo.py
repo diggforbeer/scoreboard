@@ -106,6 +106,7 @@ def _play(
             "down": 2,
             "distance": 7,
             "shortDownDistanceText": "2nd & 7",
+            "possessionText": f"{HOME} {yard}" if yard <= 50 else f"{AWAY} {100 - yard}",
         }
 
     return Play.from_api(
@@ -283,7 +284,28 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         Touchdown, td, via="run", points=7, extra_point="good", home_score=24, scope=Scope.QUICK
     )
     miss = event(FieldGoal, kick, made=False, yards=38, miss="Wide Left")
-    turnover = event(Turnover, pick, AWAY, reason="interception", lost_by=HOME)
+    turnover = event(Turnover, pick, AWAY, reason="interception", lost_by=HOME, favourite="lost")
+    fumble_play = _play(
+        "Fumble Recovery (Opponent)",
+        "(Shotgun) D.Jones pass short left to K.Pitts to NYG 20 for 9 yards. FUMBLES (L.London), "
+        "RECOVERED by WSH-T.Campbell at NYG 19.",
+        30, 19, HOME, 0, turnover=True, end_team=AWAY,
+    )  # fmt: skip
+    fumble = event(Turnover, fumble_play, AWAY, reason="fumble", lost_by=HOME, favourite="lost")
+    gained_play = _play(
+        "Pass Interception Return",
+        "(Shotgun) M.Penix pass short middle INTERCEPTED by D.Singletary at NYG 43.",
+        57, 43, AWAY, 0, turnover=True, end_team=HOME,
+    )  # fmt: skip
+    gained = event(
+        Turnover, gained_play, HOME, reason="interception", lost_by=AWAY, favourite="gained"
+    )
+    downs_play = _play(
+        "Rush", "D.Jones rush up the middle for 1 yard.", 40, 41, HOME, 1, end_team=AWAY
+    )
+    on_downs = event(
+        Turnover, downs_play, AWAY, reason="on_downs", lost_by=HOME, favourite="neither"
+    )
     toss = event(CoinToss, rush, HOME, kicker=AWAY)
     reversal = event(
         Reversal, td, original=touchdown, original_kind="touchdown", title="TOUCHDOWN OVERTURNED",
@@ -420,7 +442,22 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(
             scene("fb_play", "play", miss_block, miss, at=1.9, seconds=3.0), name="fg_miss_blocked"
         ),
-        DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),
+        DemoStep(
+            scene("fb_event", "event", pick, turnover, at=1.1, seconds=4.0), name="turnover_arrow"
+        ),
+        DemoStep(scene("fb_event", "event", pick, turnover, at=3.4, seconds=4.0), name="turnover"),
+        DemoStep(
+            scene("fb_event", "event", gained_play, gained, at=3.4, seconds=4.0),
+            name="turnover_gained",
+        ),
+        DemoStep(
+            scene("fb_event", "event", fumble_play, fumble, at=3.4, seconds=4.0),
+            name="turnover_fumble",
+        ),
+        DemoStep(
+            scene("fb_event", "event", downs_play, on_downs, at=3.4, seconds=4.0),
+            name="turnover_on_downs",
+        ),
         DemoStep(scene("fb_event", "event", rush, toss, at=1.1, seconds=6.0), name="cointoss_flip"),
         DemoStep(
             scene("fb_event", "event", rush, toss, at=3.2, seconds=6.0), name="cointoss_landed"
