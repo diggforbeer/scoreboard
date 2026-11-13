@@ -235,8 +235,16 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         "D.Singletary rush left end for 3 yards, TOUCHDOWN. G.Gano extra point is GOOD.",
         97, 100, HOME, 3, (10, 24), True,
     )  # fmt: skip
-    kick = _play(
-        "Field Goal Missed", "G.Gano 38 yard field goal is No Good, Wide Left.", 80, 80, HOME
+    miss_text = "{} yard field goal is No Good, {}."
+    kick = _play("Field Goal Missed", miss_text.format("G.Gano 38", "Wide Left"), 62, 62, HOME, 38)
+    miss_right = _play(
+        "Field Goal Missed", miss_text.format("C.Smyth 52", "Wide Right"), 48, 48, HOME, 52
+    )
+    miss_short = _play(
+        "Field Goal Missed", miss_text.format("C.Smyth 55", "Short"), 45, 45, HOME, 55
+    )
+    miss_block = _play(
+        "Field Goal Missed", miss_text.format("C.Smyth 40", "Blocked"), 60, 60, HOME, 40
     )
     pick = _play(
         "Pass Interception Return",
@@ -402,7 +410,16 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
             scene("fb_event", "event", fg_play, quick_fg, at=1.5, seconds=4.0),
             name="fieldgoal_quick",
         ),
-        DemoStep(scene("fb_event", "event", kick, miss), name="fb_event_fg_miss"),
+        DemoStep(scene("fb_play", "play", kick, miss, at=1.9, seconds=3.0), name="fg_miss"),
+        DemoStep(
+            scene("fb_play", "play", miss_right, miss, at=1.9, seconds=3.0), name="fg_miss_right"
+        ),
+        DemoStep(
+            scene("fb_play", "play", miss_short, miss, at=1.9, seconds=3.0), name="fg_miss_short"
+        ),
+        DemoStep(
+            scene("fb_play", "play", miss_block, miss, at=1.9, seconds=3.0), name="fg_miss_blocked"
+        ),
         DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),
         DemoStep(scene("fb_event", "event", rush, toss, at=1.1, seconds=6.0), name="cointoss_flip"),
         DemoStep(

@@ -134,12 +134,13 @@ def test_an_opponents_made_field_goal_gets_only_the_plays_animation():
     assert rig.names() == [dr.PLAY, dr.PLAYTEXT]
 
 
-def test_a_missed_field_goal_is_a_short_card_for_either_team():
+def test_a_missed_field_goal_is_one_short_screen_for_either_team_with_no_card_after_it():
     rig = started(make_play(1, "rush", off="NYG"))
     rig.poll(make_play(1, "rush", off="NYG"), make_play(2, "fg_miss_left", off="WSH"))
     stages = rig.run()
-    assert [s.stage for s in stages] == [dr.PLAY, dr.EVENT, dr.PLAYTEXT]
-    assert isinstance(stages[1].event, ev.FieldGoal) and stages[1].seconds == 3.0
+    assert [s.stage for s in stages] == [dr.PLAY, dr.PLAYTEXT]
+    assert isinstance(stages[0].event, ev.FieldGoal) and not stages[0].event.made
+    assert stages[0].seconds == 3.0
 
 
 def test_a_turnover_is_an_alert_after_the_animation():

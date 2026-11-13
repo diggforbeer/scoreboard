@@ -262,8 +262,9 @@ class Director:
                 out.append(stage(EVENT, timings.cointoss, event))
         # A made field goal's kick animation knows how it was scored (its scope), so the plain
         # kick of a team nobody follows can be dimmer than the favourite's (#392).
-        kick = next((e for e in own if isinstance(e, FieldGoal) and e.made), None)
-        out.append(stage(PLAY, animation_seconds(play, timings.play), kick))
+        kick = next((e for e in own if isinstance(e, FieldGoal)), None)
+        seconds = timings.fg_miss if kick is not None and not kick.made else None
+        out.append(stage(PLAY, seconds or animation_seconds(play, timings.play), kick))
         for event in own:
             if not isinstance(event, CoinToss):
                 out.extend(self._event_stages(event, stage, timings, undone))
@@ -279,8 +280,10 @@ class Director:
         if event.play.id in undone or isinstance(event, CoinToss):
             return []
         if isinstance(event, FieldGoal) and not event.made:
-            # A miss is shown for either team in a followed game (decided), at every scope.
-            return [stage(EVENT, timings.fg_miss, event)]
+            # A miss is shown for either team in a followed game (decided), at every scope, as
+            # its own play stage (``fb_fg_miss``, 3s): the kick, the miss and its words in one
+            # screen, so there is no separate card after it (#393).
+            return []
         if isinstance(event, Touchdown | GenericScore | FieldGoal):
             if event.scope == Scope.FULL:
                 return [
