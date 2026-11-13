@@ -52,6 +52,7 @@ from .models import FbGame, Play
 from .people import Person, RosterPlayer, resolve_people
 from .queue import PlayWatcher, Shown
 from .reversals import Reversal, ReversalDetector
+from .textlayout import playtext_seconds
 
 if TYPE_CHECKING:
     from ..config import FootballConfig
@@ -264,7 +265,8 @@ class Director:
                 out.extend(self._event_stages(event, stage, timings, undone))
         for reversal in already:
             out.append(stage(REVERSAL, timings.reversal, reversal))
-        out.append(stage(PLAYTEXT, timings.playtext))
+        # Long sentences scroll, so they stay up longer than the 5s minimum (#379).
+        out.append(stage(PLAYTEXT, playtext_seconds(play.text, timings.playtext)))
         return out
 
     @staticmethod

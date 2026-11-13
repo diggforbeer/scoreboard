@@ -243,6 +243,22 @@ left ~64px, text on the right ~64px. On a single 64px panel it alternates
 between the two. **Every** play gets an animation before this layout, not just runs and passes:
 see "Every other play" below.
 
+**Built (story #379, `football/textlayout.py` + `display/football_plays.py`).** A pure
+function of the seconds since the stage began:
+
+- **128px:** the field in the left half (ball where the play ended, the play's label over it),
+  the sentence on the right **three lines at a time** with the new down and distance fixed
+  under it. A sentence of more than three lines is **held 2s, then scrolls up one line a second**
+  and rests on the last lines for 1.5s. The scroll is line by line (the panel cannot clip a text
+  draw to a window), not smooth.
+- **64px:** the field and the text **take turns**: the field for 2s, then the text (three lines
+  and the down, scrolling the same way), and the cycle repeats until the stage ends.
+- **How long it stays up:** at least 5s, longer when the sentence needs scrolling (the
+  field's turn included at 64px), capped at 15s so a board that is behind never sits on one
+  play. Real sentences are 50-200 characters, so most scroll. It then returns to `fb_field`.
+- The generic version is what every play shows; a designed play screen changes only its
+  animation, not this layout.
+
 ### Every other play
 
 Decided by the owner: **animate every play**, not only runs and passes. Every
@@ -1087,7 +1103,7 @@ added later.
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
-- [ ] Play-text layout and scrolling
+- [x] Play-text layout and scrolling (#379)
 - [x] (#356) Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
 - [ ] `fb_touchdown` and `fb_fieldgoal` celebrations
