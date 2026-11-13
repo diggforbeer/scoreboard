@@ -18,6 +18,8 @@ from ..app import Scene
 from ..demo import DemoStep
 from .events import CoinToss, Event, FieldGoal, Scope, Touchdown, Turnover
 from .models import FbGame, Play
+from .pacing import animation_seconds
+from .people import Person
 from .reversals import Reversal
 from .teams import TEAMS
 
@@ -128,7 +130,16 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     """Stills of the generic play scenes (#377): what every play shows until its own screen is
     drawn, and the cards of every event. A designed screen replaces its step with its own."""
     game = _game(now, "in", 10, 17, "12:24 - 3rd", situation=_situation(HOME, 62, 2, 7))
-    rush = _play("Rush", "D.Singletary rush up the middle to WSH 38 for 9 yards.", 62, 71, HOME, 9)
+    rush = _play(
+        "Rush", "D.Singletary up the middle to WSH 29 for 9 yards (J.Smith).", 62, 71, HOME, 9
+    )
+    outside = _play(
+        "Rush", "B.Robinson right end to NYG 33 for 7 yards (T.Smith).", 40, 33, AWAY, 7,
+    )  # fmt: skip
+    kneel = _play("Rush", "D.Jones kneels to NYG 22 for -1 yards.", 23, 22, HOME, -1)
+    loss = _play(
+        "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
+    )
     punt = _play("Punt", "T.Way punts 51 yards to NYG 24, fair catch by K.Toney.", 24, 76, AWAY)
     td = _play(
         "Rushing Touchdown",
@@ -158,14 +169,33 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         review=None, current=None,
     )  # fmt: skip
 
-    def scene(kind: str, stage: str, play: Play, ev: Event | None = None, at: float = 1.5) -> Scene:
+    carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
+    robinson = Person("rusher", 9, "B. Robinson", "9", "RB", True)
+
+    def scene(
+        kind: str,
+        stage: str,
+        play: Play,
+        ev: Event | None = None,
+        at: float = 1.5,
+        seconds: float = 3.0,
+        people: tuple[Person, ...] = (),
+    ) -> Scene:
         return Scene(
             kind, fb_game=game, fb_play=play, fb_event=ev, fb_stage=stage, fb_elapsed=at,
-            fb_seconds=3.0, animating=True,
+            fb_seconds=seconds, fb_people=people, animating=True,
         )  # fmt: skip
 
+    def run(play: Play, at: float, who: Person | None) -> Scene:
+        return scene("fb_play", "play", play, at=at, seconds=animation_seconds(play, 3.0),
+                     people=(who,) if who else ())  # fmt: skip
+
     return [
-        DemoStep(scene("fb_play", "play", rush), name="fb_play_rush"),
+        DemoStep(run(rush, 1.0, carrier), name="fb_run"),
+        DemoStep(run(rush, 9.0, carrier), name="fb_run_settled"),
+        DemoStep(run(outside, 1.2, robinson), name="fb_run_outside"),
+        DemoStep(run(loss, 1.2, carrier), name="fb_run_loss"),
+        DemoStep(run(kneel, 1.0, None), name="fb_run_kneel"),
         DemoStep(scene("fb_play", "play", punt), name="fb_play_punt"),
         DemoStep(scene("fb_playtext", "playtext", rush), name="fb_playtext"),
         DemoStep(scene("fb_event", "event", td, touchdown), name="fb_event_touchdown"),

@@ -49,6 +49,7 @@ from .events import (
     Turnover,
 )
 from .models import FbGame, Play
+from .pacing import animation_seconds
 from .people import Person, RosterPlayer, resolve_people
 from .queue import PlayWatcher, Shown
 from .reversals import Reversal, ReversalDetector
@@ -259,7 +260,7 @@ class Director:
         for event in own:
             if isinstance(event, CoinToss):
                 out.append(stage(EVENT, timings.cointoss, event))
-        out.append(stage(PLAY, timings.play))
+        out.append(stage(PLAY, animation_seconds(play, timings.play)))
         for event in own:
             if not isinstance(event, CoinToss):
                 out.extend(self._event_stages(event, stage, timings, undone))

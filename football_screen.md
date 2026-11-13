@@ -226,6 +226,27 @@ to `end.yardLine`, the carrier's **jersey number** on it. Up the middle stays
 on the centre lane; the gap in the text (`left end`, `right guard`) nudges the
 lane for outside runs. Length scales with yardage.
 
+**Built (story #380, `display/football_run.py`, lengths in `football/pacing.py`).** Registered
+for `Rush` and `Rushing Touchdown`; a scramble and a kneel are read off the play's flags.
+
+- The ball runs from `start.yardLine` to `end.yardLine` (smoothstep: it gets going and slows)
+  for 75% of the stage and then rests; a fading **trail** is left behind it, dim at the start
+  and brightest at the ball.
+- **Lane:** the gap in the text (`left end` ... `right end`; `up the middle`, or no gap, is the
+  centre). The offence's left is **up the panel when it drives right and down when it drives
+  left**.
+- **The number:** the carrier's jersey number on the ball, else the last name (up to 6
+  letters), nothing when the play names no one. Drawn below the ball in the top half of the
+  field and above it in the bottom half, so it never runs into the band.
+- The **line of scrimmage and the first-down line** are the play's own until the ball arrives,
+  then move to the new spot (when the same team keeps the ball and the feed gives the new
+  down and distance).
+- **Length:** 2s for a short run, 0.1s more per yard, up to 4s. The label is `RUSH +9` (green
+  gain, red loss, amber for no gain), `SCRAMBLE +6`, or `KNEEL`. The band's right side is
+  `3RD 12:24`.
+- A run with no end spot uses `statYardage` in the offence's direction.
+- Penalised runs (`Penalty` plays) are the penalty story's, not this one's.
+
 ### `fb_pass`: a pass
 
 Triggered by a new play of type `Pass Reception`. The ball arcs from the
@@ -798,12 +819,23 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Halftime](docs/football/fb_scores_halftime.png) | ![Final](docs/football/fb_scores_final.png) |
 | `fb_scores` at halftime. | `fb_scores`, final. |
 
+**`fb_run`** (#380; stills of one run at three moments, an away run to the outside and a loss):
+
+| | |
+|---|---|
+| ![Run, mid-way](docs/football/fb_run.png) | ![Run, settled](docs/football/fb_run_settled.png) |
+| The ball with the carrier's number partway, the trail behind it. | Settled: the markers moved to the new spot. |
+| ![Away run](docs/football/fb_run_outside.png) | ![Run for a loss](docs/football/fb_run_loss.png) |
+| The away team drives left; `right end` is its lower lane. | A loss: red label. |
+| ![Kneel](docs/football/fb_run_kneel.png) | |
+| A kneel: no number, amber `KNEEL`. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
 |---|---|
-| ![Generic play](docs/football/fb_play_rush.png) | ![Generic punt](docs/football/fb_play_punt.png) |
-| `fb_play` for a rush: the ball slides from the start spot to the end spot, the play's name over it. | `fb_play` for a play with no screen yet (a punt). |
+| ![Generic punt](docs/football/fb_play_punt.png) | |
+| `fb_play` for a play with no screen of its own yet (a punt): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
 | ![Event detail](docs/football/fb_event_detail.png) | ![Missed field goal card](docs/football/fb_event_fg_miss.png) |
@@ -826,7 +858,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field` and `fb_field_redzone`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone` and `fb_run`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -884,7 +916,7 @@ open for the owner's review:
 | ![Field](docs/football/fb_field.png) | ![Red zone](docs/football/fb_field_redzone.png) |
 | `fb_field`: the resting screen. Clock, quarter, down and distance; ball, line of scrimmage and first-down line. | The same screen in the red zone (away team has the ball, so the drive runs the other way). |
 | ![Run](docs/football/fb_run.png) | ![Pass](docs/football/fb_pass.png) |
-| `fb_run`: the ball carrier's number moves with a fading trail. | `fb_pass`: an arc from the quarterback to the receiver's number. |
+| `fb_run` (a real render now, see "Real renders"): the ball carrier's number moves with a fading trail. | `fb_pass`: an arc from the quarterback to the receiver's number. |
 | ![Play text](docs/football/fb_playtext.png) | ![Field at 64px](docs/football/fb_field_64.png) |
 | Play-text layout: the field on the left half, the feed's own text on the right. | `fb_field` on a single 64px panel. |
 
@@ -1097,7 +1129,7 @@ added later.
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
       event screens, registries (#377)
-- [ ] `fb_run` and `fb_pass` animations
+- [~] `fb_run` animation done (#380); `fb_pass` still to do
 - [ ] Kickoff and punt animations (arc, return, fair catch, out of bounds, touchback)
 - [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
