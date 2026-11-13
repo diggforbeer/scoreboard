@@ -202,6 +202,23 @@ the left-right flip of the whole view) depends on who has the ball (see
 band with the clock, quarter and `1ST & 10`. Red zone tinted when `isRedZone`.
 Shown between plays.
 
+**Built (story #378, `display/football_scenes.py` `draw_fb_field`).** A live game rests on
+`fb_field`; before the game, at the half and once it is final the board shows `fb_scores`.
+Details the design left open:
+
+- The **band** is `3RD 12:24` on the left, the down and distance on the right (`2ND & 7`;
+  `1ST&GOAL` tightened to leave room; red in the red zone) and, on a 128px panel, the **score**
+  between them (`WSH 10 NYG 17`, abbreviations in team colours), because nothing else on this
+  screen says it. The 4x6 `Q` reads as a zero, so the quarter is `1ST`..`4TH`, not `Q3`. A 64px
+  panel has no room: the clock and `2&7` only.
+- The **red zone** is tinted dark red over the 20 yards in front of the goal line the offence
+  attacks (the home team attacks yard 100, the away team yard 0), under the yard lines.
+- The first-down line follows the offence and stops at the goal line (goal to go).
+- **No situation** (a kickoff, between quarters) draws the plain field. An offence the app does
+  not know shows the ball but no markers.
+- `fb_field_64` stays a hand-drawn mockup: the image script renders 128px panels only; the 64px
+  layout is pinned by snapshots (`tests/snapshots/fb_field_*_64.txt`).
+
 ### `fb_run`: a rush
 
 Triggered by a new play of type `Rush`. The ball moves from `start.yardLine`
@@ -1060,7 +1077,7 @@ added later.
       done (#350); play feed, `Play` model, play-text parser and `--dump-plays` done (#353);
       rosters, participants and jersey numbers done (#354, `football/people.py`). Not wired into
       the loop yet: the worker will fetch the core feed when the site summary shows a new play
-- [ ] `fb_field` renderer
+- [x] `fb_field` renderer: live games rest on it, with the band, red zone and 64px layout (#378)
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
       event screens, registries (#377)

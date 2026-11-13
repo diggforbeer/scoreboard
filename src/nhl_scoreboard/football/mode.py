@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from ..app import Scene
     from ..config import FootballConfig, ScoreboardConfig
 
-#: Every scene kind NFL mode draws (``fb_field`` is so far only shown by the demo, #359).
+#: Every scene kind NFL mode draws.
 #: Documented in ``football_screen.md`` ("Base scenes"); a test keeps that list, this tuple and
 #: the renderer in step.
 FB_SCENE_KINDS = (
@@ -198,7 +198,10 @@ class NflMode:
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
-        base = Scene("fb_scores", fb_game=game)
+        # The field between plays while a ball is in play; the text scoreboard before the game,
+        # at the half and once it is final (the half and final get their own cards later).
+        resting = "fb_field" if game.is_live and not game.is_halftime else "fb_scores"
+        base = Scene(resting, fb_game=game)
         self.director.ingest(snap)
         current = self.director.current(game.id)
         if current is None:

@@ -281,6 +281,11 @@ class FbGame:
         return self.state == PRE
 
     @property
+    def is_halftime(self) -> bool:
+        """Live, but between halves: no ball in play, so no field to show (#378)."""
+        return self.is_live and "HALF" in self.status_name.upper()
+
+    @property
     def is_live(self) -> bool:
         return self.state == IN
 
