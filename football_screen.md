@@ -290,8 +290,8 @@ So the screen can honestly say who **receives**. It cannot say who **won** or
   three-letter abbreviation in team colour.
 - On a single 64px panel the kicking team's logo and the `KICK` caption drop, and
   only `<TEAM> RECEIVE` remains.
-- It plays **no horn**: there is nothing to celebrate yet. A soft sound is an
-  open question.
+- It is **silent** (decided: sounds are touchdowns and field goals only, see
+  "Sounds").
 - It ends by itself and the board moves to `fb_field` for the opening kickoff, the
   same way the goal screen hands back to the game.
 
@@ -371,8 +371,8 @@ Triggered by a new play with `scoringPlay` true whose `type` contains
 
 The look follows the goal light on purpose (full panel, no logos, no score
 in the first seconds). It is a function of the seconds since the play, so it
-runs the fast animation loop while up. The horn plays the instant the score is
-detected, whatever is on screen.
+runs the fast animation loop while up. The touchdown sound (see "Sounds") plays
+the instant the score is detected, whatever is on screen.
 
 #### `fb_score_detail`: who scored
 
@@ -408,7 +408,8 @@ Triggered by `scoringPlay` true on a `Field Goal Good` play. Runs for
 - `FIELD GOAL` in team colour, with `31 YD` (parsed from the text) below it.
 - The detail line reads `N. FOLK  31 YD` and the new score. It is `+3`, and
   `awayScore` / `homeScore` carry it.
-- Horn: the favourite's only, same as a touchdown.
+- Sound: the favourite's field-goal sound, played the instant the kick is
+  detected as good (see "Sounds").
 
 #### `fb_fg_miss`: a missed field goal
 
@@ -442,9 +443,8 @@ This is an alert, not a celebration: it is colour-coded by who gained the ball.
 - Detail line: who took it away and the yard line (`INTERCEPTED by B.Carter at
   ATL 43`), parsed from the text. A return that ran a long way shows the
   return yards.
-- Sound: reuses the existing audio slots. The favourite **taking** the ball
-  plays the ding; the favourite **giving** it away is left silent by default
-  (open question). Neither uses the horn.
+- Sound: **none**, taking the ball or giving it away (decided: touchdowns and
+  field goals only, see "Sounds").
 
 A turnover that is also a score (a pick-six) shows `fb_touchdown` only. The
 touchdown wins, because it is the bigger event, and the detail line says
@@ -529,8 +529,8 @@ green or red: this is neither good nor bad news yet, it is a correction.
 
 - It only shows for plays that were celebrated. A reversal on an opponent's
   score or an unfollowed game is silent, because nothing was announced.
-- The horn cannot be unplayed. The board accepts that the favourite's horn may
-  sound for a touchdown that is then overturned. The reversal screen is what
+- A sound cannot be unplayed. The board accepts that the favourite's touchdown or
+  field-goal sound may play for a score that is then overturned. The reversal screen is what
   makes that understandable.
 - If the celebration is still on screen when the change arrives (a very quick
   flag), the reversal screen **replaces it at once** and the detail screen is
@@ -547,6 +547,40 @@ play. The first rule (score drops) is the likeliest to work; the other two are
 guesses at how the feed represents a removed play. Capturing a real one is a
 research todo, and the detector should log every case it matches so the rules
 can be tightened from real games.
+
+## Sounds
+
+Decided by the owner: to start, sounds only for **touchdowns** and **field goals**,
+and **per team**. Nothing else makes a sound: not the coin toss, interceptions,
+fumbles, missed field goals, reversals, kickoffs or any other play. More can be
+added later.
+
+- **Two sound slots per team:** a touchdown sound and a field-goal sound. Each NFL
+  team can have its own pair, like the NHL's per-team horns, plus a **default**
+  touchdown sound and a default field-goal sound used when a team has no file of
+  its own.
+- **Who triggers them:** the favourite's own scores, the same moment the celebration
+  is detected (not when the screen appears), and whatever is on screen. Opponents'
+  scores are silent: the NHL's wah-wah has no counterpart here. Followed teams are
+  silent by default (see the open question).
+- **Stored apart from the NHL horns.** NFL and NHL abbreviations overlap (`BUF`,
+  `CAR`, `DAL`, `DET`, `MIN` and more), so the NFL files live in their own folder
+  or carry an `nfl` prefix. Proposed: `nfl/{ABBR}_td.wav`, `nfl/{ABBR}_fg.wav`,
+  `nfl/_td.wav`, `nfl/_fg.wav`. The same upload directory and the same lookup
+  order as the NHL horns (uploads before shipped files).
+- **Admin page:** in NFL mode the Audio tab shows the touchdown and field-goal
+  slots per team, with upload, Play and Delete like the NHL horns. Uploads are
+  normalised the same way (RMS match, mono, WAV).
+- **Existing controls apply:** the `audio` enabled switch, the volume, and the
+  physical button's mute all silence them, as they do the NHL horn.
+- **Shipped defaults:** a default touchdown sound and field-goal sound have to
+  exist so a board makes a noise before anyone uploads. Generated like the NHL
+  default horn, with no third-party audio committed. Team-specific files are a
+  user drop-in, never committed.
+- **A reversed score:** the sound has already played and cannot be taken back
+  (see "Reviews and reversals").
+- **Not verified on hardware** (the same caveat as the NHL audio): USB audio and
+  its timing against the panel.
 
 ## Timing (proposed, tune on hardware)
 
@@ -597,12 +631,15 @@ can be tightened from real games.
       team and followed teams, just like NHL**. See "Choosing the sport".
 - [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
       "`<TEAM>` RECEIVE" enough, or is a source for the winner worth finding?
-- [ ] Coin toss: any sound (a soft ding for the favourite receiving), or silent?
+- [x] Sounds (decided): only **touchdowns and field goals**, **per team**, to start.
+      The coin toss, turnovers, reversals and everything else are silent. See "Sounds".
+- [ ] Sounds: does a **followed** team's touchdown or field goal play its own team
+      sound, or stay silent? The NHL rule is horn for the favourite only, and the
+      celebration-scoping decision above gives followed teams a quiet quick screen,
+      so silent is assumed. "Per team" could also mean followed teams get theirs.
 - [x] Celebration scoping (confirmed by the owner): the favourite gets the full
       screen and horn, a followed team gets the quick screen, opponents and
       unfollowed games get nothing. Same as the NHL rule.
-- [ ] Should the favourite **giving away** the ball (interception, fumble) make
-      a sound? Proposed default is silent; taking the ball plays the ding.
 - [x] Reviews: celebrate immediately, and show a `fb_reversal` screen explaining
       the change if the play is overturned, then swap back (decided)
 - [ ] Opponent's missed field goal: show the `NO GOOD` screen (proposed) or skip?
@@ -671,7 +708,8 @@ can be tightened from real games.
 - [ ] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser
 - [ ] `fb_fg_miss`
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
-- [ ] Horn and ding wiring
+- [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
+      support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
 - [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
 - [ ] `fb_reversal` screen
 - [ ] Live sport switch: tear down the old sport's state and baseline the new one cleanly
