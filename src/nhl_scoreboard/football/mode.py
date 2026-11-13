@@ -21,8 +21,18 @@ from typing import TYPE_CHECKING, Any
 
 from .api import MIN_POLL_SECONDS
 from .director import Director, Timings
+from .idle import (
+    SCHEDULE_TTL,
+    STANDINGS_TTL,
+    WEEK_TTL,
+    IdleCache,
+    IdleSnapshot,
+    Scoreboard,
+    with_scoreboard,
+)
 from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
+from .teams import is_team, team
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -75,7 +85,15 @@ class NflMode:
         self._monotonic = monotonic
         self._client_factory = client_factory
         self._utc_now = utc_now
-        self.worker = FeedWorker(client_factory, self._interval, monotonic, collect=self._collect)
+        #: The idle screens' data cache (#421): the feed worker's thread owns it.
+        self._idle_cache = IdleCache(monotonic)
+        self.worker = FeedWorker(
+            client_factory,
+            self._interval,
+            monotonic,
+            collect=self._collect,
+            idle=self._collect_idle,
+        )
         #: Which play, celebration or reversal is on screen (#377). Render loop only.
         self.director = Director(
             football or _no_football, monotonic, delay_seconds, utc_now, timings
@@ -148,6 +166,52 @@ class NflMode:
         self._core_sync.forget(lambda game_id: game_id in keep)
         return plays, players
 
+    def _collect_idle(
+        self, client: Any, games: list[FbGame], scoreboard: Scoreboard | None, prev: IdleSnapshot
+    ) -> IdleSnapshot:
+        """The idle screens' data (#421): the favourite's and followed teams' schedules (daily),
+        the standings (hourly) and the week's games (every few minutes), each fetched only when it
+        is due. The scoreboard's own week, byes and calendar come in on the poll already made.
+
+        **Nothing is fetched while any game is live** (the idle screens are not showing and the
+        live poll is the busy one); the last data is kept. A failed fetch keeps the last good
+        value (``IdleCache``), and a client without these methods (a test fake) is simply skipped.
+        """
+        snap = with_scoreboard(prev, scoreboard)
+        if any(g.is_live for g in games):
+            return snap
+        cfg = self._football() if self._football else None
+        mine = ([cfg.favourite_team] if cfg and cfg.favourite_team else []) + (
+            list(cfg.followed_teams) if cfg else []
+        )
+        mine = [t for t in dict.fromkeys(mine) if is_team(t)]
+        cache = self._idle_cache
+        schedules = dict(snap.schedules)
+        if hasattr(client, "schedule"):
+            for abbrev in mine:
+                team_id = team(abbrev).espn_id
+                item = cache.refresh(
+                    ("schedule", team_id), SCHEDULE_TTL, lambda tid=team_id: client.schedule(tid)
+                )
+                if item is not None:
+                    schedules[team_id] = item
+        standings = snap.standings_cached
+        if mine and hasattr(client, "standings"):
+            standings = cache.refresh(("standings",), STANDINGS_TTL, client.standings) or standings
+        week_item = snap.week_cached
+        if scoreboard is not None and scoreboard.week is not None and hasattr(client, "week"):
+            number, kind = scoreboard.week, scoreboard.season_type or 2
+            week_item = (
+                cache.refresh(("week", number, kind), WEEK_TTL, lambda: client.week(number, kind))
+                or week_item
+            )
+        return IdleSnapshot(
+            scoreboard=snap.scoreboard,
+            schedules=schedules,
+            standings_cached=standings,
+            week_cached=week_item,
+        )
+
     def _fetch_roster(self, team_id: int) -> dict[int, RosterPlayer] | None:
         if self._roster_client is None:
             self._roster_client = self._client_factory()
@@ -165,6 +229,7 @@ class NflMode:
             with contextlib.suppress(Exception):
                 client.close()
         self.rosters.clear()
+        self._idle_cache.clear()
 
     @property
     def snapshot(self) -> FeedSnapshot:

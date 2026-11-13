@@ -34,6 +34,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from .idle import IdleSnapshot, Scoreboard
 from .models import FbGame, Play
 from .people import RosterPlayer
 
@@ -82,6 +83,8 @@ class FeedSnapshot:
     plays: Mapping[int, tuple[Play, ...]] = field(default_factory=dict)
     #: Both teams' rosters per game, for ``people.resolve_people``.
     players: Mapping[int, Mapping[int, RosterPlayer]] = field(default_factory=dict)
+    #: What the idle screens read (#421): the week, byes, schedules, standings, the week's games.
+    idle: IdleSnapshot = field(default_factory=IdleSnapshot)
 
     @property
     def has_data(self) -> bool:
@@ -109,7 +112,12 @@ class FeedWorker:
         monotonic: Callable[[], float] = time.monotonic,
         name: str = "nfl-feed",
         collect: Callable[[Any, list[FbGame], FeedSnapshot], tuple[dict, dict]] | None = None,
+        idle: Callable[[Any, list[FbGame], Scoreboard | None, IdleSnapshot], IdleSnapshot]
+        | None = None,
     ) -> None:
+        #: After each good scoreboard fetch, ``idle(client, games, scoreboard, previous)`` returns
+        #: the idle screens' data (#421), fetching only what is due. Same rules as ``collect``.
+        self._idle = idle
         #: After each good scoreboard fetch, ``collect(client, games, previous snapshot)`` returns
         #: ``(plays, players)`` for the snapshot (#377). It runs on this thread; if it raises, the
         #: scores are still published and the previous plays kept.
@@ -190,10 +198,15 @@ class FeedWorker:
         """
         started = self._monotonic()
         games: list[FbGame] | None = None
+        scoreboard: Scoreboard | None = None
         error = ""
         try:
             client = self._get_client(generation)
-            games = client.scores()
+            if hasattr(client, "scoreboard"):
+                scoreboard = client.scoreboard()
+                games = None if scoreboard is None else list(scoreboard.games)
+            else:
+                games = client.scores()
             if games is None:
                 error = getattr(client, "last_error", "") or "no data"
         except Exception as exc:  # the thread must survive whatever the client does
@@ -215,6 +228,13 @@ class FeedWorker:
             except Exception:  # plays are a bonus: the scores must still reach the panel
                 log.warning("collecting NFL plays failed", exc_info=True)
 
+        idle = before.idle
+        if games is not None and self._idle is not None:
+            try:
+                idle = self._idle(client, games, scoreboard, before.idle)
+            except Exception:  # the idle screens are a bonus too
+                log.warning("collecting the NFL idle data failed", exc_info=True)
+
         with self._lock:
             if generation is not None and generation != self._generation:
                 return 0.0  # stopped while this was in flight: publish nothing
@@ -228,6 +248,7 @@ class FeedWorker:
                     started_at=prev.started_at,
                     plays=plays,
                     players=players,
+                    idle=idle,
                 )
             else:
                 snap = replace(
