@@ -85,6 +85,7 @@ SCREEN_MODULES = (
     "football_cointoss",
     "football_touchdown",
     "football_score_detail",
+    "football_fieldgoal",
 )
 _loaded = False
 

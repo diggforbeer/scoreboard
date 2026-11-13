@@ -768,6 +768,23 @@ favourite is not a celebration, but the board still shows what happened.
 - Sound: the favourite's field-goal sound, played the instant the kick is
   detected as good (see "Sounds").
 
+**Built (story #392, `display/football_fieldgoal.py`).** A made field goal is two screens:
+
+- **The kick** (`@play_screen(FIELD_GOAL_GOOD)`, 4s): the ball is placed at the kick spot and
+  **arcs through the uprights** drawn at the back of the end zone being attacked (right for the
+  home team, left for the away team), the height scaled to the distance and kept on the field; it
+  drops down behind the posts. Band `FIELD GOAL 31 YD`. The favourite's and a followed team's
+  posts flash white and the label is green. **A field goal by a team nobody follows is only this
+  kick**, drawn as the design says: *without the celebration*, dim (the posts and ball at half
+  brightness), no flash, in the kicking team's colour. The director now hands the kick its
+  event so the screen knows its scope.
+- **The celebration** (`@event_screen(FieldGoal, EVENT)`, `fb_score_seconds`): the favourite's
+  (`Scope.FULL`) opens with a white flash and strobes the panel in the team's colour for two
+  seconds; a followed team's (`Scope.QUICK`) has no strobe. In both the uprights flash yellow and
+  white at the right edge and `FIELD GOAL` fades in in the team's colour with `31 YD` under it
+  (the small font on a 64px panel). The detail screen with the kicker follows (#391). A **miss**
+  that reaches this screen falls back to the generic card until #393.
+
 #### `fb_fg_miss`: a missed field goal
 
 Triggered by a `Field Goal Missed` play for **either team** in a followed game
@@ -1088,6 +1105,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Field goal](docs/football/score_detail_fieldgoal.png) | |
 | The kicker, the distance, the new score. | |
 
+**The field goal** (#392; the favourite's kick, the opponent's plain kick, the celebration, a followed team's):
+
+| | |
+|---|---|
+| ![Kick](docs/football/fieldgoal.png) | ![Opponent](docs/football/fieldgoal_opponent.png) |
+| The ball arcs toward the uprights, green label, flashing posts. | An opponent's made kick: the same arc, dim, no flash, the kicker's colour. |
+| ![Celebration](docs/football/fieldgoal_celebration.png) | ![Quick](docs/football/fieldgoal_quick.png) |
+| The favourite's celebration (this frame is a dark strobe step). | A followed team's: no strobe. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1114,7 +1140,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown` and `score_detail`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal` and `fieldgoal_opponent`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1394,7 +1420,7 @@ added later.
 - [x] Play-text layout and scrolling (#379)
 - [x] (#356) Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
-- [~] `fb_touchdown` celebration done (#390); `fb_fieldgoal` still to do
+- [x] `fb_touchdown` (#390) and `fb_fieldgoal` (#392) celebrations
 - [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
 - [ ] `fb_fg_miss`
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks

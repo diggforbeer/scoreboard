@@ -262,6 +262,15 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         "Field Goal Good", "N.Folk 31 yard field goal is GOOD.", 69, 69, HOME, 31, (10, 20), True
     )
     field_goal = event(FieldGoal, fg_play, made=True, yards=31, points=3, home_score=20)
+    plain_play = _play(
+        "Field Goal Good", "E.Evans 38 yard field goal is GOOD.", 21, 21, AWAY, 38, (13, 17), True
+    )
+    plain_fg = event(
+        FieldGoal, plain_play, AWAY, scope=Scope.PLAIN, made=True, yards=38, points=3, away_score=13
+    )
+    quick_fg = event(
+        FieldGoal, fg_play, scope=Scope.QUICK, made=True, yards=31, points=3, home_score=20
+    )
     quick_td = event(
         Touchdown, td, via="run", points=7, extra_point="good", home_score=24, scope=Scope.QUICK
     )
@@ -377,6 +386,21 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(
             scene("fb_event", "detail", fg_play, field_goal, seconds=8.0, people=(folk,)),
             name="score_detail_fieldgoal",
+        ),
+        DemoStep(
+            scene("fb_play", "play", fg_play, field_goal, at=2.0, seconds=4.0), name="fieldgoal"
+        ),
+        DemoStep(
+            scene("fb_play", "play", plain_play, plain_fg, at=2.0, seconds=4.0),
+            name="fieldgoal_opponent",
+        ),
+        DemoStep(
+            scene("fb_event", "event", fg_play, field_goal, at=0.8, seconds=6.0),
+            name="fieldgoal_celebration",
+        ),
+        DemoStep(
+            scene("fb_event", "event", fg_play, quick_fg, at=1.5, seconds=4.0),
+            name="fieldgoal_quick",
         ),
         DemoStep(scene("fb_event", "event", kick, miss), name="fb_event_fg_miss"),
         DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),
