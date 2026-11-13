@@ -177,7 +177,15 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     loss = _play(
         "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
     )
-    sack = _play("Sack", "D.Jones sacked at NYG 31 for -6 yards (L.London).", 37, 31, HOME, -6)
+    odd = _play(
+        "Blocked Punt", "T.Way punt is BLOCKED by J.Smith, recovered at NYG 20.", 24, 20, AWAY, 0
+    )
+    sack = _play(
+        "Sack", "(Shotgun) D.Jones sacked at NYG 34 for -6 yards (L.London).", 40, 34, HOME, -6
+    )
+    sack_zero = _play(
+        "Sack", "(Shotgun) D.Jones sacked at NYG 40 for 0 yards (L.London).", 40, 40, HOME, 0
+    )
     fair_catch = _play(
         "Punt", "J.Bailey punts 53 yards to WSH 12, Center-L.McCullough, fair catch by D.Meyers.",
         35, 88, HOME, 0, end_team=AWAY,
@@ -230,6 +238,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
     zaccheaus = Person("returner", 5, "O. Zaccheaus", "5", "WR", True)
     meyers = Person("returner", 4, "D. Meyers", "11", "WR", True)
+    london = Person("sackedBy", 30, "L. London", "91", "DE", True)
     pitts = Person("target", 7, "K. Pitts", "8", "TE", True)
     robinson = Person("rusher", 9, "B. Robinson", "9", "RB", True)
     qb = Person("passer", 9, "M. Penix", "9", "QB", True)
@@ -265,6 +274,10 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(kickoff, 3.8, meyers), name="kickoff_return"),
         DemoStep(run(touchback, 3.2, None), name="kickoff_touchback"),
         DemoStep(run(onside, 1.2, None), name="kickoff_onside"),
+        DemoStep(run(sack, 0.7, jones, london), name="sack_drop"),
+        DemoStep(run(sack, 1.6, jones, london), name="sack"),
+        DemoStep(run(sack, 3.0, jones, london), name="sack_settled"),
+        DemoStep(run(sack_zero, 1.5, jones, london), name="sack_zero"),
         DemoStep(run(incomplete, 1.1, qb, pitts), name="incomplete_air"),
         DemoStep(run(incomplete, 1.9, qb, pitts), name="incomplete"),
         DemoStep(run(deep_incomplete, 1.9, jones), name="incomplete_deep"),
@@ -274,7 +287,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(pass_play, 2.2, qb, dotson), name="fb_pass_catch"),
         DemoStep(run(pass_play, 9.0, qb, dotson), name="fb_pass_settled"),
         DemoStep(run(deep, 1.0, jones, wr), name="fb_pass_deep"),
-        DemoStep(scene("fb_play", "play", sack), name="fb_play_generic"),
+        DemoStep(scene("fb_play", "play", odd), name="fb_play_generic"),
         DemoStep(run(fair_catch, 1.5, meyers), name="punt_air"),
         DemoStep(run(fair_catch, 4.0, meyers), name="punt_fair_catch"),
         DemoStep(run(punt_return, 3.8, zaccheaus), name="punt_return"),

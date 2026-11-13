@@ -76,6 +76,7 @@ SCREEN_MODULES = (
     "football_kickoff",
     "football_punt",
     "football_incomplete",
+    "football_sack",
 )
 _loaded = False
 

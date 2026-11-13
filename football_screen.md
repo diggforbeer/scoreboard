@@ -372,6 +372,15 @@ Per-play notes, from real text:
   the number is drawn on the field rather than as `#14` in the label. An intentional grounding
   is drawn as an incompletion; its penalty is the penalty story's. The defender who broke the
   pass up (`[C.Thomas]`) is not drawn.
+- **Built (story #385, `display/football_sack.py`).** 3s. The quarterback's number **drops
+  back** about five yards behind the line (0-35% of the stage), a **burst** (eight spokes that
+  grow and fade) goes off at the sack spot (35-65%), then the line of scrimmage and the ball
+  **slide backwards** to it (55-85%) while the **first-down line stays where it was** (the new
+  down and distance is the band's and the next screen's). The sacker's number (else his last
+  name) stands at the spot in red once it has settled. The label is `SACK -6` (red; `SACK 0`
+  neutral). The spot is the play's own loss against the drive direction, not `end.yardLine`
+  (which the feed shifts on a fumble). A sack for 0 plays the burst with no slide. A sack that
+  ends in a fumble is the turnover story's.
 - **Sacks:** `sacked at CIN 31 for -6 yards (L.London)`. A sack for 0 yards
   (`for 0 yards`) is seen too: the burst plays with no slide. A sack that ends in a
   fumble is `Sack Opp Fumble Recovery` and goes to the turnover screen.
@@ -921,12 +930,21 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Deep](docs/football/incomplete_deep.png) | ![Spike](docs/football/incomplete_spike.png) |
 | A deep pass, no target named. | A spike: into the ground at the quarterback. |
 
+**Sacks** (#385; the drop back, the hit, sliding back, settled, and a sack for no loss):
+
+| | |
+|---|---|
+| ![Drop back](docs/football/sack_drop.png) | ![The hit](docs/football/sack.png) |
+| The quarterback's number drops back. | A burst at the sack spot. |
+| ![Settled](docs/football/sack_settled.png) | ![No loss](docs/football/sack_zero.png) |
+| The line slid back; the sacker's number in red. | A sack for 0: the burst, no slide. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
 |---|---|
 | ![Generic play](docs/football/fb_play_generic.png) | |
-| `fb_play` for a play with no screen of its own yet (a sack): the ball slides from the start spot to the end spot, the play's name over it. | |
+| `fb_play` for a play with no screen of its own yet (a blocked punt, which has no screen of its own): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
 | ![Event detail](docs/football/fb_event_detail.png) | ![Missed field goal card](docs/football/fb_event_fg_miss.png) |
@@ -949,7 +967,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return` and `incomplete`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete` and `sack`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1222,7 +1240,7 @@ added later.
       event screens, registries (#377)
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
-- [~] Incompletion animation done (#384); sack and penalty (flag) animations still to do
+- [~] Incompletion (#384) and sack (#385) animations done; penalty (flag) animation still to do
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
