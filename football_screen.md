@@ -576,10 +576,12 @@ can be tightened from real games.
       a dropdown on the Scoreboard card that saves itself with an Undo, like the other
       cards. It is stored as `[scoreboard] sport` so a boot-partition TOML can set it
       too.
-- [ ] Does changing the sport apply live (like a favourite-team switch) or need a
-      service restart? Assumed live, so the board swaps over without a reboot, but
-      not decided: swapping data sources and scene logic is bigger than switching a
-      team, and the state the old sport held (caches, last scene) has to be dropped.
+- [x] Changing the sport applies **live** (decided): the board swaps over without a
+      restart or reboot. This is more than a favourite-team switch, so the build has
+      to drop everything the old sport held (cached data, remembered scores and plays,
+      the last scene, any animation in progress, the follow lists in use) and start
+      the new sport from a clean baseline, so nothing celebrates on the first frame.
+      The panel shows `connecting` until the new sport's first fetch lands.
 - [x] Jersey numbers: they are available (core `plays` participants + roster, see
       `football_api.md`), so the fallback is only for the ~5 of 79 players with no
       number. Those show the last name instead (decided by default, shout if not).
@@ -672,6 +674,7 @@ can be tightened from real games.
 - [ ] Horn and ding wiring
 - [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
 - [ ] `fb_reversal` screen
+- [ ] Live sport switch: tear down the old sport's state and baseline the new one cleanly
 - [ ] `[scoreboard] sport` setting and the admin page picker; NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
