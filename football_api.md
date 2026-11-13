@@ -129,3 +129,36 @@ Checked 2026-11-12 on two games (CIN vs ATL final, WSH @ NYG live).
   `wallclock`: the feed seems to publish it at kickoff, not at the real toss.
 - Unverified: whether overtime gets a second `Coin Toss` play (the check errored).
 
+## Play text: what each play type carries (checked 2026-11-12, 4 finished games)
+
+Counts are from about 690 plays across the 4 games.
+
+- **Kickoff** (44): `E.McPherson kicks 59 yards from CIN 35 to ATL 6. K.Herbert to
+  ATL 30 for 24 yards (J.Kiser; T.Davis).` Kick distance, landing spot, returner,
+  return yards, tacklers. Touchback appears in the text (8 in the sample). A penalty
+  can ride on the same play, so `start`/`end` and the printed return can disagree.
+- **Punt** (25): `J.Bailey punts 53 yards to CIN 12, Center-L.McCullough, fair catch by
+  D.Meyers.` Endings seen: `fair catch`, `out of bounds`, a return
+  (`O.Zaccheaus to ATL 24 for -3 yards`) and touchback.
+- **Pass Incompletion** (80): `(Shotgun) M.Penix pass incomplete short left to K.Pitts.`
+  Direction and depth are always there; a target is sometimes named; `[C.Thomas]`
+  marks a defender who broke it up. `statYardage` is 0 and the ball does not move.
+- **Sack** (17): `(Shotgun) J.Burrow sacked at CIN 31 for -6 yards (L.London).` A
+  0-yard sack exists. Sack plus fumble is its own type, `Sack Opp Fumble Recovery`.
+- **Penalty** (48): type `Penalty` is used **even when a play was run**. Text is the
+  underlying play, then `PENALTY on ATL-M.Bergeron, Offensive Holding, 10 yards,
+  enforced at ...`, with `- No Play` when it nullifies the down. `declined` appears
+  in 6 plays.
+- **Field Goal Good / Missed**: `N.Folk 38 yard field goal is No Good, Wide Left,
+  Center-..., Holder-...`. Distance and miss direction (`Wide Left` / `Wide Right`)
+  are in the text; `statYardage` is the kick distance.
+- **Timeout** (34): `Timeout #1 by CIN at 01:10.` Team, number and clock.
+  **Official Timeout** (58): `Official Timeout at 11:12.`
+- **Stoppages:** `Two-Minute Warning`, `END QUARTER 1`, `END QUARTER 2` (type
+  `End of Half`), `END GAME`.
+- **Not seen as their own types, so unconfirmed:** QB kneel (5 mentions in text,
+  type unknown), spike (1), intentional grounding (1), onside kick, safety, blocked
+  kick, two-point attempt.
+- Plays were about 35-60s apart by `wallclock` in the live game, and the feed returns
+  several at once when polled less often than that.
+

@@ -107,8 +107,105 @@ After the animation the field stays in the area it needs and the play text
 takes one side: `J.McCarthy pass short middle to I.Likely for 9 yards`, with
 the down and distance under it. Long text scrolls. For example, field on the
 left ~64px, text on the right ~64px. On a single 64px panel it alternates
-between the two. Plays that are not a run or a pass (penalty, punt, kickoff,
-sack, field goal, timeout) skip the animation and go straight to this layout.
+between the two. **Every** play gets an animation before this layout, not just runs and passes:
+see "Every other play" below.
+
+### Every other play
+
+Decided by the owner: **animate every play**, not only runs and passes. Every
+play follows the same shape as `fb_run` / `fb_pass`: the animation on the field,
+then the play-text layout with the result, then the next play. Checked against the
+text of 4 finished games on 2026-11-12; type names and wording below are what was
+actually seen unless marked unverified.
+
+Common rules for every animation:
+
+- It ends with the ball settled at the play's `end.yardLine` (`start.yardLine`
+  when the play is nullified), and the down-and-distance band updated.
+- The label (`PUNT 53 YD`, `SACK -6`) is drawn over the field while it plays,
+  and the play-text layout then shows the feed's own sentence.
+- Directions flip with the possessing team, as in `fb_field`: `yardLine` runs 0-100
+  from the **home** goal line.
+- A play with a number in its text uses the jersey number, from the roster map, in
+  the same way `fb_run` and `fb_pass` do; a missing number falls back to the last
+  name.
+
+| Play type (`type.text`) | Animation | Label | Length |
+|---|---|---|---|
+| `Kickoff` | Ball on the kicker's tee at the 35, **arcs high** to the landing spot parsed from `to ATL 6`, then the returner's number **runs back** to the end spot | `KICKOFF 59 YD`, then `RETURN 24 YD` | 5s |
+| `Kickoff`, touchback | Same arc, lands in the end zone, ball **steps out** to the 25 | `TOUCHBACK` | 4s |
+| `Punt`, fair catch | Long, high arc (more hang than a kickoff); lands, a **flag/hand** icon marks the catch | `PUNT 53 YD`, `FAIR CATCH` | 5s |
+| `Punt`, returned | Arc, then the returner's number runs back (`O.Zaccheaus to ATL 24 for -3 yards`) | `PUNT 51 YD`, `RETURN -3` | 5s |
+| `Punt`, out of bounds | Arc, then the ball **skips to the sideline** edge and stops | `OUT OF BOUNDS` | 4s |
+| `Punt`, touchback | Arc into the end zone, ball steps out to the 20 | `TOUCHBACK` | 4s |
+| `Rush` | `fb_run` (above), including a QB scramble | `RUSH +9` | 2-4s |
+| `Pass Reception` | `fb_pass` (above) | `PASS +12` | 2-4s |
+| `Pass Incompletion` | Ball arcs toward the lane and target in the text, **drops and bounces** short of the receiver; the ball marker stays put | `INCOMPLETE`, plus `#14` if a target is named (`to K.Pitts`) | 3s |
+| `Sack` | The QB's number **drops back**, then a burst at the sack spot as the marker slides **backwards** to it | `SACK -6`, sacker's number or name | 3s |
+| `Field Goal Good` | Kick spot, ball arcs through the uprights (see `fb_fieldgoal`) | `FIELD GOAL 31 YD` | celebration |
+| `Field Goal Missed` | Ball arcs and drifts off the side the text names (`Wide Left` / `Wide Right`) | `NO GOOD`, direction | 3s (see `fb_fg_miss`) |
+| `Penalty` | A **yellow flag** flies in and lands at the enforcement spot; the marker moves to the new spot | `FLAG`, the foul, yards (`FALSE START 5 YD`); `NO PLAY` when the text says so | 4s |
+| `Timeout` | A clock icon **freezes**; the team's timeouts left shown as dots | `TIMEOUT NYG #2`, `0:45` | 3s |
+| `Official Timeout` | Same clock icon, neutral colour | `OFFICIAL TIMEOUT` | 3s |
+| `Two-minute warning` | Clock icon with `2:00` | `2-MIN WARNING` | 3s |
+| `End Period` | Quarter number wipes across the field | `END Q1` | 3s |
+| `End of Half` | Same, then the board holds on a halftime card | `HALFTIME` | until play resumes |
+| `End of Game` | Hands over to the final scoreboard (held like an NHL final) | `FINAL` | held |
+| `Coin Toss` | `fb_cointoss` | | 6s |
+| Scores, turnovers | The play's own animation first, then the celebration or turnover alert | | see those sections |
+
+Per-play notes, from real text:
+
+- **Kickoffs:** text is `E.McPherson kicks 59 yards from CIN 35 to ATL 6. K.Herbert
+  to ATL 30 for 24 yards (J.Kiser; T.Davis).` The kick distance, the landing spot,
+  the returner, the return yards and the tackler are all in it. A penalty on the
+  play shows up in the same text (`PENALTY on ATL-M.Ford, Offensive Holding`), which
+  is why `start`/`end` can disagree with the printed return: use the printed
+  return for the animation and `end.yardLine` for where the ball finally sits.
+  Touchbacks appeared 8 times in the sample.
+- **Punts:** four endings seen: `fair catch by D.Meyers`, `out of bounds`, a
+  return (`O.Zaccheaus to ATL 24 for -3 yards`) and a touchback. The punt's own
+  distance (`punts 53 yards`) sets the arc length.
+- **Incompletions:** 80 in the sample, the most common non-run, non-pass type, so
+  this animation must be quick. Direction (`short right`, `deep left`) sets the
+  lane and the arc height; a named target (`to K.Pitts`) puts a number on it, and
+  `[C.Thomas]` brackets mark the defender who broke it up.
+- **Sacks:** `sacked at CIN 31 for -6 yards (L.London)`. A sack for 0 yards
+  (`for 0 yards`) is seen too: the burst plays with no slide. A sack that ends in a
+  fumble is `Sack Opp Fumble Recovery` and goes to the turnover screen.
+- **Penalties:** type `Penalty` is used **even when a play happened**. One sample is
+  a QB scramble that gained 6 yards and was then wiped out by a hold
+  (`scrambles up the middle to CIN 1 for 6 yards ... PENALTY on ATL-M.Bergeron,
+  Offensive Holding, 10 yards`). Rule: if the text contains a result before the
+  word `PENALTY`, play that result **compressed** (about 1s), then the flag, then
+  the marker moves to the enforced spot. `No Play` in the text means the first part
+  did not count. `declined` (6 in the sample) shows the flag then `DECLINED`, with
+  the ball staying where the play left it.
+- **Timeouts:** `Timeout #1 by CIN at 01:10.` carries the team, the timeout number
+  and the clock. Timeouts left is `3 - number`, which should be checked against the
+  situation block's `homeTimeouts` / `awayTimeouts`.
+- **Stoppages:** `Official Timeout at 11:12.`, `Two-Minute Warning`, `END QUARTER 1`,
+  `END QUARTER 2` (type `End of Half`), `END GAME`.
+
+**Pace, queueing and catch-up.** Plays are about 35-60s apart in real time, so a
+2-5s animation fits easily. But the feed is polled every 10-15s, so one poll can
+return several plays at once, and a kickoff follows a score within seconds.
+
+- Animations play **in play order** (`sequenceNumber`), one at a time.
+- A backlog of more than **two** plays is caught up by playing the oldest at double
+  speed and skipping straight to the newest. The ball always lands where the
+  newest play puts it, so the field is never wrong.
+- Stoppage cards (timeouts, two-minute warning, end of period) are **dropped first**
+  when there is a backlog, because they carry no ball movement.
+- A board that starts mid-game draws the current field and does **not** replay the
+  plays before startup (same baseline rule as goal detection).
+- The animation clock starts when the play is **shown**, not at its `wallclock`, so
+  `broadcast_delay_seconds` shifts everything together.
+
+**Not seen in the sample, so unverified:** the type names for a QB kneel (5 kneels
+in the text, type unknown), a spike (1), an onside kick (0), a safety (0), a
+blocked kick (0), a two-point attempt, an intentional grounding (1) and a free
+kick. Each falls back to the plain play-text layout until its type is seen.
 
 ### `fb_cointoss`: the opening coin toss
 
@@ -445,6 +542,9 @@ can be tightened from real games.
 | `fb_field` | Resting state between plays | Until the next play arrives |
 | `fb_run` / `fb_pass` | New play detected | 2-4s, scaled by yardage |
 | Play-text layout | After the animation | Until the next play, at least ~5s |
+| Kickoff / punt | New play | 4-5s |
+| Incompletion / sack / penalty / timeout | New play | 3-4s |
+| Stoppage cards (official timeout, 2-min warning, end of period) | New play | 3s |
 | `fb_cointoss` | First `Coin Toss` play for a followed game | `fb_cointoss_seconds`, 6s |
 | `fb_touchdown` / `fb_fieldgoal` | Favourite's score | `fb_score_seconds`, 6s (held to 4-15s) |
 | `fb_score_detail` | After the celebration | `fb_score_detail_seconds`, 8s |
@@ -465,8 +565,11 @@ can be tightened from real games.
 - [x] Jersey numbers: they are available (core `plays` participants + roster, see
       `football_api.md`), so the fallback is only for the ~5 of 79 players with no
       number. Those show the last name instead (decided by default, shout if not).
-- [ ] Which other plays get their own animation (punt, kickoff, field goal,
-      sack)?
+- [x] Every play gets an animation (decided): kickoff, punt, incompletion, sack,
+      penalty, timeout, field goal and the stoppages as well as runs and passes.
+      See "Every other play".
+- [ ] Animation pace: is a hard cap on how long a board can lag behind the live game
+      (catch-up by skipping) acceptable, or must every play be shown in full?
 - [ ] Which team(s) does a board follow, and where is that set?
 - [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
       "`<TEAM>` RECEIVE" enough, or is a source for the winner worth finding?
@@ -496,6 +599,8 @@ can be tightened from real games.
 - [ ] Coin toss: find out when the feed publishes the toss play before kickoff, whether
       overtime gets a second `Coin Toss` play (the overtime check errored), and whether
       any source names the toss winner
+- [ ] Find the type names for QB kneel, spike, onside kick, intentional grounding and
+      free kick (the sample's text mentions kneels, a spike and a grounding)
 - [ ] Capture the play types not yet seen: safety, two-point conversion, pick-six
       and other return touchdowns, turnover on downs, muffed punt, blocked kick
 - [ ] Capture a real reviewed or reversed scoring play, and what the feed does with it
@@ -510,6 +615,8 @@ can be tightened from real games.
 - [ ] Mockup of `fb_field`
 - [ ] Mockup of `fb_run`
 - [ ] Mockup of `fb_pass`
+- [ ] Mockups: kickoff, punt (fair catch / returned / out of bounds / touchback), incompletion,
+      sack, penalty (flag), timeout, end of period, halftime
 - [ ] Mockup of the play-text layout, on 128px and 64px panels
 - [x] Scoring and turnover screens designed (see Scoring and turnovers)
 - [ ] Mockups: `fb_touchdown`, `fb_score_detail`, `fb_fieldgoal`, `fb_fg_miss`,
@@ -523,6 +630,10 @@ can be tightened from real games.
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [ ] Play detection and the animation queue
 - [ ] `fb_run` and `fb_pass` animations
+- [ ] Kickoff and punt animations (arc, return, fair catch, out of bounds, touchback)
+- [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
+- [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
+- [ ] Animation queue: ordering, double-speed catch-up, dropping stoppages first
 - [ ] Play-text layout and scrolling
 - [ ] Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
