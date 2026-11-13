@@ -336,7 +336,13 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(scene("fb_event", "detail", td, touchdown), name="fb_event_detail"),
         DemoStep(scene("fb_event", "event", kick, miss), name="fb_event_fg_miss"),
         DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),
-        DemoStep(scene("fb_event", "event", rush, toss), name="fb_event_cointoss"),
+        DemoStep(scene("fb_event", "event", rush, toss, at=1.1, seconds=6.0), name="cointoss_flip"),
+        DemoStep(
+            scene("fb_event", "event", rush, toss, at=3.2, seconds=6.0), name="cointoss_landed"
+        ),
+        DemoStep(
+            scene("fb_event", "event", rush, toss, at=5.5, seconds=6.0), name="cointoss_result"
+        ),
         DemoStep(scene("fb_event", "reversal", td, reversal), name="fb_event_reversal"),
     ]
 

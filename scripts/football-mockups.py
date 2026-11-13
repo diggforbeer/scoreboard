@@ -309,27 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def cointoss_flip() -> Panel:
-    p = Panel()
-    p.text("4x6", 2, 7, DIM, "COIN TOSS")
-    cx, cy = 64, 15
-    for y in range(-7, 8):
-        half = round(2 * math.sqrt(max(0, 1 - (y / 7) ** 2)))
-        for x in range(-half, half + 1):
-            p.px(cx + x, cy + y - 3, (190, 190, 200))
-    return p
-
-
-def cointoss_result() -> Panel:
-    p = Panel()
-    p.text("4x6", 2, 7, DIM, "COIN TOSS")
-    p.logo(64, 13, HOME, 8)
-    p.center("5x7", 29, TEAMS[HOME], "NYG RECEIVE")
-    p.text("4x6", p.w - 25, 31, DIM, "KICK")
-    p.logo(p.w - 12, 15, AWAY, 4, 0.6)
-    return p
-
-
 def touchdown() -> Panel:
     p = Panel()
     for i in range(0, 160, 14):  # strobe rays
@@ -446,8 +425,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "cointoss_flip": cointoss_flip,
-    "cointoss_result": cointoss_result,
     "touchdown": touchdown,
     "score_detail": score_detail,
     "fieldgoal": fieldgoal,
