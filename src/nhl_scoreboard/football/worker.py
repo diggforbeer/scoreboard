@@ -30,11 +30,12 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from .models import FbGame
+from .models import FbGame, Play
+from .people import RosterPlayer
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,11 @@ class FeedSnapshot:
     #: Monotonic time the worker was started, ``None`` if it never was. Lets the caller tell
     #: "still connecting" from "never connected in 15 minutes" (no data) before a first success.
     started_at: float | None = None
+    #: Each watched game's plays so far, with the core feed's participants merged in (#377), as
+    #: of the last successful fetch. A game whose play fetch failed keeps its previous plays.
+    plays: Mapping[int, tuple[Play, ...]] = field(default_factory=dict)
+    #: Both teams' rosters per game, for ``people.resolve_people``.
+    players: Mapping[int, Mapping[int, RosterPlayer]] = field(default_factory=dict)
 
     @property
     def has_data(self) -> bool:
@@ -102,7 +108,12 @@ class FeedWorker:
         interval: Callable[[FeedSnapshot], float],
         monotonic: Callable[[], float] = time.monotonic,
         name: str = "nfl-feed",
+        collect: Callable[[Any, list[FbGame], FeedSnapshot], tuple[dict, dict]] | None = None,
     ) -> None:
+        #: After each good scoreboard fetch, ``collect(client, games, previous snapshot)`` returns
+        #: ``(plays, players)`` for the snapshot (#377). It runs on this thread; if it raises, the
+        #: scores are still published and the previous plays kept.
+        self._collect = collect
         self._client_factory = client_factory
         self._interval = interval
         self._monotonic = monotonic
@@ -196,6 +207,15 @@ class FeedWorker:
             log.debug("NFL fetch took %.2fs", took)
 
         with self._lock:
+            before = self._snapshot
+        plays, players = before.plays, before.players
+        if games is not None and self._collect is not None:
+            try:
+                plays, players = self._collect(client, games, before)
+            except Exception:  # plays are a bonus: the scores must still reach the panel
+                log.warning("collecting NFL plays failed", exc_info=True)
+
+        with self._lock:
             if generation is not None and generation != self._generation:
                 return 0.0  # stopped while this was in flight: publish nothing
             prev = self._snapshot
@@ -205,6 +225,9 @@ class FeedWorker:
                     fetched_at=finished,
                     fetch_seconds=took,
                     attempts=prev.attempts + 1,
+                    started_at=prev.started_at,
+                    plays=plays,
+                    players=players,
                 )
             else:
                 snap = replace(

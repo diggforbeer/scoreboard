@@ -29,6 +29,7 @@ fly-by two seconds in, a scrolling table its top.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import logging
 import sys
 import tempfile
@@ -150,6 +151,8 @@ def capture(app: ScoreboardApp, step) -> Frame:
     # the live view but not for a still of an animated screen.
     app._overlay_animating = app._shootout_animating = app._scroll_animating = False
     app._goal_building = False
+    if scene.animating:  # a still of an NFL play scene: not held back as mid-animation
+        scene = dataclasses.replace(scene, animating=False)
     app.mirror.requested = True
     before = app.mirror.latest()
     app.draw_scene(scene)

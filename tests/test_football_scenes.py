@@ -420,6 +420,9 @@ def test_every_nfl_scene_kind_is_known_and_documented():
         "fb_no_games",
         "fb_scores",
         "fb_field",
+        "fb_play",
+        "fb_playtext",
+        "fb_event",
     }
     missing = [k for k in FB_SCENE_KINDS if f"`{k}`" not in guide]
     assert missing == [], f"football_screen.md never mentions: {missing}"
@@ -428,6 +431,10 @@ def test_every_nfl_scene_kind_is_known_and_documented():
 @pytest.mark.parametrize("kind", FB_SCENE_KINDS)
 def test_the_app_draws_every_nfl_scene_kind(kind, app):
     scene = Scene(kind, fb_game=GAMES["live"] if kind in ("fb_scores", "fb_field") else None)
+    if kind in ("fb_play", "fb_playtext", "fb_event"):
+        from nhl_scoreboard.football.demo import nfl_demo_steps
+
+        scene = next(s.scene for s in nfl_demo_steps(datetime.now(UTC)) if s.scene.kind == kind)
     app.draw_scene(scene)
     assert app.matrix.shown.pixels, f"{kind} drew nothing"
     assert not app.matrix.shown.out_of_bounds

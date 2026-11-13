@@ -16,7 +16,9 @@ from typing import Any
 
 from ..app import Scene
 from ..demo import DemoStep
-from .models import FbGame
+from .events import CoinToss, Event, FieldGoal, Scope, Touchdown, Turnover
+from .models import FbGame, Play
+from .reversals import Reversal
 from .teams import TEAMS
 
 #: The matchup every demo screen shows: away at home, so the home team is on the left.
@@ -80,6 +82,101 @@ def _game(
     )
 
 
+def _play(
+    kind: str,
+    text: str,
+    start: int,
+    end: int,
+    offense: str,
+    yards: int = 0,
+    score: tuple[int, int] = (10, 17),
+    scoring: bool = False,
+    turnover: bool = False,
+    end_team: str | None = None,
+) -> Play:
+    """A play in the shape ESPN sends it, with made-up numbers."""
+
+    def pos(yard: int, team: str) -> dict[str, Any]:
+        return {
+            "yardLine": yard,
+            "team": {"id": str(TEAMS[team].espn_id)},
+            "down": 2,
+            "distance": 7,
+            "shortDownDistanceText": "2nd & 7",
+        }
+
+    return Play.from_api(
+        {
+            "id": f"demo-{kind}",
+            "sequenceNumber": "100",
+            "type": {"text": kind},
+            "text": text,
+            "period": {"number": 3},
+            "clock": {"displayValue": "12:24"},
+            "statYardage": yards,
+            "scoringPlay": scoring,
+            "isTurnover": turnover,
+            "awayScore": score[0],
+            "homeScore": score[1],
+            "start": pos(start, offense),
+            "end": pos(end, end_team or offense),
+        }
+    )
+
+
+def _play_scenes(now: datetime) -> list[DemoStep]:
+    """Stills of the generic play scenes (#377): what every play shows until its own screen is
+    drawn, and the cards of every event. A designed screen replaces its step with its own."""
+    game = _game(now, "in", 10, 17, "12:24 - 3rd", situation=_situation(HOME, 62, 2, 7))
+    rush = _play("Rush", "D.Singletary rush up the middle to WSH 38 for 9 yards.", 62, 71, HOME, 9)
+    punt = _play("Punt", "T.Way punts 51 yards to NYG 24, fair catch by K.Toney.", 24, 76, AWAY)
+    td = _play(
+        "Rushing Touchdown",
+        "D.Singletary rush left end for 3 yards, TOUCHDOWN. G.Gano extra point is GOOD.",
+        97, 100, HOME, 3, (10, 24), True,
+    )  # fmt: skip
+    kick = _play(
+        "Field Goal Missed", "G.Gano 38 yard field goal is No Good, Wide Left.", 80, 80, HOME
+    )
+    pick = _play(
+        "Pass Interception Return",
+        "D.Jones pass deep left INTERCEPTED by B.Carter at WSH 43.",
+        57, 43, HOME, 0, turnover=True, end_team=AWAY,
+    )  # fmt: skip
+    base = {"game_id": 1, "away_score": 10, "home_score": 17}
+
+    def event(cls: type[Event], play: Play, team: str = HOME, **kw: Any) -> Event:
+        return cls(play=play, team=team, scope=Scope.FULL, **{**base, **kw})
+
+    touchdown = event(Touchdown, td, via="run", points=7, extra_point="good", home_score=24)
+    miss = event(FieldGoal, kick, made=False, yards=38, miss="Wide Left")
+    turnover = event(Turnover, pick, AWAY, reason="interception", lost_by=HOME)
+    toss = event(CoinToss, rush, HOME, kicker=AWAY)
+    reversal = event(
+        Reversal, td, original=touchdown, original_kind="touchdown", title="TOUCHDOWN OVERTURNED",
+        rules=("flag_cleared",), rule="flag_cleared", reason="OFFENSIVE HOLDING ON NYG, NO PLAY",
+        review=None, current=None,
+    )  # fmt: skip
+
+    def scene(kind: str, stage: str, play: Play, ev: Event | None = None, at: float = 1.5) -> Scene:
+        return Scene(
+            kind, fb_game=game, fb_play=play, fb_event=ev, fb_stage=stage, fb_elapsed=at,
+            fb_seconds=3.0, animating=True,
+        )  # fmt: skip
+
+    return [
+        DemoStep(scene("fb_play", "play", rush), name="fb_play_rush"),
+        DemoStep(scene("fb_play", "play", punt), name="fb_play_punt"),
+        DemoStep(scene("fb_playtext", "playtext", rush), name="fb_playtext"),
+        DemoStep(scene("fb_event", "event", td, touchdown), name="fb_event_touchdown"),
+        DemoStep(scene("fb_event", "detail", td, touchdown), name="fb_event_detail"),
+        DemoStep(scene("fb_event", "event", kick, miss), name="fb_event_fg_miss"),
+        DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),
+        DemoStep(scene("fb_event", "event", rush, toss), name="fb_event_cointoss"),
+        DemoStep(scene("fb_event", "reversal", td, reversal), name="fb_event_reversal"),
+    ]
+
+
 def nfl_demo_steps(now: datetime) -> list[DemoStep]:
     """Every NFL screen there is, in a sensible viewing order."""
     pregame = _game(now, "pre", name="STATUS_SCHEDULED", start=now + timedelta(days=2, hours=3))
@@ -102,4 +199,5 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_scores", "fb_scores_final", final),
         step("fb_field", "fb_field", live),
         step("fb_field", "fb_field_redzone", red),
+        *_play_scenes(now),
     ]

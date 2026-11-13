@@ -99,6 +99,13 @@ list in the PR that does the work, and put new findings about the feed in
 `football_api.md`. Boards only get this branch's builds if the owner picks
 `football` under Software update (see README, "Following a branch").
 
+**Adding an NFL screen:** `football/director.py` decides what is on screen (stages per play,
+scope, reversals; it draws nothing) and `display/football_plays.py` draws it. A screen is one
+registered function (`@play_screen(PlayKind.X)` or `@event_screen(EventClass, stage)`); anything
+unregistered falls back to a generic version. Add its demo steps to `football/demo.py`, render
+with `scripts/render-screens.py --sport nfl`, and retire its mockup (see `football_screen.md`,
+"Play scenes" and "Real renders").
+
 ## Commands
 
 ```bash

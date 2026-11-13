@@ -1205,6 +1205,12 @@ class Renderer:
 
         football_scenes.draw_fb_field(self, canvas, game)
 
+    def draw_fb_play_scene(self, canvas: Any, scene: Any) -> None:
+        """An NFL play, its text, or an event on screen (#377); see ``football_plays``."""
+        from . import football_plays
+
+        football_plays.draw(self, canvas, scene)
+
     def draw_message(self, canvas: Any, title: str, subtitle: str = "") -> None:
         canvas.Clear()
         if subtitle:

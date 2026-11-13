@@ -14,7 +14,7 @@ import threading
 import time
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import FrameType
@@ -50,8 +50,10 @@ from .display.logos import LogoLibrary, LogoSet
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
+from .football.events import Event as FbEvent
 from .football.mode import NflMode
-from .football.models import FbGame
+from .football.models import FbGame, Play
+from .football.people import Person
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
@@ -260,6 +262,19 @@ class Scene:
     address_qr: tuple[tuple[bool, ...], ...] | None = None
     #: Set only for ``fb_scores`` (#352) -- the NFL game to show.
     fb_game: FbGame | None = None
+    #: Set only for the NFL play scenes (``fb_play``, ``fb_playtext``, ``fb_event``, #377):
+    #: the play, who was on it (jersey numbers), the event being celebrated or alerted, which
+    #: stage of it this is (``football.director``), how many animation seconds in and how long
+    #: the stage runs. ``fb_elapsed`` is not part of the scene's identity (it changes every
+    #: frame; the live view would otherwise snapshot every one), and ``animating`` makes the
+    #: loop run fast while the scene is up.
+    fb_play: Play | None = None
+    fb_people: tuple[Person, ...] = ()
+    fb_event: FbEvent | None = None
+    fb_stage: str = ""
+    fb_elapsed: float = field(default=0.0, compare=False)
+    fb_seconds: float = 0.0
+    animating: bool = False
     #: Set only for ``conference_leaders`` -- pixels the list has scrolled up.
     scroll_px: int = 0
     #: True while ``scroll_px`` is still moving, so the loop runs fast.
@@ -440,6 +455,7 @@ class ScoreboardApp:
         #: The favourite's goal light is on screen (fast loop); _goal_building
         #: is its first BUILD_SECONDS, which a live-view snapshot waits out.
         self._goal_animating = False
+        self._fb_animating = False
         self._goal_building = False
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
         #: if we watched it finish; estimated from the start time otherwise.
@@ -616,6 +632,7 @@ class ScoreboardApp:
             or self._shootout_animating
             or self._scroll_animating
             or self._goal_animating
+            or self._fb_animating
         )
         return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
@@ -788,6 +805,8 @@ class ScoreboardApp:
             client_factory=self._nfl_client_factory,
             monotonic=self.monotonic,
             football=lambda: self.settings.football,
+            delay_seconds=self._delay_seconds,
+            utc_now=self.clock,
         )
 
     def current_mode(self) -> str:
@@ -849,7 +868,7 @@ class ScoreboardApp:
         self._blowout_shown = set()
         self._shootout_animating = False
         self._scroll_animating = False
-        self._goal_animating = self._goal_building = False
+        self._goal_animating = self._goal_building = self._fb_animating = False
         self._overlay_animating = False
         self._demo_shootout_started = None
         self._demo_goal_started = None
@@ -2765,7 +2784,7 @@ class ScoreboardApp:
             self.swap_canvas()
             self._overlay_animating = False
             self._shootout_animating = False
-            self._goal_animating = self._goal_building = False
+            self._goal_animating = self._goal_building = self._fb_animating = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -2798,6 +2817,7 @@ class ScoreboardApp:
             or self._shootout_animating
             or self._scroll_animating
             or self._goal_building
+            or self._fb_animating
         ):
             return
         mirror.requested = False
@@ -2838,6 +2858,7 @@ class ScoreboardApp:
         r = self.renderer
         self._shootout_animating = False
         self._scroll_animating = scene.scrolling
+        self._fb_animating = scene.animating
         goal_age = self._goal_age(scene)
         self._goal_animating = goal_age is not None
         self._goal_building = goal_age is not None and goal_age < goal_light.BUILD_SECONDS
@@ -2910,6 +2931,8 @@ class ScoreboardApp:
             r.draw_fb_scores(self.canvas, scene.fb_game)
         elif scene.kind == "fb_field":
             r.draw_fb_field(self.canvas, scene.fb_game)
+        elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
+            r.draw_fb_play_scene(self.canvas, scene)
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), favourite)
         elif scene.kind == "christmas_tree":
