@@ -38,6 +38,7 @@ FB_SCENE_KINDS = (
     "fb_no_games",
     "fb_scores",
     "fb_field",
+    "fb_halftime",
     "fb_play",
     "fb_playtext",
     "fb_event",
@@ -198,9 +199,9 @@ class NflMode:
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
-        # The field between plays while a ball is in play; the text scoreboard before the game,
-        # at the half and once it is final (the half and final get their own cards later).
-        resting = "fb_field" if game.is_live and not game.is_halftime else "fb_scores"
+        # The field between plays while a ball is in play, the halftime card at the half, and
+        # the text scoreboard before the game and once it is final.
+        resting = resting_kind(game)
         base = Scene(resting, fb_game=game)
         self.director.ingest(snap)
         current = self.director.current(game.id)
@@ -256,6 +257,14 @@ class NflMode:
         seconds = self._scoreboard().rotate_seconds if self._scoreboard else DEFAULT_ROTATE_SECONDS
         turn = int(now // max(seconds, 1.0)) % len(pool)
         return pool[turn]
+
+
+def resting_kind(game: FbGame) -> str:
+    """The scene a game rests on when nothing is being played out: the field while a ball is in
+    play, the halftime card at the half, and the text scoreboard before the game and once final."""
+    if game.is_halftime:
+        return "fb_halftime"
+    return "fb_field" if game.is_live else "fb_scores"
 
 
 def _no_football() -> FootballConfig:
