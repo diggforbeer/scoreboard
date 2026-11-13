@@ -170,19 +170,35 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 - **Not yet checked:** leaders for a recap line (the scoreboard has per-event `leaders`), the real
   postseason bracket once set, and what the scoreboard does in the gaps between playoff rounds.
 
+## Decisions (owner, 2026-11-13)
+
+- [x] **Its own rotation.** NFL mode has its own idle rotation under `[football]` (NFL screen names),
+      not the shared `[[rotation]]`, so switching sport never shows screens that do not exist. The
+      admin page gets an NFL version of the Idle rotation card.
+- [x] **The final is held 60 minutes, with a recap line.** A setting (default 60 minutes, like the
+      NHL's `final_hold_minutes`); the final screen adds a **recap**: the leading passer and rusher
+      (needs the per-event `leaders` field, still to be checked in `football_api.md`).
+- [x] **Preseason and playoffs are games.** All three seasons get the same screens. The round is
+      labelled: `PRESEASON WK 2`, `WILD CARD`, `DIVISIONAL`, `CONF CHAMP`, `SUPER BOWL`. A `TBD @ TBD`
+      playoff game is skipped until its teams are known.
+- [x] **Records on the preview and the countdown**, read from the scoreboard events' `records`
+      (`overall`) when the game is in the polled week; omitted when it is not. No extra request.
+- [x] **The off-season marks the draft and training camp** as well as the season start. The season
+      start comes from the feed's calendar; the draft and camp dates are **owner-set in `[football]`
+      with built-in defaults** for the current year (a past date drops off by itself), because the
+      feed does not carry them and they change every year.
+- [x] **128px only.** These screens are skipped on a single 64px panel (it shows the clock, or
+      `fb_no_games`). The in-game screens keep their 64px layouts.
+- [x] **Primetime and holiday games** get a tag on the preview (`THU NIGHT`, `MON NIGHT`,
+      `THANKSGIVING`, `CHRISTMAS`, from the feed's broadcast and date) **and the existing holiday
+      overlay** on Thanksgiving and Christmas games.
+
 ## Open questions
 
-- [ ] One rotation or two? Does NFL mode reuse the existing `[[rotation]]` setting (shared
-      with NHL, with NFL screen names) or get its own `[football]` rotation?
-- [ ] How long does a final stay (the NHL's `final_hold_minutes`), and is there a recap?
-- [ ] The preseason and the playoffs: are they "games" for these screens, and how does the
-      board name a round (`WILD CARD`, `SUPER BOWL`)?
-- [ ] Records on `fb_preview`: wanted, and from which feed?
-- [ ] The off-season dates (the draft, training camp): wanted, and configured by the owner or
-      fixed in the code?
-- [ ] 64px panels: which of these have a single-panel version, and which are skipped there.
-- [ ] Thursday and Monday night games and holiday games (Thanksgiving, Christmas): any
-      special treatment, or just games.
+- [ ] The exact defaults for the draft and camp dates, and their setting names.
+- [ ] Which holiday overlays apply to a game on that day (the holiday overlay still uses NHL team
+      colours with NFL abbreviations, a known gap in `CLAUDE.md`).
+- [ ] The default order and seconds of the NFL idle rotation.
 
 ## Todo
 
@@ -192,8 +208,8 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 - [ ] Check the per-event `leaders` for a recap line, and the playoff gaps (see above).
 
 ### Design
-- [ ] Decide the open questions above.
-- [ ] Mockups for each screen the owner keeps (128px, and 64px where it applies), made the way
+- [x] Decide the main open questions (above); the three left are small.
+- [ ] Mockups for each screen the owner keeps (128px only), made the way
       `football_screen.md`'s are (`scripts/render-screens.py --sport nfl` once built).
 - [ ] The default idle rotation and its settings; the admin page's rotation card for NFL mode.
 
