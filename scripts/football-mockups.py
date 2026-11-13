@@ -309,17 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def reversal() -> Panel:
-    p = Panel()
-    p.logo(10, 16, HOME, 7)
-    p.center("5x7", 9, AMBER, "TOUCHDOWN", 22, p.w - 22)
-    p.center("5x7", 17, AMBER, "OVERTURNED", 22, p.w - 22)
-    p.center("4x6", 24, WHITE, "OFF PASS INTERFERENCE", 22, p.w - 22)
-    p.center("4x6", 31, DIM, "SCORE BACK TO NYG 0 WSH 0", 22, p.w - 22)
-    flag(p, p.w - 12, 22)
-    return p
-
-
 # -- 64px (single panel) variants ------------------------------------------------
 def fb_field_64() -> Panel:
     p = Panel(64)
@@ -352,7 +341,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "reversal": reversal,
     "fb_field_64": fb_field_64,
     "cointoss_result_64": cointoss_result_64,
     "touchdown_64": touchdown_64,

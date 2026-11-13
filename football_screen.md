@@ -947,6 +947,21 @@ green or red: this is neither good nor bad news yet, it is a correction.
   `fb_field`, with the ball at the restored spot, exactly as for any play. The
   score band is already corrected.
 
+**Built (story #396, `display/football_reversal.py`).** An `@event_screen(Reversal, REVERSAL)`
+screen, amber, `fb_reversal_seconds` (5s), silent, preempting what is on screen (the director
+already replaces a celebration with it and skips the detail). In the text column beside the
+logo of **the team whose play was reversed**: the title from the detector split over two lines
+(`TOUCHDOWN` / `OVERTURNED`, `FIELD GOAL` / `NEGATED`: the last word on the second line), the
+**reason** in white (the feed's own words, trimmed by the detector) and, in dim type across the
+full width under the logo, the restored score with the home team first
+(`SCORE BACK TO NYG 17  WSH 10`) and the new down and distance when the feed gives it and there
+is room (`SCORE BACK TO` is shortened to `BACK TO` before the down is given up). A yellow flag
+stands at the right edge. A reason longer than the row (21 characters) is **held for a second
+and then scrolls a character at a time** to its end, a pure function of the seconds since the
+stage began. A 64px panel has no logo or flag and its last row **alternates**: the reason
+(scrolling) for the first 55% of the stage, then the restored score. When the stage ends the board
+returns to `fb_field` with the ball at the restored spot (the field already follows the feed).
+
 **Details and limits**
 
 - It only shows for plays that were celebrated. A reversal on an opponent's
@@ -1189,6 +1204,13 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Safety](docs/football/fb_score.png) | ![Quick](docs/football/fb_score_quick.png) |
 | The points, the team, the score, the first line of the play. | A followed team's: the same card, static. |
 
+**The reversal** (#396; a touchdown overturned, and a long reason scrolling):
+
+| | |
+|---|---|
+| ![Reversal](docs/football/reversal.png) | ![Scrolling reason](docs/football/reversal_scrolling.png) |
+| `TOUCHDOWN OVERTURNED`, the reason, the restored score and the new down. | A long reason, a few characters scrolled. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1197,8 +1219,6 @@ test does the same. Nothing here touches `docs/screens/`.
 | `fb_play` for a play with no screen of its own yet (a blocked punt, which has no screen of its own): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
-| ![Reversal card](docs/football/fb_event_reversal.png) | |
-| `fb_event` (stage `reversal`): the correction and its reason. | |
 
 `fb_field` and `fb_field_redzone` (the resting field, below) are real renders too: the same
 names as their mockups, which they replaced.
@@ -1213,7 +1233,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal`, `fieldgoal_opponent`, `fg_miss` and `turnover`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown`, `score_detail`, `fieldgoal`, `fieldgoal_opponent`, `fg_miss`, `turnover` and `reversal`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1500,7 +1520,7 @@ added later.
 - [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
       support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
 - [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)
-- [ ] `fb_reversal` screen
+- [x] `fb_reversal` screen (#396)
 - [x] Live sport switch: tear down the old sport's state and baseline the new one cleanly
 - [x] `[scoreboard] sport` setting and the admin page picker (#345); NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode (#348)
 - [ ] Config and admin page settings
