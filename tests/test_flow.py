@@ -2194,3 +2194,74 @@ def test_a_blowout_flashes_once_per_game(day):
     clock.advance(seconds=10)
     app.refresh()
     assert scene(app) == ("game", 1)
+
+
+# -- live sport switch (#346) -------------------------------------------------
+
+
+def switch_sport(app: ScoreboardApp, sport: str) -> None:
+    new = dataclasses.replace(app.settings.scoreboard, sport=sport)
+    settings = dataclasses.replace(app.settings, scoreboard=new)
+    app._apply_reloaded_settings(settings)
+
+
+def test_sport_defaults_to_nhl_mode(day):
+    app, _, _ = day
+    assert app.current_mode() == "nhl"
+    assert scene(app)[0] != "fb_stub"
+
+
+def test_switching_to_nfl_shows_connecting_then_the_stub_and_back(day):
+    app, clock, _ = day
+    switch_sport(app, "nfl")
+    assert app.current_mode() == "nfl"
+    assert app.select_scene().kind == "fb_connecting"
+    app.refresh()
+    assert app.select_scene().kind == "fb_stub"
+    app.draw()  # draws through the real renderer without error
+
+    switch_sport(app, "nhl")
+    assert app.current_mode() == "nhl"
+    assert app.select_scene().kind == "connecting"
+    tick(app, clock, minutes=1)
+    assert app.select_scene().kind not in ("connecting", "fb_stub")
+
+
+def test_switching_sport_re_baselines_goals_and_stays_silent(day):
+    app, clock, client = day
+    clock.advance(hours=6)
+    tonight = client.today[1]
+    client.today[1] = score(dataclasses.replace(tonight, state="LIVE"), home=2)
+    app.refresh()
+    assert app.horn.calls == [FAV]  # 0-0 -> 2-0 is a real goal
+    app.horn.calls.clear()
+
+    switch_sport(app, "nfl")
+    assert app._known_scores == {} and app.games == []
+    switch_sport(app, "nhl")
+    assert app._known_scores == {}
+
+    # The favourite is already up 2-0: the first sight after a switch is a
+    # baseline, not a goal.
+    app.refresh()
+    assert app.horn.calls == []
+    assert app.last_goal is None
+    # A real increase afterwards still fires.
+    client.today[1] = score(client.today[1], home=3)
+    app.refresh()
+    assert app.horn.calls == [FAV]
+
+
+def test_rapid_sport_switching_leaks_nothing(day):
+    import threading
+
+    app, clock, _ = day
+    threads = threading.active_count()
+    for i in range(200):
+        switch_sport(app, "nfl" if i % 2 == 0 else "nhl")
+        clock.advance(seconds=1)
+        app.refresh()
+    assert threading.active_count() == threads
+    assert app.current_mode() == "nhl"
+    assert app._nfl is None
+    assert len(app._known_scores) <= 2

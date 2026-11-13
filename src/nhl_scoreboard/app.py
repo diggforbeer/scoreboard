@@ -50,6 +50,7 @@ from .display.logos import LogoLibrary
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
+from .football.mode import NflMode
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
@@ -520,6 +521,14 @@ class ScoreboardApp:
         self._demo_drawing = False
         self._demo_holiday: Holiday | None = None
         self._running = False
+        #: The sport the board is running right now (#346). Only
+        #: ``_switch_sport`` changes it, so ``current_mode()`` is the one
+        #: place that decides which sport's code runs.
+        self._sport = settings.scoreboard.sport
+        self._nfl: NflMode | None = NflMode() if self._sport == "nfl" else None
+        #: Set by a sport switch so run() fetches on its next pass rather than
+        #: leaving the new sport on ``connecting`` for a whole poll interval.
+        self._poll_asap = False
 
     # -- lifecycle -------------------------------------------------------
 
@@ -564,6 +573,9 @@ class ScoreboardApp:
             now = self.monotonic()
             self.reload_config_if_changed()
             self.handle_button()
+            if self._poll_asap:
+                self._poll_asap = False
+                next_poll = 0.0
             if now >= next_poll:
                 self.refresh()
                 next_poll = now + self.poll_interval()
@@ -573,10 +585,11 @@ class ScoreboardApp:
             if now >= next_brightness:
                 self.refresh_brightness()
                 next_brightness = now + self.settings.panel.brightness_poll_seconds
-            self.refresh_situations()
-            self.refresh_shootouts()
-            self.refresh_goal_details()
-            self.refresh_three_stars()
+            if self.current_mode() == "nhl":
+                self.refresh_situations()
+                self.refresh_shootouts()
+                self.refresh_goal_details()
+                self.refresh_three_stars()
             self._sync_setup_server()
             self._track_address()
             self._sync_alias()
@@ -741,7 +754,72 @@ class ScoreboardApp:
 
     # -- data ------------------------------------------------------------
 
+    def current_mode(self) -> str:
+        """``nhl`` or ``nfl``: the one place that says which sport is running (#346)."""
+        return self._sport
+
+    def _switch_sport(self, sport: str) -> None:
+        """Swap the running sport live, from a clean slate (#346).
+
+        Drops everything the old sport held -- cached data, remembered scores,
+        goal detection, the last scene, animations -- so the new sport starts
+        at ``connecting`` and baselines on its first fetch: nothing celebrates
+        or sounds on the first frame after a switch. The button mute is the
+        owner's, not the sport's, so it survives.
+        """
+        log.info("Switching sport %s -> %s", self._sport, sport)
+        self._sport = sport
+        self._nfl = NflMode() if sport == "nfl" else None
+        self._poll_asap = True
+        self.games = []
+        self.index = 0
+        self._delay = DelayQueue(self.monotonic)
+        self._latest_games = None
+        self._shown_situations = {}
+        self._shown_shootouts = {}
+        self.situations = {}
+        self.shootouts = {}
+        self._shootout_seen = {}
+        self.last_success = None
+        self.last_success_at = None
+        self.last_error = None
+        self.last_error_at = None
+        self.last_error_recovered_at = None
+        self._last_error_from_scores = False
+        self.ended_at = {}
+        self._seen_live = set()
+        self._schedule = None
+        self._schedule_retry_after = 0.0
+        self._standings = None
+        self._standings_retry_after = 0.0
+        self._season_series = {}
+        self._season_series_retry_after = {}
+        self._leaders = None
+        self._leaders_retry_after = 0.0
+        self._known_scores = {}
+        self.last_goal = None
+        self._goal_events = {}
+        self._shown_goal_events = {}
+        self._goal_detail = None
+        self._team_rosters = {}
+        self._three_stars_pending = {}
+        self._three_stars_shown = set()
+        self._three_stars = None
+        self._blowout = None
+        self._blowout_shown = set()
+        self._shootout_animating = False
+        self._scroll_animating = False
+        self._goal_animating = self._goal_building = False
+        self._overlay_animating = False
+        self._demo_shootout_started = None
+        self._demo_goal_started = None
+        self._mirror_key = None
+        self.mirror.requested = True
+
     def refresh(self) -> None:
+        if self._nfl is not None:
+            self._nfl.refresh()
+            return
         try:
             games = self.client.scores()
         except NHLApiError as exc:
@@ -920,6 +998,7 @@ class ScoreboardApp:
         favourite_team_changed = (
             old.scoreboard.favourite_team != new_settings.scoreboard.favourite_team
         )
+        sport_changed = old.scoreboard.sport != new_settings.scoreboard.sport
         followed_changed = old.scoreboard.followed_teams != new_settings.scoreboard.followed_teams
         auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
         status_changed = (
@@ -935,6 +1014,9 @@ class ScoreboardApp:
         )
 
         self.settings = new_settings
+
+        if sport_changed:
+            self._switch_sport(new_settings.scoreboard.sport)
 
         if timezone_changed:
             self.tz = resolve_timezone(new_settings.scoreboard.timezone, fallback=self.tz)
@@ -1851,6 +1933,8 @@ class ScoreboardApp:
             address_scene = self._address_scene()
             if address_scene is not None:
                 return address_scene
+        if self._nfl is not None:
+            return self._nfl.scene()
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
 
@@ -2740,6 +2824,10 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NO DATA", "CHECK NETWORK")
         elif scene.kind == "connecting":
             r.draw_message(self.canvas, "NHL", "CONNECTING")
+        elif scene.kind == "fb_connecting":
+            r.draw_message(self.canvas, "NFL", "CONNECTING")
+        elif scene.kind == "fb_stub":
+            r.draw_message(self.canvas, "NFL MODE")
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), favourite)
         elif scene.kind == "christmas_tree":
