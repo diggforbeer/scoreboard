@@ -823,7 +823,7 @@ added later.
 - [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
 - [ ] `fb_reversal` screen
 - [ ] Live sport switch: tear down the old sport's state and baseline the new one cleanly
-- [ ] `[scoreboard] sport` setting and the admin page picker; NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode
+- [x] `[scoreboard] sport` setting and the admin page picker (#345); NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
 - [ ] Tests

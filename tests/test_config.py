@@ -553,3 +553,19 @@ def test_a_bare_also_follow_string_is_one_team():
 def test_followed_teams_without_a_favourite_is_just_also_follow():
     settings = Settings.from_dict({"scoreboard": {"favourite_team": "", "also_follow": ["TOR"]}})
     assert settings.scoreboard.followed_teams == ["TOR"]
+
+
+def test_sport_defaults_to_nhl_and_accepts_nfl(tmp_path):
+    assert Settings.load(tmp_path / "missing.toml").scoreboard.sport == "nhl"
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nsport = "NFL"\n')
+    assert Settings.load(path).scoreboard.sport == "nfl"
+
+
+def test_invalid_sport_warns_once_and_falls_back_to_nhl(tmp_path, caplog):
+    path = tmp_path / "scoreboard.toml"
+    path.write_text('[scoreboard]\nsport = "cricket"\n')
+    caplog.set_level(logging.WARNING)
+    settings = Settings.load(path)
+    assert settings.scoreboard.sport == "nhl"
+    assert caplog.text.count("scoreboard.sport") == 1

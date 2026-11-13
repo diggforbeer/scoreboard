@@ -210,10 +210,17 @@ def next_hardware_mapping(current: str) -> str:
     return PANEL_HARDWARE_MAPPING_CHOICES[(index + 1) % len(PANEL_HARDWARE_MAPPING_CHOICES)]
 
 
+#: ``[scoreboard] sport`` choices; the first is the default.
+SPORT_CHOICES = ("nhl", "nfl")
+
+
 @dataclass(slots=True)
 class ScoreboardConfig:
     """Behaviour of the scoreboard itself."""
 
+    #: Which sport the board runs: "nhl" or "nfl". Anything else is warned
+    #: about and treated as "nhl". Nothing acts on it yet (football #345).
+    sport: str = "nhl"
     #: Pinned to the front of the rotation and eligible for the special-teams
     #: indicator. Nashville unless the boot-partition config says otherwise.
     favourite_team: str = "NSH"
@@ -268,6 +275,13 @@ class ScoreboardConfig:
     scores_grid: bool = False
 
     def __post_init__(self) -> None:
+        sport = str(self.sport).strip().lower()
+        if sport not in SPORT_CHOICES:
+            log.warning(
+                "scoreboard.sport %r is not one of %s; using nhl", self.sport, SPORT_CHOICES
+            )
+            sport = "nhl"
+        self.sport = sport
         self.favourite_team = self.favourite_team.strip().upper()
         if isinstance(self.also_follow, str):
             self.also_follow = [self.also_follow]

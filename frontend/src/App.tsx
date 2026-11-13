@@ -132,6 +132,7 @@ interface HornEntry {
 }
 
 interface ScoreboardConfig {
+  sport: string
   favourite_team: string
   also_follow: string[]
   timezone: string
@@ -1075,6 +1076,21 @@ function App() {
           <h2 className="card-title h5">Scoreboard</h2>
           {scoreboard ? (
             <form onSubmit={flushOnSubmit(scoreboardSave)}>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="sb-sport">
+                  Sport
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="sb-sport"
+                  value={scoreboard.sport}
+                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, sport: e.target.value })}
+                >
+                  <option value="nhl">NHL</option>
+                  <option value="nfl">NFL</option>
+                </select>
+              </div>
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-favourite-team">
                   Favourite team

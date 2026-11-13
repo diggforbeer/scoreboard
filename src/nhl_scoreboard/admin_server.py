@@ -294,6 +294,7 @@ from .config import (
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
     PANEL_HARDWARE_MAPPING_CHOICES,
+    SPORT_CHOICES,
     VALID_ROTATION_SCREENS,
     ConfigWriteError,
     Settings,
@@ -417,6 +418,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
 _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
+    "sport": _FieldSpec("select", choices=SPORT_CHOICES),
     "favourite_team": _FieldSpec("str"),
     "also_follow": _FieldSpec("teams"),
     "timezone": _FieldSpec("str"),
