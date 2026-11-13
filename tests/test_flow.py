@@ -2221,24 +2221,24 @@ def switch_sport(app: ScoreboardApp, sport: str) -> None:
 def test_sport_defaults_to_nhl_mode(day):
     app, _, _ = day
     assert app.current_mode() == "nhl"
-    assert scene(app)[0] != "fb_stub"
+    assert not scene(app)[0].startswith("fb_")
 
 
-def test_switching_to_nfl_shows_connecting_then_the_stub_and_back(day):
+def test_switching_to_nfl_shows_connecting_then_no_games_and_back(day):
     app, clock, _ = day
     switch_sport(app, "nfl")
     assert app.current_mode() == "nfl"
     assert app.select_scene().kind == "fb_connecting"
     # The feed lands on the worker's own thread in real life; here one fetch is run by hand.
     app._nfl.worker.poll_once()
-    assert app.select_scene().kind == "fb_stub"
+    assert app.select_scene().kind == "fb_no_games"  # the fake feed answers with an empty slate
     app.draw()  # draws through the real renderer without error
 
     switch_sport(app, "nhl")
     assert app.current_mode() == "nhl"
     assert app.select_scene().kind == "connecting"
     tick(app, clock, minutes=1)
-    assert app.select_scene().kind not in ("connecting", "fb_stub")
+    assert app.select_scene().kind not in ("connecting", "fb_no_games")
 
 
 def test_switching_sport_re_baselines_goals_and_stays_silent(day):

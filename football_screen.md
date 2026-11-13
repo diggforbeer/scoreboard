@@ -106,6 +106,46 @@ picker. There is no mixing, no priority between the two sports, and no
 - The picker keeps all sport-specific code behind one switch, which is what lets
   the branch merge to `main` later without changing NHL boards.
 
+## Base scenes (what NFL mode shows today)
+
+Before any of the designed screens below exist, NFL mode shows four plain scenes (story
+#352). They are the thin base that gets real ESPN data onto the panel, the NFL counterpart
+of the NHL text layout, and the designed screens build on them. `football/mode.py` keeps the
+list (`FB_SCENE_KINDS`) and a test keeps this section, that list and the renderer in step.
+
+| Scene | When | What it draws |
+|---|---|---|
+| `fb_connecting` | The feed has not answered yet | `NFL` over `CONNECTING` |
+| `fb_no_data` | The last **successful** fetch is over 15 minutes old, or the feed has been failing for 15 minutes without ever answering | `NO DATA` over `NFL CHECK NETWORK` |
+| `fb_no_games` | The feed answered and there are no games on the slate (a bye, the off-season) | `NO GAMES` over `NFL` |
+| `fb_scores` | There is a game to show | One game as text (below) |
+
+**`fb_scores`** (`display/football_scenes.py`): away on the left half and home on the right,
+each abbreviation in its **NFL team colour** (never the NHL one) with its score in white at
+the edge of its half; the down and distance (`2ND & 3 AT WSH 13`) in amber while a game is
+live, red in the red zone; the state along the bottom in the state's colour: green for live
+play, amber at halftime, grey once final, blue before kickoff. Before kickoff there is no
+score, and the line is the kickoff time in the board's timezone (`SUN 11/15 12:00 PM`, just
+`12:00 PM` on a single 64px panel). A team that is not one of the 32 (a Pro Bowl side) is
+drawn plain. On a 64px panel the abbreviations and scores drop to the smaller font so both
+sides fit.
+
+**Which game** (`NflMode.pick_game`), using the NFL favourite and followed teams:
+
+1. The favourite's game holds the screen **alone while it is live**.
+2. Otherwise the games the followed teams are in take turns, `rotate_seconds` each, the
+   favourite's first; if any of them is live, only the live ones.
+3. With nobody followed, or none of them playing (a bye), every game takes a turn, live
+   ones first.
+
+Turns are timed by the monotonic clock, so a refresh that changes the slate never makes the
+board skip or repeat a game. There is no hold timer for a finished game (NHL has
+`final_hold_minutes`): a final stays on the rotation until the slate moves on.
+
+The admin page's status box and Live view work in NFL mode: the status box reports the
+feed's last successful poll and last error, and the Live view mirrors these scenes pixel for
+pixel (tested for every state).
+
 ## Screens
 
 Every football screen draws as much of the field as fits, with the possessing
@@ -849,6 +889,8 @@ added later.
 
 ### Build (after the design is agreed)
 
+- [x] Base scenes: the status screens and a plain text scoreboard with the favourite and
+      followed-team selection (#352); see "Base scenes"
 - [~] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport nfl`
       done (#350); play feed, `Play` model, play-text parser and `--dump-plays` done (#353);
       rosters and participants (jersey numbers) still to do

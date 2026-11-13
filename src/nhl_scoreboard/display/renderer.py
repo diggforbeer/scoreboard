@@ -1190,6 +1190,12 @@ class Renderer:
         line = f"{mine.abbrev} {mine.score} - {theirs.score} {theirs.abbrev}"
         self.text_center(canvas, self.fonts.small, cx, self.height - 5, WHITE, line)
 
+    def draw_fb_scores(self, canvas: Any, game: Any) -> None:
+        """The plain NFL scoreboard for one game (#352); see ``football_scenes``."""
+        from . import football_scenes
+
+        football_scenes.draw_fb_scores(self, canvas, game)
+
     def draw_message(self, canvas: Any, title: str, subtitle: str = "") -> None:
         canvas.Clear()
         if subtitle:

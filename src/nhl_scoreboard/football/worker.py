@@ -73,6 +73,9 @@ class FeedSnapshot:
     fetch_seconds: float = 0.0
     #: Attempts since start, successful or not.
     attempts: int = 0
+    #: Monotonic time the worker was started, ``None`` if it never was. Lets the caller tell
+    #: "still connecting" from "never connected in 15 minutes" (no data) before a first success.
+    started_at: float | None = None
 
     @property
     def has_data(self) -> bool:
@@ -135,7 +138,7 @@ class FeedWorker:
                 return
             self._generation += 1
             self._stop = threading.Event()
-            self._snapshot = FeedSnapshot()
+            self._snapshot = FeedSnapshot(started_at=self._monotonic())
             generation, stop = self._generation, self._stop
             self._thread = threading.Thread(
                 target=self._run, args=(generation, stop), name=self._name, daemon=True
