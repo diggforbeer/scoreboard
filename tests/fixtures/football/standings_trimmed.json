@@ -1,0 +1,1949 @@
+{
+ "uid": "s:20~l:28~g:9",
+ "id": "9",
+ "name": "National Football League",
+ "abbreviation": "NFL",
+ "shortName": "NFL",
+ "children": [
+  {
+   "uid": "s:20~l:28~g:8",
+   "id": "8",
+   "name": "American Football Conference",
+   "abbreviation": "AFC",
+   "children": [
+    {
+     "uid": "s:20~l:28~g:4",
+     "id": "4",
+     "name": "AFC East",
+     "abbreviation": "EAST",
+     "isConference": false,
+     "standings": {
+      "id": "0",
+      "name": "overall",
+      "displayName": "Standings",
+      "season": 2026,
+      "seasonType": 2,
+      "seasonDisplayName": "2026",
+      "entries": [
+       {
+        "team": {
+         "id": "2",
+         "uid": "s:20~l:28~t:2",
+         "location": "Buffalo",
+         "name": "Bills",
+         "abbreviation": "BUF",
+         "displayName": "Buffalo Bills",
+         "shortDisplayName": "Bills",
+         "isActive": true
+        },
+        "stats": [
+         {
+          "name": "differential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "differential",
+          "value": 69.0,
+          "displayValue": "+69"
+         },
+         {
+          "name": "gamesBehind",
+          "displayName": "Games Back",
+          "shortDisplayName": "GB",
+          "description": "Games Back",
+          "abbreviation": "GB",
+          "type": "gamesbehind",
+          "value": 0.0,
+          "displayValue": "-"
+         },
+         {
+          "name": "losses",
+          "displayName": "Losses",
+          "shortDisplayName": "L",
+          "description": "Losses",
+          "abbreviation": "L",
+          "type": "losses",
+          "value": 1.0,
+          "displayValue": "1"
+         },
+         {
+          "name": "playoffSeed",
+          "displayName": "Position",
+          "shortDisplayName": "POS",
+          "description": "Playoff Seed",
+          "abbreviation": "SEED",
+          "type": "playoffseed",
+          "value": 1.0,
+          "displayValue": "1"
+         },
+         {
+          "name": "pointDifferential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "pointdifferential",
+          "value": 69.0,
+          "displayValue": "+69"
+         },
+         {
+          "name": "pointsAgainst",
+          "displayName": "Points Against",
+          "shortDisplayName": "PA",
+          "description": "Total Points Against",
+          "abbreviation": "PA",
+          "type": "pointsagainst",
+          "value": 187.0,
+          "displayValue": "187"
+         },
+         {
+          "name": "pointsFor",
+          "displayName": "Points For",
+          "shortDisplayName": "PF",
+          "description": "Total Points For",
+          "abbreviation": "PF",
+          "type": "pointsfor",
+          "value": 256.0,
+          "displayValue": "256"
+         },
+         {
+          "name": "streak",
+          "displayName": "Streak",
+          "shortDisplayName": "STRK",
+          "description": "Current Streak",
+          "abbreviation": "STRK",
+          "type": "streak",
+          "value": 4.0,
+          "displayValue": "W4"
+         },
+         {
+          "name": "ties",
+          "displayName": "Ties",
+          "shortDisplayName": "T",
+          "description": "Ties",
+          "abbreviation": "T",
+          "type": "ties",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "name": "winPercent",
+          "displayName": "Win Percentage",
+          "shortDisplayName": "PCT",
+          "description": "Winning Percentage",
+          "abbreviation": "PCT",
+          "type": "winpercent",
+          "value": 0.875,
+          "displayValue": ".875"
+         },
+         {
+          "name": "wins",
+          "displayName": "Wins",
+          "shortDisplayName": "W",
+          "description": "Wins",
+          "abbreviation": "W",
+          "type": "wins",
+          "value": 7.0,
+          "displayValue": "7"
+         },
+         {
+          "name": "divisionLosses",
+          "displayName": "Division Losses",
+          "shortDisplayName": "DL",
+          "description": "Division Losses",
+          "abbreviation": "DL",
+          "type": "divisionlosses",
+          "value": 1.0,
+          "displayValue": "1"
+         },
+         {
+          "name": "divisionRecord",
+          "displayName": "Division record",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "abbreviation": "DIV",
+          "type": "divisionrecord",
+          "value": 0.0,
+          "displayValue": "0-1"
+         },
+         {
+          "name": "divisionTies",
+          "displayName": "Division Tie ",
+          "shortDisplayName": "DT",
+          "description": "Division Tie ",
+          "abbreviation": "DT",
+          "type": "divisionties",
+          "value": 0.0,
+          "displayValue": "0.000"
+         },
+         {
+          "name": "divisionWins",
+          "displayName": "Division Wins ",
+          "shortDisplayName": "DW",
+          "description": "Division Winning ",
+          "abbreviation": "DW",
+          "type": "divisionwins",
+          "value": 0.0,
+          "displayValue": "0.000"
+         },
+         {
+          "name": "lockedDivRank",
+          "displayName": "Locked Div Rank",
+          "shortDisplayName": "LDR",
+          "description": "Locked Div Rank",
+          "abbreviation": "LDR",
+          "type": "lockeddivrank",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "id": "0",
+          "name": "overall",
+          "abbreviation": "Any",
+          "type": "total",
+          "summary": "7-1",
+          "displayValue": "7-1"
+         },
+         {
+          "id": "13",
+          "name": "Home",
+          "displayName": "Home",
+          "shortDisplayName": "HOME",
+          "description": "Home Record",
+          "type": "home",
+          "summary": "3-1",
+          "displayValue": "3-1"
+         },
+         {
+          "id": "14",
+          "name": "Road",
+          "displayName": "Road",
+          "shortDisplayName": "AWAY",
+          "description": "Away Record",
+          "type": "road",
+          "summary": "4-0",
+          "displayValue": "4-0"
+         },
+         {
+          "id": "17",
+          "name": "vs. Div.",
+          "displayName": "DIV",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "type": "vsdiv",
+          "summary": "0-1",
+          "displayValue": "0-1"
+         },
+         {
+          "id": "906",
+          "name": "vs. Conf.",
+          "displayName": "CONF",
+          "shortDisplayName": "CONF",
+          "description": "Conference Record",
+          "type": "vsconf",
+          "summary": "4-1",
+          "displayValue": "4-1"
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "17",
+         "uid": "s:20~l:28~t:17",
+         "location": "New England",
+         "name": "Patriots",
+         "abbreviation": "NE",
+         "displayName": "New England Patriots",
+         "shortDisplayName": "Patriots",
+         "isActive": true
+        },
+        "stats": [
+         {
+          "name": "differential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "differential",
+          "value": 4.0,
+          "displayValue": "+4"
+         },
+         {
+          "name": "gamesBehind",
+          "displayName": "Games Back",
+          "shortDisplayName": "GB",
+          "description": "Games Back",
+          "abbreviation": "GB",
+          "type": "gamesbehind",
+          "value": 2.5,
+          "displayValue": "2.5"
+         },
+         {
+          "name": "losses",
+          "displayName": "Losses",
+          "shortDisplayName": "L",
+          "description": "Losses",
+          "abbreviation": "L",
+          "type": "losses",
+          "value": 4.0,
+          "displayValue": "4"
+         },
+         {
+          "name": "playoffSeed",
+          "displayName": "Position",
+          "shortDisplayName": "POS",
+          "description": "Playoff Seed",
+          "abbreviation": "SEED",
+          "type": "playoffseed",
+          "value": 7.0,
+          "displayValue": "7"
+         },
+         {
+          "name": "pointDifferential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "pointdifferential",
+          "value": 4.0,
+          "displayValue": "+4"
+         },
+         {
+          "name": "pointsAgainst",
+          "displayName": "Points Against",
+          "shortDisplayName": "PA",
+          "description": "Total Points Against",
+          "abbreviation": "PA",
+          "type": "pointsagainst",
+          "value": 207.0,
+          "displayValue": "207"
+         },
+         {
+          "name": "pointsFor",
+          "displayName": "Points For",
+          "shortDisplayName": "PF",
+          "description": "Total Points For",
+          "abbreviation": "PF",
+          "type": "pointsfor",
+          "value": 211.0,
+          "displayValue": "211"
+         },
+         {
+          "name": "streak",
+          "displayName": "Streak",
+          "shortDisplayName": "STRK",
+          "description": "Current Streak",
+          "abbreviation": "STRK",
+          "type": "streak",
+          "value": -1.0,
+          "displayValue": "L1"
+         },
+         {
+          "name": "ties",
+          "displayName": "Ties",
+          "shortDisplayName": "T",
+          "description": "Ties",
+          "abbreviation": "T",
+          "type": "ties",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "name": "winPercent",
+          "displayName": "Win Percentage",
+          "shortDisplayName": "PCT",
+          "description": "Winning Percentage",
+          "abbreviation": "PCT",
+          "type": "winpercent",
+          "value": 0.5555556,
+          "displayValue": ".556"
+         },
+         {
+          "name": "wins",
+          "displayName": "Wins",
+          "shortDisplayName": "W",
+          "description": "Wins",
+          "abbreviation": "W",
+          "type": "wins",
+          "value": 5.0,
+          "displayValue": "5"
+         },
+         {
+          "name": "divisionLosses",
+          "displayName": "Division Losses",
+          "shortDisplayName": "DL",
+          "description": "Division Losses",
+          "abbreviation": "DL",
+          "type": "divisionlosses",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "name": "divisionRecord",
+          "displayName": "Division record",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "abbreviation": "DIV",
+          "type": "divisionrecord",
+          "value": 0.0,
+          "displayValue": "3-0"
+         },
+         {
+          "name": "divisionTies",
+          "displayName": "Division Tie ",
+          "shortDisplayName": "DT",
+          "description": "Division Tie ",
+          "abbreviation": "DT",
+          "type": "divisionties",
+          "value": 0.0,
+          "displayValue": "0.000"
+         },
+         {
+          "name": "divisionWins",
+          "displayName": "Division Wins ",
+          "shortDisplayName": "DW",
+          "description": "Division Winning ",
+          "abbreviation": "DW",
+          "type": "divisionwins",
+          "value": 3.0,
+          "displayValue": "3.000"
+         },
+         {
+          "name": "lockedDivRank",
+          "displayName": "Locked Div Rank",
+          "shortDisplayName": "LDR",
+          "description": "Locked Div Rank",
+          "abbreviation": "LDR",
+          "type": "lockeddivrank",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "id": "0",
+          "name": "overall",
+          "abbreviation": "Any",
+          "type": "total",
+          "summary": "5-4",
+          "displayValue": "5-4"
+         },
+         {
+          "id": "13",
+          "name": "Home",
+          "displayName": "Home",
+          "shortDisplayName": "HOME",
+          "description": "Home Record",
+          "type": "home",
+          "summary": "3-1",
+          "displayValue": "3-1"
+         },
+         {
+          "id": "14",
+          "name": "Road",
+          "displayName": "Road",
+          "shortDisplayName": "AWAY",
+          "description": "Away Record",
+          "type": "road",
+          "summary": "2-3",
+          "displayValue": "2-3"
+         },
+         {
+          "id": "17",
+          "name": "vs. Div.",
+          "displayName": "DIV",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "type": "vsdiv",
+          "summary": "3-0",
+          "displayValue": "3-0"
+         },
+         {
+          "id": "906",
+          "name": "vs. Conf.",
+          "displayName": "CONF",
+          "shortDisplayName": "CONF",
+          "description": "Conference Record",
+          "type": "vsconf",
+          "summary": "5-1",
+          "displayValue": "5-1"
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "20",
+         "uid": "s:20~l:28~t:20",
+         "location": "New York",
+         "name": "Jets",
+         "abbreviation": "NYJ",
+         "displayName": "New York Jets",
+         "shortDisplayName": "Jets",
+         "isActive": true
+        },
+        "stats": [
+         {
+          "name": "differential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "differential",
+          "value": -41.0,
+          "displayValue": "-41"
+         },
+         {
+          "name": "gamesBehind",
+          "displayName": "Games Back",
+          "shortDisplayName": "GB",
+          "description": "Games Back",
+          "abbreviation": "GB",
+          "type": "gamesbehind",
+          "value": 5.5,
+          "displayValue": "5.5"
+         },
+         {
+          "name": "losses",
+          "displayName": "Losses",
+          "shortDisplayName": "L",
+          "description": "Losses",
+          "abbreviation": "L",
+          "type": "losses",
+          "value": 7.0,
+          "displayValue": "7"
+         },
+         {
+          "name": "playoffSeed",
+          "displayName": "Position",
+          "shortDisplayName": "POS",
+          "description": "Playoff Seed",
+          "abbreviation": "SEED",
+          "type": "playoffseed",
+          "value": 12.0,
+          "displayValue": "12"
+         },
+         {
+          "name": "pointDifferential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "pointdifferential",
+          "value": -41.0,
+          "displayValue": "-41"
+         },
+         {
+          "name": "pointsAgainst",
+          "displayName": "Points Against",
+          "shortDisplayName": "PA",
+          "description": "Total Points Against",
+          "abbreviation": "PA",
+          "type": "pointsagainst",
+          "value": 223.0,
+          "displayValue": "223"
+         },
+         {
+          "name": "pointsFor",
+          "displayName": "Points For",
+          "shortDisplayName": "PF",
+          "description": "Total Points For",
+          "abbreviation": "PF",
+          "type": "pointsfor",
+          "value": 182.0,
+          "displayValue": "182"
+         },
+         {
+          "name": "streak",
+          "displayName": "Streak",
+          "shortDisplayName": "STRK",
+          "description": "Current Streak",
+          "abbreviation": "STRK",
+          "type": "streak",
+          "value": -4.0,
+          "displayValue": "L4"
+         },
+         {
+          "name": "ties",
+          "displayName": "Ties",
+          "shortDisplayName": "T",
+          "description": "Ties",
+          "abbreviation": "T",
+          "type": "ties",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "name": "winPercent",
+          "displayName": "Win Percentage",
+          "shortDisplayName": "PCT",
+          "description": "Winning Percentage",
+          "abbreviation": "PCT",
+          "type": "winpercent",
+          "value": 0.22222222,
+          "displayValue": ".222"
+         },
+         {
+          "name": "wins",
+          "displayName": "Wins",
+          "shortDisplayName": "W",
+          "description": "Wins",
+          "abbreviation": "W",
+          "type": "wins",
+          "value": 2.0,
+          "displayValue": "2"
+         },
+         {
+          "name": "divisionLosses",
+          "displayName": "Division Losses",
+          "shortDisplayName": "DL",
+          "description": "Division Losses",
+          "abbreviation": "DL",
+          "type": "divisionlosses",
+          "value": 2.0,
+          "displayValue": "2"
+         },
+         {
+          "name": "divisionRecord",
+          "displayName": "Division record",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "abbreviation": "DIV",
+          "type": "divisionrecord",
+          "value": 0.0,
+          "displayValue": "0-2"
+         },
+         {
+          "name": "divisionTies",
+          "displayName": "Division Tie ",
+          "shortDisplayName": "DT",
+          "description": "Division Tie ",
+          "abbreviation": "DT",
+          "type": "divisionties",
+          "value": 0.0,
+          "displayValue": "0.000"
+         },
+         {
+          "name": "divisionWins",
+          "displayName": "Division Wins ",
+          "shortDisplayName": "DW",
+          "description": "Division Winning ",
+          "abbreviation": "DW",
+          "type": "divisionwins",
+          "value": 0.0,
+          "displayValue": "0.000"
+         },
+         {
+          "name": "lockedDivRank",
+          "displayName": "Locked Div Rank",
+          "shortDisplayName": "LDR",
+          "description": "Locked Div Rank",
+          "abbreviation": "LDR",
+          "type": "lockeddivrank",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "id": "0",
+          "name": "overall",
+          "abbreviation": "Any",
+          "type": "total",
+          "summary": "2-7",
+          "displayValue": "2-7"
+         },
+         {
+          "id": "13",
+          "name": "Home",
+          "displayName": "Home",
+          "shortDisplayName": "HOME",
+          "description": "Home Record",
+          "type": "home",
+          "summary": "1-3",
+          "displayValue": "1-3"
+         },
+         {
+          "id": "14",
+          "name": "Road",
+          "displayName": "Road",
+          "shortDisplayName": "AWAY",
+          "description": "Away Record",
+          "type": "road",
+          "summary": "1-4",
+          "displayValue": "1-4"
+         },
+         {
+          "id": "17",
+          "name": "vs. Div.",
+          "displayName": "DIV",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "type": "vsdiv",
+          "summary": "0-2",
+          "displayValue": "0-2"
+         },
+         {
+          "id": "906",
+          "name": "vs. Conf.",
+          "displayName": "CONF",
+          "shortDisplayName": "CONF",
+          "description": "Conference Record",
+          "type": "vsconf",
+          "summary": "2-4",
+          "displayValue": "2-4"
+         }
+        ]
+       },
+       {
+        "team": {
+         "id": "15",
+         "uid": "s:20~l:28~t:15",
+         "location": "Miami",
+         "name": "Dolphins",
+         "abbreviation": "MIA",
+         "displayName": "Miami Dolphins",
+         "shortDisplayName": "Dolphins",
+         "isActive": true
+        },
+        "stats": [
+         {
+          "name": "differential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "differential",
+          "value": -74.0,
+          "displayValue": "-74"
+         },
+         {
+          "name": "gamesBehind",
+          "displayName": "Games Back",
+          "shortDisplayName": "GB",
+          "description": "Games Back",
+          "abbreviation": "GB",
+          "type": "gamesbehind",
+          "value": 6.0,
+          "displayValue": "6"
+         },
+         {
+          "name": "losses",
+          "displayName": "Losses",
+          "shortDisplayName": "L",
+          "description": "Losses",
+          "abbreviation": "L",
+          "type": "losses",
+          "value": 7.0,
+          "displayValue": "7"
+         },
+         {
+          "name": "playoffSeed",
+          "displayName": "Position",
+          "shortDisplayName": "POS",
+          "description": "Playoff Seed",
+          "abbreviation": "SEED",
+          "type": "playoffseed",
+          "value": 14.0,
+          "displayValue": "14"
+         },
+         {
+          "name": "pointDifferential",
+          "displayName": "Point Differential",
+          "shortDisplayName": "DIFF",
+          "description": "Point Differential",
+          "abbreviation": "DIFF",
+          "type": "pointdifferential",
+          "value": -74.0,
+          "displayValue": "-74"
+         },
+         {
+          "name": "pointsAgainst",
+          "displayName": "Points Against",
+          "shortDisplayName": "PA",
+          "description": "Total Points Against",
+          "abbreviation": "PA",
+          "type": "pointsagainst",
+          "value": 200.0,
+          "displayValue": "200"
+         },
+         {
+          "name": "pointsFor",
+          "displayName": "Points For",
+          "shortDisplayName": "PF",
+          "description": "Total Points For",
+          "abbreviation": "PF",
+          "type": "pointsfor",
+          "value": 126.0,
+          "displayValue": "126"
+         },
+         {
+          "name": "streak",
+          "displayName": "Streak",
+          "shortDisplayName": "STRK",
+          "description": "Current Streak",
+          "abbreviation": "STRK",
+          "type": "streak",
+          "value": -2.0,
+          "displayValue": "L2"
+         },
+         {
+          "name": "ties",
+          "displayName": "Ties",
+          "shortDisplayName": "T",
+          "description": "Ties",
+          "abbreviation": "T",
+          "type": "ties",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "name": "winPercent",
+          "displayName": "Win Percentage",
+          "shortDisplayName": "PCT",
+          "description": "Winning Percentage",
+          "abbreviation": "PCT",
+          "type": "winpercent",
+          "value": 0.125,
+          "displayValue": ".125"
+         },
+         {
+          "name": "wins",
+          "displayName": "Wins",
+          "shortDisplayName": "W",
+          "description": "Wins",
+          "abbreviation": "W",
+          "type": "wins",
+          "value": 1.0,
+          "displayValue": "1"
+         },
+         {
+          "name": "divisionLosses",
+          "displayName": "Division Losses",
+          "shortDisplayName": "DL",
+          "description": "Division Losses",
+          "abbreviation": "DL",
+          "type": "divisionlosses",
+          "value": 1.0,
+          "displayValue": "1"
+         },
+         {
+          "name": "divisionRecord",
+          "displayName": "Division record",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "abbreviation": "DIV",
+          "type": "divisionrecord",
+          "value": 0.0,
+          "displayValue": "1-1"
+         },
+         {
+          "name": "divisionTies",
+          "displayName": "Division Tie ",
+          "shortDisplayName": "DT",
+          "description": "Division Tie ",
+          "abbreviation": "DT",
+          "type": "divisionties",
+          "value": 0.0,
+          "displayValue": "0.000"
+         },
+         {
+          "name": "divisionWins",
+          "displayName": "Division Wins ",
+          "shortDisplayName": "DW",
+          "description": "Division Winning ",
+          "abbreviation": "DW",
+          "type": "divisionwins",
+          "value": 1.0,
+          "displayValue": "1.000"
+         },
+         {
+          "name": "lockedDivRank",
+          "displayName": "Locked Div Rank",
+          "shortDisplayName": "LDR",
+          "description": "Locked Div Rank",
+          "abbreviation": "LDR",
+          "type": "lockeddivrank",
+          "value": 0.0,
+          "displayValue": "0"
+         },
+         {
+          "id": "0",
+          "name": "overall",
+          "abbreviation": "Any",
+          "type": "total",
+          "summary": "1-7",
+          "displayValue": "1-7"
+         },
+         {
+          "id": "13",
+          "name": "Home",
+          "displayName": "Home",
+          "shortDisplayName": "HOME",
+          "description": "Home Record",
+          "type": "home",
+          "summary": "0-4",
+          "displayValue": "0-4"
+         },
+         {
+          "id": "14",
+          "name": "Road",
+          "displayName": "Road",
+          "shortDisplayName": "AWAY",
+          "description": "Away Record",
+          "type": "road",
+          "summary": "1-3",
+          "displayValue": "1-3"
+         },
+         {
+          "id": "17",
+          "name": "vs. Div.",
+          "displayName": "DIV",
+          "shortDisplayName": "DIV",
+          "description": "Division Record",
+          "type": "vsdiv",
+          "summary": "1-1",
+          "displayValue": "1-1"
+         },
+         {
+          "id": "906",
+          "name": "vs. Conf.",
+          "displayName": "CONF",
+          "shortDisplayName": "CONF",
+          "description": "Conference Record",
+          "type": "vsconf",
+          "summary": "1-4",
+          "displayValue": "1-4"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "isConference": true
+  }
+ ],
+ "isConference": false,
+ "season": {
+  "year": 2026,
+  "startDate": "2026-08-06T07:00Z",
+  "endDate": "2027-02-16T07:59Z",
+  "displayName": "2026"
+ },
+ "seasons": [
+  {
+   "year": 2026,
+   "startDate": "2026-08-06T07:00Z",
+   "endDate": "2027-02-16T07:59Z",
+   "displayName": "2026",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2026-08-06T07:00Z",
+     "endDate": "2026-09-06T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2026-09-06T07:00Z",
+     "endDate": "2027-01-13T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2027-01-13T08:00Z",
+     "endDate": "2027-02-16T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2027-02-16T08:00Z",
+     "endDate": "2027-08-01T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2026"
+  },
+  {
+   "year": 2025,
+   "startDate": "2025-07-31T07:00Z",
+   "endDate": "2026-02-12T07:59Z",
+   "displayName": "2025",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2025-07-31T07:00Z",
+     "endDate": "2025-09-04T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2025-09-04T07:00Z",
+     "endDate": "2026-01-07T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2026-01-07T08:00Z",
+     "endDate": "2026-02-12T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2026-02-12T08:00Z",
+     "endDate": "2026-08-06T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2025"
+  },
+  {
+   "year": 2024,
+   "startDate": "2024-08-01T07:00Z",
+   "endDate": "2025-02-15T07:59Z",
+   "displayName": "2024",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2024-08-01T07:00Z",
+     "endDate": "2024-09-05T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2024-09-05T07:00Z",
+     "endDate": "2025-01-08T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2025-01-08T08:00Z",
+     "endDate": "2025-02-15T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2025-02-15T08:00Z",
+     "endDate": "2025-07-31T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2024"
+  },
+  {
+   "year": 2023,
+   "startDate": "2023-08-01T07:00Z",
+   "endDate": "2024-02-15T07:59Z",
+   "displayName": "2023",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2023-08-01T07:00Z",
+     "endDate": "2023-09-07T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2023-09-07T07:00Z",
+     "endDate": "2024-01-11T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2024-01-11T08:00Z",
+     "endDate": "2024-02-15T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2024-02-15T08:00Z",
+     "endDate": "2024-08-01T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2023"
+  },
+  {
+   "year": 2022,
+   "startDate": "2022-08-01T07:00Z",
+   "endDate": "2023-02-15T07:59Z",
+   "displayName": "2022",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2022-08-01T07:00Z",
+     "endDate": "2022-09-08T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2022-09-08T07:00Z",
+     "endDate": "2023-01-12T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2023-01-12T08:00Z",
+     "endDate": "2023-02-15T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2023-02-15T08:00Z",
+     "endDate": "2023-08-01T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2022"
+  },
+  {
+   "year": 2021,
+   "startDate": "2021-07-17T07:00Z",
+   "endDate": "2022-02-16T07:59Z",
+   "displayName": "2021",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2021-07-17T07:00Z",
+     "endDate": "2021-09-09T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2021-09-09T07:00Z",
+     "endDate": "2022-01-12T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2022-01-12T08:00Z",
+     "endDate": "2022-02-16T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2022-02-16T08:00Z",
+     "endDate": "2022-08-01T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2021"
+  },
+  {
+   "year": 2020,
+   "startDate": "2020-08-05T07:00Z",
+   "endDate": "2021-02-10T07:59Z",
+   "displayName": "2020",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2020-08-05T07:00Z",
+     "endDate": "2020-09-09T06:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2020-09-09T07:00Z",
+     "endDate": "2021-01-06T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2021-01-06T08:00Z",
+     "endDate": "2021-02-10T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2021-02-10T08:00Z",
+     "endDate": "2021-07-17T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2020"
+  },
+  {
+   "year": 2019,
+   "startDate": "2019-07-31T07:00Z",
+   "endDate": "2020-02-06T07:59Z",
+   "displayName": "2019",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2019-07-31T07:00Z",
+     "endDate": "2019-09-05T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2019-09-05T07:00Z",
+     "endDate": "2020-01-01T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2020-01-01T08:00Z",
+     "endDate": "2020-02-06T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2020-02-06T08:00Z",
+     "endDate": "2020-08-05T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2019"
+  },
+  {
+   "year": 2018,
+   "startDate": "2018-08-02T07:00Z",
+   "endDate": "2019-02-06T07:59Z",
+   "displayName": "2018",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2018-08-02T07:00Z",
+     "endDate": "2018-09-05T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2018-09-05T07:00Z",
+     "endDate": "2019-01-02T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2019-01-02T08:00Z",
+     "endDate": "2019-02-06T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2019-02-06T08:00Z",
+     "endDate": "2019-07-31T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2018"
+  },
+  {
+   "year": 2017,
+   "startDate": "2017-08-02T07:00Z",
+   "endDate": "2018-02-07T07:59Z",
+   "displayName": "2017",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2017-08-02T07:00Z",
+     "endDate": "2017-09-06T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2017-09-06T07:00Z",
+     "endDate": "2018-01-03T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2018-01-03T08:00Z",
+     "endDate": "2018-02-07T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2018-02-07T08:00Z",
+     "endDate": "2018-08-02T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2017"
+  },
+  {
+   "year": 2016,
+   "startDate": "2016-08-03T07:00Z",
+   "endDate": "2017-02-09T07:59Z",
+   "displayName": "2016",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2016-08-03T07:00Z",
+     "endDate": "2016-09-06T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2016-09-06T07:00Z",
+     "endDate": "2017-01-07T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2017-01-07T08:00Z",
+     "endDate": "2017-02-09T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2017-02-09T08:00Z",
+     "endDate": "2017-08-02T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2016"
+  },
+  {
+   "year": 2015,
+   "startDate": "2015-08-05T07:00Z",
+   "endDate": "2016-02-10T07:59Z",
+   "displayName": "2015",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2015-08-05T07:00Z",
+     "endDate": "2015-09-09T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2015-09-09T07:00Z",
+     "endDate": "2016-01-06T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2016-01-06T08:00Z",
+     "endDate": "2016-02-10T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2016-02-10T08:00Z",
+     "endDate": "2016-08-07T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2015"
+  },
+  {
+   "year": 2014,
+   "startDate": "2014-07-30T07:00Z",
+   "endDate": "2015-02-04T07:59Z",
+   "displayName": "2014",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2014-07-30T07:00Z",
+     "endDate": "2014-09-03T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2014-09-03T07:00Z",
+     "endDate": "2014-12-31T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2014-12-31T08:00Z",
+     "endDate": "2015-02-04T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2015-02-04T08:00Z",
+     "endDate": "2015-08-05T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2014"
+  },
+  {
+   "year": 2013,
+   "startDate": "2013-08-01T07:00Z",
+   "endDate": "2014-02-05T07:59Z",
+   "displayName": "2013",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2013-08-01T07:00Z",
+     "endDate": "2013-09-04T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2013-09-04T07:00Z",
+     "endDate": "2014-01-01T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2014-01-01T08:00Z",
+     "endDate": "2014-02-05T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2014-02-05T08:00Z",
+     "endDate": "2014-07-30T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2013"
+  },
+  {
+   "year": 2012,
+   "startDate": "2012-08-01T07:00Z",
+   "endDate": "2013-02-13T07:59Z",
+   "displayName": "2012",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2012-08-01T07:00Z",
+     "endDate": "2012-09-05T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2012-09-05T07:00Z",
+     "endDate": "2013-01-02T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2013-01-02T08:00Z",
+     "endDate": "2013-02-13T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2013-02-13T08:00Z",
+     "endDate": "2013-08-01T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2012"
+  },
+  {
+   "year": 2011,
+   "startDate": "2011-08-03T07:00Z",
+   "endDate": "2012-02-15T07:59Z",
+   "displayName": "2011",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2011-08-03T07:00Z",
+     "endDate": "2011-09-07T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2011-09-07T07:00Z",
+     "endDate": "2012-01-04T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2012-01-04T08:00Z",
+     "endDate": "2012-02-15T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2012-02-15T08:00Z",
+     "endDate": "2012-08-02T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2011"
+  },
+  {
+   "year": 2010,
+   "startDate": "2010-08-04T07:00Z",
+   "endDate": "2011-02-09T07:59Z",
+   "displayName": "2010",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2010-08-04T07:00Z",
+     "endDate": "2010-09-08T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2010-09-08T07:00Z",
+     "endDate": "2011-01-05T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2011-01-05T08:00Z",
+     "endDate": "2011-02-09T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2011-02-09T08:00Z",
+     "endDate": "2011-08-03T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2010"
+  },
+  {
+   "year": 2009,
+   "startDate": "2009-08-04T07:00Z",
+   "endDate": "2010-02-10T07:59Z",
+   "displayName": "2009",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2009-08-04T07:00Z",
+     "endDate": "2009-09-09T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2009-09-09T07:00Z",
+     "endDate": "2010-01-06T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2010-01-06T08:00Z",
+     "endDate": "2010-02-10T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2010-02-10T08:00Z",
+     "endDate": "2010-08-04T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2009"
+  },
+  {
+   "year": 2008,
+   "startDate": "2008-07-30T07:00Z",
+   "endDate": "2009-02-11T07:59Z",
+   "displayName": "2008",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2008-07-30T07:00Z",
+     "endDate": "2008-09-03T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2008-09-03T07:00Z",
+     "endDate": "2008-12-31T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2008-12-31T08:00Z",
+     "endDate": "2009-02-11T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2009-02-11T08:00Z",
+     "endDate": "2009-08-04T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2008"
+  },
+  {
+   "year": 2007,
+   "startDate": "2007-08-01T07:00Z",
+   "endDate": "2008-02-13T07:59Z",
+   "displayName": "2007",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2007-08-01T07:00Z",
+     "endDate": "2007-09-05T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2007-09-05T07:00Z",
+     "endDate": "2008-01-02T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2008-01-02T08:00Z",
+     "endDate": "2008-02-13T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2008-02-13T08:00Z",
+     "endDate": "2008-07-30T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2007"
+  },
+  {
+   "year": 2006,
+   "startDate": "2006-08-03T07:00Z",
+   "endDate": "2007-02-16T07:59Z",
+   "displayName": "2006",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2006-08-03T07:00Z",
+     "endDate": "2006-09-06T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2006-09-06T07:00Z",
+     "endDate": "2007-01-03T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2007-01-03T08:00Z",
+     "endDate": "2007-02-16T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2007-02-16T08:00Z",
+     "endDate": "2007-08-01T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2006"
+  },
+  {
+   "year": 2005,
+   "startDate": "2005-08-03T07:00Z",
+   "endDate": "2006-02-16T07:59Z",
+   "displayName": "2005",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2005-08-03T07:00Z",
+     "endDate": "2005-09-07T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2005-09-07T07:00Z",
+     "endDate": "2006-01-03T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2006-01-03T08:00Z",
+     "endDate": "2006-02-16T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2006-02-16T08:00Z",
+     "endDate": "2006-08-03T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2005"
+  },
+  {
+   "year": 2004,
+   "startDate": "2004-08-04T07:00Z",
+   "endDate": "2005-02-16T07:59Z",
+   "displayName": "2004",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2004-08-04T07:00Z",
+     "endDate": "2004-09-08T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2004-09-08T07:00Z",
+     "endDate": "2005-01-05T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2005-01-05T08:00Z",
+     "endDate": "2005-02-16T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2005-02-16T08:00Z",
+     "endDate": "2005-08-03T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2004"
+  },
+  {
+   "year": 2003,
+   "startDate": "2003-07-30T07:00Z",
+   "endDate": "2004-02-04T07:59Z",
+   "displayName": "2003",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2003-07-30T07:00Z",
+     "endDate": "2003-09-03T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2003-09-03T07:00Z",
+     "endDate": "2003-12-31T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2003-12-31T08:00Z",
+     "endDate": "2004-02-04T07:59Z",
+     "hasStandings": false
+    },
+    {
+     "id": "4",
+     "name": "Off Season",
+     "abbreviation": "off",
+     "startDate": "2004-02-04T08:00Z",
+     "endDate": "2004-08-04T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2003"
+  },
+  {
+   "year": 2002,
+   "startDate": "2002-07-16T07:00Z",
+   "endDate": "2003-07-29T06:59Z",
+   "displayName": "2002",
+   "types": [
+    {
+     "id": "1",
+     "name": "Preseason",
+     "abbreviation": "pre",
+     "startDate": "2002-07-16T07:00Z",
+     "endDate": "2002-09-04T06:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "2",
+     "name": "Regular Season",
+     "abbreviation": "reg",
+     "startDate": "2002-09-04T07:00Z",
+     "endDate": "2003-01-01T07:59Z",
+     "hasStandings": true
+    },
+    {
+     "id": "3",
+     "name": "Postseason",
+     "abbreviation": "post",
+     "startDate": "2003-01-01T08:00Z",
+     "endDate": "2003-07-29T06:59Z",
+     "hasStandings": false
+    }
+   ],
+   "seasonYears": "2002"
+  }
+ ]
+}

@@ -32,7 +32,9 @@ board falls back to these, and only these:
 So on a bye week or in March the board says `NO GAMES NFL` and nothing else, and the
 idle clock, holidays and everything between games that the NHL board has are absent.
 The scoreboard feed is asked for **today's slate only** (`scores(date=None)`), so the
-board cannot say when the next game is.
+board cannot say when the next game is. The research below (`football_api.md`, "Between
+games") shows the feed already hands the board more than it uses: the week, a list of the
+teams on a bye, and the whole season's calendar.
 
 ## Principles
 
@@ -53,8 +55,8 @@ board cannot say when the next game is.
 
 ## Proposed screens
 
-Each is a proposal with the data it needs; "unverified" means the endpoint has not been
-checked against the live feed yet (see Research).
+Each is a proposal with the data it needs. The endpoints were checked against the live feed
+on 2026-11-13; the findings are in `football_api.md`, "Between games".
 
 ### `fb_countdown`: kickoff is close
 
@@ -67,13 +69,16 @@ inside the window. Data: the game's start time, already in the scoreboard feed.
 
 The favourite's next game, up to a week out: `SUN 12:00 PM`, `@ WSH` or `vs DAL`, both
 logos, the week number, optionally the records and the broadcast. The NFL equivalent of the
-NHL `preview`, with days instead of hours. Data: the next game's date and teams (needs
-more than today's slate: see Research); records are on the scoreboard feed.
+NHL `preview`, with days instead of hours. Data: the team **schedule** (`/teams/{id}/schedule`, 17 games, 300 KB, fetched daily) gives
+the next game's date and opponent; **records** and the **broadcast** are on the scoreboard
+events (`records`, `broadcasts`) once the game is in the week being polled.
 
 ### `fb_bye`: a bye week
 
 When the favourite has no game this week: `BYE WEEK`, the logo, and the next game
-(`NEXT: SUN 11/22 @ DAL`). Replaces `NO GAMES`. Data: the team's schedule.
+(`NEXT: SUN 11/22 @ DAL`). Replaces `NO GAMES`. Data: **the scoreboard already says it**: `week.teamsOnBye` lists the
+teams on a bye that week, so no schedule is needed to know; the next game is in the schedule
+(`byeWeek` is also in it).
 
 ### `fb_final`: after the game
 
@@ -86,26 +91,29 @@ final score; leaders would need the summary or box score (unverified).
 
 From the end of the season to kickoff: the favourite's logo, `NEXT GAME`, and the days
 to the opener (`SEP 6 · 142 DAYS`), with a few fixed dates worth marking (the draft, the
-start of training camp) if the owner wants them. Data: the first game of next season (the
-schedule is published in May, so before that only a configured or estimated date).
+start of training camp) if the owner wants them. Data: the season calendar (`leagues[0].calendar`, on every scoreboard response in season) says
+when the **regular season starts** (this year Sep 6). The **next season's schedule is not
+published** until ESPN releases it (`?season=2027` returned no events), so before then the
+opener's matchup is unknowable; only the start date can be shown.
 
 ### `fb_standings`: the playoff picture
 
 The favourite's **division** (four teams, W-L-T, the favourite highlighted) and, as a
 second page, the **conference** seeds (1-7 with the cut line). The NFL counterpart of
-`division`, `wildcard` and `standings`. Data: the standings table (unverified endpoint).
+`division`, `wildcard` and `standings`. Data: the **standings** endpoint (`/apis/v2/sports/football/nfl/standings`, `?level=3` for
+divisions): each team's `overall` record, `playoffSeed`, `streak` and points for and against.
 
 ### `fb_week`: the league's slate
 
 Everyone's score for the week on one frame, the way `scores` shows several NHL games: on a
 Sunday, the other 15 games; on Monday, the whole week's finals. A grid of small score
-cells, paged. Data: the scoreboard feed for the week (the `dates` parameter exists; the week
-view is unverified).
+cells, paged. Data: `scoreboard?week=N&seasontype=2` returns the **whole week's** games (16 for week 12), so
+one request fills the grid; `week.teamsOnBye` names the teams missing from it.
 
 ### `fb_schedule`: the next few games
 
 The favourite's next three games in a column: date, opponent, home or away. Data: the
-schedule.
+schedule (`/teams/{id}/schedule`); a missing week number in it is the bye.
 
 ## Carry-over from the NHL idle rotation
 
@@ -141,19 +149,26 @@ Highest first; the first that has something to show wins, as in the NHL list in
 
 ## Data needs and research
 
-The board fetches only today's `scoreboard` now. Everything marked "unverified" above needs
-a check against the live feed before it is designed in detail, and the findings go in
-`football_api.md`:
+Checked against the live feed on 2026-11-13 and written up in `football_api.md`, "Between games"
+(trimmed responses are in `tests/fixtures/football/`). The short version:
 
-- The **team schedule** (`/teams/{id}/schedule`) or the scoreboard with `dates=` across a
-  week or a season: needed for `fb_preview`, `fb_bye`, `fb_schedule` and `fb_offseason`.
-- The **standings** endpoint and its shape (the site API and the core API differ): for
-  `fb_standings`.
-- Whether the **scoreboard week view** (`?week=`, `?seasontype=`) returns a whole week: for
-  `fb_week`.
-- Box-score or leaders fields for a recap line.
-- How the feed behaves in the **off-season** and in the gaps (preseason, the bye week, the
-  playoffs): the `seasontype` values, and what the scoreboard returns on a day with no games.
+- **The week and the byes** are on the scoreboard the board already polls: `week.number`,
+  `week.teamsOnBye` (full team objects) and, on every in-season response, the whole season's
+  **calendar** with each week's dates. `fb_bye` and "week N" cost nothing extra.
+- **The whole week's games** come from `scoreboard?week=N&seasontype=2` (one request): `fb_week`.
+  A date **range is a 400**; `dates=YYYY` returns a calendar year's games.
+- **The schedule** is per team (`/teams/{id}/schedule`, ~300 KB, regular season only, the bye as
+  a missing week): `fb_preview`, `fb_schedule`, the next game on `fb_bye`. Fetch it daily. The
+  **next season's schedule is not published** (`?season=2027` is empty), so `fb_offseason` can
+  show the season's start date from the calendar but not the opener's matchup.
+- **Standings** are on `/apis/v2/...` (not `/apis/site/v2/`), ~158 KB: the two conferences by
+  default, the four divisions each with `?level=3`. Each entry has `overall`, `playoffSeed`,
+  `streak` and points for and against. Fetch hourly at most.
+- **The off-season looks like a quiet day**: a 200 with `events: []` and *no* `season` or `week`
+  keys. The calendar or the schedule is what tells the two apart.
+- **The postseason** is `seasontype=3`: until the bracket is set its games read `TBD @ TBD`.
+- **Not yet checked:** leaders for a recap line (the scoreboard has per-event `leaders`), the real
+  postseason bracket once set, and what the scoreboard does in the gaps between playoff rounds.
 
 ## Open questions
 
@@ -172,8 +187,9 @@ a check against the live feed before it is designed in detail, and the findings 
 ## Todo
 
 ### Research
-- [ ] Verify the schedule, standings and week-view endpoints; add them to `football_api.md`.
-- [ ] Capture the off-season and bye-week responses.
+- [x] Verify the schedule, standings and week-view endpoints; added to `football_api.md`.
+- [x] Capture the off-season and bye-week responses (fixtures in `tests/fixtures/football/`).
+- [ ] Check the per-event `leaders` for a recap line, and the playoff gaps (see above).
 
 ### Design
 - [ ] Decide the open questions above.
@@ -182,7 +198,7 @@ a check against the live feed before it is designed in detail, and the findings 
 - [ ] The default idle rotation and its settings; the admin page's rotation card for NFL mode.
 
 ### Build (after the design is agreed, one story each)
-- [ ] The schedule fetch and cache (hourly or daily, off the render thread).
+- [ ] The schedule and standings fetch and cache (daily and hourly, off the render thread), using the findings above.
 - [ ] `fb_countdown`, `fb_preview`, `fb_bye`, `fb_offseason`
 - [ ] `fb_final` (the hold, and the recap if kept)
 - [ ] `fb_standings`, `fb_week`, `fb_schedule`

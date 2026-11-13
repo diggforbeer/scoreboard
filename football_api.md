@@ -353,3 +353,69 @@ kicker as `kicker` **and** `scorer`; a sack lists the defender as `sackedBy` **a
   `injuredReserveOrOut`, `suspended`, `practiceSquad`), each with `items[]`; an athlete has `id`,
   `fullName`, `shortName` (`M. Bergeron`), `lastName`, `jersey` (a string) and `position.abbreviation`.
 
+
+## Between games: the week, byes, schedule, standings and the off-season (checked 2026-11-13)
+
+Findings for `screens_not_during_games.md`. Everything is on the same site API as the
+scoreboard unless noted; trimmed copies of the responses are in `tests/fixtures/football/`
+(`scoreboard_week8_byes_trimmed.json`, `scoreboard_offseason_empty.json`,
+`schedule_NYG_trimmed.json`, `standings_trimmed.json`). An error from this API can arrive
+gzipped whatever was asked for, so read the body through a client that decompresses.
+
+**The scoreboard says what week it is, and who is on a bye.**
+- `season: {type, year}` and `week: {number, teamsOnBye: [...]}` at the top. `teamsOnBye`
+  holds **full team objects** (`abbreviation`, `displayName`, ...): week 8 listed `NO NYG SF
+  HOU`, week 10 `CHI DEN PHI TB`. A team on the list has no game that week; that is the whole
+  of the bye signal, so `fb_bye` needs no schedule.
+- `leagues[0].calendar` is the **whole season's calendar**: `Preseason` (4 weeks, Aug 6 -
+  Sep 6) and `Regular Season` (18 weeks, Sep 6 - Jan 13), each week with `startDate`,
+  `endDate` and a label (`Week 12`, `Nov 25-Dec 1`). The board can say "week 12" and when the
+  season starts without another request.
+- Each event carries `week.number`, `season.type`, both teams' `records` (`overall`
+  `5-3-1`, `Home`, `Road`) and `competitions[0].broadcasts[].names` (`Prime Video`).
+
+**Parameters.**
+- `dates=YYYYMMDD` is one day. A **range** (`dates=20261108-20261117`) is a **400**. `dates=YYYY`
+  returns that calendar year's games: `dates=2027` gave the 44 games of January (the
+  postseason's first rounds).
+- `week=N&seasontype=2` returns the **whole week**: week 12 was 16 games from Nov 26 to Dec 1.
+  `seasontype=1` is the preseason (week 1 was one game), `seasontype=3` the postseason: week 1
+  returned 6 games dated 2027-01-16 with **`TBD @ TBD`** names until the bracket is set; week 5
+  was empty (the Super Bowl's slot, not yet filled).
+- **A day with no games** (`dates=20260301`, `20270301`) answers **200 with `events: []`** and
+  *no* `season` or `week` keys at all (about 1-5 KB). That is the off-season, and what the
+  board's `fb_no_games` is today. So "the off-season" and "a quiet Tuesday" look the same from
+  the scoreboard alone; the `calendar` on a normal response, or the team schedule, is what
+  tells them apart.
+
+**The team schedule** (`/teams/{id}/schedule`, 306 KB for a full season: fetch rarely).
+- `byeWeek: 8`, `season`, and `events` (17 games for NYG in 2026): per event `date`, `week`
+  (`{number, text}`), `seasonType`, `name`, and `competitions[0]` with both teams, `homeAway`
+  and, once played, `score: {value, displayValue}`. Status is `competitions[0].status.type`
+  (`STATUS_FINAL`, `STATUS_SCHEDULED`). Only the **regular season** is in it: the bye shows as
+  a missing week number.
+- `?season=2025` returns that season (17 games, `requestedSeason: 2025`); **`?season=2027`
+  returns no events**: the next season's schedule is not published (ESPN's own schedule comes
+  out in May), so the board cannot name next season's opener before then. `?seasontype=` is
+  ignored.
+- `/teams/{id}` (23 KB) has `nextEvent`, `record.items[0].summary` (`5-3-1`) and
+  `standingSummary` (`1st in NFC East`). **`nextEvent` can lag**: the day after a finished game
+  it still named that game. Prefer the schedule or the scoreboard.
+
+**Standings** are on a different base: **`https://site.api.espn.com/apis/v2/sports/football/
+nfl/standings`** (`/apis/v2/`, not `/apis/site/v2/`; ~158 KB, so fetch hourly at most).
+- By default `children` is the **two conferences**, each with `standings.entries`.
+  **`?level=3`** gives each conference's **four divisions** as `children`, each with its own
+  `standings.entries` (`AFC East`: BUF, NE, NYJ, MIA), which is what a division page needs.
+- An entry has `team` (with `abbreviation`) and a `stats` list of `{name, displayValue}`:
+  `overall` (`7-1`), `wins`, `losses`, `ties`, `winPercent` (`.875`), **`playoffSeed`** (1 for
+  the top seed; present for the seeded teams), `streak` (`W4`), `pointsFor`, `pointsAgainst`,
+  `pointDifferential`, `divisionRecord`, `Home`, `Road`, `vs. Conf.`. Entries come in
+  standings order.
+
+**What this means for the board.** One cheap, small request tells it the week and the byes
+(the scoreboard it already polls); the schedule (300 KB) and the standings (160 KB) are
+fetched once an hour or less and cached; next season's opener is unknowable until the schedule
+is published. Not checked: a recap's leaders (the scoreboard has `leaders` per event but it was
+not examined), the postseason's real bracket (it was all `TBD` today), and what the scoreboard
+returns during the playoffs' gaps.
