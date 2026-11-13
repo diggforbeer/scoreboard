@@ -363,10 +363,16 @@ def test_live_view_shows_a_snapshot_and_refreshes(live_admin_page):
 
 
 def _wait_until(condition, timeout=15.0):
+    """Poll ``condition`` until it is true. The config file is rewritten by another process, so a
+    read can land on a half-written or not-yet-populated file (no ``[scoreboard]`` yet, or a TOML
+    error): that is "not yet", not a failure (it flaked once in CI)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if condition():
-            return
+        try:
+            if condition():
+                return
+        except (KeyError, FileNotFoundError, tomllib.TOMLDecodeError):
+            pass
         time.sleep(0.1)
     raise AssertionError("condition never became true")
 
