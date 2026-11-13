@@ -44,26 +44,31 @@ Known gaps:
 - Delay against TV is unknown. `broadcast_delay_seconds` may apply.
 - Undocumented API: it can change without notice.
 
-## How football fits with the NHL screens
+## Choosing the sport
 
-Decided by the owner: football runs alongside the NHL app, and **NHL always
-wins for now**. Football is an extra source of scenes, not a second app:
+Decided by the owner: a board runs **NHL or NFL, one at a time**, chosen with a
+picker. There is no mixing, no priority between the two sports, and no
+"NHL wins" rule.
 
-- The NHL scene selection (`select_scene()` and its priority list in
-  `screens.md`) runs first and is unchanged. If it picks any NHL scene, that
-  scene shows and football waits.
-- Football screens only appear when the NHL side has nothing to put on the panel
-  (see the open question on exactly where the line is).
-- Football scenes use their own `fb_` kinds, so they never collide with NHL
-  scene names.
-- A football event (touchdown, turnover) never interrupts an NHL goal or live
-  game, however big. If the NHL side is busy, the football moment is missed on
-  the panel. It may still be worth a sound, which is an open question.
-- Because "NHL always wins" is explicitly **for now**, the priority decision
-  should live in one place (a single function that orders NHL and football
-  candidates) so it can be changed later without touching either side's screens.
-- Setup needs a way to say which NFL team to follow, separate from the NHL
-  favourite. See the open question on following teams.
+- A new setting picks the sport: `[scoreboard] sport = "nhl"` (the default, so a
+  board that never touches it behaves exactly as today) or `"nfl"`. The admin
+  page's Scoreboard card gets a matching dropdown.
+- With `nhl`, the app is exactly the existing NHL app. Nothing in `screens.md`
+  changes and no football code runs.
+- With `nfl`, the board runs the football logic in this file: its own data
+  source (ESPN), its own scene selection and its own `fb_` screens. The NHL
+  logic stays idle.
+- The NFL side needs its own team setting (the favourite NFL team), since an NHL
+  abbreviation means nothing there. See the open question on following teams.
+- Shared between the two: the panel, brightness and night mode, the admin page,
+  Wi-Fi, the updater, holidays, the clock and the button. These are not
+  sport-specific.
+- The screens that are not sport-specific stay: `ap_setup`, `wifi_join`,
+  `address`, `connecting`, `no_data`, `no_games`, and the idle clock. How much of
+  the idle rotation (standings and so on) carries over is for the NFL side to
+  decide; the NHL-only ones (NHL standings, matchup, leaders) do not apply.
+- The picker keeps all sport-specific code behind one switch, which is what lets
+  the branch merge to `main` later without changing NHL boards.
 
 ## Screens
 
@@ -451,14 +456,12 @@ can be tightened from real games.
 
 - [x] NFL only (decided). College football and other leagues are out of scope;
       the code can use the `nfl` league path and the 32 NFL teams directly.
-- [x] Football runs **alongside** the NHL app, in the same process and on the same
-      board (decided). For now **NHL always wins**: any NHL scene preempts football.
-      Football never touches NHL behaviour, so a board on `main` is unaffected.
-- [ ] Where exactly does football slot into the screen priority? Proposed: below
-      every NHL scene that has something to show (goal, live game, held final,
-      three stars, followed-team turns) but **above** the NHL idle rotation, clock
-      and `no_games`, so football fills time the NHL side would leave idle. See
-      "How football fits with the NHL screens".
+- [x] One sport per board, chosen with a **picker** (decided): a board runs NHL
+      or NFL, never both. No mixing and no priority rules between the sports. See
+      "Choosing the sport".
+- [ ] Sport picker: where does it live (`[scoreboard] sport` in the TOML plus the
+      admin page's Scoreboard card, proposed), and does a change apply live or need a
+      restart? Proposed: live, like a favourite-team switch.
 - [x] Jersey numbers: they are available (core `plays` participants + roster, see
       `football_api.md`), so the fallback is only for the ~5 of 79 players with no
       number. Those show the last name instead (decided by default, shout if not).
@@ -511,7 +514,7 @@ can be tightened from real games.
 - [x] Scoring and turnover screens designed (see Scoring and turnovers)
 - [ ] Mockups: `fb_touchdown`, `fb_score_detail`, `fb_fieldgoal`, `fb_fg_miss`,
       `fb_turnover`, on 128px and 64px
-- [ ] Priority against the NHL screens written down (first draft in "How football fits with the NHL screens")
+- [ ] Which non-sport screens and idle-rotation entries carry over to the NFL mode, written down
 
 ### Build (after the design is agreed)
 
@@ -530,6 +533,7 @@ can be tightened from real games.
 - [ ] Horn and ding wiring
 - [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
 - [ ] `fb_reversal` screen
+- [ ] `[scoreboard] sport` setting and the admin page picker; NFL team setting
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
 - [ ] Tests
