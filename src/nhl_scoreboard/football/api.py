@@ -17,7 +17,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import FbGame
+from .models import FbGame, Play
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +90,38 @@ class NflClient:
         games = _parse_events(payload.get("events"))
         games.sort(key=FbGame.sort_key)
         return games
+
+    def plays(self, event_id: int | str) -> list[Play] | None:
+        """Every play of a game so far, in the order they happened (#353).
+
+        Read from the site ``summary``: ``drives.previous[].plays`` plus
+        ``drives.current.plays``. ``None`` is no data (as for ``scores``); ``[]`` is a
+        game with no plays yet. The coin toss is not in this endpoint (see
+        ``football_api.md``). Drives are only a grouping: plays are de-duplicated by id
+        and sorted by ``sequenceNumber``, so the order ESPN lists drives in never matters.
+        """
+        payload = self._get("/summary", {"event": str(event_id)})
+        if payload is None:
+            return None
+        drives = payload.get("drives")
+        drives = drives if isinstance(drives, dict) else {}
+        groups = (
+            list(drives.get("previous") or []) if isinstance(drives.get("previous"), list) else []
+        )
+        if isinstance(drives.get("current"), dict):
+            groups.append(drives["current"])
+        plays: dict[str, Play] = {}
+        for group in groups:
+            for item in (group.get("plays") if isinstance(group, dict) else None) or []:
+                try:
+                    play = Play.from_api(item)
+                except (ValueError, TypeError, AttributeError, KeyError) as exc:
+                    log.warning("Skipping unusable play: %s", exc)
+                    continue
+                plays[play.id] = (
+                    play  # the later copy wins, e.g. a play ESPN re-sent after a review
+                )
+        return sorted(plays.values(), key=Play.sort_key)
 
     # -- plumbing --------------------------------------------------------
 

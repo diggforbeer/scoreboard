@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--dump-plays",
+        metavar="EVENT_ID",
+        help="Print every play of an NFL game (ESPN event id) in order and exit",
+    )
+    parser.add_argument(
         "--sport",
         choices=["nhl", "nfl"],
         help="Which sport --dump prints (default: the configured [scoreboard] sport)",
@@ -48,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     settings = Settings.load(args.config)
 
+    if args.dump_plays:
+        return _dump_plays(args.dump_plays)
     if args.dump:
         if (args.sport or settings.scoreboard.sport) == "nfl":
             return _dump_nfl(settings)
@@ -110,6 +117,25 @@ def _dump_nfl(settings: Settings) -> int:
         if game.is_live and sit and sit.down_distance_text:
             line += f"  | {sit.down_distance_text}"
         print(line)
+    return 0
+
+
+def _dump_plays(event_id: str) -> int:
+    """Every play of one NFL game, in order, as text (#353)."""
+    from .football.api import NflClient
+
+    with NflClient() as client:
+        plays = client.plays(event_id)
+        if plays is None:
+            print(f"error: {client.last_error}", file=sys.stderr)
+            return 1
+    if not plays:
+        print("No plays yet.")
+        return 0
+    for play in plays:
+        print(
+            f"{play.sequence:>7}  Q{play.period} {play.clock:>5}  {play.kind.value:<26} {play.text}"
+        )
     return 0
 
 
