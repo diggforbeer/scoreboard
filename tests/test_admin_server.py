@@ -623,6 +623,7 @@ def test_watcher_broadcasts_to_every_connected_client(
 
 
 _DEFAULT_SCOREBOARD_DATA = {
+    "sport": "nhl",
     "favourite_team": "NSH",
     "also_follow": [],
     "timezone": "America/Chicago",
@@ -756,6 +757,31 @@ def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
     message = json.loads(received)
     assert message["type"] == "error"
     assert "logo_variant" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_writes_the_sport(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "sport": "nfl"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] != "error"
+    assert 'sport = "nfl"' in config_path.read_text()
+
+
+def test_scoreboard_save_rejects_an_invalid_sport(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "sport": "cricket"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error"
+    assert "sport" in message["message"]
     assert config_path.read_text() == ""
 
 

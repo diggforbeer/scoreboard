@@ -22,6 +22,9 @@ country = "CA"
 connect_timeout_seconds = 90
 
 [scoreboard]
+# Which sport the board runs: "nhl" (default) or "nfl". Anything else is
+# treated as "nhl".
+sport = "nhl"
 # Three-letter team abbreviation, followed as your team's day: a preview of
 # the next game, a countdown as puck drop approaches, the live score, the
 # final for a while, then the preview of the game after that. Set to "" for
