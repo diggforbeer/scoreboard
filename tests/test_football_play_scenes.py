@@ -332,18 +332,22 @@ def test_a_registered_screen_replaces_the_generic_one_and_only_for_its_kind():
     from nhl_scoreboard.football.models import PlayKind
 
     calls = []
+    real = fp.PLAY_SCREENS.get(PlayKind.SACK)
 
-    @fp.play_screen(PlayKind.RUSH)
-    def draw_rush(r, canvas, scene):
+    @fp.play_screen(PlayKind.SACK)
+    def draw_sack(r, canvas, scene):
         calls.append(scene.fb_play.kind)
         canvas.Clear()
 
     try:
-        draw_scene(scene_for("fb_play", "play", make_play(1, "rush", off="WSH")))
-        draw_scene(scene_for("fb_play", "play", make_play(2, "sack", off="WSH")))
+        draw_scene(scene_for("fb_play", "play", make_play(1, "sack", off="WSH")))
+        draw_scene(scene_for("fb_play", "play", make_play(2, "timeout", off="WSH")))
     finally:
-        del fp.PLAY_SCREENS[PlayKind.RUSH]
-    assert calls == [PlayKind.RUSH]
+        if real is None:
+            del fp.PLAY_SCREENS[PlayKind.SACK]
+        else:
+            fp.PLAY_SCREENS[PlayKind.SACK] = real
+    assert calls == [PlayKind.SACK]
 
 
 @pytest.mark.parametrize("width", [128, 64])

@@ -90,6 +90,12 @@ def play_label(scene: Scene) -> tuple[str, tuple[int, int, int]]:
     return name, NEUTRAL
 
 
+def quarter_clock(play: Any) -> str:
+    """``3RD 12:24`` for the band (the 4x6 ``Q`` reads as a zero); ``OT`` after the fourth."""
+    ordinal = {1: "1ST", 2: "2ND", 3: "3RD", 4: "4TH"}.get(play.period, "OT")
+    return f"{ordinal} {play.clock}".strip()
+
+
 def _side(game: Any, team_id: int | None) -> str | None:
     return ff.possession_of(game, team_id)
 
@@ -114,7 +120,7 @@ def draw_generic_play(r: Renderer, canvas: Any, scene: Scene) -> None:
     )
     ff.draw_ball(canvas, layout, start + (end - start) * progress)
     label, color = play_label(scene)
-    _band(r, canvas, label, color, f"Q{play.period} {play.clock}")
+    _band(r, canvas, label, color, quarter_clock(play))
 
 
 def _band(r: Renderer, canvas: Any, label: str, color: tuple[int, int, int], right: str) -> None:
@@ -268,3 +274,7 @@ def draw_generic_event(r: Renderer, canvas: Any, scene: Scene) -> None:
     else:
         line = _score_line(scene)
     r.text_center(canvas, r.fonts.tiny, r.width // 2, 22, WHITE, r_fit(line, width, r.fonts.tiny))
+
+
+# Each designed screen lives in its own module and registers itself on import.
+from . import football_run  # noqa: E402,F401

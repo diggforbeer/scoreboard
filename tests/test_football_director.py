@@ -13,6 +13,7 @@ from nhl_scoreboard.football import director as dr
 from nhl_scoreboard.football import events as ev
 from nhl_scoreboard.football.director import Director, Timings
 from nhl_scoreboard.football.models import FbGame
+from nhl_scoreboard.football.pacing import animation_seconds
 from nhl_scoreboard.football.reversals import Reversal
 from nhl_scoreboard.football.textlayout import playtext_seconds
 from nhl_scoreboard.football.worker import FeedSnapshot
@@ -86,7 +87,7 @@ def test_stage_lengths_are_the_proposed_timings():
     rig.poll(make_play(1, "rush", off="WSH"), td(2))
     stages = rig.run()
     assert [(s.stage, s.seconds) for s in stages] == [
-        (dr.PLAY, 3.0), (dr.EVENT, 6.0), (dr.DETAIL, 8.0),
+        (dr.PLAY, animation_seconds(td(), 3.0)), (dr.EVENT, 6.0), (dr.DETAIL, 8.0),
         (dr.PLAYTEXT, playtext_seconds(td().text, 5.0)),
     ]  # fmt: skip
 
@@ -120,7 +121,8 @@ def test_a_followed_teams_touchdown_is_the_quick_version_without_detail():
     rig.poll(make_play(1, "rush", off="WSH"), td())
     stages = rig.run()
     assert [(s.stage, s.seconds) for s in stages] == [
-        (dr.PLAY, 3.0), (dr.EVENT, 4.0), (dr.PLAYTEXT, playtext_seconds(td().text, 5.0)),
+        (dr.PLAY, animation_seconds(td(), 3.0)), (dr.EVENT, 4.0),
+        (dr.PLAYTEXT, playtext_seconds(td().text, 5.0)),
     ]  # fmt: skip
     assert stages[1].event.scope == ev.Scope.QUICK
 
