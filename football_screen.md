@@ -58,8 +58,21 @@ picker. There is no mixing, no priority between the two sports, and no
 - With `nfl`, the board runs the football logic in this file: its own data
   source (ESPN), its own scene selection and its own `fb_` screens. The NHL
   logic stays idle.
-- The NFL side needs its own team setting (the favourite NFL team), since an NHL
-  abbreviation means nothing there. See the open question on following teams.
+- **Teams work like NHL.** In NFL mode the admin page's Scoreboard card shows an
+  NFL **favourite team** and **followed teams** (the 32 NFL teams), in place of the
+  NHL ones, set the same way. Changing the picker swaps which pickers show.
+  - They are stored separately from the NHL settings (proposed: a `[football]`
+    section with `favourite_team` and `also_follow`), not shared, because the
+    abbreviations overlap between the leagues (`BUF`, `CAR`, `DAL`, `DET`, `MIN`
+    and others) and mean different teams. Switching sport and back keeps each
+    sport's choices.
+  - The favourite is the board's primary team: its game takes the screen, gets the
+    full celebrations and the horn, and its logo and colours are used where the NHL
+    board uses the favourite's. Followed teams are the secondary ones: they take
+    their turn on the screen and get the quick score updates, as in NHL.
+  - Open: whether the followed-team rules (primary-first, quick turns, goal-style
+    updates) are copied exactly or adjusted for football, where a game is three
+    hours and a score is rarer than an NHL goal.
 - Shared between the two: the panel, brightness and night mode, the admin page,
   Wi-Fi, the updater, holidays, the clock and the button. These are not
   sport-specific.
@@ -570,12 +583,14 @@ can be tightened from real games.
       See "Every other play".
 - [ ] Animation pace: is a hard cap on how long a board can lag behind the live game
       (catch-up by skipping) acceptable, or must every play be shown in full?
-- [ ] Which team(s) does a board follow, and where is that set?
+- [x] Teams (decided): in NFL mode the admin page lets the owner set a **favourite
+      team and followed teams, just like NHL**. See "Choosing the sport".
 - [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
       "`<TEAM>` RECEIVE" enough, or is a source for the winner worth finding?
 - [ ] Coin toss: any sound (a soft ding for the favourite receiving), or silent?
 - [ ] Celebration scoping: favourite only gets the full screen and horn, a
-      followed team gets the quick screen, opponents nothing. Confirm.
+      followed team gets the quick screen, opponents nothing. Confirm. (This is the
+      NHL rule; "teams work like NHL" suggests yes, but it was not asked directly.)
 - [ ] Should the favourite **giving away** the ball (interception, fumble) make
       a sound? Proposed default is silent; taking the ball plays the ding.
 - [x] Reviews: celebrate immediately, and show a `fb_reversal` screen explaining
@@ -644,7 +659,7 @@ can be tightened from real games.
 - [ ] Horn and ding wiring
 - [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
 - [ ] `fb_reversal` screen
-- [ ] `[scoreboard] sport` setting and the admin page picker; NFL team setting
+- [ ] `[scoreboard] sport` setting and the admin page picker; NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
 - [ ] Tests
