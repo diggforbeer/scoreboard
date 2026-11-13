@@ -109,7 +109,7 @@ picker. There is no mixing, no priority between the two sports, and no
 ## Base scenes (what NFL mode shows today)
 
 Before any of the designed screens below exist, NFL mode shows four plain scenes (story
-#352). They are the thin base that gets real ESPN data onto the panel, the NFL counterpart
+#352; the play scenes of #377 are below). They are the thin base that gets real ESPN data onto the panel, the NFL counterpart
 of the NHL text layout, and the designed screens build on them. `football/mode.py` keeps the
 list (`FB_SCENE_KINDS`) and a test keeps this section, that list and the renderer in step.
 
@@ -141,6 +141,46 @@ sides fit.
 Turns are timed by the monotonic clock, so a refresh that changes the slate never makes the
 board skip or repeat a game. There is no hold timer for a finished game (NHL has
 `final_hold_minutes`): a final stays on the rotation until the slate moves on.
+
+### Play scenes (the plumbing, #377)
+
+While a play, a celebration or a reversal is on screen the board shows one of three scene
+kinds instead of `fb_scores`. `football/director.py` decides which (it draws nothing); the
+renderer's registries in `display/football_plays.py` draw it, and **each designed screen is one
+registered function**, so a screen's story only adds an entry:
+
+| Scene | What it is | Register with |
+|---|---|---|
+| `fb_play` | The animation of one play, a pure function of the seconds since it began | `@play_screen(PlayKind.X)` |
+| `fb_playtext` | The feed's own sentence once the animation is over | (the play-text story replaces it) |
+| `fb_event` | A celebration, alert, coin toss or reversal; `Scene.fb_stage` is `event`, `detail` or `reversal` | `@event_screen(EventClass, stage)` |
+
+Anything with no entry gets a plain generic version (the ball sliding from where the play
+started to where it ended, a card with the headline and score), so an unknown play type or an
+undrawn event still shows something and never raises.
+
+**One play is a run of stages:** `[coin toss]  play animation  [celebration  detail | alert]
+play text`, then the board returns to `fb_scores` (the resting field arrives with its own story).
+
+- **Scope decides the size** (the detector already did): `FULL` (the favourite) gets the whole
+  celebration and the detail screen; `QUICK` (a followed team) a short one with no detail; a
+  field goal by a team nobody follows (`PLAIN`) gets only the play's own animation; a missed
+  field goal is a short card for anyone in a followed game; a turnover an alert.
+- **A reversal preempts** whatever is on screen and skips the detail screen; it is shown once.
+- **The animation clock starts when a stage is shown**, so `broadcast_delay_seconds` moves
+  everything together. Catch-up is the queue's (stoppages dropped first, the oldest plays
+  skipped, the shown one at double speed); the events of skipped plays still celebrate, shown
+  before the play that was animated.
+- **Which game:** the one on screen first, then any other watched game with plays waiting, so a
+  followed team's touchdown is not lost because another game was on screen.
+- **Which games are fetched:** only live (or about-to-start, within 20 minutes) games the
+  favourite or a followed team is in; with none of those, the first live game. Never the whole
+  slate. The core feed (jersey numbers, the toss) is fetched when the site feed shows a new play.
+- **Lengths** (`director.Timings`, the proposed values of "Timing", held to sane ranges;
+  settings come with the settings story): play 3s, play text 5s, score 6s, detail 8s,
+  quick 4s, missed field goal 3s, turnover 4s, reversal 5s, coin toss 6s.
+- The live view does not show a stage mid-animation (it waits for it to end, like the NHL
+  shootout and goal light); what the panel shows is exact.
 
 The admin page's status box and Live view work in NFL mode: the status box reports the
 feed's last successful poll and last error, and the Live view mirrors these scenes pixel for
@@ -725,6 +765,21 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Halftime](docs/football/fb_scores_halftime.png) | ![Final](docs/football/fb_scores_final.png) |
 | `fb_scores` at halftime. | `fb_scores`, final. |
 
+**The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
+
+| | |
+|---|---|
+| ![Generic play](docs/football/fb_play_rush.png) | ![Generic punt](docs/football/fb_play_punt.png) |
+| `fb_play` for a rush: the ball slides from the start spot to the end spot, the play's name over it. | `fb_play` for a play with no screen yet (a punt). |
+| ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
+| `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
+| ![Event detail](docs/football/fb_event_detail.png) | ![Missed field goal card](docs/football/fb_event_fg_miss.png) |
+| `fb_event` (stage `detail`): the play's text under the headline. | A missed field goal. |
+| ![Turnover card](docs/football/fb_event_turnover.png) | ![Coin toss card](docs/football/fb_event_cointoss.png) |
+| A turnover alert. | The coin toss: who receives. |
+| ![Reversal card](docs/football/fb_event_reversal.png) | |
+| `fb_event` (stage `reversal`): the correction and its reason. | |
+
 `fb_field` and `fb_field_redzone` (the resting field, below) are real renders too: the same
 names as their mockups, which they replaced.
 
@@ -1007,7 +1062,8 @@ added later.
       the loop yet: the worker will fetch the core feed when the site summary shows a new play
 - [ ] `fb_field` renderer
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
-- [ ] Play detection and the animation queue
+- [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
+      event screens, registries (#377)
 - [ ] `fb_run` and `fb_pass` animations
 - [ ] Kickoff and punt animations (arc, return, fair catch, out of bounds, touchback)
 - [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
