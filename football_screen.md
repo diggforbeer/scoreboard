@@ -22,8 +22,11 @@ ESPN's unofficial, free, keyless API.
 
 Known gaps:
 
-- Jersey numbers are not in the play data; `participants` carries athlete ids.
-  The number probably needs a roster lookup (`/teams/{id}/roster`). Unverified.
+- Jersey numbers are not in the site `summary` play data. They are available:
+  the core `plays` endpoint lists `participants` (`passer`, `receiver`,
+  `rusher`, `scorer`, `kicker` and more) with athlete ids, and a cached team
+  roster maps id to jersey (74 of 79 players had one). Verified 2026-11-12;
+  details in `football_api.md`.
 - Delay against TV is unknown. `broadcast_delay_seconds` may apply.
 - Undocumented API: it can change without notice.
 
@@ -35,7 +38,11 @@ team's logo at its end of the panel.
 ### `fb_field`: the resting screen
 
 Field across the panel with yard ticks and end zones tinted in team colours. A
-ball dot at `yardLine`, a first-down marker at `yardLine + distance`. A small
+ball dot at `yardLine`, a first-down marker `distance` yards ahead of it in the
+direction of play. `yardLine` runs 0-100 from the **home** team's goal line,
+not the offence's, so the away team drives toward 0 and the marker sign (and
+the left-right flip of the whole view) depends on who has the ball (see
+`football_api.md`). A small
 band with the clock, quarter and `1ST & 10`. Red zone tinted when `isRedZone`.
 Shown between plays.
 
@@ -288,7 +295,7 @@ after the fact.
 
 ### Research
 
-- [ ] Verify jersey numbers via the roster endpoint
+- [x] Verify jersey numbers via the roster endpoint (core `plays` participants + roster, see `football_api.md`)
 - [ ] Measure feed delay against a live broadcast
 - [ ] Capture sample payloads for each play type (punt, sack, penalty,
       touchdown, field goal, interception, fumble) into the repo as fixtures
