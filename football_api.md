@@ -251,3 +251,18 @@ a measurement: the Pi 4 measurement todo is still what answers the deferred anim
 question. The queue logs `lag=` for every play it shows, so a full game's worth can be read
 from the journal (`journalctl -u nhl-scoreboard | grep "play shown"`).
 
+## Turnovers and possession (#356, the same 13 games)
+
+- `end.team` is the team that has the ball **after** the play, `start.team` the one that had it
+  before. On every turnover the feed flags (`isTurnover`: 20 interceptions, 12 fumbles lost, 5
+  sack-fumbles, 1 pick-six) `end.team` differs from `start.team`, so `end.team` is the team that
+  gained the ball.
+- **A turnover on downs is not flagged.** `isTurnover` is false and the type is an ordinary
+  `Rush`, `Pass Incompletion` or `Sack`. But on a scrimmage play possession changed **only on
+  fourth down** (rush 4, incompletion 7, sack 3, no counter-examples, out of 31 fourth-down
+  scrimmage plays), so "fourth down and `end.team` differs" identifies it.
+- A missed field goal also changes `end.team` (the other team takes over), and so do punts and
+  kickoffs: those are told apart by their type, not by possession.
+- `Fumble Recovery (Own)` can still change `end.team` (a fumble on a punt return that the
+  returning team recovers), and is **not** flagged: only `Fumble Recovery (Opponent)` is a turnover.
+
