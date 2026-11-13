@@ -309,20 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def incomplete() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    f.markers(55, 10)
-    arc(p, f, 50, 63, 19, 8, upto=1.0)
-    f.ball(63, 21)
-    f.number(65, 26, "88", DIM)
-    for dx in (-2, 2):
-        p.px(round(f.x(63)) + dx, 23, DIM)
-    band(p, "Q2 08:49", "INCOMPLETE", WHITE, RED)
-    return p
-
-
 def sack() -> Panel:
     p = Panel()
     f = Field(p)
@@ -528,7 +514,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "incomplete": incomplete,
     "sack": sack,
     "penalty": penalty,
     "penalty_no_play": penalty_no_play,

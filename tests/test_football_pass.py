@@ -182,7 +182,7 @@ def test_a_pass_is_paced_by_its_yardage():
 
 def test_incompletions_and_other_plays_are_not_this_screen():
     assert fp.PLAY_SCREENS[PlayKind.PASS_COMPLETE] is fpass.draw_pass
-    assert PlayKind.PASS_INCOMPLETE not in fp.PLAY_SCREENS
+    assert fp.PLAY_SCREENS.get(PlayKind.PASS_INCOMPLETE) is not fpass.draw_pass
 
 
 def test_a_pass_with_no_end_spot_uses_the_yardage():

@@ -193,7 +193,7 @@ def test_a_run_with_no_end_spot_still_draws_using_the_yardage():
 
 def test_it_is_registered_for_runs_only():
     assert fp.PLAY_SCREENS[PlayKind.RUSH] is fr.draw_run
-    assert PlayKind.PASS_INCOMPLETE not in fp.PLAY_SCREENS
+    assert fp.PLAY_SCREENS.get(PlayKind.PASS_COMPLETE) is not fr.draw_run
 
 
 REAL_RUNS = ["rush", "rush_up_the_middle", "rush_no_gain", "rush_kneel", "rush_scramble",
