@@ -369,6 +369,22 @@ boot. A submitted form is checked against the request's own `Host`
 header to reject cross-site submissions, but there's still no login: as
 with the rest of the page, this assumes the LAN itself is trusted.
 
+### Following a branch (test builds)
+
+Under **Software update** on the admin page, *Follow releases from* lists the
+branches that have published test builds. The default, `main`, is the stable
+channel. Picking another (for example `football`) makes the board follow that
+branch's pre-releases instead, tagged like `v2026.11.13.2-football`, and
+checks straight away. Choose `main` again to return to stable releases; the
+card then offers the newest stable release even if it is dated earlier. It is
+also the `branch` key under `[update]` in `scoreboard.toml`.
+
+Pushes to a channel branch (listed in `.github/workflows/release.yml`) publish
+a pre-release with the app bundle only: no flashable image, and GitHub's
+"latest release" never points at one, so boards on `main` never see them.
+Flash a `main` image once, then follow the branch from the admin page. Anything
+the update can't change (see below) still needs a reflash.
+
 ### What the in-app update can't change
 
 The admin page's software update replaces the app and the admin page only.

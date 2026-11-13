@@ -247,6 +247,10 @@ interface UpdateConfig {
   applicable: boolean
   last_apply: string
   image_changes: ImageChanges | null
+  // The branch this board follows, and the branches the last check saw
+  // releases for (#341). "main" is the stable channel.
+  branch: string
+  channels: string[]
 }
 
 // What a release changes that the in-app update can't install (#284).
@@ -818,6 +822,18 @@ function App() {
       return
     }
     socketRef.current.send(JSON.stringify({ type: 'update_check' }))
+  }
+
+  // Switch which branch's releases the board follows, then look straight away
+  // so the card shows what that channel would install. Both messages ride the
+  // same socket, which the server handles in order.
+  function chooseBranch(branch: string) {
+    setUpdateActionError(null)
+    if (!save('update', { branch })) {
+      setUpdateActionError(NOT_CONNECTED_ERROR)
+      return
+    }
+    socketRef.current?.send(JSON.stringify({ type: 'update_check' }))
   }
 
   function applyUpdate() {
@@ -1799,6 +1815,30 @@ function App() {
           {update ? (
             <>
               <p className="mb-1">Installed: {update.installed}</p>
+              <div className="mb-2">
+                <label htmlFor="update-branch" className="form-label small mb-1">
+                  Follow releases from
+                </label>
+                <select
+                  id="update-branch"
+                  className="form-select form-select-sm w-auto"
+                  value={update.branch}
+                  onChange={(e) => chooseBranch(e.target.value)}
+                  disabled={updatePhase !== 'idle'}
+                >
+                  {update.channels.map((name) => (
+                    <option key={name} value={name}>
+                      {name === 'main' ? 'main (stable)' : `${name} (test builds)`}
+                    </option>
+                  ))}
+                </select>
+                {update.branch !== 'main' && (
+                  <div className="text-warning small mt-1">
+                    Test builds from the {update.branch} branch may be unfinished. Choose main to
+                    return to stable releases.
+                  </div>
+                )}
+              </div>
               {update.latest && <p className="mb-1">Latest release: {update.latest}</p>}
               {update.checked_at && (
                 <p className="text-body-secondary small mb-1">Last checked: {update.checked_at}</p>

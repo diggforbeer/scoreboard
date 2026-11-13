@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, football]
   pull_request:
   workflow_dispatch:
 

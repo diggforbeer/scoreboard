@@ -588,7 +588,8 @@ def _rotation_payload(settings: Settings) -> dict[str, object]:
     }
 
 
-def _update_payload() -> dict[str, object]:
+def _update_payload(settings: Settings | None = None) -> dict[str, object]:
+    settings = settings or Settings.load(CONFIG_PATH)
     state = updater.read_state()
     return {
         "type": "config",
@@ -603,6 +604,10 @@ def _update_payload() -> dict[str, object]:
             "applicable": bool(state.get("applicable")),
             "last_apply": (state.get("last_apply") or {}).get("detail") or "",
             "image_changes": state.get("image_changes"),
+            # Which branch's releases this board follows, and the branches
+            # the last check saw releases for (#341).
+            "branch": settings.update.branch,
+            "channels": state.get("channels") or [updater.STABLE_BRANCH],
         },
     }
 
@@ -865,8 +870,10 @@ async def _send_snapshot(connection: ServerConnection) -> None:
     await connection.send(json.dumps(_snapshot_payload()))
 
 
-async def _send_update_config(connection: ServerConnection) -> None:
-    await connection.send(json.dumps(_update_payload()))
+async def _send_update_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    await connection.send(json.dumps(_update_payload(settings)))
 
 
 def _start_update_unit(action: str) -> None:
@@ -1344,7 +1351,17 @@ _SEND_AFTER_SAVE = {
     "wifi": _send_wifi_config,
     "rotation": _send_rotation_config,
     "holiday": _send_holiday_config,
+    "update": _send_update_config,
 }
+
+
+def _coerce_update(data: object) -> dict[str, object]:
+    values = _coerce_scalar_fields(data, {"branch": _FieldSpec("str")})
+    branch = str(values.get("branch", "")).strip().lower()
+    if "branch" in values and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", branch):
+        msg = "lower-case letters, digits and hyphens only"
+        raise ValueError(json.dumps({"branch": msg}))
+    return {"branch": branch} if branch else {}
 
 
 def _coerce_status(data: object) -> dict[str, object]:
@@ -1392,6 +1409,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_rotation(message.get("data"))
         elif section == "holiday":
             values = _coerce_holiday(message.get("data"))
+        elif section == "update":
+            values = _coerce_update(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
@@ -1423,7 +1442,7 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_night_mode_config(connection, settings)
         await _send_wifi_config(connection, settings)
         await _send_rotation_config(connection, settings)
-        await _send_update_config(connection)
+        await _send_update_config(connection, settings)
         await _send_horn_list(connection)
         await _send_snapshot(connection)
         # Last, not grouped with the other sections: everything (tests
