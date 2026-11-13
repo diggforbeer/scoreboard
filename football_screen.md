@@ -572,9 +572,14 @@ can be tightened from real games.
 - [x] One sport per board, chosen with a **picker** (decided): a board runs NHL
       or NFL, never both. No mixing and no priority rules between the sports. See
       "Choosing the sport".
-- [ ] Sport picker: where does it live (`[scoreboard] sport` in the TOML plus the
-      admin page's Scoreboard card, proposed), and does a change apply live or need a
-      restart? Proposed: live, like a favourite-team switch.
+- [x] Sport picker lives on the **admin page, just like the NHL settings** (decided):
+      a dropdown on the Scoreboard card that saves itself with an Undo, like the other
+      cards. It is stored as `[scoreboard] sport` so a boot-partition TOML can set it
+      too.
+- [ ] Does changing the sport apply live (like a favourite-team switch) or need a
+      service restart? Assumed live, so the board swaps over without a reboot, but
+      not decided: swapping data sources and scene logic is bigger than switching a
+      team, and the state the old sport held (caches, last scene) has to be dropped.
 - [x] Jersey numbers: they are available (core `plays` participants + roster, see
       `football_api.md`), so the fallback is only for the ~5 of 79 players with no
       number. Those show the last name instead (decided by default, shout if not).
