@@ -280,6 +280,20 @@ def test_a_giveaway_by_the_favourite_is_still_a_full_event_about_the_game():
     assert (t.team, t.lost_by, t.scope) == ("WSH", "NYG", Scope.FULL)
 
 
+def test_a_turnover_says_what_it_means_for_the_favourite():
+    """A screen colours its alert by this (#394): green gained, red lost, amber otherwise."""
+    det, game, _ = detector("NYG")
+    gained = one(run(det, game, make_play(1, "interception_return", off="WSH", end="NYG")))
+    lost = one(run(det, game, make_play(2, "interception_return", off="NYG", end="WSH")))
+    assert (gained.favourite, lost.favourite) == ("gained", "lost")
+    det, game, _ = detector("DAL", follow=["KC"], game=make_game("KC", "ATL"))
+    other = one(run(det, game, make_play(1, "interception_return", off="KC", end="ATL")))
+    assert other.favourite == "neither", "the favourite is not in the game"
+    det, game, _ = detector("", follow=["WSH"])
+    nobody = one(run(det, game, make_play(1, "interception_return", off="WSH", end="NYG")))
+    assert nobody.favourite == "neither", "no favourite set"
+
+
 def test_a_turnover_in_a_followed_game_is_quick_and_in_other_games_it_is_not_emitted():
     det, game, _ = detector("DAL", follow=["KC"], game=make_game("KC", "ATL"))
     t = one(run(det, game, make_play(1, "interception_return", off="KC", end="ATL")))

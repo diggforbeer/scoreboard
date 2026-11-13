@@ -99,6 +99,9 @@ class Turnover(Event):
     reason: str = ""
     #: ``team`` gained the ball from this team.
     lost_by: str = ""
+    #: For the favourite: ``gained`` or ``lost`` the ball; ``neither`` when the favourite is not one
+    #: of the two teams (a followed team's game). A screen colours its alert by it (#394).
+    favourite: str = "neither"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -289,9 +292,16 @@ class EventDetector:
         lost = _abbrev(game, play.start.team_id if play.start else None)
         if not gained:
             return None
+        favourite, _ = _followed(cfg)
+        if favourite and favourite == gained:
+            relation = "gained"
+        elif favourite and favourite == lost:
+            relation = "lost"
+        else:
+            relation = "neither"
         return Turnover(
             play=play, game_id=game.id, team=gained, scope=scope, reason=reason, lost_by=lost,
-            away_score=play.away_score, home_score=play.home_score,
+            favourite=relation, away_score=play.away_score, home_score=play.home_score,
         )  # fmt: skip
 
     def _coin_toss(self, game: FbGame, play: Play, cfg) -> CoinToss | None:
