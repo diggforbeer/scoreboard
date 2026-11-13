@@ -335,14 +335,18 @@ payload is captured.
 
 #### Who gets a celebration
 
-Same scoping rule as the NHL board, and to be confirmed by the owner (see the
-open questions):
+Same scoping rule as the NHL board, confirmed by the owner, with **one
+exception: field goals** (see below):
 
 - The **favourite's** scores get the full celebration and the horn.
 - A **followed** team's scores (`also_follow`) get the quick version: the plain
   score screen, no horn.
 - An opponent's score, or an unfollowed game's, gets nothing beyond the normal
   play-text layout.
+- **Exception, field goals:** the outcome of every field goal, **made or missed**,
+  is shown for **either team** in a game the board is following (the favourite's
+  game, or a followed team's game). Decided by the owner. See `fb_fieldgoal` and
+  `fb_fg_miss`. A field goal in an unfollowed game is still not shown.
 - Who scored comes from the **score delta**, not from the possessing team, so a
   pick-six counts for the defence.
 - A game already in progress at startup does not celebrate: scores are
@@ -399,8 +403,18 @@ time.
 
 #### `fb_fieldgoal`: a made field goal
 
-Triggered by `scoringPlay` true on a `Field Goal Good` play. Runs for
+Triggered by `scoringPlay` true on a `Field Goal Good` play, for **either team**
+in a followed game (decided: always show a field goal's outcome). Runs for
 `fb_score_seconds`, then the same detail screen with the kicker.
+
+| Kicking team | Screen | Sound |
+|---|---|---|
+| The favourite | The full celebration below | The favourite's field-goal sound |
+| A followed team | The same animation, quick version, as for a followed team's touchdown | none |
+| The opponent (or any other team in the game) | The same kick animation and `FIELD GOAL 31 YD`, **without the celebration**: no uprights flash, no strobe, in the kicking team's colours | none |
+
+The opponent's version is deliberately plainer, because a field goal against the
+favourite is not a celebration, but the board still shows what happened.
 
 - The ball is placed at the kick spot, then **arcs through the uprights**: two
   tall posts drawn at the end of the field with the arc height scaled to the
@@ -413,12 +427,12 @@ Triggered by `scoringPlay` true on a `Field Goal Good` play. Runs for
 
 #### `fb_fg_miss`: a missed field goal
 
-Triggered by a `Field Goal Missed` play in a followed team's game. Not a
-celebration, so no horn and a short **3s** screen: the ball arcs and drifts off
-to the side the text names (`Wide Left`, `Wide Right`, `Short`, `Blocked`), the
-words `NO GOOD` and `38 YD  WIDE LEFT`. For the favourite's own miss it is
-the same screen. For an opponent's miss it is the same screen too, since it is
-good news for the board's owner.
+Triggered by a `Field Goal Missed` play for **either team** in a followed game
+(decided: always show a field goal's outcome). Not a celebration, so no sound and
+a short **3s** screen: the ball arcs and drifts off to the side the text names
+(`Wide Left`, `Wide Right`, `Short`, `Blocked`), the words `NO GOOD` and
+`38 YD  WIDE LEFT`. It is the same screen for the favourite's miss and the
+opponent's.
 
 #### `fb_turnover`: interception or fumble lost
 
@@ -642,7 +656,9 @@ added later.
       unfollowed games get nothing. Same as the NHL rule.
 - [x] Reviews: celebrate immediately, and show a `fb_reversal` screen explaining
       the change if the play is overturned, then swap back (decided)
-- [ ] Opponent's missed field goal: show the `NO GOOD` screen (proposed) or skip?
+- [x] Field goals (decided): always show the outcome, made or missed, for **either
+      team** in a followed game. An opponent's made field goal gets the plain kick
+      animation with no celebration or sound; any miss gets `fb_fg_miss`.
 
 ## Todo
 
