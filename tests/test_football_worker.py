@@ -362,7 +362,8 @@ def test_mode_shows_connecting_until_the_first_result_then_the_scoreboard():
     mode.refresh()  # the app's poll hook is a no-op
     assert mode.scene().kind == "fb_connecting"
     mode.worker.poll_once()
-    assert mode.scene().kind == "fb_field" and mode.ready
+    scene = mode.scene()  # which game takes this turn depends on the real clock
+    assert scene.kind == ("fb_field" if scene.fb_game.is_live else "fb_scores") and mode.ready
     assert mode.snapshot.games == tuple(GAMES)
 
 
@@ -435,7 +436,7 @@ def test_the_render_loop_keeps_drawing_while_a_fetch_is_in_flight(app_factory):
         assert time.monotonic() - started < 2.0, "drawing must not wait for the feed"
         assert app.select_scene().kind == "fb_connecting"
         client.release.set()
-        assert wait_for(lambda: app.select_scene().kind == "fb_field")
+        assert wait_for(lambda: app.select_scene().kind in ("fb_field", "fb_scores"))
         app.draw()
     finally:
         client.release.set()
