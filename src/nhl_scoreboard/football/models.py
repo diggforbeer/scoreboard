@@ -14,6 +14,7 @@ code owns that (see ``football_api.md``, "Field coordinates").
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, tzinfo
 from enum import StrEnum
@@ -53,6 +54,30 @@ def _list(value: Any) -> list[Any]:
 
 def _bool(value: Any) -> bool:
     return value if isinstance(value, bool) else False
+
+
+_REF_ID = re.compile(r"/(?:athletes|teams)/(\d+)")
+
+
+def ref_id(ref: Any) -> int | None:
+    """The numeric id inside an ESPN ``$ref`` URL (``.../athletes/4430807?lang=en`` -> 4430807).
+
+    Reading it from the link means no athlete or team has to be fetched to learn who it is.
+    """
+    match = _REF_ID.search(ref) if isinstance(ref, str) else None
+    return int(match.group(1)) if match else None
+
+
+def normalise_ref(url: str) -> str:
+    """Some core ``$ref`` links use the host ``espn.pvt``, which does not resolve; ESPN's own
+    public host is ``espn.com`` (``football_api.md``). Also upgrades ``http`` to ``https``."""
+    return url.replace("espn.pvt", "espn.com").replace("http://", "https://", 1)
+
+
+def _team_id(raw: Any) -> int | None:
+    """A team's ESPN id from either shape: ``{"id": "19"}`` or ``{"$ref": ".../teams/19?..."}``."""
+    team = _dict(raw)
+    return _int(team.get("id"), None) if team.get("id") is not None else ref_id(team.get("$ref"))
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -395,8 +420,36 @@ class FieldPos:
             down_distance_text=_str(pos.get("downDistanceText")),
             short_down_distance_text=_str(pos.get("shortDownDistanceText")),
             possession_text=_str(pos.get("possessionText")),
-            team_id=_int(_dict(pos.get("team")).get("id"), None),
+            team_id=_team_id(pos.get("team")),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class Participant:
+    """Someone named on a play by the core feed: a role and an athlete id (#354).
+
+    The id comes straight from the athlete ``$ref``; nothing is fetched to read it. Who the
+    athlete is, and their jersey number, comes from the team roster (``football/people.py``).
+    """
+
+    #: ``passer``, ``receiver``, ``rusher``, ``scorer``, ``patScorer``, ``kicker``, ``returner``,
+    #: ``fumbler``, ``forcedBy``, ``sackedBy``, ``passDefender``, ``punter``, ``tackler``, ...
+    role: str
+    athlete_id: int | None
+    #: ESPN's ``order`` among the play's participants (0 if not given).
+    order: int = 0
+
+    @staticmethod
+    def from_api(raw: Any) -> Participant | None:
+        p = _dict(raw)
+        role = _str(p.get("type"))
+        athlete = _dict(p.get("athlete"))
+        athlete_id = _int(athlete.get("id"), None) if athlete.get("id") is not None else None
+        if athlete_id is None:
+            athlete_id = ref_id(athlete.get("$ref"))
+        if not role and athlete_id is None:
+            return None
+        return Participant(role=role, athlete_id=athlete_id, order=_int(p.get("order")) or 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,6 +477,9 @@ class Play:
     end: FieldPos | None
     #: What the text says (kick distance, returner, penalty, review ...), parsed defensively.
     info: PlayText
+    #: Who did it, by athlete id, when the feed names them (the core feed always does, the site
+    #: summary rarely). See ``football/people.py`` for turning these into names and numbers.
+    participants: tuple[Participant, ...] = ()
 
     @staticmethod
     def from_api(raw: Any) -> Play:
@@ -452,6 +508,11 @@ class Play:
             start=FieldPos.from_api(p.get("start")),
             end=FieldPos.from_api(p.get("end")),
             info=parse_text(type_text, text),
+            participants=tuple(
+                part
+                for part in (Participant.from_api(x) for x in _list(p.get("participants")))
+                if part is not None
+            ),
         )
 
     @property
