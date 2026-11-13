@@ -309,28 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def penalty() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    f.markers(33, 10)
-    f.ball(33)
-    flag(p, round(f.x(33)) + 3, 25)
-    band(p, "Q2 12:56", "FLAG: FALSE START", WHITE, YELLOW)
-    p.text("4x6", 1, 31, DIM, "")  # keep the band clear; detail below
-    return p
-
-
-def penalty_no_play() -> Panel:
-    p = Panel()
-    p.center("5x7", 10, YELLOW, "FLAG")
-    p.center("4x6", 18, WHITE, "OFFENSIVE HOLDING")
-    p.center("4x6", 25, AMBER, "10 YD  NO PLAY")
-    flag(p, 14, 20)
-    flag(p, p.w - 20, 20)
-    return p
-
-
 def timeout() -> Panel:
     p = Panel()
     p.logo(14, 16, HOME, 8)
@@ -502,8 +480,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "penalty": penalty,
-    "penalty_no_play": penalty_no_play,
     "timeout": timeout,
     "halftime": halftime,
     "end_quarter": end_quarter,
