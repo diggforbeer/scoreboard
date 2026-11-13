@@ -92,6 +92,10 @@ class PlayQueue:
     label: str = ""
 
     baselined: bool = field(default=False, init=False)
+    #: The newest play already played when the first poll arrived (``None`` if the game had
+    #: not started). Its score is the score the board starts from, so nothing downstream
+    #: celebrates it (#356).
+    baseline: Play | None = field(default=None, init=False)
     #: The newest play offered (shown or not): where the ball really is.
     latest: Play | None = field(default=None, init=False)
     current: Shown | None = field(default=None, init=False)
@@ -114,6 +118,7 @@ class PlayQueue:
             self.baselined = True
             self._seen.update(p.id for p in batch)
             self.latest = batch[-1] if batch else None
+            self.baseline = self.latest
             if batch:
                 log.info(
                     "%sbaseline: %d plays already played, not animated", self._tag(), len(batch)

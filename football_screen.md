@@ -422,6 +422,36 @@ exception: field goals** (see below):
 - A game already in progress at startup does not celebrate: scores are
   baselined on first sight, as in `_detect_goals`.
 
+**Built (story #356, `football/events.py`).** The decision is made by an `EventDetector`, which
+emits typed events (`Touchdown`, `FieldGoal` made or missed, `GenericScore`, `Turnover`,
+`CoinToss`) each with a `scope` and a `sound` flag; the screens read those. Nothing is drawn or
+played there. As built:
+
+| Event | The favourite's | A followed team's | Anyone else's |
+|---|---|---|---|
+| Touchdown, other score | `FULL`, **sound** | `QUICK`, silent; but **not** when it scores on the favourite | not emitted |
+| Field goal, made | `FULL`, **sound** | `QUICK`, silent | `PLAIN` (in a followed game only), silent |
+| Field goal, missed | `QUICK`, silent | `QUICK`, silent | `PLAIN` (in a followed game only), silent |
+| Turnover, coin toss | about the game: `FULL` in the favourite's game, `QUICK` in a followed team's | | not emitted |
+
+- **In the favourite's own game only the favourite's scores count** (the NHL rule); two followed
+  teams meeting both count. The sound flag is only the favourite's touchdown and made field goal.
+- **Who scored is the score delta**, so a pick-six is the defence's touchdown (`via =
+  "interception"`) and no separate turnover is emitted for it. A safety, or any score with an
+  unrecognised type, is a `GenericScore`. The points are the delta, so a touchdown that carries
+  its extra point reads as 7 and a two-point conversion as 8.
+- **A turnover** is the feed's `isTurnover` flag, a muffed punt, or a **turnover on downs**: a
+  scrimmage play on **fourth down** after which the other team has the ball. In the 2,441 real
+  plays possession changed on a scrimmage play only on fourth down (14 times, no false positives).
+- **The coin toss** comes from the opening kickoff (15:00 in the first quarter), because the
+  site feed omits the `Coin Toss` play; once per game, and never for a board that joined mid-game.
+- **Skipped plays still count.** The queue may skip plays to catch up, so the detector reads
+  every skipped play as well as the one shown: a touchdown among them still celebrates.
+- **Nothing fires for the score the board started with:** a game's score is seeded from the play
+  queue's baseline (`PlayQueue.baseline`), a fresh detector (a new mode after a sport switch)
+  starts empty, and an unseeded game treats its first play as the baseline. A score that goes
+  *down* (a review) emits nothing here; that is the reversal detector (#357).
+
 #### `fb_touchdown`: the favourite scores a touchdown
 
 Triggered by a new play with `scoringPlay` true whose `type` contains
@@ -904,7 +934,7 @@ added later.
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
 - [ ] Play-text layout and scrolling
-- [ ] Score detection from the `awayScore` / `homeScore` delta, with a baseline on
+- [x] (#356) Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
 - [ ] `fb_touchdown` and `fb_fieldgoal` celebrations
 - [ ] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser
