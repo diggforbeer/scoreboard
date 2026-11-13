@@ -802,7 +802,8 @@ added later.
 
 ### Build (after the design is agreed)
 
-- [ ] Data layer: ESPN client and models
+- [~] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport nfl`
+      done (#350); plays, rosters and participants still to do
 - [ ] `fb_field` renderer
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [ ] Play detection and the animation queue

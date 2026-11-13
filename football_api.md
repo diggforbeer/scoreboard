@@ -162,3 +162,28 @@ Counts are from about 690 plays across the 4 games.
 - Plays were about 35-60s apart by `wallclock` in the live game, and the feed returns
   several at once when polled less often than that.
 
+## Scoreboard client findings (#350, checked 2026-11-13)
+
+Parsed by `football/api.py` and `football/models.py`; fixtures are trimmed real
+payloads in `tests/fixtures/football/`.
+
+- **Cache and polling floor:** the scoreboard answers `cache-control: max-age=9`
+  (earlier seen as 7). Asking faster returns the same bytes, so
+  `api.MIN_POLL_SECONDS = 10` is the lowest interval any caller should use. The
+  intervals the app actually polls at are the worker story's decision.
+- **No games is `{"events": []}`** (a date with no slate returned exactly that, with no
+  `week`), so the client returns `[]` for it and `None` only for a failure.
+- **Scores are strings** (`"7"`), as are team ids (`"19"`) and `situation.possession`
+  (the id of the team with the ball). Parsed leniently; a junk value becomes 0 or `None`.
+- **`situation` exists only while a game is live**; pre and final games do not carry it.
+  `lastPlay` inside it is a summary with `start`/`end` `yardLine`, `statYardage`,
+  `scoreValue` and the scoring `team`, but not participants or jersey numbers.
+- **`winner`** is absent while a game is live, `True`/`False` once final.
+- **`neutralSite: true`** on the international game (NE vs DET, shown as `VS`, not `@`).
+- **`status.type.state`** is `pre` / `in` / `post`; `name` was `STATUS_SCHEDULED`,
+  `STATUS_IN_PROGRESS`, `STATUS_FINAL`. **Not yet seen:** halftime, delayed, postponed,
+  overtime (`Final/OT`) and suspended names. The client keeps any unknown state or name
+  as sent and ranks it after the known ones.
+- **Team ids** map to the 32 NFL teams (`football/teams.py`); an id that is not one of
+  them (a Pro Bowl side) keeps ESPN's own abbreviation and is flagged `is_nfl = False`.
+

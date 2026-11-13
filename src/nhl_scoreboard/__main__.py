@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
             "(needs the real matrix backend)"
         ),
     )
+    parser.add_argument(
+        "--sport",
+        choices=["nhl", "nfl"],
+        help="Which sport --dump prints (default: the configured [scoreboard] sport)",
+    )
     parser.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING, ERROR")
     return parser
 
@@ -44,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.load(args.config)
 
     if args.dump:
+        if (args.sport or settings.scoreboard.sport) == "nfl":
+            return _dump_nfl(settings)
         return _dump(settings)
 
     # Imported lazily so --dump works on a machine with no matrix backend.
@@ -78,6 +85,31 @@ def _dump(settings: Settings) -> int:
             f"{game.away.abbrev:>3} {game.away.score:>2} @ "
             f"{game.home.abbrev:>3} {game.home.score:>2}  {game.status_label(tz)}"
         )
+    return 0
+
+
+def _dump_nfl(settings: Settings) -> int:
+    """Today's NFL games as text, like ``_dump`` does for the NHL (#350)."""
+    from .football.api import NflClient
+
+    tz = resolve_timezone(settings.scoreboard.timezone)
+    with NflClient() as client:
+        games = client.scores()
+        if games is None:
+            print(f"error: {client.last_error}", file=sys.stderr)
+            return 1
+    if not games:
+        print("No games today.")
+        return 0
+    for game in games:
+        line = (
+            f"{game.away.abbrev:>3} {game.away.score:>2} @ "
+            f"{game.home.abbrev:>3} {game.home.score:>2}  {game.status_label(tz)}"
+        )
+        sit = game.situation
+        if game.is_live and sit and sit.down_distance_text:
+            line += f"  | {sit.down_distance_text}"
+        print(line)
     return 0
 
 
