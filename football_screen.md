@@ -247,8 +247,8 @@ The first screen of a game. It shows a coin flipping, settling on the team that
   pre-kickoff window of a game starting in minutes.
 
 So the screen can honestly say who **receives**. It cannot say who **won** or
-**deferred**, and must not imply it. Anything beyond that (`won the toss`,
-`deferred`, `chose to receive`) needs another source and is out of scope.
+**deferred**, and must not imply it. The owner confirmed this is enough; anything
+beyond that (`won the toss`, `deferred`, `chose to receive`) is out of scope.
 
 #### When it shows
 
@@ -643,8 +643,9 @@ added later.
       provisional default until there are measurements.
 - [x] Teams (decided): in NFL mode the admin page lets the owner set a **favourite
       team and followed teams, just like NHL**. See "Choosing the sport".
-- [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
-      "`<TEAM>` RECEIVE" enough, or is a source for the winner worth finding?
+- [x] Coin toss (decided): "`<TEAM>` RECEIVE" is enough. The feed only says who
+      receives, and the screen does not claim who won or deferred. No hunt for another
+      source.
 - [x] Sounds (decided): only **touchdowns and field goals**, **per team**, to start.
       The coin toss, turnovers, reversals and everything else are silent. See "Sounds".
 - [ ] Sounds: does a **followed** team's touchdown or field goal play its own team
@@ -675,8 +676,7 @@ added later.
 - [ ] Capture sample payloads for each play type (punt, sack, penalty,
       touchdown, field goal, interception, fumble) into the repo as fixtures
 - [ ] Coin toss: find out when the feed publishes the toss play before kickoff, whether
-      overtime gets a second `Coin Toss` play (the overtime check errored), and whether
-      any source names the toss winner
+      overtime gets a second `Coin Toss` play (the overtime check errored)
 - [ ] Find the type names for QB kneel, spike, onside kick, intentional grounding and
       free kick (the sample's text mentions kneels, a spike and a grounding)
 - [ ] Capture the play types not yet seen: safety, two-point conversion, pick-six
