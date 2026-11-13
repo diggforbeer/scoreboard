@@ -109,10 +109,12 @@ pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
 ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (RUF100)
 
+nhl-scoreboard --demo                                            # loop every scene with made-up games; with sport = "nfl", the NFL steps (silent)
 nhl-scoreboard --dump                                            # today's scores as text; no display
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live board at http://localhost:8888
 python scripts/preview.py --fixture                              # frames as ASCII, offline
 python scripts/render-screens.py                                 # docs/screens/*.png for screens.md; rerun after a layout change
+python scripts/render-screens.py --sport nfl                     # docs/football/*.png from football.demo steps; --check fails when stale
 python scripts/fetch-logos.py                                    # team logos -> assets/logos/ (git-ignored)
 python scripts/fetch-logos.py --sport nfl                        # NFL logos (12px, 16px) -> assets/logos/nfl/ (git-ignored)
 ./scripts/fetch-vendor.sh                                        # HUB75 driver source -> image/files/vendor/

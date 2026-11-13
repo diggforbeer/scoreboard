@@ -623,14 +623,28 @@ SCREENS = {
 }
 
 
+def real_screens() -> set[str]:
+    """Screens the real renderer now draws (``football.demo``): their images come from
+    ``render-screens.py --sport nfl``, so a mockup of the same name is retired, not rewritten."""
+    from nhl_scoreboard.football.demo import nfl_demo_steps
+
+    return {step.name for step in nfl_demo_steps(render_screens.NOW)}
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    real = real_screens()
     for old in OUT.glob("*.png"):
-        old.unlink()
+        if old.stem in SCREENS and old.stem not in real:
+            old.unlink()
+    written = 0
     for name, build in SCREENS.items():
+        if name in real:
+            continue  # replaced by the real renderer: delete its entry above, not its image
+        written += 1
         panel = build()
         render_screens.to_image(panel.frame()).save(OUT / f"{name}.png", optimize=True)
-    print(f"Wrote {len(SCREENS)} mockups to {OUT}")
+    print(f"Wrote {written} mockups to {OUT} ({len(real)} screens are real renders now)")
     return 0
 
 

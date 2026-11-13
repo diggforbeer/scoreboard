@@ -629,17 +629,13 @@ class ScoreboardApp:
         Goals drawn here never reach ``_on_goal()`` (only ``refresh()``'s
         ``_detect_goals()`` does), so the horn stays silent.
         """
-        # Imported here: demo builds Scene objects, so a top-level import
-        # would be circular.
-        from .demo import demo_steps
-
         self._running = True
         self._demo_real_logos = self.renderer.logos
         self._demo_drawing = True
         ticks_per_scene = max(1, round(DEMO_SCENE_SECONDS / FRAME_INTERVAL))
         while self._running:
             # Rebuilt each pass so the preview/countdown stay relative to now.
-            steps = demo_steps(self.settings.scoreboard.favourite_team, self.clock())
+            steps = self._demo_step_list()
             for step in steps:
                 if not self._running:
                     break
@@ -661,6 +657,17 @@ class ScoreboardApp:
         self._demo_drawing = False
         self.renderer.logos = self._demo_real_logos
         self.shutdown()
+
+    def _demo_step_list(self) -> list[DemoStep]:
+        """The steps for the board's sport; NFL's are all text and field, never a sound (#359)."""
+        # Imported here: demo builds Scene objects, so a top-level import would be circular.
+        if self._sport == "nfl":
+            from .football.demo import nfl_demo_steps
+
+            return nfl_demo_steps(self.clock())
+        from .demo import demo_steps
+
+        return demo_steps(self.settings.scoreboard.favourite_team, self.clock())
 
     def _start_demo_holiday(self, step: DemoStep) -> None:
         """Force a step's holiday on, with a fly-by starting right now.
@@ -718,13 +725,11 @@ class ScoreboardApp:
 
     def _draw_demo_step(self) -> None:
         """Advance the live demo on ``DEMO_SCENE_SECONDS`` and draw its current step."""
-        from .demo import demo_steps
-
         now = self.monotonic()
         if now >= self._demo_next_step_at:
             if self._demo_step_index >= len(self._demo_steps):
                 # Rebuilt each pass so preview/countdown stay relative to now.
-                self._demo_steps = demo_steps(self.settings.scoreboard.favourite_team, self.clock())
+                self._demo_steps = self._demo_step_list()
                 self._demo_step_index = 0
             step = self._demo_steps[self._demo_step_index]
             self._demo_step_index += 1
@@ -2903,6 +2908,8 @@ class ScoreboardApp:
             r.draw_message(self.canvas, "NO GAMES", "NFL")
         elif scene.kind == "fb_scores":
             r.draw_fb_scores(self.canvas, scene.fb_game)
+        elif scene.kind == "fb_field":
+            r.draw_fb_field(self.canvas, scene.fb_game)
         elif scene.kind == "clock":
             r.draw_clock(self.canvas, self.clock(), favourite)
         elif scene.kind == "christmas_tree":
