@@ -287,3 +287,17 @@ live behaviour gets learned.
 
 `nhl-scoreboard --watch-nfl <id>` also runs the play queue against the live feed and logs.
 
+## Team logos (#349, 2026-11-13)
+
+- `.../nfl/teams` lists each team's logos under `logos[]`, each with a `rel`: `["full","default"]`
+  (500px), `["full","dark"]` (500px, for dark backgrounds), the same two under `scoreboard`, a
+  `grayscale`, and a family of 4096px `primary_logo_*` / `secondary_logo_*` variants
+  (`..._on_black_color`, `..._white`, ...). The fetch script uses `dark` (and `default` as the
+  "light" variant) and reads the links from the endpoint rather than assuming a URL pattern.
+- All 32 fetch in about 4 seconds (the two 500px variants are 17-36 KB each).
+- **The 4096px "on black" and "white" variants do not rescue a dark crest.** Carolina's panther is
+  black: its `on_black` art measured the same (mean luma 30) and `primary_logo_white` is a grey
+  ghost, so the script brightens it instead.
+- Legibility at 12px (mean luma of the lit pixels, 0-255): CAR 31 with no bright pixel, then CHI
+  62, TB 65, ARI 69, IND 75 ... NYG 180. Below 60 is lifted (at most 3x).
+

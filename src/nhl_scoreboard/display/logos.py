@@ -33,13 +33,38 @@ class Logo:
     pixels: tuple[tuple[int, int, RGB], ...]
 
 
-def default_directories(size: int, variant: str) -> list[Path]:
-    """Where to look, most specific first."""
+#: The sports with logos. NFL and NHL abbreviations overlap (``BUF``, ``CAR``, ``DAL``, ``DET``,
+#: ``MIN`` ...) and mean different teams, so each sport has its own directories and its own
+#: library: ``BUF`` is never looked up across them.
+SPORTS = ("nhl", "nfl")
+
+
+def default_directories(size: int, variant: str, sport: str = "nhl") -> list[Path]:
+    """Where to look, most specific first.
+
+    NHL art keeps its original layout (``assets/logos/32/dark``). NFL art lives beside it
+    under ``nfl/`` (``assets/logos/nfl/12/dark``), with the same ``overrides`` slot, and its
+    own environment variable.
+    """
+    if sport not in SPORTS:
+        raise ValueError(f"unknown sport {sport!r}; expected one of {SPORTS}")
     dirs: list[Path] = []
-    env = os.environ.get("NHL_SCOREBOARD_LOGO_DIR")
+    env = os.environ.get(
+        "NHL_SCOREBOARD_LOGO_DIR" if sport == "nhl" else "NHL_SCOREBOARD_NFL_LOGO_DIR"
+    )
     if env:
         dirs.append(Path(env))
     repo_root = Path(__file__).resolve().parents[3]
+    if sport == "nfl":
+        system = Path("/usr/share/nhl-scoreboard/logos/nfl")
+        assets = repo_root / "assets" / "logos" / "nfl"
+        return [
+            *dirs,
+            system / "overrides" / str(size) / variant,
+            assets / "overrides" / str(size) / variant,
+            system / str(size) / variant,
+            assets / str(size) / variant,
+        ]
     # Hand-picked overrides for teams whose official crest doesn't
     # downscale legibly at panel size (#12) -- checked before the
     # auto-fetched directory below, so one of these wins without needing
@@ -61,8 +86,8 @@ class LogoLibrary:
         self._warned_no_pillow = False
 
     @classmethod
-    def default(cls, size: int = 32, variant: str = "dark") -> LogoLibrary:
-        return cls(default_directories(size, variant), size=size)
+    def default(cls, size: int = 32, variant: str = "dark", sport: str = "nhl") -> LogoLibrary:
+        return cls(default_directories(size, variant, sport), size=size)
 
     def path_for(self, abbrev: str) -> Path | None:
         name = f"{abbrev.strip().upper()}.png"
@@ -125,3 +150,26 @@ def decode(abbrev: str, image, size: int) -> Logo:
                 continue
             pixels.append((x, y, rgb))
     return Logo(abbrev=abbrev, width=size, height=size, pixels=tuple(pixels))
+
+
+class LogoSet:
+    """One sport's logos at several sizes: a library per size, made on first use (#349).
+
+    Football draws a team at more than one size (a small one in each end zone, a larger one on
+    the coin toss and score screens), and ``LogoLibrary`` is square and fixed-size, so a screen
+    asks for ``get("KC", 12)``. A size that was never fetched is simply ``None`` and the screen
+    falls back to the team's abbreviation, as NHL does.
+    """
+
+    def __init__(self, sport: str, variant: str = "dark", libraries: dict | None = None) -> None:
+        self.sport = sport
+        self.variant = variant
+        self._libraries: dict[int, LogoLibrary] = dict(libraries or {})
+
+    def for_size(self, size: int) -> LogoLibrary:
+        if size not in self._libraries:
+            self._libraries[size] = LogoLibrary.default(size, self.variant, self.sport)
+        return self._libraries[size]
+
+    def get(self, abbrev: str, size: int) -> Logo | None:
+        return self.for_size(size).get(abbrev)

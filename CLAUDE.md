@@ -114,6 +114,7 @@ nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live boa
 python scripts/preview.py --fixture                              # frames as ASCII, offline
 python scripts/render-screens.py                                 # docs/screens/*.png for screens.md; rerun after a layout change
 python scripts/fetch-logos.py                                    # team logos -> assets/logos/ (git-ignored)
+python scripts/fetch-logos.py --sport nfl                        # NFL logos (12px, 16px) -> assets/logos/nfl/ (git-ignored)
 ./scripts/fetch-vendor.sh                                        # HUB75 driver source -> image/files/vendor/
 ```
 

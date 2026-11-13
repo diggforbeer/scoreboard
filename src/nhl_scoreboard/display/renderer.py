@@ -28,7 +28,7 @@ from ..nhl.models import (
 )
 from . import goal_light
 from .fonts import FontSet, text_width
-from .logos import Logo, LogoLibrary
+from .logos import Logo, LogoLibrary, LogoSet
 from .teams import team_color, team_name, team_secondary_color
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,9 @@ class Renderer:
         self.height = height
         self.tz = tz
         self.logos = logos
+        #: The NFL's logos at several sizes (#349), kept apart from the NHL's because the
+        #: abbreviations overlap. ``None`` with logos switched off or in NHL mode.
+        self.nfl_logos: LogoSet | None = None
         self._colors: dict[tuple[int, int, int], Any] = {}
         #: goal_light's GOAL letters, rasterised once.
         self.goal_glyphs: dict[str, Any] = {}
