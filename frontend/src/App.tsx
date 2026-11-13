@@ -155,6 +155,19 @@ interface ScoreboardConfig {
   scores_grid: boolean
 }
 
+// The NFL favourite and followed teams (#348), stored apart from the NHL ones because
+// abbreviations like BUF overlap between the leagues. `available` (the 32 teams) comes from
+// the server's NFL table, so this page has no second copy of that list.
+interface FootballConfig {
+  favourite_team: string
+  also_follow: string[]
+}
+
+interface NflTeamOption {
+  abbrev: string
+  name: string
+}
+
 interface StatusConfig {
   enabled: boolean
   port: number
@@ -285,6 +298,7 @@ type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
+  | { type: 'config'; section: 'football'; data: FootballConfig; available: NflTeamOption[] }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
@@ -337,6 +351,86 @@ function teamName(abbrev: string) {
   return team ? team[1] : '(none)'
 }
 
+// The favourite dropdown and the "also follow" checklist, shared by the NHL and NFL pickers so
+// the two cannot drift apart. `idPrefix` keeps their element ids apart ('sb' for the NHL
+// ones, which the e2e test relies on, 'fb' for the NFL ones).
+function TeamPickers({
+  idPrefix,
+  teams,
+  favourite,
+  alsoFollow,
+  onChange,
+  followHelp,
+}: {
+  idPrefix: string
+  teams: readonly (readonly [string, string])[]
+  favourite: string
+  alsoFollow: string[]
+  onChange: (next: { favourite_team: string; also_follow: string[] }) => void
+  followHelp: string
+}) {
+  const nameOf = (abbrev: string) => teams.find(([code]) => code === abbrev)?.[1] ?? '(none)'
+  return (
+    <>
+      <div className="mb-3">
+        <label className="form-label" htmlFor={`${idPrefix}-favourite-team`}>
+          Favourite team
+        </label>
+        <select
+          className="form-select"
+          style={{ width: 'auto' }}
+          id={`${idPrefix}-favourite-team`}
+          value={favourite}
+          onChange={(e) => onChange({ favourite_team: e.target.value, also_follow: alsoFollow })}
+        >
+          <option value="">(none)</option>
+          {teams.map(([abbrev, name]) => (
+            <option key={abbrev} value={abbrev}>
+              {name} ({abbrev})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="mb-3">
+        <label className="form-label">Also follow</label>
+        <p className="text-body-secondary small mb-2">{followHelp}</p>
+        <div
+          className="border rounded p-2"
+          id={`${idPrefix}-also-follow`}
+          style={{ maxHeight: '14rem', overflowY: 'auto' }}
+        >
+          {teams
+            .filter(([abbrev]) => abbrev !== favourite)
+            .map(([abbrev, name]) => (
+              <div className="form-check" key={abbrev}>
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id={`${idPrefix}-follow-${abbrev}`}
+                  checked={alsoFollow.includes(abbrev)}
+                  onChange={(e) =>
+                    onChange({
+                      favourite_team: favourite,
+                      also_follow: e.target.checked
+                        ? [...alsoFollow, abbrev]
+                        : alsoFollow.filter((t) => t !== abbrev),
+                    })
+                  }
+                />
+                <label className="form-check-label" htmlFor={`${idPrefix}-follow-${abbrev}`}>
+                  {name} ({abbrev})
+                </label>
+              </div>
+            ))}
+        </div>
+        <div className="form-text">
+          {alsoFollow.length ? `Following ${alsoFollow.map(nameOf).join(', ')}.` : 'Nobody else yet.'}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // One line, colour-coded, for the "Software update" status box -- the same
 // four states the Software update card itself distinguishes, just
 // summarised at a glance rather than with its own Check/Install buttons.
@@ -387,6 +481,13 @@ function App() {
     return save('scoreboard', data)
   }, NOT_CONNECTED_ERROR)
   const scoreboard = scoreboardState.value
+
+  const [footballState, footballSave] = useAutosave<FootballConfig>(
+    (v) => save('football', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const football = footballState.value
+  const [nflTeams, setNflTeams] = useState<NflTeamOption[]>([])
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
@@ -465,6 +566,7 @@ function App() {
     const autosaved = [
       audioSave,
       scoreboardSave,
+      footballSave,
       nightModeSave,
       wifiSave,
       rotationSave,
@@ -509,6 +611,10 @@ function App() {
           case 'config':
             if (message.section === 'audio') audioSave.receiveConfig(message.data)
             else if (message.section === 'scoreboard') scoreboardSave.receiveConfig(message.data)
+            else if (message.section === 'football') {
+              footballSave.receiveConfig(message.data)
+              setNflTeams(message.available)
+            }
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
             else if (message.section === 'night_mode') nightModeSave.receiveConfig(message.data)
@@ -544,6 +650,7 @@ function App() {
           case 'saved':
             if (message.section === 'audio') audioSave.receiveSaved()
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
+            else if (message.section === 'football') footballSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
             else if (message.section === 'night_mode') nightModeSave.receiveSaved()
@@ -612,6 +719,8 @@ function App() {
               audioSave.receiveError(message.message)
             } else if (message.section === 'scoreboard') {
               scoreboardSave.receiveError(message.message)
+            } else if (message.section === 'football') {
+              footballSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -674,7 +783,7 @@ function App() {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       socketRef.current?.close()
     }
-  }, [audioSave, scoreboardSave, nightModeSave, wifiSave, rotationSave, holidaySave])
+  }, [audioSave, scoreboardSave, footballSave, nightModeSave, wifiSave, rotationSave, holidaySave])
 
   // Logs are opt-in (#197): subscribe only while the tab is showing, and
   // again after a reconnect (`connection` flips back to 'open').
@@ -985,7 +1094,12 @@ function App() {
             <div className="card-body text-center py-2">
               <div className="text-body-secondary small">Favourite team</div>
               <div className="fs-5">
-                {scoreboard ? teamName(scoreboard.favourite_team) : 'waiting...'}
+                {!scoreboard
+                  ? 'waiting...'
+                  : scoreboard.sport === 'nfl'
+                    ? (nflTeams.find((t) => t.abbrev === football?.favourite_team)?.name ??
+                      '(none)')
+                    : teamName(scoreboard.favourite_team)}
               </div>
             </div>
           </div>
@@ -1091,70 +1205,27 @@ function App() {
                   <option value="nfl">NFL</option>
                 </select>
               </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="sb-favourite-team">
-                  Favourite team
-                </label>
-                <select
-                  className="form-select"
-                  style={{ width: 'auto' }}
-                  id="sb-favourite-team"
-                  value={scoreboard.favourite_team}
-                  onChange={(e) =>
-                    scoreboardSave.edit({ ...scoreboard, favourite_team: e.target.value })
-                  }
-                >
-                  <option value="">(none)</option>
-                  {NHL_TEAMS.map(([abbrev, name]) => (
-                    <option key={abbrev} value={abbrev}>
-                      {name} ({abbrev})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label">
-                  Also follow
-                </label>
-                <p className="text-body-secondary small mb-2">
-                  Their live games take turns on screen with your favourite's, and their goals
-                  jump to the goal screen. The horn only plays for your favourite.
-                </p>
-                <div
-                  className="border rounded p-2"
-                  id="sb-also-follow"
-                  style={{ maxHeight: '14rem', overflowY: 'auto' }}
-                >
-                  {NHL_TEAMS.filter(([abbrev]) => abbrev !== scoreboard.favourite_team).map(
-                    ([abbrev, name]) => (
-                      <div className="form-check" key={abbrev}>
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id={`sb-follow-${abbrev}`}
-                          checked={scoreboard.also_follow.includes(abbrev)}
-                          onChange={(e) =>
-                            scoreboardSave.edit({
-                              ...scoreboard,
-                              also_follow: e.target.checked
-                                ? [...scoreboard.also_follow, abbrev]
-                                : scoreboard.also_follow.filter((t) => t !== abbrev),
-                            })
-                          }
-                        />
-                        <label className="form-check-label" htmlFor={`sb-follow-${abbrev}`}>
-                          {name} ({abbrev})
-                        </label>
-                      </div>
-                    ),
-                  )}
-                </div>
-                <div className="form-text">
-                  {scoreboard.also_follow.length
-                    ? `Following ${scoreboard.also_follow.map(teamName).join(', ')}.`
-                    : 'Nobody else yet.'}
-                </div>
-              </div>
+              {scoreboard.sport === 'nfl' ? (
+                football && (
+                  <TeamPickers
+                    idPrefix="fb"
+                    teams={nflTeams.map((t) => [t.abbrev, t.name] as const)}
+                    favourite={football.favourite_team}
+                    alsoFollow={football.also_follow}
+                    onChange={(next) => footballSave.edit({ ...football, ...next })}
+                    followHelp="Their live games take turns on screen with your favourite's, and their scores get a quick update. Your NFL teams are kept apart from your NHL ones."
+                  />
+                )
+              ) : (
+                <TeamPickers
+                  idPrefix="sb"
+                  teams={NHL_TEAMS}
+                  favourite={scoreboard.favourite_team}
+                  alsoFollow={scoreboard.also_follow}
+                  onChange={(next) => scoreboardSave.edit({ ...scoreboard, ...next })}
+                  followHelp="Their live games take turns on screen with your favourite's, and their goals jump to the goal screen. The horn only plays for your favourite."
+                />
+              )}
               <div className="mb-3">
                 <label className="form-label" htmlFor="sb-timezone">
                   Timezone
@@ -2311,6 +2382,7 @@ function App() {
       <AutosaveToast
         sections={[
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
+          { label: 'NFL teams', state: footballState, onUndo: footballSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
           { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },

@@ -70,6 +70,14 @@ picker. There is no mixing, no priority between the two sports, and no
     full celebrations and the horn, and its logo and colours are used where the NHL
     board uses the favourite's. Followed teams are the secondary ones: they take
     their turn on the screen and get the quick score updates, as in NHL.
+  - **Built (story #348):** `[football] favourite_team` and `also_follow` in the config
+    (`FootballConfig`), the 32 teams sent to the admin page from the NFL table so it has no
+    second list, validated against the NFL table (an NHL-only abbreviation such as `NSH` is
+    rejected on a live save and ignored with a warning from a hand-edited TOML). The favourite
+    is not also followed, duplicates collapse, and with no favourite set the board shows every
+    game. In NFL mode the Scoreboard card shows the NFL pickers in place of the NHL ones; its
+    other settings (puck-drop countdown, shootout polling, goal timings) are NHL-only and are
+    still shown, which a later story should hide.
   - Open: whether the followed-team rules (primary-first, quick turns, goal-style
     updates) are copied exactly or adjusted for football, where a game is three
     hours and a score is rarer than an NHL goal.
@@ -865,7 +873,7 @@ added later.
 - [ ] Reversal detector (remembers celebrated plays, compares each poll, logs every match)
 - [ ] `fb_reversal` screen
 - [x] Live sport switch: tear down the old sport's state and baseline the new one cleanly
-- [x] `[scoreboard] sport` setting and the admin page picker (#345); NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode
+- [x] `[scoreboard] sport` setting and the admin page picker (#345); NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode (#348)
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
 - [ ] Tests

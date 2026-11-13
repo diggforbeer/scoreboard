@@ -22,6 +22,7 @@ import tomlkit
 
 from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 from .display.teams import TEAM_COLORS
+from .football.teams import is_team as nfl_team_exists
 
 log = logging.getLogger(__name__)
 
@@ -473,6 +474,47 @@ class WifiSetupConfig:
 
 
 @dataclass(slots=True)
+class FootballConfig:
+    """Which NFL teams the board follows in NFL mode (#348).
+
+    Kept apart from ``[scoreboard]`` (the NHL favourite and followed teams) because
+    abbreviations overlap between the leagues (``BUF``, ``CAR``, ``DAL``, ``DET``,
+    ``MIN`` ...) and mean different teams: sharing one list would make an NHL
+    abbreviation silently select an NFL team. Switching sport and back keeps each
+    sport's choices.
+
+    There is no default favourite: the NHL side defaults to Nashville, but nothing
+    obvious plays that role for the NFL, so it starts empty and the board shows
+    every game until one is chosen.
+    """
+
+    favourite_team: str = ""
+    #: More NFL teams to follow, like ``scoreboard.also_follow``.
+    also_follow: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        favourite = str(self.favourite_team).strip().upper()
+        if favourite and not nfl_team_exists(favourite):
+            log.warning("Ignoring unknown football.favourite_team %r", self.favourite_team)
+            favourite = ""
+        self.favourite_team = favourite
+        raw_follow = [self.also_follow] if isinstance(self.also_follow, str) else self.also_follow
+        follow: list[str] = []
+        for raw in raw_follow if isinstance(raw_follow, list) else []:
+            team = str(raw).strip().upper()
+            if not nfl_team_exists(team):
+                log.warning("Ignoring unknown football.also_follow team %r", raw)
+            elif team != self.favourite_team and team not in follow:
+                follow.append(team)
+        self.also_follow = follow
+
+    @property
+    def followed_teams(self) -> list[str]:
+        """The favourite (if any) first, then ``also_follow``."""
+        return [self.favourite_team, *self.also_follow] if self.favourite_team else self.also_follow
+
+
+@dataclass(slots=True)
 class UpdateConfig:
     """Daily check for a newer release (#32).
 
@@ -680,6 +722,7 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
+    football: FootballConfig = field(default_factory=FootballConfig)
     #: The idle rotation (#150), explicit ``[[rotation]]`` entries in file
     #: order. Empty when absent from the file -- app.py derives the old
     #: implicit default list (countdown/preview, standings, clock) from
@@ -721,6 +764,7 @@ class Settings:
         return cls(
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
+            football=_build(FootballConfig, raw.get("football", {}), "football"),
             rotation=_parse_rotation(raw.get("rotation", [])),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
@@ -792,6 +836,7 @@ class Settings:
         reloaded = Settings.from_toml(self.source_path)
         self.panel = reloaded.panel
         self.scoreboard = reloaded.scoreboard
+        self.football = reloaded.football
         self.rotation = reloaded.rotation
         self.audio = reloaded.audio
         self.status = reloaded.status

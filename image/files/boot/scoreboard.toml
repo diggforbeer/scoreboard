@@ -150,6 +150,19 @@ scores_grid = false
 # screen = "clock"
 # seconds = 8
 
+[football]
+# Used only when [scoreboard] sport = "nfl". The NFL favourite and followed teams are
+# kept apart from the NHL ones above, because abbreviations like BUF, CAR, DAL, DET
+# and MIN are different teams in each league; switching sport and back keeps both.
+# Also editable on the admin page (Scoreboard card, once Sport is NFL).
+#
+# ESPN's abbreviation for your team: KC, NYG, WSH, GB, SF, ... There is no default:
+# with none set, the board shows every game. An NHL-only abbreviation (NSH, TOR) is
+# ignored with a warning.
+favourite_team = ""
+# More NFL teams to follow. Example: also_follow = ["NYG", "DAL"]
+also_follow = []
+
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
 # scores. The board has no other way to make sound: the HUB75 panel needs
