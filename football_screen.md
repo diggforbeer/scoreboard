@@ -361,6 +361,17 @@ Per-play notes, from real text:
   this animation must be quick. Direction (`short right`, `deep left`) sets the
   lane and the arc height; a named target (`to K.Pitts`) puts a number on it, and
   `[C.Thomas]` brackets mark the defender who broke it up.
+- **Built (story #384, `display/football_incomplete.py`).** Quick (3s). The quarterback's
+  number at his spot, then the ball **arcs toward the receiver** (the depth the text gives:
+  `short` about 8 yards, `deep` about 25, none 14; lane from `left` / `middle` / `right`), comes
+  down **short of him** (80% of the way) and **bounces twice**, smaller each time, rolling on a
+  little. The receiver's number (the named target, else his last name) stands where he was.
+  **The ball marker stays put**: the line of scrimmage and first-down line do not move and a
+  dim resting ball stays at the line. The label is `INCOMPLETE`, or `SPIKE` for a spike (the
+  ball goes straight into the ground at the quarterback). The tiny font has no usable `#`, so
+  the number is drawn on the field rather than as `#14` in the label. An intentional grounding
+  is drawn as an incompletion; its penalty is the penalty story's. The defender who broke the
+  pass up (`[C.Thomas]`) is not drawn.
 - **Sacks:** `sacked at CIN 31 for -6 yards (L.London)`. A sack for 0 yards
   (`for 0 yards`) is seen too: the burst plays with no slide. A sack that ends in a
   fumble is `Sack Opp Fumble Recovery` and goes to the turnover screen.
@@ -901,6 +912,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Touchback](docs/football/punt_touchback.png) | ![Downed](docs/football/punt_downed.png) |
 | Down in the end zone, the ball steps out to the spot. | Downed by the coverage where it landed. |
 
+**Incompletions** (#384; in the air, bouncing short of the receiver, a deep one, a spike):
+
+| | |
+|---|---|
+| ![In the air](docs/football/incomplete_air.png) | ![Bounce](docs/football/incomplete.png) |
+| The ball on its way to the receiver. | It came down short of him; the ball marker has not moved. |
+| ![Deep](docs/football/incomplete_deep.png) | ![Spike](docs/football/incomplete_spike.png) |
+| A deep pass, no target named. | A spike: into the ground at the quarterback. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -929,7 +949,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch` and `punt_return`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return` and `incomplete`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1202,7 +1222,7 @@ added later.
       event screens, registries (#377)
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
-- [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
+- [~] Incompletion animation done (#384); sack and penalty (flag) animations still to do
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)

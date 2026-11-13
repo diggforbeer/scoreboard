@@ -70,7 +70,13 @@ def event_screen(event: type, stage: str = EVENT) -> Callable[[Drawer], Drawer]:
 #: The modules that register a designed screen on import. Loaded on first draw rather than at the
 #: bottom of this module, so importing any one of them first cannot hit a half-built import cycle
 #: (each imports this module for ``play_screen``, and some import each other).
-SCREEN_MODULES = ("football_run", "football_pass", "football_kickoff", "football_punt")
+SCREEN_MODULES = (
+    "football_run",
+    "football_pass",
+    "football_kickoff",
+    "football_punt",
+    "football_incomplete",
+)
 _loaded = False
 
 
