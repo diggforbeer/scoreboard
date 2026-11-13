@@ -89,6 +89,16 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   run can't reproduce those two locally; they're still checked by CI
   itself on the PR regardless.
 
+## Football work (`football` branch)
+
+NFL screens are designed and tracked in two files at the repo root, which go
+together: **`football_screen.md`** (screens, timing, open questions, the todo
+list) and **`football_api.md`** (what ESPN's undocumented feed returns, checked
+against real games). Read both before touching football code, tick the todo
+list in the PR that does the work, and put new findings about the feed in
+`football_api.md`. Boards only get this branch's builds if the owner picks
+`football` under Software update (see README, "Following a branch").
+
 ## Commands
 
 ```bash

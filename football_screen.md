@@ -6,6 +6,20 @@ is tracked: tick boxes here, in the PR that does the work.
 
 Documentation first: nothing below is built yet.
 
+## Companion files: read both
+
+- **`football_screen.md`** (this file): what the board shows, when, for how
+  long, and the todo list. Product design.
+- **[`football_api.md`](football_api.md)**: what ESPN's feed actually returns:
+  endpoints, field meanings, the `yardLine` orientation, play types,
+  participants and jersey numbers, caveats. Technical reference.
+
+The two are meant to be read and updated together. A screen design here that
+depends on a data field should point at the section of `football_api.md` that
+verifies it; a new finding about the feed goes in `football_api.md` and, if it
+changes a design, is reflected here. When they disagree, check the live feed and
+fix both.
+
 ## Data source (checked against a live game, 2026-11-12)
 
 ESPN's unofficial, free, keyless API.
