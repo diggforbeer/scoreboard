@@ -173,6 +173,22 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         "Pass Incompletion", "(No Huddle) D.Jones spiked the ball to stop the clock.",
         33, 33, HOME, 0,
     )  # fmt: skip
+    false_start = _play(
+        "Penalty",
+        "(Shotgun) PENALTY on NYG-J.Taylor, False Start, 5 yards, enforced at NYG 40 - No Play.",
+        40, 35, HOME, -5,
+    )  # fmt: skip
+    holding = _play(
+        "Penalty",
+        "(Shotgun) D.Jones scrambles up the middle to NYG 46 for 6 yards (L.London).PENALTY on "
+        "NYG-M.Bergeron, Offensive Holding, 10 yards, enforced at NYG 40 - No Play.",
+        40, 30, HOME, -10,
+    )  # fmt: skip
+    declined = _play(
+        "Penalty",
+        "D.Jones pass incomplete short left.Penalty on WSH-N.Muse, Offensive Offside, declined.",
+        40, 40, HOME, 0,
+    )  # fmt: skip
     kneel = _play("Rush", "D.Jones kneels to NYG 22 for -1 yards.", 23, 22, HOME, -1)
     loss = _play(
         "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
@@ -274,6 +290,11 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(kickoff, 3.8, meyers), name="kickoff_return"),
         DemoStep(run(touchback, 3.2, None), name="kickoff_touchback"),
         DemoStep(run(onside, 1.2, None), name="kickoff_onside"),
+        DemoStep(run(holding, 0.6, jones), name="penalty_after_run"),
+        DemoStep(run(false_start, 1.6, jones), name="penalty_flag"),
+        DemoStep(run(false_start, 2.6, jones), name="penalty"),
+        DemoStep(run(false_start, 4.0, jones), name="penalty_no_play"),
+        DemoStep(run(declined, 2.6, jones), name="penalty_declined"),
         DemoStep(run(sack, 0.7, jones, london), name="sack_drop"),
         DemoStep(run(sack, 1.6, jones, london), name="sack"),
         DemoStep(run(sack, 3.0, jones, london), name="sack_settled"),

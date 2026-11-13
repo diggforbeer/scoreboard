@@ -411,6 +411,17 @@ Per-play notes, from real text:
   the marker moves to the enforced spot. `No Play` in the text means the first part
   did not count. `declined` (6 in the sample) shows the flag then `DECLINED`, with
   the ball staying where the play left it.
+- **Built (story #386, `display/football_penalty.py`).** 4s, for plays the feed types
+  `Penalty`. In order: the **result before the flag, compressed** into the first quarter (a
+  scramble's yards slide the ball; an incompletion shows `INCOMPLETE`; a pre-snap foul has
+  none), a **yellow flag flies in** from behind the offence and lands at the spot, the band
+  names the foul (`FALSE START 5 YD`), the line of scrimmage and ball **move to the enforced
+  spot** (`end.yardLine`) and the band shows `NO PLAY` when the text says so. **Declined**
+  shows the flag and `<FOUL> DECLINED` with the ball where the play left it (whatever end spot
+  the feed gives), and **offsetting** penalties show `OFFSETTING`, again with no move. The
+  accepted penalty is the first one neither declined nor offsetting. A penalty that rides on
+  another play type (an incompletion with intentional grounding, a kickoff with a foul) is drawn
+  by that play's own screen, not this one.
 - **Timeouts:** `Timeout #1 by CIN at 01:10.` carries the team, the timeout number
   and the clock. Timeouts left is `3 - number`, which should be checked against the
   situation block's `homeTimeouts` / `awayTimeouts`.
@@ -939,6 +950,17 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Settled](docs/football/sack_settled.png) | ![No loss](docs/football/sack_zero.png) |
 | The line slid back; the sacker's number in red. | A sack for 0: the burst, no slide. |
 
+**Penalties** (#386; the result before the flag, the flag in flight, landed, `NO PLAY`, declined):
+
+| | |
+|---|---|
+| ![Result](docs/football/penalty_after_run.png) | ![Flag](docs/football/penalty_flag.png) |
+| The play as first run, compressed (a 6-yard scramble). | The flag flies in. |
+| ![Landed](docs/football/penalty.png) | ![No play](docs/football/penalty_no_play.png) |
+| It lands; the foul and yards; the marker moves. | Settled: `NO PLAY`, new markers. |
+| ![Declined](docs/football/penalty_declined.png) | |
+| Declined: the flag, the ball stays. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -967,7 +989,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete` and `sack`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty` and `penalty_no_play`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1240,7 +1262,7 @@ added later.
       event screens, registries (#377)
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
-- [~] Incompletion (#384) and sack (#385) animations done; penalty (flag) animation still to do
+- [x] Incompletion (#384), sack (#385) and penalty (#386) animations, including a play wiped out by a penalty
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)

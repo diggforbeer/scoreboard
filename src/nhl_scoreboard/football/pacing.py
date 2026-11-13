@@ -68,3 +68,12 @@ def punt_seconds(play: Play) -> float:
     info = play.info
     short = info.touchback or info.out_of_bounds or info.downed
     return SHORT_KICKOFF_SECONDS if short else KICKOFF_SECONDS
+
+
+#: A penalty is 4s: the flag, the foul, and the marker moving (the compressed play is inside it).
+PENALTY_SECONDS = 4.0
+
+
+@pacer(PlayKind.PENALTY)
+def penalty_seconds(play: Play) -> float:
+    return PENALTY_SECONDS
