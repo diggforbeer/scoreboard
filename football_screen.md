@@ -428,10 +428,13 @@ can be tightened from real games.
 
 ## Open questions
 
-- [ ] NFL only, or other leagues through the same ESPN shape?
+- [x] NFL only (decided). College football and other leagues are out of scope;
+      the code can use the `nfl` league path and the 32 NFL teams directly.
 - [ ] Does football replace the NHL scene logic, or run alongside it for
       followed teams?
-- [ ] If jersey numbers prove unavailable: initials or last name instead?
+- [x] Jersey numbers: they are available (core `plays` participants + roster, see
+      `football_api.md`), so the fallback is only for the ~5 of 79 players with no
+      number. Those show the last name instead (decided by default, shout if not).
 - [ ] Which other plays get their own animation (punt, kickoff, field goal,
       sack)?
 - [ ] Which team(s) does a board follow, and where is that set?
