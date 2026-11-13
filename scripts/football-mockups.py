@@ -309,16 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def touchdown() -> Panel:
-    p = Panel()
-    for i in range(0, 160, 14):  # strobe rays
-        p.line(i - 30, 0, i, 31, scale(TEAMS[HOME], 0.28))
-    w = p.text2x("7x13B", 1, 0, TEAMS[HOME], "TOUCHDOWN")
-    p.center("4x6", 31, WHITE, "NEW YORK")
-    del w
-    return p
-
-
 def score_detail() -> Panel:
     p = Panel()
     p.logo(10, 16, HOME, 8)
@@ -425,7 +415,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "touchdown": touchdown,
     "score_detail": score_detail,
     "fieldgoal": fieldgoal,
     "fieldgoal_opponent": fieldgoal_opponent,

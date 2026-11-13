@@ -246,9 +246,12 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     base = {"game_id": 1, "away_score": 10, "home_score": 17}
 
     def event(cls: type[Event], play: Play, team: str = HOME, **kw: Any) -> Event:
-        return cls(play=play, team=team, scope=Scope.FULL, **{**base, **kw})
+        return cls(play=play, team=team, **{"scope": Scope.FULL, **base, **kw})
 
     touchdown = event(Touchdown, td, via="run", points=7, extra_point="good", home_score=24)
+    quick_td = event(
+        Touchdown, td, via="run", points=7, extra_point="good", home_score=24, scope=Scope.QUICK
+    )
     miss = event(FieldGoal, kick, made=False, yards=38, miss="Wide Left")
     turnover = event(Turnover, pick, AWAY, reason="interception", lost_by=HOME)
     toss = event(CoinToss, rush, HOME, kicker=AWAY)
@@ -332,7 +335,19 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(punt_touchback, 3.1, None), name="punt_touchback"),
         DemoStep(run(downed, 3.2, None), name="punt_downed"),
         DemoStep(scene("fb_playtext", "playtext", rush), name="fb_playtext"),
-        DemoStep(scene("fb_event", "event", td, touchdown), name="fb_event_touchdown"),
+        DemoStep(
+            scene("fb_event", "event", td, touchdown, at=0.06, seconds=6.0), name="touchdown_flash"
+        ),
+        DemoStep(
+            scene("fb_event", "event", td, touchdown, at=1.3, seconds=6.0), name="touchdown_strobe"
+        ),
+        DemoStep(
+            scene("fb_event", "event", td, touchdown, at=2.2, seconds=6.0), name="touchdown_letters"
+        ),
+        DemoStep(scene("fb_event", "event", td, touchdown, at=4.2, seconds=6.0), name="touchdown"),
+        DemoStep(
+            scene("fb_event", "event", td, quick_td, at=2.0, seconds=4.0), name="touchdown_quick"
+        ),
         DemoStep(scene("fb_event", "detail", td, touchdown), name="fb_event_detail"),
         DemoStep(scene("fb_event", "event", kick, miss), name="fb_event_fg_miss"),
         DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),

@@ -683,6 +683,24 @@ in the first seconds). It is a function of the seconds since the play, so it
 runs the fast animation loop while up. The touchdown sound (see "Sounds") plays
 the instant the score is detected, whatever is on screen.
 
+**Built (story #390, `display/football_touchdown.py`).** An `@event_screen(Touchdown, EVENT)`
+screen, built like the NHL goal light and reusing its building blocks (`goal_light._Buffer`, the
+glyph reader, the shimmer). A pure function of the seconds since the play (6s):
+
+| Seconds | What is drawn |
+|---|---|
+| 0-0.12 | a white flash |
+| 0-1.0 | both end zones pulse in the team's colour |
+| 1.0-3.0 | the whole panel strobes in the team's colour (a 0.2s period); the **ball is spiked** at the goal line the scorer attacked (the right one for the home team): it drops, bounces once and rests, then is gone |
+| 1.0-3.5 | `TOUCHDOWN` drops in **one letter at a time** (double-size 7x13B, 0.17s apart) in the team's colour |
+| 3.5-6.0 | a white shimmer sweeps the letters every 1.5s; the team's short name (`NY GIANTS`) fades in along the bottom |
+
+No logos and no score in the first seconds, like the goal light. A followed team's touchdown
+(`Scope.QUICK`) is the **quick version**: a static card with `TOUCHDOWN`, the team and the
+score. On a 64px panel the word wraps to `TOUCH` / `DOWN` at normal size. The letters are wide
+and nearly touch at double size (a rough edge noted in the mockups). The sound is a separate
+story; this only draws.
+
 #### `fb_score_detail`: who scored
 
 Follows the celebration for `fb_score_detail_seconds` (8s proposed). Like
@@ -1030,6 +1048,17 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Result](docs/football/cointoss_result.png) | |
 | `NYG RECEIVE`; the kicking team small at the edge with `KICK`. | |
 
+**The touchdown** (#390; the flash, the end zones, the strobe and spiked ball, the letters landing, settled with the city, and the followed team's quick card):
+
+| | |
+|---|---|
+| ![Flash](docs/football/touchdown_flash.png) | ![Strobe and ball](docs/football/touchdown_strobe.png) |
+| The white flash, then the end zones pulse. | The strobe; the ball is spiked at the goal line (this frame is a dark one). |
+| ![Letters](docs/football/touchdown_letters.png) | ![Settled](docs/football/touchdown.png) |
+| `TOUCHDOWN` dropping in one letter at a time. | Landed, the shimmer passing, the city along the bottom. |
+| ![Quick](docs/football/touchdown_quick.png) | |
+| A followed team's touchdown: the plain score card. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1056,7 +1085,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip` and `cointoss_result`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result` and `touchdown`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1336,7 +1365,7 @@ added later.
 - [x] Play-text layout and scrolling (#379)
 - [x] (#356) Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
-- [ ] `fb_touchdown` and `fb_fieldgoal` celebrations
+- [~] `fb_touchdown` celebration done (#390); `fb_fieldgoal` still to do
 - [ ] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser
 - [ ] `fb_fg_miss`
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
