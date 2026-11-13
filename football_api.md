@@ -301,3 +301,55 @@ live behaviour gets learned.
 - Legibility at 12px (mean luma of the lit pixels, 0-255): CAR 31 with no bright pixel, then CHI
   62, TB 65, ARI 69, IND 75 ... NYG 180. Below 60 is lifted (at most 3x).
 
+## Jersey numbers, participants and the polling decision (#354, measured 2026-11-13)
+
+Built in `football/people.py`, `NflClient.core_plays()` and `NflClient.roster()`.
+
+**Measured** (a finished game, 174 plays; one team roster):
+
+| Request | On the wire (gzip) | Decoded | Time |
+|---|---|---|---|
+| Core plays, whole game (`?limit=300`) | 37 KB | 757 KB | 0.30s |
+| Core plays, one 25-play page (`?limit=25&page=N`) | 5-6 KB | | 0.14s |
+| Core plays, count only (`?limit=1`) | 0.5 KB | | 0.14s |
+| Site `summary` (for comparison) | 51 KB | 550 KB | 0.11s |
+| Team roster (`/teams/{id}/roster`, ~80 players) | 27 KB | 366 KB | 0.08s |
+
+All of the 13 finished games' core plays (2,454), both teams' rosters (26) and the site summaries
+fetched in 3.8 seconds in total.
+
+**Chosen polling approach: fetch the core feed only when the site summary shows a play it has not
+seen, the whole list in one request.** A play arrives about once a minute, so that is one 37 KB
+request a minute (well under 1 KB/s) and 0.3s on the worker thread. The tail-page trick
+(`page=ceil(n/25)`) would cut it to 5 KB but needs the play count first and handles a play that
+straddles a page boundary; it is not worth the complication at this size. `people.CoreSync`
+implements the rule. Rosters are fetched on first use and then **hourly** per team
+(`people.RosterCache`, kept by `NflMode`, so a sport switch starts empty); a failed fetch keeps the
+old roster and is not retried for 60s.
+
+**What the core feed adds over the site feed**
+- **Participants on every play** (`participants[]`: `type`, `order`, and an `athlete.$ref`). The
+  site summary rarely has them. The athlete id is read **out of the `$ref`**
+  (`.../athletes/4430807?lang=en` -> 4430807), so no athlete is ever fetched.
+- **The `Coin Toss` play**, in all 13 of 13 games, with the receiver as `end.team`. The site feed
+  omits it. Teams in the core feed are `$ref`s (`.../teams/19`), not `{"id": ...}`.
+- **Core play ids equal the site feed's ids** (173 of 173 matched), so the two join on `id`.
+- A `$ref` host of `espn.pvt` was **not seen** in any of these responses; ids parse regardless, and
+  `models.normalise_ref` rewrites it to `espn.com` if a link ever has to be followed.
+
+**Roles seen** (6,327 participants): receiver 1,105, tackler 995, passer 994, assistedBy 834,
+rusher 713, other 327, kicker 255, returner 205, penalized 191, passDefender 133, scorer 116,
+punter 104, sackedBy 89, patScorer 63, holder 50, snapper 49, recoverer 35, fumbler 34.
+A touchdown lists the same player as `rusher` or `receiver` **and** `scorer`; a field goal lists the
+kicker as `kicker` **and** `scorer`; a sack lists the defender as `sackedBy` **and** `tackler`.
+
+**Validated against the real data** (13 games, joined and resolved through the new code):
+- 6,209 participants resolved to a roster player; **118 (1.9%) were not on the roster** (a kicker
+  released since, a player traded or signed). They fall back to the name in the play text.
+- **3,099 comparisons of the roster's surname against the name in the play text: 0 mismatches**, so
+  the athlete ids map to the right people.
+- **149 of 2,563 rostered players (5.8%) have no jersey number**; they are shown by last name.
+- Roster shape: `athletes[]` is a list of groups (`offense`, `defense`, `specialTeam`,
+  `injuredReserveOrOut`, `suspended`, `practiceSquad`), each with `items[]`; an athlete has `id`,
+  `fullName`, `shortName` (`M. Bergeron`), `lastName`, `jersey` (a string) and `position.abbreviation`.
+

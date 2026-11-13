@@ -12,12 +12,14 @@ the run, the pass ...) exist yet.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from .api import MIN_POLL_SECONDS
 from .models import FbGame
+from .people import RosterCache, RosterPlayer
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -50,7 +52,13 @@ class NflMode:
         self._scoreboard = scoreboard
         self._football = football
         self._monotonic = monotonic
+        self._client_factory = client_factory
         self.worker = FeedWorker(client_factory, self._interval, monotonic)
+        #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here so a
+        #: sport switch, which builds a fresh mode, starts with none. The feed worker's thread
+        #: owns it: it must not be used from the render loop.
+        self.rosters = RosterCache(self._fetch_roster, monotonic)
+        self._roster_client: Any = None
 
     def _interval(self, snap: FeedSnapshot) -> float:
         """Poll fast while a game is live, slowly otherwise, never faster than the feed caches."""
@@ -62,6 +70,11 @@ class NflMode:
             base = cfg.live_poll_seconds if live else cfg.poll_seconds
         return max(base, MIN_POLL_SECONDS)
 
+    def _fetch_roster(self, team_id: int) -> dict[int, RosterPlayer] | None:
+        if self._roster_client is None:
+            self._roster_client = self._client_factory()
+        return self._roster_client.roster(team_id)
+
     # -- lifecycle -------------------------------------------------------
 
     def start(self) -> None:
@@ -69,6 +82,11 @@ class NflMode:
 
     def stop(self) -> None:
         self.worker.stop()
+        client, self._roster_client = self._roster_client, None
+        if client is not None:
+            with contextlib.suppress(Exception):
+                client.close()
+        self.rosters.clear()
 
     @property
     def snapshot(self) -> FeedSnapshot:

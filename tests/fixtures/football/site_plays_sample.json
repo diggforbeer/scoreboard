@@ -1,0 +1,292 @@
+{
+ "drives": {
+  "previous": [
+   {
+    "id": "1",
+    "plays": [
+     {
+      "id": "401873038306",
+      "sequenceNumber": "30600",
+      "text": "N.Folk kicks 60 yards from ATL 35 to CIN 5. D.Meyers to CIN 25 for 20 yards (N.Muse).",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "11:12"
+      },
+      "wallclock": "2026-11-08T14:44:58Z",
+      "statYardage": 20,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 0,
+      "homeScore": 7,
+      "type": {
+       "id": "53",
+       "text": "Kickoff"
+      },
+      "start": {
+       "yardLine": 35,
+       "yardsToEndzone": 65,
+       "down": 0,
+       "distance": 0,
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 75,
+       "yardsToEndzone": 75,
+       "down": 1,
+       "distance": 10,
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "401873038172",
+      "sequenceNumber": "17200",
+      "text": "B.Robinson left end to CIN 19 for 21 yards (M.Murphy; B.Carter).",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "12:31"
+      },
+      "wallclock": "2026-11-08T14:38:34Z",
+      "statYardage": 21,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 0,
+      "homeScore": 0,
+      "type": {
+       "id": "5",
+       "text": "Rush"
+      },
+      "start": {
+       "yardLine": 60,
+       "yardsToEndzone": 40,
+       "down": 3,
+       "distance": 1,
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 81,
+       "yardsToEndzone": 19,
+       "down": 1,
+       "distance": 10,
+       "team": {
+        "id": "1"
+       }
+      }
+     },
+     {
+      "id": "40187303873",
+      "sequenceNumber": "7300",
+      "text": "(Shotgun) M.Penix pass short right to J.Dotson to ATL 32 for 12 yards (D.Knight).",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "14:54"
+      },
+      "wallclock": "2026-11-08T14:36:05Z",
+      "statYardage": 12,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 0,
+      "homeScore": 0,
+      "type": {
+       "id": "24",
+       "text": "Pass Reception"
+      },
+      "start": {
+       "yardLine": 20,
+       "yardsToEndzone": 80,
+       "down": 1,
+       "distance": 10,
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 32,
+       "yardsToEndzone": 68,
+       "down": 1,
+       "distance": 10,
+       "team": {
+        "id": "1"
+       }
+      }
+     },
+     {
+      "id": "401873038843",
+      "sequenceNumber": "84300",
+      "text": "N.Folk 31 yard field goal is GOOD, Center-L.McCullough, Holder-J.Bailey.",
+      "period": {
+       "number": 1
+      },
+      "clock": {
+       "displayValue": "2:56"
+      },
+      "wallclock": "2026-11-08T15:03:29Z",
+      "statYardage": 31,
+      "scoringPlay": true,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 7,
+      "homeScore": 10,
+      "type": {
+       "id": "59",
+       "text": "Field Goal Good"
+      },
+      "start": {
+       "yardLine": 87,
+       "yardsToEndzone": 13,
+       "down": 4,
+       "distance": 13,
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 100,
+       "yardsToEndzone": 0,
+       "down": -1,
+       "distance": 10,
+       "team": {
+        "id": "1"
+       }
+      }
+     },
+     {
+      "id": "4018730381164",
+      "sequenceNumber": "116400",
+      "text": "J.Burrow left guard for 1 yard, TOUCHDOWN. E.McPherson extra point is GOOD, Center-W.Wagner, Holder-R.Rehkow.",
+      "period": {
+       "number": 2
+      },
+      "clock": {
+       "displayValue": "12:56"
+      },
+      "wallclock": "2026-11-08T15:16:40Z",
+      "statYardage": 1,
+      "scoringPlay": true,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 14,
+      "homeScore": 10,
+      "type": {
+       "id": "68",
+       "text": "Rushing Touchdown"
+      },
+      "start": {
+       "yardLine": 1,
+       "yardsToEndzone": 1,
+       "down": 2,
+       "distance": 1,
+       "team": {
+        "id": "4"
+       }
+      },
+      "end": {
+       "yardLine": 0,
+       "yardsToEndzone": 0,
+       "down": -1,
+       "distance": 10,
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "4018730383392",
+      "sequenceNumber": "339200",
+      "text": "(Shotgun) J.Burrow sacked at CIN 31 for -6 yards (L.London).",
+      "period": {
+       "number": 4
+      },
+      "clock": {
+       "displayValue": "10:13"
+      },
+      "wallclock": "2026-11-08T17:03:44Z",
+      "statYardage": -6,
+      "scoringPlay": false,
+      "isTurnover": false,
+      "isPenalty": false,
+      "awayScore": 31,
+      "homeScore": 17,
+      "type": {
+       "id": "7",
+       "text": "Sack"
+      },
+      "start": {
+       "yardLine": 63,
+       "yardsToEndzone": 63,
+       "down": 3,
+       "distance": 1,
+       "team": {
+        "id": "4"
+       }
+      },
+      "end": {
+       "yardLine": 69,
+       "yardsToEndzone": 69,
+       "down": 4,
+       "distance": 7,
+       "team": {
+        "id": "4"
+       }
+      }
+     },
+     {
+      "id": "4018730383850",
+      "sequenceNumber": "385000",
+      "text": "(No Huddle, Shotgun) M.Penix pass short middle intended for B.Robinson INTERCEPTED by B.Carter at ATL 43. B.Carter to ATL 37 for 6 yards (R.Neuzil).",
+      "period": {
+       "number": 4
+      },
+      "clock": {
+       "displayValue": "4:06"
+      },
+      "wallclock": "2026-11-08T17:22:22Z",
+      "statYardage": 6,
+      "scoringPlay": false,
+      "isTurnover": true,
+      "isPenalty": false,
+      "awayScore": 34,
+      "homeScore": 17,
+      "type": {
+       "id": "26",
+       "text": "Pass Interception Return"
+      },
+      "start": {
+       "yardLine": 40,
+       "yardsToEndzone": 60,
+       "down": 2,
+       "distance": 1,
+       "team": {
+        "id": "1"
+       }
+      },
+      "end": {
+       "yardLine": 37,
+       "yardsToEndzone": 37,
+       "down": 1,
+       "distance": 10,
+       "team": {
+        "id": "4"
+       }
+      }
+     }
+    ]
+   }
+  ],
+  "current": null
+ }
+}

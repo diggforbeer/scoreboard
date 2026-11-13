@@ -972,9 +972,10 @@ added later.
 
 - [x] Base scenes: the status screens and a plain text scoreboard with the favourite and
       followed-team selection (#352); see "Base scenes"
-- [~] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport nfl`
+- [x] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport nfl`
       done (#350); play feed, `Play` model, play-text parser and `--dump-plays` done (#353);
-      rosters and participants (jersey numbers) still to do
+      rosters, participants and jersey numbers done (#354, `football/people.py`). Not wired into
+      the loop yet: the worker will fetch the core feed when the site summary shows a new play
 - [ ] `fb_field` renderer
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [ ] Play detection and the animation queue

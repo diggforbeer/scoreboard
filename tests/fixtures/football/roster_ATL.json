@@ -1,0 +1,213 @@
+{
+ "team": {
+  "id": "1",
+  "abbreviation": "ATL"
+ },
+ "athletes": [
+  {
+   "position": "offense",
+   "items": [
+    {
+     "id": "4568510",
+     "fullName": "Matthew Bergeron",
+     "displayName": "Matthew Bergeron",
+     "shortName": "M. Bergeron",
+     "firstName": "Matthew",
+     "lastName": "Bergeron",
+     "jersey": "65",
+     "position": {
+      "abbreviation": "G"
+     }
+    },
+    {
+     "id": "4369886",
+     "fullName": "Chris Blair",
+     "displayName": "Chris Blair",
+     "shortName": "C. Blair",
+     "firstName": "Chris",
+     "lastName": "Blair",
+     "jersey": "19",
+     "position": {
+      "abbreviation": "WR"
+     }
+    },
+    {
+     "id": "4361409",
+     "fullName": "Jahan Dotson",
+     "displayName": "Jahan Dotson",
+     "shortName": "J. Dotson",
+     "firstName": "Jahan",
+     "lastName": "Dotson",
+     "jersey": "4",
+     "position": {
+      "abbreviation": "WR"
+     }
+    },
+    {
+     "id": "4249624",
+     "fullName": "Nick Muse",
+     "displayName": "Nick Muse",
+     "shortName": "N. Muse",
+     "firstName": "Nick",
+     "lastName": "Muse",
+     "jersey": "87",
+     "position": {
+      "abbreviation": "TE"
+     }
+    },
+    {
+     "id": "4360423",
+     "fullName": "Michael Penix Jr.",
+     "displayName": "Michael Penix Jr.",
+     "shortName": "M. Penix Jr.",
+     "firstName": "Michael",
+     "lastName": "Penix Jr.",
+     "jersey": "9",
+     "position": {
+      "abbreviation": "QB"
+     }
+    },
+    {
+     "id": "4430807",
+     "fullName": "Bijan Robinson",
+     "displayName": "Bijan Robinson",
+     "shortName": "B. Robinson",
+     "firstName": "Bijan",
+     "lastName": "Robinson",
+     "jersey": "7",
+     "position": {
+      "abbreviation": "RB"
+     }
+    }
+   ]
+  },
+  {
+   "position": "defense",
+   "items": [
+    {
+     "id": "4360807",
+     "fullName": "Yasir Abdullah",
+     "displayName": "Yasir Abdullah",
+     "shortName": "Y. Abdullah",
+     "firstName": "Yasir",
+     "lastName": "Abdullah",
+     "jersey": "22",
+     "position": {
+      "abbreviation": "LB"
+     }
+    },
+    {
+     "id": "4431194",
+     "fullName": "Billy Bowman Jr.",
+     "displayName": "Billy Bowman Jr.",
+     "shortName": "B. Bowman Jr.",
+     "firstName": "Billy",
+     "lastName": "Bowman Jr.",
+     "jersey": "33",
+     "position": {
+      "abbreviation": "CB"
+     }
+    },
+    {
+     "id": "4376288",
+     "fullName": "LaCale London",
+     "displayName": "LaCale London",
+     "shortName": "L. London",
+     "firstName": "LaCale",
+     "lastName": "London",
+     "jersey": "94",
+     "position": {
+      "abbreviation": "DE"
+     }
+    }
+   ]
+  },
+  {
+   "position": "specialTeam",
+   "items": [
+    {
+     "id": "3931395",
+     "fullName": "Jake Bailey",
+     "displayName": "Jake Bailey",
+     "shortName": "J. Bailey",
+     "firstName": "Jake",
+     "lastName": "Bailey",
+     "jersey": "16",
+     "position": {
+      "abbreviation": "P"
+     }
+    },
+    {
+     "id": "3915528",
+     "fullName": "Liam McCullough",
+     "displayName": "Liam McCullough",
+     "shortName": "L. McCullough",
+     "firstName": "Liam",
+     "lastName": "McCullough",
+     "jersey": "49",
+     "position": {
+      "abbreviation": "LS"
+     }
+    }
+   ]
+  },
+  {
+   "position": "injuredReserveOrOut",
+   "items": [
+    {
+     "id": "4428872",
+     "fullName": "JD Bertrand",
+     "displayName": "JD Bertrand",
+     "shortName": "J. Bertrand",
+     "firstName": "JD",
+     "lastName": "Bertrand",
+     "jersey": "40",
+     "position": {
+      "abbreviation": "LB"
+     }
+    },
+    {
+     "id": "3045527",
+     "fullName": "Samson Ebukam",
+     "displayName": "Samson Ebukam",
+     "shortName": "S. Ebukam",
+     "firstName": "Samson",
+     "lastName": "Ebukam",
+     "jersey": "52",
+     "position": {
+      "abbreviation": "DE"
+     }
+    }
+   ]
+  },
+  {
+   "position": "practiceSquad",
+   "items": [
+    {
+     "id": "4869816",
+     "fullName": "Vinny Anthony II",
+     "displayName": "Vinny Anthony II",
+     "shortName": "V. Anthony II",
+     "firstName": "Vinny",
+     "lastName": "Anthony II",
+     "jersey": "86",
+     "position": {
+      "abbreviation": "WR"
+     }
+    },
+    {
+     "id": "4360255",
+     "fullName": "Brian Asamoah II",
+     "displayName": "Brian Asamoah II",
+     "shortName": "B. Asamoah II",
+     "firstName": "Brian",
+     "lastName": "Asamoah II",
+     "jersey": "41",
+     "position": {
+      "abbreviation": "LB"
+     }
+    }
+   ]
+  }
+ ]
+}

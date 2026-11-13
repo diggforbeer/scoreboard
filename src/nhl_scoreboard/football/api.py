@@ -18,10 +18,17 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .models import FbGame, Play
+from .people import RosterPlayer, roster_from_payload
 
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
+#: The core API: per-play ``participants`` (who did it) and the ``Coin Toss`` play (#354).
+CORE_URL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl"
+#: Plays asked for per core page. A game has 150-200, so one page covers it; longer ones follow
+#: ``pageCount``.
+CORE_PAGE_LIMIT = 300
+CORE_MAX_PAGES = 10
 USER_AGENT = "nhl-scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
 
 #: (connect, read) seconds, as the NHL client. Fetches may run on the render
@@ -61,8 +68,10 @@ class NflClient:
         base_url: str = BASE_URL,
         timeout: float | tuple[float, float] = TIMEOUT,
         session: requests.Session | None = None,
+        core_url: str = CORE_URL,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.core_url = core_url.rstrip("/")
         self.timeout = timeout
         self.session = session or _build_session()
         #: The last failure, or ``""`` after a success. For the admin page's status.
@@ -105,10 +114,52 @@ class NflClient:
             return None
         return plays_from_summary(payload)
 
+    def core_plays(self, event_id: int | str) -> list[Play] | None:
+        """A game's plays from the **core** feed, each with its ``participants`` (#354).
+
+        The same plays as :meth:`plays` (ids match exactly) plus the ``Coin Toss`` the site feed
+        omits. One request covers a whole game (37 KB on the wire); a longer one follows
+        ``pageCount``. ``None`` is no data, ``[]`` is a game with no plays. See
+        ``people.merge_core`` to join it with the site plays, and ``people.CoreSync`` for when
+        it is worth fetching.
+        """
+        path = f"/events/{event_id}/competitions/{event_id}/plays"
+        first = self._get(path, {"limit": str(CORE_PAGE_LIMIT)}, base=self.core_url)
+        if first is None:
+            return None
+        pages = [first]
+        total = _int_or(first.get("pageCount"), 1)
+        for page in range(2, min(total, CORE_MAX_PAGES) + 1):
+            more = self._get(
+                path, {"limit": str(CORE_PAGE_LIMIT), "page": str(page)}, base=self.core_url
+            )
+            if more is None:
+                return None
+            pages.append(more)
+        plays: dict[str, Play] = {}
+        for payload in pages:
+            for item in payload.get("items") or []:
+                try:
+                    play = Play.from_api(item)
+                except (ValueError, TypeError, AttributeError, KeyError) as exc:
+                    log.warning("Skipping unusable core play: %s", exc)
+                    continue
+                plays[play.id] = play
+        return sorted(plays.values(), key=Play.sort_key)
+
+    def roster(self, team_id: int | str) -> dict[int, RosterPlayer] | None:
+        """A team's roster by athlete id (jersey, name, position), or ``None`` on failure (#354)."""
+        payload = self._get(f"/teams/{team_id}/roster")
+        if payload is None:
+            return None
+        return roster_from_payload(payload)
+
     # -- plumbing --------------------------------------------------------
 
-    def _get(self, path: str, params: dict[str, str] | None = None) -> dict[str, Any] | None:
-        url = f"{self.base_url}{path}"
+    def _get(
+        self, path: str, params: dict[str, str] | None = None, base: str | None = None
+    ) -> dict[str, Any] | None:
+        url = f"{base or self.base_url}{path}"
         try:
             response = self.session.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
@@ -168,3 +219,10 @@ def _parse_events(raw: Any) -> list[FbGame]:
         except (ValueError, TypeError, AttributeError, KeyError) as exc:
             log.warning("Skipping unusable event: %s", exc)
     return games
+
+
+def _int_or(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
