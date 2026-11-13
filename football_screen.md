@@ -746,6 +746,15 @@ open for the owner's review:
   first-down line is yellow, the ball is a small orange-brown dot.
 - **A number rides on the play** (the carrier or receiver), drawn above the ball
   or at the catch. The tiny font has no usable `#`, so the number is plain digits.
+- **Built (story #358):** `football/geometry.py` (pure: yard to pixel, the direction each team
+  drives, the first-down line and goal to go, run and pass lanes, kick and pass arcs, the layout
+  constants) and `display/football_field.py` (the static field and the ball). Compared with
+  `docs/football/fb_field.png` and `fb_field_64.png` the differences are deliberate: **goal lines**
+  at yard 0 and 100 (brighter green) so the end-zone boundary reads, **no logo in a 64px end zone**
+  (see the logo sizes above), and the logos are synthetic discs where the mockups drew rings
+  (placeholders for the real art). The first-down line stops at the goal line in goal to go.
+  Left and right are the offence's own: facing the goal it attacks, its left is **up the panel**
+  when it drives right and **down** when it drives left.
 - **`yardLine` runs from the home goal line**, so the home team's end zone is
   always on the left and the view flips its drive arrow and first-down line by
   who has the ball (see `football_api.md`). In every mockup NYG (home, left) is
@@ -956,6 +965,8 @@ added later.
 
 ### Build (after the design is agreed)
 
+- [x] Field geometry and the static field background (#358): `football/geometry.py`,
+      `display/football_field.py`, snapshots at 128px and 64px; the screens that use it come next
 - [x] NFL logos: `scripts/fetch-logos.py --sport nfl` (12px and 16px, dark), `LogoSet` for a team
       at several sizes, kept apart from the NHL art (#349)
 
