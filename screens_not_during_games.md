@@ -85,7 +85,7 @@ teams on a bye that week, so no schedule is needed to know; the next game is in 
 `fb_scores` already holds the final. Proposed: after the game the favourite's final stays
 for a set time (the NHL's `final_hold_minutes`), then the rotation resumes. Optionally a
 **recap** line (the winning team, the margin, the leading passer or rusher). Data: the
-final score; leaders would need the summary or box score (unverified).
+final score and, for the recap, the final event's `leaders` (the game's top passer and rusher, each tagged with its team: #420).
 
 ### `fb_standings`: the playoff picture
 
@@ -174,8 +174,13 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
   default, the four divisions each with `?level=3`. Each entry has `overall`, `playoffSeed`,
   `streak` and points for and against. Fetch hourly at most.
 - **The postseason** is `seasontype=3`: until the bracket is set its games read `TBD @ TBD`.
-- **Not yet checked:** leaders for a recap line (the scoreboard has per-event `leaders`), the real
-  postseason bracket once set, and what the scoreboard does in the gaps between playoff rounds.
+- **The recap's leaders** (checked in #420): each *final* event has the game's top passer, rusher and
+  receiver (one each, across both teams, with the team id, `shortName`, jersey and a ready
+  `displayValue`). A scheduled game's `leaders` are **season totals**, so read them only from a final.
+- **The calendar names the postseason rounds** (`Wild Card`, `Div Rd`, `Conf Champ`, `Super Bowl`) and the
+  off-season; postseason games read `TBD @ TBD` until set; an empty January day is a gap in a round,
+  not the end of the season.
+- **Not yet checked:** a game in progress's leaders (no game was live), and the real bracket once set.
 
 ## Decisions (owner, 2026-11-13)
 
@@ -184,7 +189,7 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
       admin page gets an NFL version of the Idle rotation card.
 - [x] **The final is held 60 minutes, with a recap line.** A setting (default 60 minutes, like the
       NHL's `final_hold_minutes`); the final screen adds a **recap**: the leading passer and rusher
-      (needs the per-event `leaders` field, still to be checked in `football_api.md`).
+      (the per-event `leaders`: see #420 in `football_api.md`).
 - [x] **Preseason and playoffs are games.** All three seasons get the same screens. The round is
       labelled: `PRESEASON WK 2`, `WILD CARD`, `DIVISIONAL`, `CONF CHAMP`, `SUPER BOWL`. A `TBD @ TBD`
       playoff game is skipped until its teams are known.
@@ -215,7 +220,7 @@ None left. The next step is the build, one story each (see the todo).
 ### Research
 - [x] Verify the schedule, standings and week-view endpoints; added to `football_api.md`.
 - [x] Capture the bye-week responses (fixtures in `tests/fixtures/football/`).
-- [ ] Check the per-event `leaders` for a recap line, and the playoff gaps (see above).
+- [x] Check the per-event `leaders` for a recap line, and the playoff gaps (#420; see above).
 
 ### Design
 - [x] Decide the main open questions (above); the three left are small.

@@ -419,3 +419,48 @@ fetched once an hour or less and cached; next season's opener is unknowable unti
 is published. Not checked: a recap's leaders (the scoreboard has `leaders` per event but it was
 not examined), the postseason's real bracket (it was all `TBD` today), and what the scoreboard
 returns during the playoffs' gaps.
+
+### Leaders and the playoffs (#420, checked 2026-11-13)
+
+Trimmed copies: `scoreboard_leaders_trimmed.json`, `scoreboard_postseason_w2.json`,
+`season_calendar.json` in `tests/fixtures/football/`.
+
+**Leaders (for the `fb_final` recap).** Each scoreboard event's `competitions[0].leaders` is a list of
+three categories, `passingYards`, `rushingYards` and `receivingYards` (`displayName` `Passing
+Leader` ...), each with **one** entry in `leaders`:
+`{displayValue, value, athlete: {fullName, shortName, jersey, position: {abbreviation}, team: {id}}, team: {id}}`.
+- It is **the game's leader across both teams**, not one per team (`competitors[].leaders` is empty):
+  the `team.id` says whose. So a recap can name the game's top passer and top rusher, each in its own
+  team's colour, but cannot give "my team's rusher" when the other team's rusher led the game.
+- `displayValue` is a ready string: `23/36, 293 YDS, 1 TD, 1 INT` (passing), `18 CAR, 78 YDS, 2 TD`
+  (rushing), `9 REC, 127 YDS, 1 TD` (receiving). `shortName` is `J.J. McCarthy` (a full first-initial
+  form, not `McCarthy`); `jersey` is a string.
+- **Only a finished game's leaders are the game's.** A scheduled game carries the same three categories
+  but as **season totals** (`2282 YDS, 18 TD, 11 INT`), so a screen must read them only when
+  `status.type.name == "STATUS_FINAL"`. A game in progress was not captured (no live game was on).
+
+**The season calendar has the playoffs and the off-season.** `leagues[0].calendar` lists four
+season types: `Preseason` (value 1, 4 entries, Aug 6 - Sep 6), `Regular Season` (2, 18 weeks),
+**`Postseason` (3, 4 rounds)** and **`Off Season` (4, no entries, Feb 16 - Aug 1)**. The postseason
+rounds, with the labels a screen can use (`alternateLabel`):
+
+| value | label | alternateLabel | window (2026-27) |
+|---|---|---|---|
+| 1 | Wild Card | Wild Card | Jan 13-19 |
+| 2 | Divisional Round | Div Rd | Jan 20-26 |
+| 3 | Conference Championship | Conf Champ | Jan 27-Feb 2 |
+| 4 | Super Bowl | Super Bowl | Feb 3-15 |
+
+(This corrects the earlier note that the off-season is only an empty response: the calendar names it.)
+
+**The postseason scoreboard.** `scoreboard?seasontype=3&week=N` answers for rounds 1-4 with
+`season: {type: 3}`, `week: {number: N}` and games named **`TBD @ TBD`** until the teams are known
+(round 1: 6 games on 2027-01-16; round 2: 4 on 01-23; round 3: 2 on 01-31; the Super Bowl one game on
+02-14, written **`TBD VS TBD`**: a neutral site reads `VS`, not `@`). Round 5 is an empty 200.
+**Days between games are empty and carry no `season` or `week`** (Jan 19, Jan 25, Feb 7 all returned
+`events: []`), even inside a round's window: the games are on one or two days. `seasontype=4` is not an
+off-season view: it returned the current regular-season week.
+
+**What this means.** A recap reads the three leaders of a final and colours each by `team.id`; round
+names come from the calendar; a `TBD` game is skipped until its teams are real; an empty day in
+January is a gap in a round, not the end of the season (the calendar says where in the year it is).
