@@ -107,6 +107,12 @@ unregistered falls back to a generic version. Add its demo steps to `football/de
 with `scripts/render-screens.py --sport nfl`, and retire its mockup (see `football_screen.md`,
 "Play scenes" and "Real renders").
 
+**Adding an NFL idle screen** (#423-#429): register it in `football/idle_screens.py` with
+`@idle_screen("fb_...")`, a `should_show(IdleContext)` that is false when its data is missing, and draw
+it in the app's `fb_*` dispatch. `NflMode._idle_kind` picks the screen (live game, countdown, final
+hold, the `[[football.rotation]]` list, the clock); the idle screens are 128px only. The rotation and
+its two timers are `[football]` settings with their own admin-page section, `football_rotation`.
+
 ## Commands
 
 ```bash

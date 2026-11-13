@@ -163,6 +163,12 @@ interface FootballConfig {
   also_follow: string[]
 }
 
+interface NflRotationConfig {
+  rotation: RotationRow[]
+  final_hold_minutes: number
+  countdown_minutes: number
+}
+
 interface NflTeamOption {
   abbrev: string
   name: string
@@ -304,6 +310,13 @@ type ServerMessage =
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
   | { type: 'config'; section: 'wifi'; data: WifiConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
+  | {
+      type: 'config'
+      section: 'football_rotation'
+      data: NflRotationConfig
+      defaults: RotationRow[]
+      screens: string[]
+    }
   | {
       type: 'config'
       section: 'holiday'
@@ -512,6 +525,14 @@ function App() {
   )
   const rotation = rotationState.value
 
+  const [nflRotationState, nflRotationSave] = useAutosave<NflRotationConfig>(
+    (v) => save('football_rotation', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const nflRotation = nflRotationState.value
+  const [nflRotationDefaults, setNflRotationDefaults] = useState<RotationRow[]>([])
+  const [nflRotationScreens, setNflRotationScreens] = useState<string[]>([])
+
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
     (v) => save('holiday', v),
     NOT_CONNECTED_ERROR,
@@ -620,6 +641,11 @@ function App() {
             else if (message.section === 'night_mode') nightModeSave.receiveConfig(message.data)
             else if (message.section === 'wifi') wifiSave.receiveConfig(message.data)
             else if (message.section === 'rotation') rotationSave.receiveConfig(message.data)
+            else if (message.section === 'football_rotation') {
+              nflRotationSave.receiveConfig(message.data)
+              setNflRotationDefaults(message.defaults)
+              setNflRotationScreens(message.screens)
+            }
             else if (message.section === 'holiday') {
               holidaySave.receiveConfig(message.data)
               setHolidayOptions(message.available)
@@ -651,6 +677,7 @@ function App() {
             if (message.section === 'audio') audioSave.receiveSaved()
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
             else if (message.section === 'football') footballSave.receiveSaved()
+            else if (message.section === 'football_rotation') nflRotationSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
             else if (message.section === 'night_mode') nightModeSave.receiveSaved()
@@ -721,6 +748,8 @@ function App() {
               scoreboardSave.receiveError(message.message)
             } else if (message.section === 'football') {
               footballSave.receiveError(message.message)
+            } else if (message.section === 'football_rotation') {
+              nflRotationSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -783,7 +812,16 @@ function App() {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       socketRef.current?.close()
     }
-  }, [audioSave, scoreboardSave, footballSave, nightModeSave, wifiSave, rotationSave, holidaySave])
+  }, [
+    audioSave,
+    scoreboardSave,
+    footballSave,
+    nflRotationSave,
+    nightModeSave,
+    wifiSave,
+    rotationSave,
+    holidaySave,
+  ])
 
   // Logs are opt-in (#197): subscribe only while the tab is showing, and
   // again after a reconnect (`connection` flips back to 'open').
@@ -923,6 +961,26 @@ function App() {
     const next = [...rotation]
     ;[next[index], next[target]] = [next[target], next[index]]
     rotationSave.edit(next)
+  }
+
+  function setNflRows(rows: RotationRow[]) {
+    if (!nflRotation) return
+    nflRotationSave.edit({ ...nflRotation, rotation: rows })
+  }
+
+  function addNflRow() {
+    if (!nflRotation || nflRotation.rotation.length >= ROTATION_MAX_ROWS) return
+    const screen = nflRotationScreens[0] ?? 'fb_preview'
+    setNflRows([...nflRotation.rotation, { screen, seconds: 8 }])
+  }
+
+  function moveNflRow(index: number, delta: -1 | 1) {
+    if (!nflRotation) return
+    const target = index + delta
+    const rows = [...nflRotation.rotation]
+    if (target < 0 || target >= rows.length) return
+    ;[rows[index], rows[target]] = [rows[target], rows[index]]
+    setNflRows(rows)
   }
 
   function checkForUpdate() {
@@ -1545,6 +1603,153 @@ function App() {
       </div>
       <div className="col-lg-6">
 
+      {scoreboard?.sport === 'nfl' && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">NFL idle rotation</h2>
+            {nflRotation ? (
+              <form onSubmit={flushOnSubmit(nflRotationSave)}>
+                <p className="text-body-secondary small">
+                  Screens shown between your favourite team&apos;s games, in this order (128px panels
+                  only). The countdown, the final and the bye-week screen join by themselves when they
+                  apply. Up to {ROTATION_MAX_ROWS} rows. Empty uses the built-in default:{' '}
+                  {nflRotationDefaults.map((d) => `${d.screen} ${d.seconds}s`).join(', ')}.
+                </p>
+                {nflRotation.rotation.map((row, i) => (
+                  <div className="d-flex align-items-center gap-2 mb-2" key={i}>
+                    <select
+                      className="form-select"
+                      style={{ width: 'auto' }}
+                      aria-label={`NFL rotation screen ${i + 1}`}
+                      value={row.screen}
+                      onChange={(e) =>
+                        setNflRows(
+                          nflRotation.rotation.map((r, j) =>
+                            j === i ? { ...row, screen: e.target.value } : r,
+                          ),
+                        )
+                      }
+                    >
+                      {nflRotationScreens.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="form-control"
+                      style={{ width: '6rem' }}
+                      type="number"
+                      step="any"
+                      min="0"
+                      aria-label={`NFL rotation seconds ${i + 1}`}
+                      value={row.seconds}
+                      onChange={(e) =>
+                        numberEdit(
+                          nflRotationSave,
+                          e,
+                          {
+                            ...nflRotation,
+                            rotation: nflRotation.rotation.map((r, j) =>
+                              j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                            ),
+                          },
+                          `nfl-rotation-seconds-${i}`,
+                        )
+                      }
+                      onBlur={nflRotationSave.flush}
+                    />
+                    <span className="text-body-secondary small">seconds</span>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => moveNflRow(i, -1)}
+                      disabled={i === 0}
+                      aria-label="Move NFL row up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => moveNflRow(i, 1)}
+                      disabled={i === nflRotation.rotation.length - 1}
+                      aria-label="Move NFL row down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() => setNflRows(nflRotation.rotation.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <div className="d-flex align-items-center gap-3 mt-3 mb-3">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={addNflRow}
+                    disabled={nflRotation.rotation.length >= ROTATION_MAX_ROWS}
+                  >
+                    Add row
+                  </button>
+                </div>
+                <div className="row g-3">
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="nfl-final-hold">
+                      Hold the final for (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="nfl-final-hold"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={nflRotation.final_hold_minutes}
+                      onChange={(e) =>
+                        numberEdit(nflRotationSave, e, {
+                          ...nflRotation,
+                          final_hold_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={nflRotationSave.flush}
+                    />
+                  </div>
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="nfl-countdown-window">
+                      Countdown starts before kickoff (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="nfl-countdown-window"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={nflRotation.countdown_minutes}
+                      onChange={(e) =>
+                        numberEdit(nflRotationSave, e, {
+                          ...nflRotation,
+                          countdown_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={nflRotationSave.flush}
+                    />
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <p className="text-body-secondary mb-0">waiting for server...</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {scoreboard?.sport !== 'nfl' && (
       <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Idle rotation</h2>
@@ -1632,6 +1837,7 @@ function App() {
           )}
         </div>
       </div>
+      )}
 
       <div className="card mb-4">
         <div className="card-body">
@@ -2384,6 +2590,7 @@ function App() {
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
           { label: 'NFL teams', state: footballState, onUndo: footballSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
+          { label: 'NFL idle rotation', state: nflRotationState, onUndo: nflRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
           { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },
           { label: 'Audio', state: audioState, onUndo: audioSave.undo },

@@ -2231,7 +2231,8 @@ def test_switching_to_nfl_shows_connecting_then_no_games_and_back(day):
     assert app.select_scene().kind == "fb_connecting"
     # The feed lands on the worker's own thread in real life; here one fetch is run by hand.
     app._nfl.worker.poll_once()
-    assert app.select_scene().kind == "fb_no_games"  # the fake feed answers with an empty slate
+    # the fake feed answers with an empty slate: the default idle rotation's clock (#422)
+    assert app.select_scene().kind == "clock"
     app.draw()  # draws through the real renderer without error
 
     switch_sport(app, "nhl")

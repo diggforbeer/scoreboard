@@ -246,12 +246,13 @@ None left. The next step is the build, one story each (see the todo).
 - [x] Decide the main open questions (above); the three left are small.
 - [x] First-draft mockups for each screen (128px only), `scripts/football-idle-mockups.py`; the owner's review is next. The real ones to be made the way
       `football_screen.md`'s are (`scripts/render-screens.py --sport nfl` once built).
-- [ ] The default idle rotation and its settings; the admin page's rotation card for NFL mode.
+- [x] The default idle rotation and its settings; the admin page's rotation card for NFL mode (#422).
 
 ### Build (after the design is agreed, one story each)
 - [x] The schedule, standings and week fetch and cache (#421, `football/idle.py`).
 - [ ] `fb_countdown`, `fb_preview`, `fb_bye`
 - [ ] `fb_final` (the hold, and the recap if kept)
 - [ ] `fb_standings`, `fb_week`, `fb_schedule`
-- [ ] The NFL idle rotation and the scene selection above, with the clock as the fallback
+- [x] The NFL idle rotation and the scene selection above, with the clock as the fallback (#422;
+      `NflMode._idle_kind`, the registry in `football/idle_screens.py`).
 - [ ] Demo steps and `scripts/render-screens.py --sport nfl` images for each
