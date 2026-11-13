@@ -66,8 +66,8 @@ def test_a_run_lasts_longer_the_further_it_goes_within_two_to_four_seconds(yards
 def test_only_runs_are_paced_by_yardage_and_everything_else_keeps_the_default():
     assert pacing.animation_seconds(HOME_RUN, 3.0) == pytest.approx(2.9)
     assert pacing.animation_seconds(make_play(1, "rush_td_pat", off="NYG"), 3.0) >= 2.0
-    punt = make_play(1, "punt_return", off="WSH")
-    assert pacing.animation_seconds(punt, 3.0) == 3.0
+    sack = make_play(1, "sack", off="WSH")
+    assert pacing.animation_seconds(sack, 3.0) == 3.0
 
 
 def test_the_director_uses_the_runs_own_length():
