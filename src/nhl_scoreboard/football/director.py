@@ -284,7 +284,12 @@ class Director:
             # its own play stage (``fb_fg_miss``, 3s): the kick, the miss and its words in one
             # screen, so there is no separate card after it (#393).
             return []
-        if isinstance(event, Touchdown | GenericScore | FieldGoal):
+        if isinstance(event, GenericScore):
+            # A score nothing else names has one plain screen and no detail (#395).
+            if event.scope == Scope.FULL:
+                return [stage(EVENT, timings.score, event)]
+            return [stage(EVENT, timings.quick, event)] if event.scope == Scope.QUICK else []
+        if isinstance(event, Touchdown | FieldGoal):
             if event.scope == Scope.FULL:
                 return [
                     stage(EVENT, timings.score, event),

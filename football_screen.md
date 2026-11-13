@@ -871,6 +871,19 @@ screen only (the detector emits no turnover for it).
    and gets the amber `fb_turnover` with the title `ON DOWNS`.
 3. An unknown `type` never throws: it falls back to the play-text layout.
 
+**Built (story #395, `display/football_score.py`).** `fb_score` is an
+`@event_screen(GenericScore, EVENT)`: the screen for a safety, a two-point conversion on its
+own, a return score of a kind not yet seen, or any scoring play with an unrecognised type
+(the detector makes a `GenericScore` from the score delta, so the favourite is never left
+uncelebrated). It shows the **points** (`SAFETY`, `2-POINT CONVERSION` when the text says so,
+else `N POINTS`), the **scoring team's short name**, the **new score with the scoring team
+first**, and **the first sentence of the play text** (the formation tag taken off the front),
+in that order, in the team's colour. It is deliberately **plainer than the touchdown**: the
+favourite's opens with a short white flash and fades in (6s); a followed team's is a static
+card (4s); there is no strobe, no dropping letters and **no detail screen after it** (the
+director gives a generic score only its event stage). A 64px panel uses smaller type and drops
+the team-name line. The sound, if any, is the sounds story's.
+
 #### Order and timing for one scoring play
 
 | Step | Screen | Length |
@@ -1168,6 +1181,13 @@ test does the same. Nothing here touches `docs/screens/`.
 | Green: the favourite picked it off (the arrow points left). | A fumble lost. |
 | ![On downs](docs/football/turnover_on_downs.png) | |
 | Amber: neither team is the favourite; a turnover on downs. | |
+
+**The generic score** (#395; a safety for the favourite, and a followed team's two-point conversion):
+
+| | |
+|---|---|
+| ![Safety](docs/football/fb_score.png) | ![Quick](docs/football/fb_score_quick.png) |
+| The points, the team, the score, the first line of the play. | A followed team's: the same card, static. |
 
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
@@ -1476,7 +1496,7 @@ added later.
 - [x] `fb_touchdown` (#390) and `fb_fieldgoal` (#392) celebrations
 - [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
 - [x] `fb_fg_miss` (#393)
-- [~] `fb_turnover` done, including the on-downs title (#394); the generic `fb_score` fallback still to do
+- [x] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks (#394, #395)
 - [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
       support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
 - [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)
