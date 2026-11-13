@@ -166,7 +166,28 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     loss = _play(
         "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
     )
-    punt = _play("Punt", "T.Way punts 51 yards to NYG 24, fair catch by K.Toney.", 24, 76, AWAY)
+    sack = _play("Sack", "D.Jones sacked at NYG 31 for -6 yards (L.London).", 37, 31, HOME, -6)
+    fair_catch = _play(
+        "Punt", "J.Bailey punts 53 yards to WSH 12, Center-L.McCullough, fair catch by D.Meyers.",
+        35, 88, HOME, 0, end_team=AWAY,
+    )  # fmt: skip
+    punt_return = _play(
+        "Punt",
+        "R.Rehkow punts 51 yards to NYG 27, Center-W.Wagner. O.Zaccheaus to NYG 24 for -3 yards.",
+        78, 24, AWAY, -3, end_team=HOME,
+    )  # fmt: skip
+    out_of_bounds = _play(
+        "Punt", "J.Bailey punts 37 yards to WSH 17, Center-L.McCullough, out of bounds.",
+        46, 83, HOME, 0, end_team=AWAY,
+    )  # fmt: skip
+    punt_touchback = _play(
+        "Punt", "T.Way punts 53 yards to end zone, Center-T.Ott, Touchback.",
+        47, 20, AWAY, 0, end_team=HOME,
+    )  # fmt: skip
+    downed = _play(
+        "Punt", "E.Evans punts 58 yards to WSH 18, Center-J.McQuaide, downed by NYG-J.Whittington.",
+        24, 82, HOME, 0, end_team=AWAY,
+    )  # fmt: skip
     td = _play(
         "Rushing Touchdown",
         "D.Singletary rush left end for 3 yards, TOUCHDOWN. G.Gano extra point is GOOD.",
@@ -196,6 +217,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     )  # fmt: skip
 
     carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
+    zaccheaus = Person("returner", 5, "O. Zaccheaus", "5", "WR", True)
     meyers = Person("returner", 4, "D. Meyers", "11", "WR", True)
     robinson = Person("rusher", 9, "B. Robinson", "9", "RB", True)
     qb = Person("passer", 9, "M. Penix", "9", "QB", True)
@@ -236,7 +258,13 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(pass_play, 2.2, qb, dotson), name="fb_pass_catch"),
         DemoStep(run(pass_play, 9.0, qb, dotson), name="fb_pass_settled"),
         DemoStep(run(deep, 1.0, jones, wr), name="fb_pass_deep"),
-        DemoStep(scene("fb_play", "play", punt), name="fb_play_punt"),
+        DemoStep(scene("fb_play", "play", sack), name="fb_play_generic"),
+        DemoStep(run(fair_catch, 1.5, meyers), name="punt_air"),
+        DemoStep(run(fair_catch, 4.0, meyers), name="punt_fair_catch"),
+        DemoStep(run(punt_return, 3.8, zaccheaus), name="punt_return"),
+        DemoStep(run(out_of_bounds, 3.4, None), name="punt_out_of_bounds"),
+        DemoStep(run(punt_touchback, 3.1, None), name="punt_touchback"),
+        DemoStep(run(downed, 3.2, None), name="punt_downed"),
         DemoStep(scene("fb_playtext", "playtext", rush), name="fb_playtext"),
         DemoStep(scene("fb_event", "event", td, touchdown), name="fb_event_touchdown"),
         DemoStep(scene("fb_event", "detail", td, touchdown), name="fb_event_detail"),

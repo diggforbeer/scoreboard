@@ -19,6 +19,7 @@ deliberately plain: they are the floor every designed screen replaces.
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -66,8 +67,26 @@ def event_screen(event: type, stage: str = EVENT) -> Callable[[Drawer], Drawer]:
     return register
 
 
+#: The modules that register a designed screen on import. Loaded on first draw rather than at the
+#: bottom of this module, so importing any one of them first cannot hit a half-built import cycle
+#: (each imports this module for ``play_screen``, and some import each other).
+SCREEN_MODULES = ("football_run", "football_pass", "football_kickoff", "football_punt")
+_loaded = False
+
+
+def load_screens() -> None:
+    """Import every screen module so its ``@play_screen`` / ``@event_screen`` entries exist."""
+    global _loaded
+    if _loaded:
+        return
+    _loaded = True
+    for name in SCREEN_MODULES:
+        importlib.import_module(f".{name}", __package__)
+
+
 def draw(r: Renderer, canvas: Any, scene: Scene) -> None:
     """Draw one of the three play scenes."""
+    load_screens()
     if scene.kind == "fb_play":
         PLAY_SCREENS.get(scene.fb_play.kind, draw_generic_play)(r, canvas, scene)
     elif scene.kind == "fb_playtext":
@@ -274,7 +293,3 @@ def draw_generic_event(r: Renderer, canvas: Any, scene: Scene) -> None:
     else:
         line = _score_line(scene)
     r.text_center(canvas, r.fonts.tiny, r.width // 2, 22, WHITE, r_fit(line, width, r.fonts.tiny))
-
-
-# Each designed screen lives in its own module and registers itself on import.
-from . import football_kickoff, football_pass, football_run  # noqa: E402,F401

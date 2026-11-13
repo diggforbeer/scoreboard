@@ -60,3 +60,11 @@ def kickoff_seconds(play: Play) -> float:
     """5s for a return; 4s for a touchback or an onside kick."""
     short = play.info.touchback or play.info.onside
     return SHORT_KICKOFF_SECONDS if short else KICKOFF_SECONDS
+
+
+@pacer(PlayKind.PUNT)
+def punt_seconds(play: Play) -> float:
+    """5s for a fair catch or a return; 4s for an out-of-bounds, downed or touchback punt."""
+    info = play.info
+    short = info.touchback or info.out_of_bounds or info.downed
+    return SHORT_KICKOFF_SECONDS if short else KICKOFF_SECONDS

@@ -374,6 +374,15 @@ Per-play notes, from real text:
   for a loss) or `TOUCHBACK`, `ONSIDE KICK 19 YD`. 5s with a return, 4s for a touchback or onside
   kick (`football/pacing.py`). A penalty changes where the ball finally sits, not the printed
   return: it runs the printed return and **finishes at `end.yardLine`**.
+- **Built (story #383, `display/football_punt.py`).** A punt hangs longer than a kickoff (a
+  higher arc, kept on the field) from the punter's spot to the printed distance in the punting
+  team's direction, then the ending the text gives: **fair catch** (a yellow flag marks the
+  catch, the catcher's number beside it), **returned** (the returner's number runs it back, a
+  negative return is red), **out of bounds** (the ball skips three yards along the ground to
+  the near sideline and stops), **touchback** (down in the end zone, the ball steps out to the
+  spot) and **downed** (stays where it landed). Labels `PUNT 53 YD`, then `FAIR CATCH`,
+  `RETURN -3`, `OUT OF BOUNDS`, `TOUCHBACK` or `DOWNED`. 5s for a fair catch or a return, 4s for
+  the rest. Muffed or blocked punts are turnovers and use the generic animation until seen.
 - **Penalties:** type `Penalty` is used **even when a play happened**. One sample is
   a QB scramble that gained 6 yards and was then wiped out by a hold
   (`scrambles up the middle to CIN 1 for 6 yards ... PENALTY on ATL-M.Bergeron,
@@ -881,12 +890,23 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Touchback](docs/football/kickoff_touchback.png) | ![Onside](docs/football/kickoff_onside.png) |
 | Down in the end zone, the ball steps out to the spot. | An onside kick: a short, low line drive. |
 
+**Punts** (#383; in the air, then each ending):
+
+| | |
+|---|---|
+| ![Punt in the air](docs/football/punt_air.png) | ![Fair catch](docs/football/punt_fair_catch.png) |
+| The punt on its long, high arc. | Fair catch: a flag marks it, the catcher's number beside it. |
+| ![Return](docs/football/punt_return.png) | ![Out of bounds](docs/football/punt_out_of_bounds.png) |
+| The returner's number runs it back (here for a loss, red). | The ball skips to the sideline and stops. |
+| ![Touchback](docs/football/punt_touchback.png) | ![Downed](docs/football/punt_downed.png) |
+| Down in the end zone, the ball steps out to the spot. | Downed by the coverage where it landed. |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
 |---|---|
-| ![Generic punt](docs/football/fb_play_punt.png) | |
-| `fb_play` for a play with no screen of its own yet (a punt): the ball slides from the start spot to the end spot, the play's name over it. | |
+| ![Generic play](docs/football/fb_play_generic.png) | |
+| `fb_play` for a play with no screen of its own yet (a sack): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
 | ![Event detail](docs/football/fb_event_detail.png) | ![Missed field goal card](docs/football/fb_event_fg_miss.png) |
@@ -909,7 +929,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air` and `kickoff_return`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch` and `punt_return`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1181,7 +1201,7 @@ added later.
 - [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
       event screens, registries (#377)
 - [x] `fb_run` (#380) and `fb_pass` (#381) animations
-- [~] Kickoff animation done (#382); punt animations still to do
+- [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
 - [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;

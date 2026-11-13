@@ -309,28 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def punt_fair_catch() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(AWAY)
-    arc(p, f, 46, 12, 20, 13, upto=1.0)
-    f.ball(12, 21)
-    flag(p, round(f.x(12)) + 2, 21)
-    band(p, "Q2 07:40", "PUNT 53 YD  FAIR CATCH", WHITE, AMBER)
-    return p
-
-
-def punt_return() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    trail(p, f, 24, 12, 20)
-    f.ball(12)
-    f.number(12, 17, "7")
-    band(p, "Q3 11:02", "PUNT 51 YD  RETURN -3", WHITE, AMBER)
-    return p
-
-
 def incomplete() -> Panel:
     p = Panel()
     f = Field(p)
@@ -550,8 +528,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "punt_fair_catch": punt_fair_catch,
-    "punt_return": punt_return,
     "incomplete": incomplete,
     "sack": sack,
     "penalty": penalty,
