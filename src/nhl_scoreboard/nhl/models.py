@@ -5,7 +5,7 @@ from __future__ import annotations
 import itertools
 import logging
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -188,6 +188,117 @@ def goal_events_from_landing(raw: dict[str, Any] | None) -> tuple[GoalEvent, ...
             except (AttributeError, KeyError, TypeError, ValueError):
                 continue
     return tuple(events)
+
+
+@dataclass(frozen=True, slots=True)
+class Penalty:
+    """One penalty from ``summary.penalties`` (#340), possibly several merged.
+
+    A fight's four entries (two fighting majors, an instigator minor and a
+    misconduct) arrive at one timestamp and collapse into one ``fighting``
+    penalty; a double minor's two identical entries into one of 4 minutes.
+    ``key`` is stable across polls, so a later fetch never re-announces it.
+    """
+
+    key: str
+    team_abbrev: str
+    #: Upper-case surname, or ``""`` for a bench minor or a fight (no one name).
+    surname: str
+    sweater_number: int | None
+    #: The NHL's ``descKey`` (``slashing``, ``too-many-men-on-the-ice``).
+    desc_key: str
+    #: ``minor``, ``major`` or ``misconduct``.
+    severity: str
+    minutes: int
+    period: int
+    time_in_period: str
+
+    @property
+    def is_fight(self) -> bool:
+        return self.desc_key == "fighting"
+
+    @property
+    def is_bench(self) -> bool:
+        return not self.surname and not self.is_fight
+
+
+def _name_part(raw: Any) -> str:
+    if isinstance(raw, dict):
+        raw = raw.get("default")
+    return str(raw or "").strip()
+
+
+def _penalty_severity(kind: Any) -> str:
+    return {"MAJ": "major", "MIS": "misconduct"}.get(str(kind or "").upper(), "minor")
+
+
+def penalties_from_landing(raw: dict[str, Any] | None) -> tuple[Penalty, ...]:
+    """Every penalty in ``summary.penalties``, in the order they were called.
+
+    Fights are collapsed to one entry and a repeated (time, player, call) is
+    summed into one; a malformed entry is skipped rather than losing the rest.
+    """
+    if not raw:
+        return ()
+    entries: list[dict[str, Any]] = []
+    for period in (raw.get("summary") or {}).get("penalties") or []:
+        number = int((period.get("periodDescriptor") or {}).get("number") or 0)
+        for item in period.get("penalties") or []:
+            if isinstance(item, dict):
+                entries.append({**item, "_period": number})
+
+    fights = {
+        (e["_period"], e.get("timeInPeriod"))
+        for e in entries
+        if str(e.get("descKey") or "") == "fighting"
+    }
+    merged: dict[str, Penalty] = {}
+    for entry in entries:
+        try:
+            when = (entry["_period"], entry.get("timeInPeriod"))
+            penalty = _one_penalty(entry, fight=when in fights)
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        earlier = merged.get(penalty.key)
+        if earlier is None:
+            merged[penalty.key] = penalty
+        elif penalty.severity == earlier.severity and not penalty.is_fight:
+            merged[penalty.key] = replace(earlier, minutes=earlier.minutes + penalty.minutes)
+    return tuple(merged.values())
+
+
+def _one_penalty(entry: dict[str, Any], *, fight: bool) -> Penalty:
+    period = int(entry["_period"])
+    when = str(entry.get("timeInPeriod") or "")
+    team = _default_str(entry.get("teamAbbrev")).upper()
+    if not team or not when:
+        raise ValueError("penalty without a team or time")
+    player = entry.get("committedByPlayer")
+    surname, number = "", None
+    if isinstance(player, dict):
+        surname = _name_part(player.get("lastName")).upper()
+        if player.get("sweaterNumber") not in (None, ""):
+            number = int(player["sweaterNumber"])
+    elif isinstance(player, str):
+        surname = player.strip().split(" ")[-1].upper()
+    desc = str(entry.get("descKey") or "unknown").lower()
+    if fight:
+        # One screen for the whole brawl: no single name, five minutes.
+        return Penalty(
+            f"{period}|{when}|fighting", team, "", None, "fighting", "major", 5, period, when
+        )
+    minutes = int(entry.get("duration") or 2)
+    return Penalty(
+        f"{period}|{when}|{team}|{surname}|{desc}",
+        team,
+        surname,
+        number,
+        desc,
+        _penalty_severity(entry.get("type")),
+        minutes,
+        period,
+        when,
+    )
 
 
 @dataclass(frozen=True, slots=True)
