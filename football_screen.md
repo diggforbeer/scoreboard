@@ -581,8 +581,11 @@ can be tightened from real games.
 - [x] Every play gets an animation (decided): kickoff, punt, incompletion, sack,
       penalty, timeout, field goal and the stoppages as well as runs and passes.
       See "Every other play".
-- [ ] Animation pace: is a hard cap on how long a board can lag behind the live game
-      (catch-up by skipping) acceptable, or must every play be shown in full?
+- [~] Animation pace: **deferred by the owner**. Is a cap on how far a board can lag
+      behind the live game (catch-up by skipping) acceptable, or must every play be
+      shown in full? Not decided: build it, run it on a **Pi 4**, and see how slow or
+      laggy it really is. The catch-up rules under "Every other play" stay as the
+      provisional default until there are measurements.
 - [x] Teams (decided): in NFL mode the admin page lets the owner set a **favourite
       team and followed teams, just like NHL**. See "Choosing the sport".
 - [ ] Coin toss: the feed only says who receives, not who won or deferred. Is
@@ -621,6 +624,11 @@ can be tightened from real games.
 - [ ] Capture a real reviewed or reversed scoring play, and what the feed does with it
       (score drop? play removed? type changed?), to confirm the three detection rules
 - [ ] Decide the polling interval and how to stay under ESPN's tolerance
+- [ ] Measure on a **Pi 4** with the real panel: frame rate during the heaviest
+      animations (kickoff and punt arcs, the touchdown strobe, the coin flip), CPU use,
+      and how far behind the live game the queue falls over a full game. This answers
+      the deferred animation-pace question; log queue depth and lag per play so it can
+      be read from a real game
 
 ### Documentation
 
