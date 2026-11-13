@@ -309,17 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def score_detail() -> Panel:
-    p = Panel()
-    p.logo(10, 16, HOME, 8)
-    p.logo(p.w - 11, 16, AWAY, 8, 0.5)
-    p.center("5x7", 8, WHITE, "14 I.LIKELY", 22, p.w - 22)
-    p.center("4x6", 16, TEAMS[HOME], "9 YD PASS FROM", 22, p.w - 22)
-    p.center("4x6", 22, TEAMS[HOME], "J.McCARTHY", 22, p.w - 22)
-    p.center("4x6", 30, AMBER, "PAT GOOD  NYG 7 WSH 0", 22, p.w - 22)
-    return p
-
-
 def fieldgoal() -> Panel:
     p = Panel()
     f = Field(p)
@@ -415,7 +404,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "score_detail": score_detail,
     "fieldgoal": fieldgoal,
     "fieldgoal_opponent": fieldgoal_opponent,
     "fg_miss": fg_miss,

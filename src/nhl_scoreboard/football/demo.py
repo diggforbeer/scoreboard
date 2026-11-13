@@ -249,6 +249,19 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         return cls(play=play, team=team, **{"scope": Scope.FULL, **base, **kw})
 
     touchdown = event(Touchdown, td, via="run", points=7, extra_point="good", home_score=24)
+    pass_td = _play(
+        "Passing Touchdown",
+        "(Shotgun) M.Penix pass short right to C.Woerner for 1 yard, TOUCHDOWN. N.Folk extra point "
+        "is GOOD.",
+        99, 100, HOME, 1, (10, 24), True,
+    )  # fmt: skip
+    pass_touchdown = event(
+        Touchdown, pass_td, via="pass", points=7, extra_point="good", home_score=24
+    )
+    fg_play = _play(
+        "Field Goal Good", "N.Folk 31 yard field goal is GOOD.", 69, 69, HOME, 31, (10, 20), True
+    )
+    field_goal = event(FieldGoal, fg_play, made=True, yards=31, points=3, home_score=20)
     quick_td = event(
         Touchdown, td, via="run", points=7, extra_point="good", home_score=24, scope=Scope.QUICK
     )
@@ -262,6 +275,9 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     )  # fmt: skip
 
     carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
+    woerner = Person("scorer", 40, "C. Woerner", "14", "TE", True)
+    penix = Person("passer", 41, "M. Penix", "9", "QB", True)
+    folk = Person("kicker", 42, "N. Folk", "6", "K", True)
     zaccheaus = Person("returner", 5, "O. Zaccheaus", "5", "WR", True)
     meyers = Person("returner", 4, "D. Meyers", "11", "WR", True)
     london = Person("sackedBy", 30, "L. London", "91", "DE", True)
@@ -348,7 +364,20 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(
             scene("fb_event", "event", td, quick_td, at=2.0, seconds=4.0), name="touchdown_quick"
         ),
-        DemoStep(scene("fb_event", "detail", td, touchdown), name="fb_event_detail"),
+        DemoStep(
+            scene(
+                "fb_event", "detail", pass_td, pass_touchdown, seconds=8.0, people=(woerner, penix)
+            ),
+            name="score_detail",
+        ),
+        DemoStep(
+            scene("fb_event", "detail", td, touchdown, seconds=8.0, people=(carrier,)),
+            name="score_detail_run",
+        ),
+        DemoStep(
+            scene("fb_event", "detail", fg_play, field_goal, seconds=8.0, people=(folk,)),
+            name="score_detail_fieldgoal",
+        ),
         DemoStep(scene("fb_event", "event", kick, miss), name="fb_event_fg_miss"),
         DemoStep(scene("fb_event", "event", pick, turnover), name="fb_event_turnover"),
         DemoStep(scene("fb_event", "event", rush, toss, at=1.1, seconds=6.0), name="cointoss_flip"),
