@@ -27,6 +27,7 @@ from ..nhl.models import (
     TeamLeaders,
 )
 from . import goal_light
+from . import penalty as penalty_screen
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary
 from .teams import team_color, team_name, team_secondary_color
@@ -472,6 +473,10 @@ class Renderer:
         canvas.Clear()
         matchup = f"{game.away.abbrev} {game.away.score}-{game.home.score} {game.home.abbrev}"
         self._draw_goal_lines(canvas, scorer, 0, self.width, matchup)
+
+    def draw_penalty(self, canvas: Any, penalty: Any, age: float) -> None:
+        """The penalty announcement (#340): see ``display/penalty.py``."""
+        penalty_screen.draw(self, canvas, penalty, age)
 
     def _draw_goal_lines(self, canvas: Any, scorer: str, left: int, right: int, score: str) -> None:
         centre = (left + right) // 2

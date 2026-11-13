@@ -38,6 +38,7 @@ from .config import (
 )
 from .delay import DelayQueue
 from .display import goal_light
+from .display import penalty as penalty_screen
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
@@ -60,6 +61,7 @@ from .nhl.models import (
     Game,
     GoalEvent,
     MeetingResult,
+    Penalty,
     PlayerSeasonDetail,
     SeasonSeriesRecord,
     Shootout,
@@ -202,7 +204,7 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
+    ``goal_detail``, ``penalty``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
     ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
     ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
@@ -227,6 +229,8 @@ class Scene:
     #: Set only for ``goal`` -- the scoring team's abbreviation, for the
     #: screen's colour and name (#265).
     goal_team: str = ""
+    #: Set only for ``penalty`` (#340) -- the call being announced.
+    penalty: Penalty | None = None
     #: Set only for ``three_stars`` -- the NHL's three stars of a finished
     #: favourite game, ranked, per-game stats (#156).
     stars: tuple[Star, ...] | None = None
@@ -432,6 +436,20 @@ class ScoreboardApp:
         #: is its first BUILD_SECONDS, which a live-view snapshot waits out.
         self._goal_animating = False
         self._goal_building = False
+        #: The penalty screen is on (fast loop); _penalty_building is its
+        #: entrance, which a live-view snapshot waits out (#340).
+        self._penalty_animating = False
+        self._penalty_building = False
+        #: Demo only: when the current step's penalty screen "started".
+        self._demo_penalty_started: float | None = None
+        #: game id -> (fetched at), for the favourite's live games' penalty polls.
+        self._penalty_fetched: dict[int, float] = {}
+        #: game id -> keys of penalties already seen. Absent until the first
+        #: fetch, which is a baseline that never fires (a restart mid-game
+        #: doesn't replay) -- same precedent as goal detection.
+        self._seen_penalties: dict[int, set[str]] = {}
+        #: (game id, monotonic time, penalty) of the screen being shown.
+        self._penalty: tuple[int, float, Penalty] | None = None
         #: game id -> when it ended (wall clock), for final_hold_minutes. Exact
         #: if we watched it finish; estimated from the start time otherwise.
         self.ended_at: dict[int, datetime] = {}
@@ -576,6 +594,7 @@ class ScoreboardApp:
             self.refresh_situations()
             self.refresh_shootouts()
             self.refresh_goal_details()
+            self.refresh_penalties()
             self.refresh_three_stars()
             self._sync_setup_server()
             self._track_address()
@@ -592,6 +611,7 @@ class ScoreboardApp:
             or self._shootout_animating
             or self._scroll_animating
             or self._goal_animating
+            or self._penalty_animating
         )
         return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
@@ -623,10 +643,16 @@ class ScoreboardApp:
                 self._start_demo_holiday(step)
                 self._start_demo_shootout(step)
                 self._start_demo_goal(step)
+                self._start_demo_penalty(step)
                 if step.scroll_seconds:
                     self._play_scrolling_demo_step(step.scene, step.scroll_seconds)
                     continue
-                if self._demo_holiday is not None or step.animate_shootout or step.animate_goal:
+                if (
+                    self._demo_holiday is not None
+                    or step.animate_shootout
+                    or step.animate_goal
+                    or step.animate_penalty
+                ):
                     self._play_animated_demo_step(step.scene)
                     continue
                 self.draw_scene(step.scene)
@@ -654,6 +680,22 @@ class ScoreboardApp:
     def _start_demo_goal(self, step: DemoStep) -> None:
         """Start a step's goal light as the step starts."""
         self._demo_goal_started = self.monotonic() if step.animate_goal else None
+
+    def _start_demo_penalty(self, step: DemoStep) -> None:
+        """Start a step's penalty screen as the step starts."""
+        self._demo_penalty_started = self.monotonic() if step.animate_penalty else None
+
+    def _penalty_age(self, scene: Scene) -> float | None:
+        """Seconds into the penalty screen, or ``None`` for any other scene."""
+        if scene.kind != "penalty":
+            return None
+        if self._demo_penalty_started is not None:
+            return self.monotonic() - self._demo_penalty_started
+        if self._penalty is not None and scene.game is not None:
+            game_id, started, _penalty = self._penalty
+            if game_id == scene.game.id:
+                return max(0.0, self.monotonic() - started)
+        return 0.0
 
     def _goal_age(self, scene: Scene) -> float | None:
         """Seconds into the favourite's goal light, or ``None`` for the quick
@@ -831,6 +873,12 @@ class ScoreboardApp:
         for game_id in list(self._three_stars_pending):
             if game_id not in current_ids:
                 del self._three_stars_pending[game_id]
+        for game_id in list(self._seen_penalties):
+            if game_id not in current_ids:
+                del self._seen_penalties[game_id]
+        for game_id in list(self._penalty_fetched):
+            if game_id not in current_ids:
+                del self._penalty_fetched[game_id]
         self._three_stars_shown &= current_ids
         self._blowout_shown &= current_ids
 
@@ -970,6 +1018,8 @@ class ScoreboardApp:
             # Forget both, and the next poll re-baselines without firing.
             self._goal_events.clear()
             self._shown_goal_events.clear()
+            self._seen_penalties.clear()
+            self._penalty_fetched.clear()
 
         if audio_changed:
             # volume is carried on the rebuilt object but deliberately not
@@ -1327,6 +1377,66 @@ class ScoreboardApp:
         return dataclasses.replace(
             event, scorer_sweater_number=detail.sweater_number, scorer_points=detail.points
         )
+
+    # -- penalties (#340) ---------------------------------------------------
+
+    def refresh_penalties(self) -> None:
+        """Poll the favourite's live game for new penalties, for either team.
+
+        Same landing request and ``live_poll_seconds`` cadence as the scorer
+        poll (no new endpoint), skipped in intermission and the shootout.
+        Scoped to the favourite's own game only; an opponent's penalty is
+        news too, so both teams count there.
+        """
+        favourite = self.settings.scoreboard.favourite_team
+        if not favourite:
+            return
+        now = self.monotonic()
+        interval = self.settings.scoreboard.live_poll_seconds
+        for game in self._api_games():
+            if not game.is_live or not game.involves(favourite):
+                continue
+            fetched = self._penalty_fetched.get(game.id)
+            if fetched is not None and now - fetched < interval:
+                continue
+            self._penalty_fetched[game.id] = now
+            if game.in_intermission or game.in_shootout:
+                continue
+            try:
+                penalties = self.client.penalties(game.id)
+            except NHLApiError as exc:
+                log.debug("Penalty fetch for %s failed: %s", game.id, exc)
+                continue
+            self._submit(
+                ("penalty", game.id), lambda g=game.id, p=penalties: self._detect_penalties(g, p)
+            )
+
+    def _detect_penalties(self, game_id: int, penalties: tuple[Penalty, ...]) -> None:
+        """Announce the newest penalty not seen before, once.
+
+        The first fetch for a game only records what is already there. If
+        several arrive in one poll only the last is shown; all are recorded.
+        """
+        keys = {p.key for p in penalties}
+        seen = self._seen_penalties.get(game_id)
+        if seen is None:
+            self._seen_penalties[game_id] = keys
+            return
+        fresh = [p for p in penalties if p.key not in seen]
+        seen |= keys
+        if fresh:
+            self._penalty = (game_id, self.monotonic(), fresh[-1])
+
+    def _penalty_override(self) -> Scene | None:
+        if self._penalty is None:
+            return None
+        game_id, started, penalty = self._penalty
+        if self.monotonic() - started >= penalty_screen.TOTAL_SECONDS:
+            return None
+        game = next((g for g in self.games if g.id == game_id), None)
+        if game is None or game.in_shootout or game.is_final:
+            return None
+        return Scene("penalty", game, penalty=penalty)
 
     # -- three stars (#156) -------------------------------------------------
 
@@ -2250,6 +2360,9 @@ class ScoreboardApp:
                 and self.monotonic() - goal_time < self.settings.scoreboard.goal_flash_seconds
             ):
                 return Scene("goal", goal_game, goal_team=goal_team)
+        penalty = self._penalty_override()
+        if penalty is not None:
+            return penalty
         flash = self._blowout_override()
         if flash is not None:
             return flash
@@ -2610,6 +2723,7 @@ class ScoreboardApp:
             self._overlay_animating = False
             self._shootout_animating = False
             self._goal_animating = self._goal_building = False
+            self._penalty_animating = self._penalty_building = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -2642,6 +2756,7 @@ class ScoreboardApp:
             or self._shootout_animating
             or self._scroll_animating
             or self._goal_building
+            or self._penalty_building
         ):
             return
         mirror.requested = False
@@ -2670,6 +2785,10 @@ class ScoreboardApp:
             changes["goal_event"] = april_fools.swap_goal(scene.goal_event)
         if scene.goal_team:
             changes["goal_team"] = april_fools.rename(scene.goal_team)
+        if scene.penalty is not None:
+            changes["penalty"] = dataclasses.replace(
+                scene.penalty, team_abbrev=april_fools.rename(scene.penalty.team_abbrev)
+            )
         if scene.stars is not None:
             changes["stars"] = tuple(april_fools.swap_star(s) for s in scene.stars)
         if scene.standings is not None:
@@ -2685,6 +2804,11 @@ class ScoreboardApp:
         goal_age = self._goal_age(scene)
         self._goal_animating = goal_age is not None
         self._goal_building = goal_age is not None and goal_age < goal_light.BUILD_SECONDS
+        penalty_age = self._penalty_age(scene)
+        self._penalty_animating = penalty_age is not None
+        self._penalty_building = (
+            penalty_age is not None and penalty_age < penalty_screen.ENTRANCE_SECONDS
+        )
         favourite = self.settings.scoreboard.favourite_team
         if self.april_fools_active():
             favourite = april_fools.PRANK_AS
@@ -2706,6 +2830,8 @@ class ScoreboardApp:
             r.draw_goal(self.canvas, scene.game, scene.goal_team or favourite, goal_age)
         elif scene.kind == "goal_detail":
             r.draw_goal_detail(self.canvas, scene.game, scene.goal_event)
+        elif scene.kind == "penalty":
+            r.draw_penalty(self.canvas, scene.penalty, penalty_age)
         elif scene.kind == "three_stars":
             r.draw_three_stars(self.canvas, scene.game, scene.stars)
         elif scene.kind == "blowout":  # not documented on purpose, see blowout.py

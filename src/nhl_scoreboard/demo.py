@@ -18,6 +18,7 @@ from .nhl.models import (
     GoalEvent,
     GoalieLine,
     MeetingResult,
+    Penalty,
     SeasonSeriesRecord,
     Shootout,
     ShootoutAttempt,
@@ -99,6 +100,8 @@ class DemoStep(NamedTuple):
     animate_shootout: bool = False
     #: Play the favourite's goal light from the start of the step.
     animate_goal: bool = False
+    #: Play the penalty screen's entrance from the start of the step (#340).
+    animate_penalty: bool = False
     #: Scroll the scene's table over this many seconds (``conference_leaders``).
     scroll_seconds: float = 0.0
     #: A unique, file-safe name (``game_live``, ``game_live_text``), which
@@ -166,6 +169,17 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         scorer_sweater_number=9,
         scorer_points=24,
     )
+    penalty = Penalty(
+        "2|08:15|demo",
+        away,
+        "MACKINNON",
+        29,
+        "slashing",
+        "minor",
+        2,
+        2,
+        "08:15",
+    )
     stars = (
         Star(1, 1, home, "F. Forsberg", 9, "R", 2, 1, 3),
         Star(2, 2, away, "N. MacKinnon", 29, "C", 1, 1, 2),
@@ -203,6 +217,28 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
             "goal_detail_text",
             Scene("goal_detail", goal, goal_event=goal_event),
             {"use_logos": False},
+        ),
+        (
+            "penalty",
+            Scene("penalty", goal, penalty=penalty),
+            {"animate_penalty": True},
+        ),
+        (
+            "penalty_fight",
+            Scene(
+                "penalty",
+                goal,
+                penalty=dataclasses.replace(
+                    penalty,
+                    team_abbrev=away,
+                    surname="",
+                    sweater_number=None,
+                    desc_key="fighting",
+                    severity="major",
+                    minutes=5,
+                ),
+            ),
+            {"animate_penalty": True},
         ),
         ("game_final", Scene("game", final), {}),
         ("game_final_text", Scene("game", final), {"use_logos": False}),

@@ -327,6 +327,23 @@ while the score and scorer wait. The boot TOML clamps with a warning; a live
 admin save outside the range is rejected (`_FieldSpec.minimum/maximum`), and
 the page's input carries the same bounds (`NUMBER_LIMITS`, App.tsx).
 
+**The penalty screen (#340, `display/penalty.py`).** A new call in the
+favourite's live game announces itself on a full-panel screen (hazard-tape
+border, whistle and ripples, then `PENALTY  NSH` / `#9 FORSBERG` / `SLASHING
+2:00`), a pure function of age like the goal light. Owner's call was "do this"
+on the issue's recommended options, so: **both teams** in the favourite's own
+game only (not `also_follow` games), every penalty type, full animation every
+time, silent, no config switch. Source is `summary.penalties` in the shared
+`landing` payload (`NHLClient.penalties()`, a fourth reader, no new request),
+polled by `refresh_penalties()` at `live_poll_seconds`, skipped in
+intermission/shootout, applied through the delay queue. First fetch per game is
+a baseline that never fires; `Penalty.key` is period+time+team+player+call.
+Fights (any entry at a timestamp with a `fighting` call) collapse into one
+`FIGHT` penalty; identical entries (double minor) sum. `_penalty_override` sits
+below goal/scorer in `_apply_goal_override`, above blowout/three stars; the
+age comes from `_penalty_age`, not `Scene`. Unverified: whether `landing`
+lags the whistle on a live game, and hardware cost (#4).
+
 The `three_stars` scene (#156) is the NHL's three stars of the favourite's
 game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
 present on a real final game; `NHLClient.three_stars()`, a third reader
