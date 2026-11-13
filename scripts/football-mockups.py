@@ -309,20 +309,6 @@ def fb_playtext() -> Panel:
     return p
 
 
-def timeout() -> Panel:
-    p = Panel()
-    p.logo(14, 16, HOME, 8)
-    clock_icon(p, 40, 15)
-    p.text("5x7", 52, 12, WHITE, "TIMEOUT")
-    p.text("5x7", 52, 22, TEAMS[HOME], "NYG  2ND")
-    p.text("4x6", 52, 30, DIM, "0:45")
-    for i in range(3):
-        c = TEAMS[HOME] if i < 1 else (40, 40, 40)
-        p.rect(100 + i * 8, 12, 105 + i * 8, 17, c)
-    p.text("4x6", 98, 25, DIM, "LEFT")
-    return p
-
-
 def halftime() -> Panel:
     p = Panel()
     p.center("7x13B", 15, WHITE, "HALFTIME")
@@ -480,7 +466,6 @@ SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
     "fb_playtext": fb_playtext,
-    "timeout": timeout,
     "halftime": halftime,
     "end_quarter": end_quarter,
     "cointoss_flip": cointoss_flip,

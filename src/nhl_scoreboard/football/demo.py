@@ -189,6 +189,9 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         "D.Jones pass incomplete short left.Penalty on WSH-N.Muse, Offensive Offside, declined.",
         40, 40, HOME, 0,
     )  # fmt: skip
+    timeout = _play("Timeout", "Timeout #2 by NYG at 00:45.", 40, 40, HOME, 0)
+    official = _play("Official Timeout", "Official Timeout at 11:12.", 40, 40, HOME, 0)
+    warning = _play("Two-Minute Warning", "Two-Minute Warning", 40, 40, HOME, 0)
     kneel = _play("Rush", "D.Jones kneels to NYG 22 for -1 yards.", 23, 22, HOME, -1)
     loss = _play(
         "Rush", "D.Singletary left tackle to WSH 41 for -2 yards (J.Smith).", 43, 41, HOME, -2
@@ -290,6 +293,10 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(kickoff, 3.8, meyers), name="kickoff_return"),
         DemoStep(run(touchback, 3.2, None), name="kickoff_touchback"),
         DemoStep(run(onside, 1.2, None), name="kickoff_onside"),
+        DemoStep(run(timeout, 0.5, jones), name="timeout_spin"),
+        DemoStep(run(timeout, 2.0, jones), name="timeout"),
+        DemoStep(run(official, 2.0), name="timeout_official"),
+        DemoStep(run(warning, 2.0), name="timeout_two_minute"),
         DemoStep(run(holding, 0.6, jones), name="penalty_after_run"),
         DemoStep(run(false_start, 1.6, jones), name="penalty_flag"),
         DemoStep(run(false_start, 2.6, jones), name="penalty"),
