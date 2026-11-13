@@ -724,6 +724,26 @@ time.
   `awayScore` / `homeScore` on the play, which already includes the point after.
 - A single 64px panel drops the line-2 passer first, then the PAT text.
 
+**Built (story #391, `display/football_score_detail.py`).** An `@event_screen` for
+`(Touchdown, DETAIL)` and `(FieldGoal, DETAIL)`, static, 8s. Between the two teams' 16px logos
+(the scorer's at full brightness, the other's dimmed; none at 64px) in an 88px column:
+
+| Row | Pass | Run / return | Field goal |
+|---|---|---|---|
+| 1 | `14 C. WOERNER` | `22 D. SINGLETARY` | `6 N. FOLK` |
+| 2 | `1 YD PASS FROM` | `3 YD RUN`, `67 YD INT RETURN` | `31 YD FIELD GOAL` |
+| 3 | `9 M. PENIX` | | |
+| 4 | `PAT GOOD  NYG 24 WSH 10` | the same | `NYG 20 WSH 10` |
+
+The scorer's number comes from the roster, else the name alone, else the play text's own spelling
+(`C.WOERNER`), found by how it was scored (the receiver, the rusher, the interceptor or returner).
+The score is the one on the play (already including the point after) with the scoring team first.
+The point-after text is `PAT GOOD`, `PAT NO GOOD`, `2 PT GOOD`, `2 PT NO GOOD` (`2 PT TRY` if the
+feed gave no result). When the point-after text and the score do not fit on one row, a play with a
+passer drops the point-after text and one without moves it to the passer's row. A 64px panel has
+no logos and no passer row but keeps the point-after text on its own row. A safety or other
+unrecognised score has no detail screen yet (the generic fallback story).
+
 #### `fb_fieldgoal`: a made field goal
 
 Triggered by `scoringPlay` true on a `Field Goal Good` play, for **either team**
@@ -1059,6 +1079,15 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Quick](docs/football/touchdown_quick.png) | |
 | A followed team's touchdown: the plain score card. | |
 
+**The score detail** (#391; a pass with its point after, a run, a field goal):
+
+| | |
+|---|---|
+| ![Pass](docs/football/score_detail.png) | ![Run](docs/football/score_detail_run.png) |
+| The receiver, the passer, `PAT GOOD` and the new score. | A run: no passer row. |
+| ![Field goal](docs/football/score_detail_fieldgoal.png) | |
+| The kicker, the distance, the new score. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -1067,8 +1096,8 @@ test does the same. Nothing here touches `docs/screens/`.
 | `fb_play` for a play with no screen of its own yet (a blocked punt, which has no screen of its own): the ball slides from the start spot to the end spot, the play's name over it. | |
 | ![Play text](docs/football/fb_playtext.png) | ![Event card](docs/football/fb_event_touchdown.png) |
 | `fb_playtext`: the field on the left half, the feed's sentence on the right. | `fb_event` (stage `event`): the headline in the team's colour and the new score. |
-| ![Event detail](docs/football/fb_event_detail.png) | ![Missed field goal card](docs/football/fb_event_fg_miss.png) |
-| `fb_event` (stage `detail`): the play's text under the headline. | A missed field goal. |
+| ![Missed field goal card](docs/football/fb_event_fg_miss.png) | |
+| A missed field goal (a generic card until its own story). | |
 | ![Turnover card](docs/football/fb_event_turnover.png) | ![Reversal card](docs/football/fb_event_reversal.png) |
 | A turnover alert. | `fb_event` (stage `reversal`): the correction and its reason. |
 
@@ -1085,7 +1114,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result` and `touchdown`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run`, `fb_pass`, `kickoff_air`, `kickoff_return`, `punt_fair_catch`, `punt_return`, `incomplete`, `sack`, `penalty`, `penalty_no_play`, `timeout`, `end_quarter`, `halftime`, `cointoss_flip`, `cointoss_result`, `touchdown` and `score_detail`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -1366,7 +1395,7 @@ added later.
 - [x] (#356) Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
 - [~] `fb_touchdown` celebration done (#390); `fb_fieldgoal` still to do
-- [ ] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser
+- [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
 - [ ] `fb_fg_miss`
 - [ ] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks
 - [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
