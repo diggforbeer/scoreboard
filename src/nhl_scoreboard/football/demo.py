@@ -322,7 +322,13 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     reversal = event(
         Reversal, td, original=touchdown, original_kind="touchdown", title="TOUCHDOWN OVERTURNED",
         rules=("flag_cleared",), rule="flag_cleared", reason="OFFENSIVE HOLDING ON NYG, NO PLAY",
-        review=None, current=None,
+        review=None, current=None, down_distance="1st & 10",
+    )  # fmt: skip
+    long_reversal = event(
+        Reversal, td, original=touchdown, original_kind="touchdown", title="FIELD GOAL NEGATED",
+        rules=("flag_cleared",), rule="flag_cleared",
+        reason="D.JONES PASS INCOMPLETE SHORT LEFT TO K.PITTS, THE PLAY WAS REVERSED",
+        review=None, current=None, down_distance="3rd & 7",
     )  # fmt: skip
 
     carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
@@ -484,7 +490,11 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(
             scene("fb_event", "event", rush, toss, at=5.5, seconds=6.0), name="cointoss_result"
         ),
-        DemoStep(scene("fb_event", "reversal", td, reversal), name="fb_event_reversal"),
+        DemoStep(scene("fb_event", "reversal", td, reversal, at=2.0, seconds=5.0), name="reversal"),
+        DemoStep(
+            scene("fb_event", "reversal", td, long_reversal, at=3.2, seconds=5.0),
+            name="reversal_scrolling",
+        ),
     ]
 
 
