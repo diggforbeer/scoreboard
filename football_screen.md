@@ -255,6 +255,27 @@ the **receiver's number** appearing on the catch. Yards after the catch are a
 short run from the landing point. Depth and direction (`short`, `deep`,
 `left`, `middle`, `right`) set the arc's height and lane.
 
+**Built (story #381, `display/football_pass.py`).** Registered for `Pass Reception` and
+`Passing Touchdown`. A pure function of the seconds since the stage began, in four phases:
+
+| Share of the stage | What is drawn |
+|---|---|
+| 0-15% | The **quarterback's number** at his spot, ball in hand |
+| 15-60% | The ball **arcs** to the catch spot with a dotted trail behind it |
+| 60-85% | The **receiver's number** on the ball, running the yards after the catch |
+| 85-100% | Settled at the end spot; the markers move to it |
+
+- **Catch spot** = `end.yardLine` less `yardsAfterCatch` in the drive direction, never behind
+  the quarterback and never past the end spot (no yards after the catch: caught at the end).
+- **Arc height** grows with the air yards (3-14px) and is scaled by depth: a `deep` pass arcs
+  1.3x a normal one, a `short` one 0.8x. The ball is kept inside the field.
+- **Lane:** the quarterback stands in the middle; the arc lands in the lane of `left`,
+  `middle` or `right` (the offence's left is up the panel when it drives right, down when it
+  drives left); no direction goes up the middle.
+- **Numbers** fall back to the last name, then to the name in the play text, then to nothing.
+- **Length** scales with yardage like a run: 2s, plus 0.1s a yard, up to 4s. Label `PASS +12`.
+- Incompletions, sacks and penalties are separate stories.
+
 ### Play-text layout
 
 After the animation the field stays in the area it needs and the play text
@@ -830,6 +851,17 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Kneel](docs/football/fb_run_kneel.png) | |
 | A kneel: no number, amber `KNEEL`. | |
 
+**`fb_pass`** (#381; the quarterback, the arc, the catch, settled, and a deep pass):
+
+| | |
+|---|---|
+| ![Snap](docs/football/fb_pass_snap.png) | ![Arc](docs/football/fb_pass.png) |
+| The quarterback's number at his spot. | The ball in the air, the dotted path behind it. |
+| ![Catch](docs/football/fb_pass_catch.png) | ![Settled](docs/football/fb_pass_settled.png) |
+| The receiver's number on the catch, running after it. | Settled: the markers moved. |
+| ![Deep](docs/football/fb_pass_deep.png) | |
+| A deep pass arcs higher. | |
+
 **The generic play scenes** (#377; what every play and event shows until its own screen is drawn):
 
 | | |
@@ -858,7 +890,7 @@ names as their mockups, which they replaced.
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
 panel), drawn in the same round-LED style as the NHL guide. All are in
 [`docs/football/`](docs/football/) and are produced by
-`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone` and `fb_run`, which are real
+`python scripts/football-mockups.py` (except `fb_field`, `fb_field_redzone`, `fb_run` and `fb_pass`, which are real
 renders now; see "Real renders").
 
 **What these are and are not.** They are **design mockups, not renderer output**:
@@ -916,7 +948,7 @@ open for the owner's review:
 | ![Field](docs/football/fb_field.png) | ![Red zone](docs/football/fb_field_redzone.png) |
 | `fb_field`: the resting screen. Clock, quarter, down and distance; ball, line of scrimmage and first-down line. | The same screen in the red zone (away team has the ball, so the drive runs the other way). |
 | ![Run](docs/football/fb_run.png) | ![Pass](docs/football/fb_pass.png) |
-| `fb_run` (a real render now, see "Real renders"): the ball carrier's number moves with a fading trail. | `fb_pass`: an arc from the quarterback to the receiver's number. |
+| `fb_run` (a real render now, see "Real renders"): the ball carrier's number moves with a fading trail. | `fb_pass` (a real render now): an arc from the quarterback to the receiver's number. |
 | ![Play text](docs/football/fb_playtext.png) | ![Field at 64px](docs/football/fb_field_64.png) |
 | Play-text layout: the field on the left half, the feed's own text on the right. | `fb_field` on a single 64px panel. |
 
@@ -1129,7 +1161,7 @@ added later.
 - [ ] `fb_cointoss` (detection from the `Coin Toss` play, with the first-kickoff fallback)
 - [x] Play detection and the animation queue: the director, scene priority, hand-back, generic play and
       event screens, registries (#377)
-- [~] `fb_run` animation done (#380); `fb_pass` still to do
+- [x] `fb_run` (#380) and `fb_pass` (#381) animations
 - [ ] Kickoff and punt animations (arc, return, fair catch, out of bounds, touchback)
 - [ ] Incompletion, sack and penalty (flag) animations, including a play wiped out by a penalty
 - [ ] Timeout, official timeout, two-minute warning, end-of-period and halftime cards

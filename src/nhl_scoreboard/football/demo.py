@@ -95,6 +95,7 @@ def _play(
     scoring: bool = False,
     turnover: bool = False,
     end_team: str | None = None,
+    yac: int | None = None,
 ) -> Play:
     """A play in the shape ESPN sends it, with made-up numbers."""
 
@@ -116,6 +117,7 @@ def _play(
             "period": {"number": 3},
             "clock": {"displayValue": "12:24"},
             "statYardage": yards,
+            "yardsAfterCatch": yac,
             "scoringPlay": scoring,
             "isTurnover": turnover,
             "awayScore": score[0],
@@ -135,6 +137,15 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     )
     outside = _play(
         "Rush", "B.Robinson right end to NYG 33 for 7 yards (T.Smith).", 40, 33, AWAY, 7,
+    )  # fmt: skip
+    pass_play = _play(
+        "Pass Reception",
+        "(Shotgun) M.Penix pass short right to J.Dotson to NYG 33 for 12 yards (D.Knight).",
+        45, 33, AWAY, 12, yac=4,
+    )  # fmt: skip
+    deep = _play(
+        "Pass Reception", "(Shotgun) D.Jones pass deep left to W.Robinson to WSH 33 for 28 yards.",
+        39, 67, HOME, 28, yac=12,
     )  # fmt: skip
     kneel = _play("Rush", "D.Jones kneels to NYG 22 for -1 yards.", 23, 22, HOME, -1)
     loss = _play(
@@ -171,6 +182,10 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
 
     carrier = Person("rusher", 22, "D. Singletary", "22", "RB", True)
     robinson = Person("rusher", 9, "B. Robinson", "9", "RB", True)
+    qb = Person("passer", 9, "M. Penix", "9", "QB", True)
+    dotson = Person("receiver", 1, "J. Dotson", "1", "WR", True)
+    wr = Person("receiver", 2, "W. Robinson", "17", "WR", True)
+    jones = Person("passer", 3, "D. Jones", "8", "QB", True)
 
     def scene(
         kind: str,
@@ -186,9 +201,9 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
             fb_seconds=seconds, fb_people=people, animating=True,
         )  # fmt: skip
 
-    def run(play: Play, at: float, who: Person | None) -> Scene:
+    def run(play: Play, at: float, *who: Person | None) -> Scene:
         return scene("fb_play", "play", play, at=at, seconds=animation_seconds(play, 3.0),
-                     people=(who,) if who else ())  # fmt: skip
+                     people=tuple(p for p in who if p))  # fmt: skip
 
     return [
         DemoStep(run(rush, 1.0, carrier), name="fb_run"),
@@ -196,6 +211,11 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(outside, 1.2, robinson), name="fb_run_outside"),
         DemoStep(run(loss, 1.2, carrier), name="fb_run_loss"),
         DemoStep(run(kneel, 1.0, None), name="fb_run_kneel"),
+        DemoStep(run(pass_play, 0.2, qb, dotson), name="fb_pass_snap"),
+        DemoStep(run(pass_play, 1.0, qb, dotson), name="fb_pass"),
+        DemoStep(run(pass_play, 2.2, qb, dotson), name="fb_pass_catch"),
+        DemoStep(run(pass_play, 9.0, qb, dotson), name="fb_pass_settled"),
+        DemoStep(run(deep, 1.0, jones, wr), name="fb_pass_deep"),
         DemoStep(scene("fb_play", "play", punt), name="fb_play_punt"),
         DemoStep(scene("fb_playtext", "playtext", rush), name="fb_playtext"),
         DemoStep(scene("fb_event", "event", td, touchdown), name="fb_event_touchdown"),

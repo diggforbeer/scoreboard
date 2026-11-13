@@ -90,18 +90,18 @@ def draw_run(r: Renderer, canvas: Any, scene: Scene) -> None:
     here = start + (end - start) * eased(progress)
 
     ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
-    _markers(r, canvas, layout, side, start_pos, end_pos, arrived)
+    draw_markers_for(r, canvas, layout, side, start_pos, end_pos, arrived)
     y = lane_y(play.info.run_gap, direction, layout)
-    _trail(canvas, layout, start, here, y)
+    draw_trail(canvas, layout, start, here, y)
     ff.draw_ball(canvas, layout, here, y)
-    _carrier(r, canvas, layout, here, y, carrier_label(scene))
+    draw_carrier(r, canvas, layout, here, y, carrier_label(scene))
     label, color = run_label(scene)
     r.text(canvas, r.fonts.tiny, 1, 6, color, r_fit(label, r.width // 2 - 2, r.fonts.tiny))
     clock = r_fit(quarter_clock(play), r.width // 2 - 2, r.fonts.tiny)
     r.text_right(canvas, r.fonts.tiny, r.width - 1, 6, DIM, clock)
 
 
-def _markers(r, canvas, layout, side, start_pos, end_pos, arrived) -> None:
+def draw_markers_for(r, canvas, layout, side, start_pos, end_pos, arrived) -> None:
     """Scrimmage and first-down lines: the play's own until the ball arrives, then the new ones
     (when the same team has the ball and the feed gives the new down and distance)."""
     pos = start_pos
@@ -113,7 +113,7 @@ def _markers(r, canvas, layout, side, start_pos, end_pos, arrived) -> None:
         ff.draw_markers(r, canvas, layout, pos.yard_line, pos.distance or 0, side)
 
 
-def _trail(canvas: Any, layout: FieldLayout, start: float, here: float, y: float) -> None:
+def draw_trail(canvas: Any, layout: FieldLayout, start: float, here: float, y: float) -> None:
     """A line of dots from the start spot to the ball, fading toward the start."""
     x0, x1 = layout.px(start), layout.px(here)
     step = 1 if x1 >= x0 else -1
@@ -125,7 +125,7 @@ def _trail(canvas: Any, layout: FieldLayout, start: float, here: float, y: float
         canvas.SetPixel(x, row, shade, shade, shade)
 
 
-def _carrier(r: Renderer, canvas: Any, layout: FieldLayout, here: float, y: float, label: str):
+def draw_carrier(r: Renderer, canvas: Any, layout: FieldLayout, here: float, y: float, label: str):
     """The number (or name) beside the ball: below it in the top half of the field, above it in
     the bottom half, so it never runs into the band or the bottom edge."""
     if not label:

@@ -288,18 +288,6 @@ def fb_field_redzone() -> Panel:
     return p
 
 
-def fb_pass() -> Panel:
-    p = Panel()
-    f = Field(p)
-    f.draw(HOME)
-    f.markers(37, 10)
-    arc(p, f, 25, 46, 19, 9, upto=0.6)
-    f.ball(37, 14)
-    f.number(46, 25, "14")
-    band(p, "Q1 14:52", "PASS +9", WHITE, GREEN)
-    return p
-
-
 def fb_playtext() -> Panel:
     p = Panel()
     f = Field(p, 0, 64)
@@ -582,7 +570,6 @@ def touchdown_64() -> Panel:
 SCREENS = {
     "fb_field": fb_field,
     "fb_field_redzone": fb_field_redzone,
-    "fb_pass": fb_pass,
     "fb_playtext": fb_playtext,
     "kickoff_air": kickoff_air,
     "kickoff_return": kickoff_return,
