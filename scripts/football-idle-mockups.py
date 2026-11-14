@@ -48,19 +48,6 @@ def team_text(p: Panel, name: str, x: int, y: int, team: str, s: str, dim: float
 # -- the screens ---------------------------------------------------------------------------------
 
 
-def fb_countdown() -> Panel:
-    """Kickoff is inside the hour: both logos and records, the countdown between them."""
-    p = Panel()
-    p.logo(14, 13, FAV, 8)
-    p.logo(p.w - 15, 13, "DAL", 8)
-    p.center("4x6", 7, DIM, "KICKOFF IN", 28, p.w - 28)
-    p.center("7x13B", 21, WHITE, "0:42:15", 28, p.w - 28)
-    p.center("4x6", 31, DIM, "SUN 12:00 PM  FOX", 28, p.w - 28)
-    p.center("4x6", 31, DIM, "5-3-1", 0, 28)
-    p.center("4x6", 31, DIM, "4-5", p.w - 28, p.w)
-    return p
-
-
 def preview(tag: str = "", tag_color=AMBER, day: str = "SUN 11/22", when: str = "12:00 PM",
             opp: str = "DAL", home: bool = True, week: str = "WEEK 11") -> Panel:  # fmt: skip
     p = Panel()
@@ -216,7 +203,6 @@ def fb_schedule() -> Panel:
 
 
 SCREENS = {
-    "fb_countdown": fb_countdown,
     "fb_preview": fb_preview,
     "fb_preview_primetime": fb_preview_primetime,
     "fb_preview_thanksgiving": fb_preview_thanksgiving,

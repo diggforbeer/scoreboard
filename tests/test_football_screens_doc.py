@@ -35,10 +35,12 @@ def test_every_fb_scene_kind_is_in_the_guide_and_in_the_demo():
 
 
 def test_every_demo_image_is_shown_in_the_guide():
+    """The idle screens (#419) are shown in ``screens_not_during_games.md``, the rest here."""
+    guide = GUIDE + (ROOT / "screens_not_during_games.md").read_text()
     names = [s.name for s in nfl_demo_steps(NOW)]
     assert len(names) == len(set(names)), "demo step names must be unique"
-    missing = [n for n in names if f"docs/football/{n}.png" not in GUIDE]
-    assert missing == [], f"football_screen.md shows no image for: {missing}"
+    missing = [n for n in names if f"docs/football/{n}.png" not in guide]
+    assert missing == [], f"the guides show no image for: {missing}"
 
 
 def test_a_mockup_and_a_real_step_never_share_an_image():

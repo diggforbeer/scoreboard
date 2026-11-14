@@ -1211,6 +1211,12 @@ class Renderer:
 
         football_scenes.draw_fb_halftime(self, canvas, game)
 
+    def draw_fb_countdown(self, canvas: Any, game: Any, now: Any) -> None:
+        """The NFL kickoff countdown (#423); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_countdown(self, canvas, game, now)
+
     def draw_fb_play_scene(self, canvas: Any, scene: Any) -> None:
         """An NFL play, its text, or an event on screen (#377); see ``football_plays``."""
         from . import football_plays

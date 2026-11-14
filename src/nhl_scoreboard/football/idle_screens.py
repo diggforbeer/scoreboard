@@ -46,3 +46,29 @@ def idle_screen(
         return should_show
 
     return register
+
+
+#: Every idle screen kind the board will have once #423-#429 are built; a test keeps this, the
+#: registry and the renderer in step.
+FB_IDLE_KINDS = (
+    "fb_countdown",
+    "fb_preview",
+    "fb_bye",
+    "fb_final",
+    "fb_standings",
+    "fb_week",
+    "fb_schedule",
+)
+
+
+def _favourite_game(ctx: IdleContext) -> FbGame | None:
+    favourite = ctx.config.favourite_team
+    return next((g for g in ctx.games if favourite and g.involves(favourite)), None)
+
+
+@idle_screen("fb_countdown")
+def _countdown(ctx: IdleContext) -> bool:
+    """The favourite has a game that has not started and has a kickoff time to count to.
+    (The window itself is ``NflMode._in_countdown``: this screen is not in the rotation.)"""
+    game = _favourite_game(ctx)
+    return game is not None and game.is_pregame and game.start_utc is not None
