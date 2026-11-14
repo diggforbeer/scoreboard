@@ -329,3 +329,28 @@ def draw_fb_week(r: Renderer, canvas: Any, view: Any, page: int = 0) -> None:
                 r.height - 1,
                 DIM if n == page else _dimmed(DIM, 0.35),
             )
+
+
+def schedule_time(row: Any, r: Renderer) -> str:
+    """``12:00P``: the kickoff in the board's zone, the AM/PM as one letter."""
+    local = row.start_utc.astimezone(r.tz)
+    return f"{local.hour % 12 or 12}:{local.minute:02d}{'A' if local.hour < 12 else 'P'}"
+
+
+def draw_fb_schedule(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
+    """The favourite's next games, one a row: week, day, ``AT``/``VS``, a chip in the
+    opponent's colour and its abbreviation, and the kickoff time. The tiny font has no ``@``."""
+    canvas.Clear()
+    font = r.fonts.tiny
+    title = f"{view.team}  NEXT"
+    color = team_color(view.team) if is_team(view.team) else WHITE
+    r.text(canvas, font, 3, 6, color, title)
+    for i, row in enumerate(view.rows):
+        y = 14 + i * 8
+        local = row.start_utc.astimezone(r.tz)
+        r.text(canvas, font, 4, y, DIM, f"WK{row.week}")
+        r.text(canvas, font, 24, y, WHITE, f"{local:%a} {local.month}/{local.day:02d}".upper())
+        r.text(canvas, font, 62, y, DIM, "VS" if row.home else "AT")
+        _marker(r, canvas, row.opponent, 78, y)
+        r.text(canvas, font, 84, y, _team_ink(row.opponent, 1.0), row.opponent)
+        r.text_right(canvas, font, r.width - 3, y, WHITE, schedule_time(row, r))

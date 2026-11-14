@@ -637,6 +637,23 @@ def _week_steps(now: datetime) -> list[DemoStep]:
     ]
 
 
+def _schedule_steps() -> list[DemoStep]:
+    """The favourite's next three games (#429)."""
+    from .idle_views import ScheduleRow, ScheduleView
+
+    rows = (
+        ScheduleRow(11, datetime(2026, 11, 22, 18, 0, tzinfo=UTC), "DAL", False),
+        ScheduleRow(12, datetime(2026, 11, 27, 1, 20, tzinfo=UTC), "DET", True),
+        ScheduleRow(13, datetime(2026, 12, 6, 22, 25, tzinfo=UTC), "PHI", False),
+    )
+    return [
+        DemoStep(Scene("fb_schedule", fb_idle=ScheduleView(HOME, rows)), name="fb_schedule"),
+        DemoStep(
+            Scene("fb_schedule", fb_idle=ScheduleView(HOME, rows[2:])), name="fb_schedule_last"
+        ),
+    ]
+
+
 def _bye_steps() -> list[DemoStep]:
     """The bye-week screen (#425): with the next game known, and without."""
     from .idle_views import ByeView, PreviewView
@@ -676,6 +693,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_countdown", "fb_countdown", countdown),
         *_preview_steps(),
         *_bye_steps(),
+        *_schedule_steps(),
         *_week_steps(now),
         *_standings_steps(),
         *_final_steps(now),

@@ -108,11 +108,11 @@ schedule (`/teams/{id}/schedule`); a missing week number in it is the bye.
 
 ## Mockups
 
-First drafts at 128x32 (these screens are skipped on a 64px panel), drawn in the same round-LED
-style as `football_screen.md`'s by `python scripts/football-idle-mockups.py` into
-[`docs/football-idle/`](docs/football-idle/). **Design mockups, not renderer output**: hand-drawn
-with the project's fonts, plain colour circles for the crests, made-up numbers, the favourite
-shown is NYG. The tiny 4x6 font has no `@` and no `#`, so away games read `AT`.
+Real renders at 128x32 (these screens are skipped on a 64px panel) from the demo steps in
+`football/demo.py`, by `python scripts/render-screens.py --sport nfl` into
+[`docs/football/`](docs/football/), with synthetic crests (the artwork is not committed) and made-up
+numbers; the favourite shown is NYG. They began as hand-drawn mockups, now retired. The tiny 4x6
+font has no `@` and no `#`, so away games read `AT`.
 
 | | |
 |---|---|
@@ -124,7 +124,7 @@ shown is NYG. The tiny 4x6 font has no `@` and no `#`, so away games read `AT`.
 | `fb_bye`: the logo, `BYE WEEK` and the next game, from the schedule. Without a schedule yet (`docs/football/fb_bye_no_next.png`) the title stands alone. | `fb_final`, held 60 minutes: the score, the loser's logo dimmed, and the recap (the leading passer and rusher) across the bottom. Without leaders (`docs/football/fb_final_no_recap.png`) the margin stands in. |
 | ![Division](docs/football/fb_standings_division.png) | ![Conference](docs/football/fb_standings_conference.png) |
 | `fb_standings`, page 1: the favourite's division (rank, record, streak, points for and against), the favourite in white. | Page 2: the conference's seven seeds and the cut line, with the first team out under it. |
-| ![Week](docs/football/fb_week.png) | ![Schedule](docs/football-idle/fb_schedule.png) |
+| ![Week](docs/football/fb_week.png) | ![Schedule](docs/football/fb_schedule.png) |
 | `fb_week`: eight games a page, away over home; finals with the winner bright, a live game in green, an upcoming one with its kickoff hour. Two pages for 16 games. | `fb_schedule`: the favourite's next three games, week, date, opponent, time. |
 
 ## Carry-over from the NHL idle rotation
@@ -244,8 +244,8 @@ None left. The next step is the build, one story each (see the todo).
 
 ### Design
 - [x] Decide the main open questions (above); the three left are small.
-- [x] First-draft mockups for each screen (128px only), `scripts/football-idle-mockups.py`; the owner's review is next. The real ones to be made the way
-      `football_screen.md`'s are (`scripts/render-screens.py --sport nfl` once built).
+- [x] First-draft mockups for each screen (128px only), reviewed by the owner and since replaced by
+      the real renders (`scripts/render-screens.py --sport nfl`); the mockup script is deleted.
 - [x] The default idle rotation and its settings; the admin page's rotation card for NFL mode (#422).
 
 ### Build (after the design is agreed, one story each)
@@ -258,7 +258,7 @@ None left. The next step is the build, one story each (see the todo).
 - [x] `fb_standings` (#427; the pages share the rotation entry's seconds)
 - [x] `fb_week` (#428: live games first, then those to come by kickoff, then finals; a second page
       is `docs/football/fb_week_page2.png`)
-- [ ] `fb_schedule`
+- [x] `fb_schedule` (#429; the end of the season is `docs/football/fb_schedule_last.png`)
 - [x] The NFL idle rotation and the scene selection above, with the clock as the fallback (#422;
       `NflMode._idle_kind`, the registry in `football/idle_screens.py`).
 - [ ] Demo steps and `scripts/render-screens.py --sport nfl` images for each

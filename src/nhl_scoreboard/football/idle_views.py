@@ -358,3 +358,44 @@ def build_week(ctx: IdleContext) -> WeekView | None:
     week = ctx.idle.week(ctx.now)
     games = week.games if week is not None and week.games else tuple(ctx.games)
     return WeekView(week_order(games)) if games else None
+
+
+SCHEDULE_ROWS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleRow:
+    week: int
+    start_utc: datetime
+    opponent: str
+    #: True when the favourite is the home team (``VS``), else ``AT``.
+    home: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleView:
+    """The favourite's next games, soonest first."""
+
+    team: str
+    rows: tuple[ScheduleRow, ...]
+
+
+def build_schedule(ctx: IdleContext) -> ScheduleView | None:
+    """The next three games from the favourite's schedule. A game with no week number (the feed's
+    bye) or no kickoff time, or against a team not yet known, is passed over; fewer than three left
+    shows what is left; nothing left (or no schedule yet) is ``None`` so the screen is skipped."""
+    favourite = ctx.config.favourite_team.strip().upper()
+    if not favourite or not _known(favourite):
+        return None
+    schedule = ctx.idle.schedule(team(favourite).espn_id, ctx.now)
+    if schedule is None:
+        return None
+    rows = []
+    for g in schedule.upcoming(ctx.utc):
+        opponent = g.opponent(favourite)
+        if g.week is None or g.start_utc is None or not _known(opponent):
+            continue
+        rows.append(ScheduleRow(g.week, g.start_utc, opponent, g.is_home(favourite)))
+        if len(rows) == SCHEDULE_ROWS:
+            break
+    return ScheduleView(favourite, tuple(rows)) if rows else None
