@@ -107,3 +107,32 @@ def draw_fb_preview(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
     for record, x in ((view.away_record, LEFT_X), (view.home_record, r.width - RIGHT_DX)):
         if record:
             r.text_center(canvas, r.fonts.tiny, x, 31, DIM, record)
+
+
+def next_game_line(view: Any, team: str, r: Renderer) -> str:
+    """``SUN 11/22 AT DAL`` (away) or ``SUN 11/22 VS DAL`` (home), in the board's zone."""
+    local = view.start_utc.astimezone(r.tz)
+    day = f"{local:%a} {local.month}/{local.day}".upper()
+    if view.away == team:
+        return f"{day} AT {view.home}"
+    return f"{day} VS {view.away}"
+
+
+def draw_fb_bye(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
+    """The favourite's bye week: its crest, ``BYE WEEK`` in its colour and, when the schedule
+    knows it, ``NEXT GAME`` over the day and opponent. Without a next game the title is centred
+    on its own."""
+    canvas.Clear()
+    draw_side_logo(r, canvas, view.team, LEFT_X, 16)
+    left = LEFT_X + 14
+    cx = (left + r.width - 4) // 2
+    color = team_color(view.team) if is_team(view.team) else WHITE
+    if view.next_game is None:
+        r.text_center(canvas, r.fonts.large, cx, 21, color, "BYE WEEK")
+        return
+    r.text_center(canvas, r.fonts.large, cx, 15, color, "BYE WEEK")
+    r.text_center(canvas, r.fonts.tiny, cx, 24, DIM, "NEXT GAME")
+    line = r._fit_text(
+        r.fonts.small, next_game_line(view.next_game, view.team, r), r.width - left - 4
+    )
+    r.text_center(canvas, r.fonts.small, cx, 31, WHITE, line)
