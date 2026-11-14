@@ -1229,6 +1229,12 @@ class Renderer:
 
         football_idle.draw_fb_bye(self, canvas, view, now)
 
+    def draw_fb_final(self, canvas: Any, view: Any, now: Any) -> None:
+        """The held NFL final with its recap (#426); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_final(self, canvas, view, now)
+
     def draw_fb_play_scene(self, canvas: Any, scene: Any) -> None:
         """An NFL play, its text, or an event on screen (#377); see ``football_plays``."""
         from . import football_plays

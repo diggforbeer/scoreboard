@@ -120,8 +120,8 @@ shown is NYG. The tiny 4x6 font has no `@` and no `#`, so away games read `AT`.
 | `fb_countdown`: kickoff in the hour. Both logos and records (from the scoreboard), the countdown between them, the day, time and broadcast under it. | `fb_preview`: the next game, days away. The week, the day, the time, the records. |
 | ![Primetime](docs/football/fb_preview_primetime.png) | ![Thanksgiving](docs/football/fb_preview_thanksgiving.png) |
 | A primetime game: the tag (`THU NIGHT`) goes before the week. | A holiday game: the tag (`THANKSGIVING`) and, suggested here by the trim along the top, the existing holiday overlay in NFL colours. |
-| ![Bye](docs/football/fb_bye.png) | ![Final](docs/football-idle/fb_final.png) |
-| `fb_bye`: the logo, `BYE WEEK` and the next game, from the schedule. Without a schedule yet (`docs/football/fb_bye_no_next.png`) the title stands alone. | `fb_final`, held 60 minutes: the score, the loser's logo dimmed, and the recap (the leading passer and rusher) across the bottom. |
+| ![Bye](docs/football/fb_bye.png) | ![Final](docs/football/fb_final.png) |
+| `fb_bye`: the logo, `BYE WEEK` and the next game, from the schedule. Without a schedule yet (`docs/football/fb_bye_no_next.png`) the title stands alone. | `fb_final`, held 60 minutes: the score, the loser's logo dimmed, and the recap (the leading passer and rusher) across the bottom. Without leaders (`docs/football/fb_final_no_recap.png`) the margin stands in. |
 | ![Division](docs/football-idle/fb_standings_division.png) | ![Conference](docs/football-idle/fb_standings_conference.png) |
 | `fb_standings`, page 1: the favourite's division (rank, record, streak, points for and against), the favourite in white. | Page 2: the conference's seven seeds and the cut line, with the first team out under it. |
 | ![Week](docs/football-idle/fb_week.png) | ![Schedule](docs/football-idle/fb_schedule.png) |
@@ -254,7 +254,7 @@ None left. The next step is the build, one story each (see the todo).
 - [x] `fb_preview` (#424: `football/idle_views.py` builds it, the tag and round rules are pure functions; a
       tag too long to sit beside the week, `THANKSGIVING`, drops the week)
 - [x] `fb_bye` (#425)
-- [ ] `fb_final` (the hold, and the recap if kept)
+- [x] `fb_final` (#426: the hold is `NflMode`'s, the recap `football/idle_views.py`)
 - [ ] `fb_standings`, `fb_week`, `fb_schedule`
 - [x] The NFL idle rotation and the scene selection above, with the clock as the fallback (#422;
       `NflMode._idle_kind`, the registry in `football/idle_screens.py`).

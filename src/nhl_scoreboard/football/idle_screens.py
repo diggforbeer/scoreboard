@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .idle_views import ByeView, PreviewView, build_bye, build_preview
+from .idle_views import ByeView, FinalView, PreviewView, build_bye, build_final, build_preview
 
 if TYPE_CHECKING:
     from ..config import FootballConfig
@@ -84,3 +84,8 @@ def _preview(ctx: IdleContext) -> PreviewView | None:
 @idle_screen("fb_bye")
 def _bye(ctx: IdleContext) -> ByeView | None:
     return build_bye(ctx)
+
+
+@idle_screen("fb_final")
+def _final(ctx: IdleContext) -> FinalView | None:
+    return build_final(ctx)

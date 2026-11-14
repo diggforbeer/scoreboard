@@ -64,6 +64,7 @@ def _game(
     start: datetime | None = None,
     records: tuple[str, str] = ("", ""),
     broadcast: str = "",
+    leaders: tuple[tuple[str, str, str, str], ...] = (),
 ) -> FbGame:
     """``records`` are (home, away); ``broadcast`` is the network, if any."""
     start = (start or now).astimezone(UTC)  # the feed's times are UTC
@@ -88,6 +89,24 @@ def _game(
     }
     if broadcast:
         comp["broadcasts"] = [{"names": [broadcast]}]
+    if leaders:  # (category, short name, team, display) as the scoreboard gives a final's leaders
+        comp["leaders"] = [
+            {
+                "name": category,
+                "leaders": [
+                    {
+                        "displayValue": display,
+                        "athlete": {
+                            "shortName": name,
+                            "jersey": "1",
+                            "position": {"abbreviation": "QB"},
+                        },
+                        "team": {"id": str(TEAMS[team].espn_id)},
+                    }
+                ],
+            }
+            for category, name, team, display in leaders
+        ]
     if situation is not None:
         comp["situation"] = situation
     return FbGame.from_api(
@@ -533,6 +552,30 @@ def _preview_steps() -> list[DemoStep]:
     ]
 
 
+def _final_steps(now: datetime) -> list[DemoStep]:
+    """The held final (#426): with the recap, and without leaders (the margin instead)."""
+    from .idle_views import build_final
+
+    def view(game: FbGame):
+        from ..config import FootballConfig
+        from .idle import IdleSnapshot
+        from .idle_screens import IdleContext
+
+        ctx = IdleContext(0.0, now, [game], IdleSnapshot(), FootballConfig(favourite_team=HOME))
+        return Scene("fb_final", fb_game=game, fb_idle=build_final(ctx))
+
+    leaders = (
+        ("passingYards", "D. Jones", HOME, "24/33, 312 YDS, 2 TD"),
+        ("rushingYards", "S. Barkley", HOME, "21 CAR, 118 YDS, 1 TD"),
+        ("receivingYards", "T. McLaurin", AWAY, "7 REC, 96 YDS"),
+    )
+    kwargs = {"detail": "Final", "name": "STATUS_FINAL"}
+    return [
+        DemoStep(view(_game(now, "post", 20, 27, leaders=leaders, **kwargs)), name="fb_final"),
+        DemoStep(view(_game(now, "post", 20, 27, **kwargs)), name="fb_final_no_recap"),
+    ]
+
+
 def _bye_steps() -> list[DemoStep]:
     """The bye-week screen (#425): with the next game known, and without."""
     from .idle_views import ByeView, PreviewView
@@ -572,6 +615,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_countdown", "fb_countdown", countdown),
         *_preview_steps(),
         *_bye_steps(),
+        *_final_steps(now),
         step("fb_scores", "fb_scores_live", live),
         step("fb_scores", "fb_scores_redzone", red),
         step("fb_scores", "fb_scores_halftime", half),

@@ -48,17 +48,6 @@ def team_text(p: Panel, name: str, x: int, y: int, team: str, s: str, dim: float
 # -- the screens ---------------------------------------------------------------------------------
 
 
-def fb_final() -> Panel:
-    """The final, held for an hour: both logos, the score, and the recap across the bottom."""
-    p = Panel()
-    p.logo(14, 12, "WSH", 8, 0.5)
-    p.logo(p.w - 15, 12, FAV, 8)
-    p.center("4x6", 7, DIM, "FINAL", 28, p.w - 28)
-    p.center("7x13B", 21, WHITE, "17 - 24", 28, p.w - 28)
-    p.center("4x6", 31, TEAMS[FAV], "JONES 312 YD  BARKLEY 118 YD", 0, p.w)
-    return p
-
-
 def table_header(p: Panel, title: str, sub: str = "") -> None:
     p.text("4x6", 3, 6, AMBER, title)
     if sub:
@@ -156,7 +145,6 @@ def fb_schedule() -> Panel:
 
 
 SCREENS = {
-    "fb_final": fb_final,
     "fb_standings_division": fb_standings_division,
     "fb_standings_conference": fb_standings_conference,
     "fb_week": fb_week,
