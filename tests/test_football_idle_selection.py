@@ -230,3 +230,41 @@ def test_bad_rotation_entries_and_minutes_fall_back():
     assert cfg.rotation == []
     assert (cfg.final_hold_minutes, cfg.countdown_minutes) == (60.0, 60.0)
     assert idle  # the module under test imports cleanly
+
+
+# -- the screens the board adds by itself can be turned off (#443) -----------------------------
+
+
+def test_the_countdown_can_be_turned_off():
+    register("fb_countdown", "fb_preview")
+    utc = Utc(datetime(2026, 11, 22, 17, 5, tzinfo=UTC))
+    mode, _ = build([nyg_game("pre")], utc=utc, rotation=[("fb_preview", 5)], show_countdown=False)
+    assert mode.scene().kind == "fb_preview"
+    on, _ = build([nyg_game("pre")], utc=utc, rotation=[("fb_preview", 5)])
+    assert on.scene().kind == "fb_countdown"
+
+
+def test_the_final_hold_can_be_turned_off():
+    register("fb_final", "fb_preview")
+    for show, expected in ((True, "fb_final"), (False, "fb_preview")):
+        clock = Clock(BASE)
+        feed = IdleFeed([nyg_game("in")])
+        feed.plays = lambda game_id: []
+        feed.core_plays = lambda game_id: None
+        cfg = FootballConfig(
+            favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 5}], show_final=show
+        )
+        mode = NflMode(
+            client_factory=lambda feed=feed: feed, monotonic=clock, football=lambda cfg=cfg: cfg
+        )
+        mode.worker.poll_once()
+        mode.scene()
+        feed.games = [nyg_game("post")]
+        mode.worker.poll_once()
+        assert mode.scene().kind == expected, show
+
+
+def test_the_bye_screen_can_be_turned_off():
+    register("fb_bye", "fb_week")
+    mode, clock = build([pregame()], favourite="CHI", rotation=[("fb_week", 10)], show_bye=False)
+    assert set(kinds(mode, clock, range(0, 20))) == {"fb_week"}

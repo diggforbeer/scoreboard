@@ -622,6 +622,9 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "rotation": [dataclasses.asdict(entry) for entry in cfg.rotation],
             "final_hold_minutes": cfg.final_hold_minutes,
             "countdown_minutes": cfg.countdown_minutes,
+            "show_countdown": cfg.show_countdown,
+            "show_bye": cfg.show_bye,
+            "show_final": cfg.show_final,
         },
         "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_NFL_ROTATION],
         "screens": list(NFL_ROTATION_SCREENS),
@@ -1383,6 +1386,10 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
 _FOOTBALL_MINUTES = {"final_hold_minutes": (1.0, 720.0), "countdown_minutes": (1.0, 720.0)}
 
 
+#: The screens NFL mode adds by itself, each switchable (#443).
+_FOOTBALL_TOGGLES = ("show_countdown", "show_bye", "show_final")
+
+
 def _coerce_football_rotation(data: object) -> dict[str, object]:
     """Validate a ``football_rotation`` save: the rows (rejected whole on the first bad one, like
     ``_coerce_rotation``) and the two timers. A missing key is left alone."""
@@ -1417,6 +1424,12 @@ def _coerce_football_rotation(data: object) -> dict[str, object]:
         if not low <= minutes <= high:
             raise ValueError(json.dumps({key: f"must be between {low:g} and {high:g}"}))
         values[key] = float(minutes)
+    for key in _FOOTBALL_TOGGLES:
+        if key not in data:
+            continue
+        if not isinstance(data[key], bool):
+            raise ValueError(json.dumps({key: "must be true or false"}))
+        values[key] = data[key]
     return values
 
 

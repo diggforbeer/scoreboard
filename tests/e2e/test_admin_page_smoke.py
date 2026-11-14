@@ -456,6 +456,7 @@ def test_nfl_mode_has_its_own_idle_rotation_card(admin_page):
             page.select_option('[aria-label="NFL rotation screen 1"]', "fb_week")
             page.fill('[aria-label="NFL rotation seconds 1"]', "12")
             page.fill("#nfl-final-hold", "45")
+            page.uncheck("#nfl-show_bye")
             page.keyboard.press("Tab")
             _wait_until(
                 lambda: (
@@ -464,6 +465,7 @@ def test_nfl_mode_has_its_own_idle_rotation_card(admin_page):
                 )
             )
             _wait_until(lambda: admin_page.config()["football"].get("final_hold_minutes") == 45)
+            _wait_until(lambda: admin_page.config()["football"].get("show_bye") is False)
             assert "rotation" not in admin_page.config() or admin_page.config()["rotation"] != [
                 {"screen": "fb_week", "seconds": 12}
             ]
