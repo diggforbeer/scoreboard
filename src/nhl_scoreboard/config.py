@@ -534,8 +534,15 @@ class FootballConfig:
     final_hold_minutes: float = 60.0
     #: The kickoff window: how long before kickoff the favourite's game shows its countdown.
     countdown_minutes: float = 60.0
+    #: The screens the board adds by itself (#443): each can be turned off.
+    show_countdown: bool = True
+    show_bye: bool = True
+    show_final: bool = True
 
     def __post_init__(self) -> None:
+        self.show_countdown = bool(self.show_countdown)
+        self.show_bye = bool(self.show_bye)
+        self.show_final = bool(self.show_final)
         self.rotation = _parse_rotation(
             self.rotation if isinstance(self.rotation, list) else [],
             NFL_ROTATION_SCREENS,

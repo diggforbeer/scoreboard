@@ -2527,6 +2527,9 @@ def test_sends_the_nfl_rotation_last_with_the_defaults_and_screens(app_dir, conf
         "rotation": [],
         "final_hold_minutes": 30.0,
         "countdown_minutes": 60.0,
+        "show_countdown": True,
+        "show_bye": True,
+        "show_final": True,
     }
     assert [d["screen"] for d in message["defaults"]] == [
         "fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock",
@@ -2572,6 +2575,8 @@ def test_saving_the_nfl_rotation_writes_football_rotation_tables(app_dir, config
         {"final_hold_minutes": 0},
         {"countdown_minutes": 99999},
         {"final_hold_minutes": "soon"},
+        {"show_bye": "yes"},
+        {"show_final": 1},
         "nope",
     ],
 )
@@ -2586,3 +2591,18 @@ def test_a_bad_nfl_rotation_save_is_rejected_and_writes_nothing(app_dir, config_
     assert message["type"] == "error" and message["section"] == "football_rotation"
     assert "rotation" not in config_path.read_text()
     assert Settings.load(config_path).football.final_hold_minutes == 60.0
+
+
+def test_the_nfl_screen_toggles_save_and_reload(app_dir, config_path):
+    config_path.write_text("[football]\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        saved = await _save_football_rotation(client, {"show_bye": False, "show_countdown": False})
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved["type"] == "saved"
+    assert echo["data"]["show_bye"] is False and echo["data"]["show_final"] is True
+    football = Settings.load(config_path).football
+    assert (football.show_bye, football.show_countdown, football.show_final) == (False, False, True)

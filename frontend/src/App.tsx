@@ -167,6 +167,9 @@ interface NflRotationConfig {
   rotation: RotationRow[]
   final_hold_minutes: number
   countdown_minutes: number
+  show_countdown: boolean
+  show_bye: boolean
+  show_final: boolean
 }
 
 interface NflTeamOption {
@@ -1740,6 +1743,30 @@ function App() {
                       onBlur={nflRotationSave.flush}
                     />
                   </div>
+                </div>
+                <div className="mt-3">
+                  {(
+                    [
+                      ['show_countdown', 'Countdown before kickoff'],
+                      ['show_bye', 'Bye-week screen'],
+                      ['show_final', 'Hold the final after a game'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <div className="form-check" key={key}>
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id={`nfl-${key}`}
+                        checked={nflRotation[key]}
+                        onChange={(e) =>
+                          nflRotationSave.edit({ ...nflRotation, [key]: e.target.checked })
+                        }
+                      />
+                      <label className="form-check-label" htmlFor={`nfl-${key}`}>
+                        {label}
+                      </label>
+                    </div>
+                  ))}
                 </div>
               </form>
             ) : (

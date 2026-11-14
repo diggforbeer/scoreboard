@@ -317,10 +317,16 @@ class NflMode:
         favourite = cfg.favourite_team
         ctx = self._idle_context(games, snap, now, cfg)
         mine = next((g for g in games if favourite and g.involves(favourite)), None)
-        if mine is not None and "fb_countdown" in IDLE_SCREENS and self._in_countdown(mine, cfg):
+        if (
+            mine is not None
+            and cfg.show_countdown
+            and "fb_countdown" in IDLE_SCREENS
+            and self._in_countdown(mine, cfg)
+        ):
             return "fb_countdown"
         if (
             mine is not None
+            and cfg.show_final
             and "fb_final" in IDLE_SCREENS
             and mine.is_final
             and now - self._final_since.get(mine.id, -1e18) < cfg.final_hold_minutes * 60
@@ -359,7 +365,8 @@ class NflMode:
                 slots.append((entry.screen, entry.seconds))
         scoreboard = ctx.idle.scoreboard
         if (
-            scoreboard is not None
+            cfg.show_bye
+            and scoreboard is not None
             and scoreboard.on_bye(favourite)
             and "fb_bye" in IDLE_SCREENS
             and IDLE_SCREENS["fb_bye"](ctx)
