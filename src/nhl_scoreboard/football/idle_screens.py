@@ -19,11 +19,13 @@ from .idle_views import (
     ByeView,
     FinalView,
     PreviewView,
+    ScheduleView,
     StandingsView,
     WeekView,
     build_bye,
     build_final,
     build_preview,
+    build_schedule,
     build_standings,
     build_week,
 )
@@ -110,3 +112,8 @@ def _standings(ctx: IdleContext) -> StandingsView | None:
 @idle_screen("fb_week")
 def _week(ctx: IdleContext) -> WeekView | None:
     return build_week(ctx)
+
+
+@idle_screen("fb_schedule")
+def _schedule(ctx: IdleContext) -> ScheduleView | None:
+    return build_schedule(ctx)

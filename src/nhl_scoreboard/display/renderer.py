@@ -1247,6 +1247,12 @@ class Renderer:
 
         football_idle.draw_fb_week(self, canvas, view, page)
 
+    def draw_fb_schedule(self, canvas: Any, view: Any, now: Any) -> None:
+        """The favourite's next three games (#429); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_schedule(self, canvas, view, now)
+
     def draw_fb_play_scene(self, canvas: Any, scene: Any) -> None:
         """An NFL play, its text, or an event on screen (#377); see ``football_plays``."""
         from . import football_plays
