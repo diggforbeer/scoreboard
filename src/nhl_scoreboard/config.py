@@ -496,6 +496,19 @@ class WifiSetupConfig:
     port: int = 80
 
 
+def _non_negative(value: Any, name: str) -> float:
+    """A number of seconds that may be 0 (off); anything else is 0 with a warning."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        log.warning("Ignoring non-numeric %s %r", name, value)
+        return 0.0
+    if number < 0:
+        log.warning("Ignoring negative %s %r", name, value)
+        return 0.0
+    return number
+
+
 def _positive_minutes(value: Any, default: float, name: str) -> float:
     """A positive number of minutes, else ``default`` with a warning (a typo never stops a boot)."""
     try:
@@ -535,11 +548,15 @@ class FootballConfig:
     #: The kickoff window: how long before kickoff the favourite's game shows its countdown.
     countdown_minutes: float = 60.0
     #: The screens the board adds by itself (#443): each can be turned off.
+    #: Seconds each page of a paged screen (the standings, the week grid) shows (#444). 0 keeps the
+    #: old behaviour: the pages split the rotation row's seconds between them.
+    page_seconds: float = 0.0
     show_countdown: bool = True
     show_bye: bool = True
     show_final: bool = True
 
     def __post_init__(self) -> None:
+        self.page_seconds = _non_negative(self.page_seconds, "football.page_seconds")
         self.show_countdown = bool(self.show_countdown)
         self.show_bye = bool(self.show_bye)
         self.show_final = bool(self.show_final)

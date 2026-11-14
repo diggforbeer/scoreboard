@@ -215,3 +215,20 @@ def test_a_page_out_of_range_shows_the_nearest_page():
         return {p: c for p, c in draw(view, page).pixels.items() if p[1] < 31}
 
     assert grid(9) == grid(1) and grid(-3) == grid(0)
+
+
+def test_a_one_page_screen_keeps_the_rows_seconds_even_with_a_page_length_set():
+    clock = Clock(960.0)
+    feed = Feed(slate(3))
+    cfg = FootballConfig(
+        favourite_team="NYG",
+        page_seconds=2,
+        rotation=[{"screen": "fb_week", "seconds": 10}, {"screen": "clock", "seconds": 5}],
+    )
+    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode.worker.poll_once()
+    kinds = []
+    for t in range(0, 15):
+        clock.t = 960.0 + t
+        kinds.append(mode.scene().kind)
+    assert kinds == ["fb_week"] * 10 + ["clock"] * 5

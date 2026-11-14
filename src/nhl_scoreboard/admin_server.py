@@ -622,6 +622,7 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "rotation": [dataclasses.asdict(entry) for entry in cfg.rotation],
             "final_hold_minutes": cfg.final_hold_minutes,
             "countdown_minutes": cfg.countdown_minutes,
+            "page_seconds": cfg.page_seconds,
             "show_countdown": cfg.show_countdown,
             "show_bye": cfg.show_bye,
             "show_final": cfg.show_final,
@@ -1424,6 +1425,13 @@ def _coerce_football_rotation(data: object) -> dict[str, object]:
         if not low <= minutes <= high:
             raise ValueError(json.dumps({key: f"must be between {low:g} and {high:g}"}))
         values[key] = float(minutes)
+    if "page_seconds" in data:
+        seconds = data["page_seconds"]
+        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+            raise ValueError(json.dumps({"page_seconds": "must be a number of seconds"}))
+        if not 0 <= seconds <= 60:
+            raise ValueError(json.dumps({"page_seconds": "must be between 0 and 60"}))
+        values["page_seconds"] = float(seconds)
     for key in _FOOTBALL_TOGGLES:
         if key not in data:
             continue

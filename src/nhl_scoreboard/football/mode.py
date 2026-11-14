@@ -361,8 +361,16 @@ class NflMode:
         for entry in cfg.idle_rotation:
             if entry.screen == "clock":
                 clock.append((entry.screen, entry.seconds))
-            elif entry.screen in IDLE_SCREENS and IDLE_SCREENS[entry.screen](ctx):
-                slots.append((entry.screen, entry.seconds))
+            elif entry.screen in IDLE_SCREENS:
+                view = IDLE_SCREENS[entry.screen](ctx)
+                if not view:
+                    continue
+                pages = int(getattr(view, "pages", 1) or 1)
+                # A paged screen with its own page length ignores the row's seconds.
+                seconds = (
+                    cfg.page_seconds * pages if cfg.page_seconds and pages > 1 else entry.seconds
+                )
+                slots.append((entry.screen, seconds))
         scoreboard = ctx.idle.scoreboard
         if (
             cfg.show_bye

@@ -223,3 +223,28 @@ def test_a_single_page_screen_stays_on_page_zero():
     view = mode.scene().fb_idle
     assert view is not None and view.pages == 2
     assert pytest is not None
+
+
+def test_a_page_length_replaces_the_rows_seconds_for_a_paged_screen_only():
+    clock = Clock(960.0)
+    feed = Feed([game("WSH", "DAL", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)])
+    cfg = FootballConfig(
+        favourite_team="NYG",
+        also_follow=["DAL"],
+        page_seconds=3,
+        rotation=[{"screen": "fb_standings", "seconds": 100}, {"screen": "clock", "seconds": 4}],
+    )
+    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode.worker.poll_once()
+    seen = []
+    for t in range(0, 10):
+        clock.t = 960.0 + t  # 960 is a multiple of 10: two 3-second pages, then 4 of clock
+        scene = mode.scene()
+        seen.append((scene.kind, scene.fb_page))
+    assert seen == [("fb_standings", 0)] * 3 + [("fb_standings", 1)] * 3 + [("clock", 0)] * 4
+
+
+def test_the_page_length_is_validated_and_zero_means_split():
+    assert FootballConfig(page_seconds=-2).page_seconds == 0.0
+    assert FootballConfig(page_seconds="x").page_seconds == 0.0
+    assert FootballConfig(page_seconds=5).page_seconds == 5.0

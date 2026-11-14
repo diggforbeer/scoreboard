@@ -167,6 +167,7 @@ interface NflRotationConfig {
   rotation: RotationRow[]
   final_hold_minutes: number
   countdown_minutes: number
+  page_seconds: number
   show_countdown: boolean
   show_bye: boolean
   show_final: boolean
@@ -1742,7 +1743,28 @@ function App() {
                       }
                       onBlur={nflRotationSave.flush}
                     />
+                    <div className="col-sm-6">
+                    <label className="form-label" htmlFor="nfl-page-seconds">
+                      Seconds per page, standings and week (0 = split the row&apos;s seconds)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="nfl-page-seconds"
+                      type="number"
+                      step="any"
+                      min="0"
+                      max="60"
+                      value={nflRotation.page_seconds}
+                      onChange={(e) =>
+                        numberEdit(nflRotationSave, e, {
+                          ...nflRotation,
+                          page_seconds: Number(e.target.value),
+                        })
+                      }
+                      onBlur={nflRotationSave.flush}
+                    />
                   </div>
+                </div>
                 </div>
                 <div className="mt-3">
                   {(
