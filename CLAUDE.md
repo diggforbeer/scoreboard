@@ -112,6 +112,10 @@ with `scripts/render-screens.py --sport nfl`, and retire its mockup (see `footba
 it in the app's `fb_*` dispatch. `NflMode._idle_kind` picks the screen (live game, countdown, final
 hold, the `[[football.rotation]]` list, the clock); the idle screens are 128px only. The rotation and
 its two timers are `[football]` settings with their own admin-page section, `football_rotation`.
+The holiday overlay is sport-aware (`display/holiday.use_sport`): in NFL mode a **game screen**
+(`app.NFL_GAME_SCENES`) is decorated only on a Thanksgiving or Christmas game
+(`football/idle_views.game_holiday`, the game's own date in the board's zone) and only if that theme
+is ticked; the clock and the other NFL screens keep the season's holiday.
 
 ## Commands
 

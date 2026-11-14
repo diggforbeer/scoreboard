@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -38,6 +38,17 @@ PRESEASON, REGULAR, POSTSEASON = 1, 2, 3
 def is_thanksgiving(day: date) -> bool:
     """The fourth Thursday of November."""
     return day.month == 11 and day.weekday() == 3 and 22 <= day.day <= 28
+
+
+def game_holiday(start_utc: datetime | None, tz: tzinfo) -> str | None:
+    """``thanksgiving`` or ``christmas`` for a game on that day in the board's own zone, else
+    ``None``: the only two days a game screen gets a holiday decoration."""
+    if start_utc is None:
+        return None
+    day = start_utc.astimezone(tz).date()
+    if is_thanksgiving(day):
+        return "thanksgiving"
+    return "christmas" if day.month == 12 and day.day == 25 else None
 
 
 def game_tag(start_utc: datetime | None, season_type: int | None = None) -> str:

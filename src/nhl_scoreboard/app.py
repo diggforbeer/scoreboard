@@ -45,6 +45,7 @@ from .display.holiday import (
     HolidayOverlay,
     active_holiday,
     christmas_countdown,
+    use_sport,
 )
 from .display.logos import LogoLibrary, LogoSet
 from .display.matrix import Backend, create_matrix, load_backend
@@ -199,6 +200,23 @@ def _restart_scoreboard_service() -> None:
             log.warning("Could not restart nhl-scoreboard.service: %s", exc)
 
     threading.Thread(target=_run, daemon=True, name="hw-mapping-restart").start()
+
+
+#: The NFL scenes that are a game's own screens (#430): a holiday decorates these only on a
+#: Thanksgiving or Christmas game. The clock, the standings, the week grid and the schedule are not.
+NFL_GAME_SCENES = frozenset(
+    {
+        "fb_scores",
+        "fb_field",
+        "fb_halftime",
+        "fb_play",
+        "fb_playtext",
+        "fb_event",
+        "fb_countdown",
+        "fb_preview",
+        "fb_final",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2995,18 +3013,44 @@ class ScoreboardApp:
             return None
         return active_holiday(cfg.themes, self.clock().astimezone(self.tz).date())
 
+    def _nfl_game_holiday(self, scene: Scene, season: Holiday | None) -> Holiday | None:
+        """The holiday to draw over an NFL scene (#430).
+
+        A **game screen** (the field, the plays, the countdown, the preview, the final...) gets a
+        decoration only for a Thanksgiving or Christmas game, by the game's own date in the board's
+        zone, and only when that holiday is ticked; no other holiday touches it, whatever the
+        calendar says. Every other NFL scene (the clock, the standings...) keeps the season's.
+        """
+        from .football.idle_views import game_holiday
+
+        if scene.kind not in NFL_GAME_SCENES:
+            return season
+        start = None
+        if scene.fb_game is not None:
+            start = scene.fb_game.start_utc
+        elif scene.fb_idle is not None:
+            start = getattr(scene.fb_idle, "start_utc", None)
+        name = game_holiday(start, self.tz)
+        cfg = self.settings.holiday
+        if name is None or not cfg.enabled or name not in cfg.themes:
+            return None
+        return HOLIDAYS.get(name)
+
     def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
+        if self._nfl is not None and not self._demo_drawing:
+            holiday = self._nfl_game_holiday(scene, holiday)
         min_gap, max_gap = self.settings.holiday.flyby_gap_minutes
-        self._overlay_animating = self.holiday_overlay.draw(
-            self.canvas,
-            scene_kind=scene.kind,
-            holiday=holiday,
-            now=self.monotonic(),
-            width=self.renderer.width,
-            height=self.renderer.height,
-            min_gap_seconds=min_gap * 60,
-            max_gap_seconds=max_gap * 60,
-            day=self.clock().astimezone(self.tz).date(),
-            favourite=favourite,
-        )
+        with use_sport("nfl" if self._nfl is not None else "nhl"):
+            self._overlay_animating = self.holiday_overlay.draw(
+                self.canvas,
+                scene_kind=scene.kind,
+                holiday=holiday,
+                now=self.monotonic(),
+                width=self.renderer.width,
+                height=self.renderer.height,
+                min_gap_seconds=min_gap * 60,
+                max_gap_seconds=max_gap * 60,
+                day=self.clock().astimezone(self.tz).date(),
+                favourite=favourite,
+            )
