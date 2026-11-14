@@ -465,7 +465,10 @@ def app(tmp_path) -> ScoreboardApp:
     settings = Settings()
     settings.status.enabled = False
     settings.scoreboard.sport = "nfl"
-    settings.football = FootballConfig(favourite_team="NYG")
+    # Only the clock in the idle rotation: these tests are about the plain game-day scenes.
+    settings.football = FootballConfig(
+        favourite_team="NYG", rotation=[{"screen": "clock", "seconds": 6}]
+    )
     feed = Feed([])
     app = ScoreboardApp(
         settings,

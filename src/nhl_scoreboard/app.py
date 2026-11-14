@@ -2940,6 +2940,8 @@ class ScoreboardApp:
             r.draw_fb_halftime(self.canvas, scene.fb_game)
         elif scene.kind == "fb_countdown":
             r.draw_fb_countdown(self.canvas, scene.fb_game, self.clock())
+        elif scene.kind == "fb_week":
+            r.draw_fb_week(self.canvas, scene.fb_idle, scene.fb_page)
         elif scene.kind == "fb_standings":
             r.draw_fb_standings(self.canvas, scene.fb_idle, scene.fb_page)
         elif scene.kind == "fb_final":

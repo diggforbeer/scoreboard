@@ -282,6 +282,10 @@ def test_through_the_real_app_the_preview_takes_its_slot_between_games_and_the_c
     app,  # noqa: F811
 ):
     feed, clock = app.feed, app.clock_box
+    app.settings.football = FootballConfig(
+        favourite_team="NYG",
+        rotation=[{"screen": "fb_preview", "seconds": 8}, {"screen": "clock", "seconds": 6}],
+    )
     app.select_scene()
     feed.answers = [[event("WSH", "NYG", utc(2026, 11, 17, 18), week=10)]]
     app._nfl.worker.poll_once()

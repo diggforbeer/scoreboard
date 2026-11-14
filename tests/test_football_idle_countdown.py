@@ -133,7 +133,7 @@ def test_through_the_real_app_the_countdown_replaces_the_pregame_scores_inside_t
 
     app.select_scene()
     land("2026-11-15T20:30:00Z")  # 90 minutes after the app's clock: outside the window
-    assert app.select_scene().kind in ("fb_scores", "fb_preview", "clock")  # not the countdown
+    assert app.select_scene().kind != "fb_countdown"
     land("2026-11-15T19:42:15Z")  # 42:15 away
     scene = app.select_scene()
     assert scene.kind == "fb_countdown" and scene.fb_game.is_pregame

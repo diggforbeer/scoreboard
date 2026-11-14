@@ -7,8 +7,9 @@ fetching. ``idle_screens.py`` registers them; ``display/football_idle.py`` draws
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -317,3 +318,43 @@ def build_standings(ctx: IdleContext) -> StandingsView | None:
         first_out=out,
         week=week,
     )
+
+
+#: The week grid holds eight games a page, two pages at most.
+WEEK_PAGE_SIZE = 8
+WEEK_MAX_GAMES = 16
+
+
+@dataclass(frozen=True, slots=True)
+class WeekView:
+    """The week's games in the order the grid shows them."""
+
+    games: tuple[FbGame, ...]
+
+    @property
+    def pages(self) -> int:
+        return max(-(-len(self.games) // WEEK_PAGE_SIZE), 1)
+
+    def page(self, number: int) -> tuple[FbGame, ...]:
+        start = number * WEEK_PAGE_SIZE
+        return self.games[start : start + WEEK_PAGE_SIZE]
+
+
+def week_order(games: Sequence[FbGame]) -> tuple[FbGame, ...]:
+    """Live games first (the ones to watch), then those still to come by kickoff, then the finals
+    by kickoff. A game with no kickoff time goes last of its group."""
+    far = datetime.max.replace(tzinfo=UTC)
+
+    def key(game: FbGame) -> tuple[int, datetime]:
+        group = 0 if game.is_live else 1 if game.is_pregame else 2
+        return group, game.start_utc or far
+
+    return tuple(sorted(games, key=key)[:WEEK_MAX_GAMES])
+
+
+def build_week(ctx: IdleContext) -> WeekView | None:
+    """The week's slate: the whole-week fetch when the board has one, else today's scoreboard.
+    ``None`` with no games (a bye for everyone, the off-season)."""
+    week = ctx.idle.week(ctx.now)
+    games = week.games if week is not None and week.games else tuple(ctx.games)
+    return WeekView(week_order(games)) if games else None

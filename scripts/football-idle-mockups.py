@@ -54,37 +54,6 @@ def table_header(p: Panel, title: str, sub: str = "") -> None:
         p.text("4x6", p.w - p.width_of("4x6", sub) - 3, 6, DIM, sub)
 
 
-def fb_week() -> Panel:
-    """The league's slate, eight games a page (away over home): finals with the winner bright, a
-    game in progress in green, an upcoming one with its kickoff hour. Two pages for 16 games."""
-    p = Panel()
-    games = [
-        ("WSH", 17, "NYG", 24, "F"), ("DAL", 20, "PHI", 27, "F"), ("DET", 31, "GB", 28, "F"),
-        ("SF", 14, "SEA", 10, "LIVE"), ("BUF", 0, "CHI", 0, "1P"), ("MIA", 0, "NE", 0, "1P"),
-        ("KC", 0, "LV", 0, "4P"), ("LAR", 0, "ARI", 0, "4P"),
-    ]  # fmt: skip
-    for i, (away, sa, home, sh, status) in enumerate(games):
-        col, row = i % 4, i // 4
-        x, top = 3 + col * 31, 7 + row * 17
-        for t in (away, home):
-            TEAMS.setdefault(t, (200, 200, 200))
-        final, live = status == "F", status == "LIVE"
-        for j, (team, score) in enumerate(((away, sa), (home, sh))):
-            y = top + j * 6
-            winner = final and score == max(sa, sh)
-            team_text(p, "4x6", x, y, team, team, 0.55 if final and not winner else 1.0)
-            if final:
-                p.text("4x6", x + 16, y, WHITE if winner else DIM, f"{score:>2}")
-            elif live:
-                p.text("4x6", x + 16, y, GREEN, f"{score:>2}")
-        if not (final or live):
-            p.text("4x6", x + 16, top, DIM, status)
-    p.rect(0, 17, p.w - 1, 17, scale(DIM, 0.35))
-    p.rect(60, 31, 61, 31, DIM)  # page 1 of 2
-    p.rect(66, 31, 67, 31, scale(DIM, 0.35))
-    return p
-
-
 def fb_schedule() -> Panel:
     """The favourite's next three games: week, date, opponent, time."""
     p = Panel()
@@ -103,7 +72,6 @@ def fb_schedule() -> Panel:
 
 
 SCREENS = {
-    "fb_week": fb_week,
     "fb_schedule": fb_schedule,
 }
 
