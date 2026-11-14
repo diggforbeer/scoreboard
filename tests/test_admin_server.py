@@ -2528,6 +2528,17 @@ def test_sends_the_nfl_rotation_last_with_the_defaults_and_screens(app_dir, conf
         "final_hold_minutes": 30.0,
         "countdown_minutes": 60.0,
         "page_seconds": 0.0,
+        "timings": {
+            "play": 3.0,
+            "playtext": 5.0,
+            "score": 6.0,
+            "score_detail": 8.0,
+            "quick": 4.0,
+            "fg_miss": 3.0,
+            "turnover": 4.0,
+            "reversal": 5.0,
+            "cointoss": 6.0,
+        },
         "show_countdown": True,
         "show_bye": True,
         "show_final": True,
@@ -2576,6 +2587,11 @@ def test_saving_the_nfl_rotation_writes_football_rotation_tables(app_dir, config
         {"final_hold_minutes": 0},
         {"countdown_minutes": 99999},
         {"final_hold_minutes": "soon"},
+        {"timings": {"play": 0.5}},
+        {"timings": {"score": 99}},
+        {"timings": {"bogus": 3}},
+        {"timings": {"play": "fast"}},
+        {"timings": [3]},
         {"page_seconds": -1},
         {"page_seconds": 61},
         {"page_seconds": "slow"},
@@ -2610,3 +2626,19 @@ def test_the_nfl_screen_toggles_save_and_reload(app_dir, config_path):
     assert echo["data"]["show_bye"] is False and echo["data"]["show_final"] is True
     football = Settings.load(config_path).football
     assert (football.show_bye, football.show_countdown, football.show_final) == (False, False, True)
+
+
+def test_the_nfl_screen_lengths_save_to_the_football_section(app_dir, config_path):
+    config_path.write_text("[football]\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        saved = await _save_football_rotation(client, {"timings": {"score": 10, "play": 2.5}})
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved["type"] == "saved"
+    assert echo["data"]["timings"]["score"] == 10.0 and echo["data"]["timings"]["play"] == 2.5
+    assert echo["timing_ranges"]["score"] == [6.0, 4.0, 15.0]
+    football = Settings.load(config_path).football
+    assert (football.score_seconds, football.play_seconds) == (10.0, 2.5)
