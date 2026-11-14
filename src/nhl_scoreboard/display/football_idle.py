@@ -23,16 +23,24 @@ LEFT_X, RIGHT_DX = 14, 15
 LOGO_CY = 13
 
 
-def draw_side_logo(r: Renderer, canvas: Any, abbrev: str, x: int, cy: int = LOGO_CY) -> None:
-    """``abbrev``'s 16px crest centred on ``x``, else the abbreviation in its colour."""
+def _dimmed(color: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
+    return (int(color[0] * factor), int(color[1] * factor), int(color[2] * factor))
+
+
+def draw_side_logo(
+    r: Renderer, canvas: Any, abbrev: str, x: int, cy: int = LOGO_CY, dim: float = 1.0
+) -> None:
+    """``abbrev``'s 16px crest centred on ``x``, else the abbreviation in its colour.
+    ``dim`` (0-1) darkens it: the loser of a final."""
     known = is_team(abbrev)
     logo = r.nfl_logos.get(abbrev, LOGO_SIZE) if r.nfl_logos is not None and known else None
     if logo is None:
-        color = team_color(abbrev) if known else UNKNOWN_TEAM
+        color = _dimmed(team_color(abbrev) if known else UNKNOWN_TEAM, dim)
         r.text_center(canvas, r.fonts.small, x, cy + 3, color, abbrev)
         return
     ox, oy = x - logo.width // 2, cy - logo.height // 2
-    for dx, dy, (red, green, blue) in logo.pixels:
+    for dx, dy, color in logo.pixels:
+        red, green, blue = _dimmed(color, dim)
         canvas.SetPixel(ox + dx, oy + dy, red, green, blue)
 
 
@@ -136,3 +144,52 @@ def draw_fb_bye(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
         r.fonts.small, next_game_line(view.next_game, view.team, r), r.width - left - 4
     )
     r.text_center(canvas, r.fonts.small, cx, 31, WHITE, line)
+
+
+#: The loser's crest, as a fraction of its brightness.
+LOSER_DIM = 0.4
+RECAP_GAP = 2  # px between recap entries (on top of the font's own spacing)
+
+
+def recap_segments(r: Renderer, view: Any, room: int) -> list[tuple[str, tuple[int, int, int]]]:
+    """The recap entries that fit ``room`` px as (text, colour), best first. A surname too long
+    for the row on its own is cut to fit; no leaders at all gives the margin line instead."""
+    font = r.fonts.tiny
+    segments = [(f"{line.surname} {line.yards} YD", team_color(line.team)) for line in view.recap]
+    if not segments:
+        return [(view.margin, DIM)]
+    chosen: list[tuple[str, tuple[int, int, int]]] = []
+    used = 0
+    for text, color in segments:
+        width = text_width(font, text) + (RECAP_GAP * 2 if chosen else 0)
+        if used + width > room:
+            break
+        chosen.append((text, color))
+        used += width
+    if not chosen:
+        text, color = segments[0]
+        chosen.append((r._fit_text(font, text, room), color))
+    return chosen
+
+
+def draw_fb_final(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
+    """The favourite's final, held after the game: both crests (the loser's dimmed), ``FINAL``
+    over the score in the large face, and the recap across the bottom -- the game's top
+    passer, rusher and receiver as far as they fit, each in his team's colour, else the margin."""
+    canvas.Clear()
+    game = view.game
+    cx = r.width // 2
+    away_dim = LOSER_DIM if game.away.winner is False or game.away.score < game.home.score else 1.0
+    home_dim = LOSER_DIM if game.home.winner is False or game.home.score < game.away.score else 1.0
+    draw_side_logo(r, canvas, game.away.abbrev, LEFT_X, 12, away_dim)
+    draw_side_logo(r, canvas, game.home.abbrev, r.width - RIGHT_DX, 12, home_dim)
+    r.text_center(canvas, r.fonts.tiny, cx, 7, DIM, view.status)
+    r.text_center(canvas, r.fonts.large, cx, 21, WHITE, f"{game.away.score} - {game.home.score}")
+    segments = recap_segments(r, view, r.width - 4)
+    total = sum(text_width(r.fonts.tiny, t) for t, _ in segments) + RECAP_GAP * 2 * (
+        len(segments) - 1
+    )
+    x = (r.width - total) // 2
+    for text, color in segments:
+        r.text(canvas, r.fonts.tiny, x, 31, color, text)
+        x += text_width(r.fonts.tiny, text) + RECAP_GAP * 2

@@ -6,12 +6,13 @@ fetching. ``idle_screens.py`` registers them; ``display/football_idle.py`` draws
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-from .teams import is_team, team
+from .teams import is_team, team, team_by_id
 
 if TYPE_CHECKING:
     from .idle import CalendarEntry
@@ -181,3 +182,81 @@ def build_bye(ctx: IdleContext) -> ByeView | None:
     if not favourite or not _known(favourite) or board is None or not board.on_bye(favourite):
         return None
     return ByeView(favourite.strip().upper(), build_preview(ctx))
+
+
+#: Suffixes that are not a surname: ``Odell Beckham Jr.`` is BECKHAM.
+_SUFFIXES = {"JR", "JR.", "SR", "SR.", "II", "III", "IV", "V"}
+#: The recap's order: the game's top passer, rusher, then receiver.
+RECAP_CATEGORIES = ("passingYards", "rushingYards", "receivingYards")
+
+
+def surname(name: str) -> str:
+    """``J.J. McCarthy`` -> ``MCCARTHY``; a trailing ``Jr.`` or ``III`` is skipped."""
+    parts = [p for p in name.split() if p.upper() not in _SUFFIXES]
+    return (parts[-1] if parts else name).upper()
+
+
+@dataclass(frozen=True, slots=True)
+class RecapLine:
+    """One of the game's leaders: ``MCCARTHY 293 YD`` in his team's colour."""
+
+    team: str
+    surname: str
+    yards: int
+    category: str
+
+
+@dataclass(frozen=True, slots=True)
+class FinalView:
+    """The favourite's final and what to say under the score."""
+
+    game: FbGame
+    #: ``FINAL`` or ``FINAL/OT``.
+    status: str
+    #: The leaders (passing, rushing, receiving), best first; empty when the feed gave none.
+    recap: tuple[RecapLine, ...]
+    #: The fallback line when there is no recap: ``NYG WIN BY 3`` or ``TIE GAME``.
+    margin: str
+
+
+def margin_line(game: FbGame) -> str:
+    gap = game.home.score - game.away.score
+    if gap == 0:
+        return "TIE GAME"
+    winner = game.home if gap > 0 else game.away
+    return f"{winner.abbrev} WIN BY {abs(gap)}"
+
+
+def recap_lines(game: FbGame) -> tuple[RecapLine, ...]:
+    """The game's leaders with a yard count, in the recap's order, one per category. A leader
+    without a readable yard count, or with a team that is not on this game, is dropped."""
+    out: list[RecapLine] = []
+    for category in RECAP_CATEGORIES:
+        leader = next((lead for lead in game.leaders if lead.category == category), None)
+        if leader is None or leader.team_id is None:
+            continue
+        match = re.search(r"(\d+)\s*YDS?", leader.display.upper())
+        try:
+            abbrev = team_by_id(leader.team_id).abbrev
+        except KeyError:
+            continue
+        if match is None or abbrev not in (game.home.abbrev, game.away.abbrev):
+            continue
+        out.append(RecapLine(abbrev, surname(leader.name), int(match.group(1)), category))
+    return tuple(out)
+
+
+def build_final(ctx: IdleContext) -> FinalView | None:
+    """The favourite's game if it is over; ``None`` otherwise. (How long it stays up is
+    ``NflMode``'s hold, not this builder's.)"""
+    favourite = ctx.config.favourite_team
+    game = next((g for g in ctx.games if favourite and g.involves(favourite) and g.is_final), None)
+    if game is None:
+        return None
+    overtime = game.period > 4 or "OT" in (game.short_detail or "").upper()
+    return FinalView(
+        game=game,
+        status="FINAL/OT" if overtime else "FINAL",
+        recap=recap_lines(game),
+        margin=margin_line(game),
+    )
