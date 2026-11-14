@@ -54,48 +54,6 @@ def table_header(p: Panel, title: str, sub: str = "") -> None:
         p.text("4x6", p.w - p.width_of("4x6", sub) - 3, 6, DIM, sub)
 
 
-def fb_standings_division() -> Panel:
-    """The favourite's division: rank, team, record, streak, points for-against."""
-    p = Panel()
-    table_header(p, "NFC EAST", "WK 10")
-    rows = [("1", "NYG", "5-3-1", "W2", "256-187"), ("2", "DAL", "4-5", "L1", "201-222"),
-            ("3", "PHI", "4-4", "W1", "190-198"), ("4", "WSH", "3-6", "L3", "151-240")]  # fmt: skip
-    for i, (rank, team, rec, streak, points) in enumerate(rows):
-        y = 13 + i * 6
-        fav = team == FAV
-        txt = WHITE if fav else DIM
-        p.rect(7, y - 4, 9, y - 2, TEAMS[team])
-        p.text("4x6", 14, y, txt, rank)
-        team_text(p, "4x6", 24, y, team, team, 1.0 if fav else 0.7)
-        p.text("4x6", 48, y, txt, rec)
-        p.text("4x6", 80, y, GREEN if streak.startswith("W") else RED, streak)
-        p.text("4x6", 94, y, txt, points)
-        if fav:
-            p.vline(3, y - 5, y, WHITE)
-    return p
-
-
-def fb_standings_conference() -> Panel:
-    """The conference seeds, 1-7 and the cut line, in two columns."""
-    p = Panel()
-    table_header(p, "NFC SEEDS", "WK 10")
-    left = [("1", "PHI", "7-1"), ("2", "DET", "7-2"), ("3", "NYG", "5-3-1"), ("4", "SEA", "5-4")]
-    right = [("5", "GB", "6-2"), ("6", "SF", "5-4"), ("7", "DAL", "4-5")]
-    for rows, x0 in ((left, 4), (right, 68)):
-        for i, (seed, team, rec) in enumerate(rows):
-            y = 13 + i * 6
-            fav = team == FAV
-            txt = WHITE if fav else DIM
-            p.text("4x6", x0, y, txt, seed)
-            team_text(p, "4x6", x0 + 8, y, team, team, 1.0 if fav else 0.7)
-            p.text("4x6", x0 + 28, y, txt, rec)
-            if fav:
-                p.vline(x0 - 3, y - 5, y, WHITE)
-    p.line(68, 26, 124, 26, scale(AMBER, 0.6))  # the cut line under seed 7
-    p.text("4x6", 68, 31, DIM, "8 CHI 4-5")
-    return p
-
-
 def fb_week() -> Panel:
     """The league's slate, eight games a page (away over home): finals with the winner bright, a
     game in progress in green, an upcoming one with its kickoff hour. Two pages for 16 games."""
@@ -145,8 +103,6 @@ def fb_schedule() -> Panel:
 
 
 SCREENS = {
-    "fb_standings_division": fb_standings_division,
-    "fb_standings_conference": fb_standings_conference,
     "fb_week": fb_week,
     "fb_schedule": fb_schedule,
 }

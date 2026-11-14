@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from ..football.models import FbGame
 from ..football.teams import is_team, team_color
 from .fonts import text_width
-from .football_scenes import DIM, UNKNOWN_TEAM, WHITE
+from .football_scenes import DIM, LIVE, RED_ZONE, UNKNOWN_TEAM, WHITE
 
 if TYPE_CHECKING:
     from .renderer import Renderer
@@ -193,3 +193,85 @@ def draw_fb_final(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
     for text, color in segments:
         r.text(canvas, r.fonts.tiny, x, 31, color, text)
         x += text_width(r.fonts.tiny, text) + RECAP_GAP * 2
+
+
+def _team_ink(abbrev: str, factor: float) -> tuple[int, int, int]:
+    return _dimmed(team_color(abbrev) if is_team(abbrev) else UNKNOWN_TEAM, factor)
+
+
+def _table_header(r: Renderer, canvas: Any, title: str, sub: str) -> None:
+    r.text(canvas, r.fonts.tiny, 3, 6, AMBER, title)
+    if sub:
+        r.text_right(canvas, r.fonts.tiny, r.width - 3, 6, DIM, sub)
+
+
+def _marker(r: Renderer, canvas: Any, abbrev: str, x: int, y: int) -> None:
+    """The little team-colour chip beside a row."""
+    for dy in (-4, -3, -2):
+        r.hline(canvas, x, x + 2, y + dy, _team_ink(abbrev, 1.0))
+
+
+def draw_fb_standings(r: Renderer, canvas: Any, view: Any, page: int = 0) -> None:
+    """Page 0: the favourite's division (rank, team, record, streak, points for-against).
+    Page 1: the conference's seven seeds with the cut line and the first team out. The favourite
+    is white with a bar at the edge; the others are dimmed team colours. A view without seeds
+    has the division page only."""
+    canvas.Clear()
+    if page == 1 and view.seeds:
+        _draw_conference(r, canvas, view)
+    else:
+        _draw_division(r, canvas, view)
+
+
+def _draw_division(r: Renderer, canvas: Any, view: Any) -> None:
+    _table_header(r, canvas, view.division_name, view.week)
+    font = r.fonts.tiny
+    for i, row in enumerate(view.division[:4]):
+        y = 13 + i * 6
+        mine = row.team == view.team
+        ink = WHITE if mine else DIM
+        _marker(r, canvas, row.team, 7, y)
+        r.text(canvas, font, 14, y, ink, str(i + 1))
+        r.text(canvas, font, 24, y, _team_ink(row.team, 1.0 if mine else 0.7), row.team)
+        r.text(canvas, font, 48, y, ink, row.overall)
+        streak = (LIVE if row.streak.startswith("W") else RED_ZONE) if row.streak else ink
+        r.text(canvas, font, 80, y, streak, row.streak)
+        r.text(canvas, font, 94, y, ink, f"{row.points_for}-{row.points_against}")
+        if mine:
+            r.vline(canvas, 3, y - 5, y, WHITE)
+    if len(view.seeds) > 0:
+        r.hline(canvas, 60, 61, r.height - 1, DIM)  # page 1 of 2
+        r.hline(canvas, 66, 67, r.height - 1, _dimmed(DIM, 0.35))
+
+
+CUT_COLOR = (153, 102, 0)  # the amber cut line, dimmed
+
+
+def _draw_conference(r: Renderer, canvas: Any, view: Any) -> None:
+    _table_header(r, canvas, f"{view.conference} SEEDS", view.week)
+    font = r.fonts.tiny
+    columns = ((view.seeds[:4], 4, 0), (view.seeds[4:], 68, 4))
+    for rows, x0, first in columns:
+        for i, row in enumerate(rows):
+            y = 13 + i * 6
+            mine = row.team == view.team
+            ink = WHITE if mine else DIM
+            r.text(canvas, font, x0, y, ink, str(first + i + 1))
+            r.text(canvas, font, x0 + 8, y, _team_ink(row.team, 1.0 if mine else 0.7), row.team)
+            r.text(canvas, font, x0 + 28, y, ink, row.overall)
+            if mine:
+                r.vline(canvas, x0 - 3, y - 5, y, WHITE)
+    r.hline(canvas, 68, 124, 26, CUT_COLOR)
+    out = view.first_out
+    if out is not None:
+        mine = out.team == view.team
+        seed = out.seed if out.seed is not None else PLAYOFF_NEXT
+        text = f"{seed} {out.team} {out.overall}"
+        r.text(canvas, font, 68, 31, WHITE if mine else DIM, text)
+        if mine:
+            r.vline(canvas, 65, 26, 31, WHITE)
+    r.hline(canvas, 60, 61, r.height - 1, _dimmed(DIM, 0.35))
+    r.hline(canvas, 66, 67, r.height - 1, DIM)
+
+
+PLAYOFF_NEXT = 8

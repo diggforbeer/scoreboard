@@ -122,7 +122,7 @@ shown is NYG. The tiny 4x6 font has no `@` and no `#`, so away games read `AT`.
 | A primetime game: the tag (`THU NIGHT`) goes before the week. | A holiday game: the tag (`THANKSGIVING`) and, suggested here by the trim along the top, the existing holiday overlay in NFL colours. |
 | ![Bye](docs/football/fb_bye.png) | ![Final](docs/football/fb_final.png) |
 | `fb_bye`: the logo, `BYE WEEK` and the next game, from the schedule. Without a schedule yet (`docs/football/fb_bye_no_next.png`) the title stands alone. | `fb_final`, held 60 minutes: the score, the loser's logo dimmed, and the recap (the leading passer and rusher) across the bottom. Without leaders (`docs/football/fb_final_no_recap.png`) the margin stands in. |
-| ![Division](docs/football-idle/fb_standings_division.png) | ![Conference](docs/football-idle/fb_standings_conference.png) |
+| ![Division](docs/football/fb_standings_division.png) | ![Conference](docs/football/fb_standings_conference.png) |
 | `fb_standings`, page 1: the favourite's division (rank, record, streak, points for and against), the favourite in white. | Page 2: the conference's seven seeds and the cut line, with the first team out under it. |
 | ![Week](docs/football-idle/fb_week.png) | ![Schedule](docs/football-idle/fb_schedule.png) |
 | `fb_week`: eight games a page, away over home; finals with the winner bright, a live game in green, an upcoming one with its kickoff hour. Two pages for 16 games. | `fb_schedule`: the favourite's next three games, week, date, opponent, time. |
@@ -255,7 +255,8 @@ None left. The next step is the build, one story each (see the todo).
       tag too long to sit beside the week, `THANKSGIVING`, drops the week)
 - [x] `fb_bye` (#425)
 - [x] `fb_final` (#426: the hold is `NflMode`'s, the recap `football/idle_views.py`)
-- [ ] `fb_standings`, `fb_week`, `fb_schedule`
+- [x] `fb_standings` (#427; the pages share the rotation entry's seconds)
+- [ ] `fb_week`, `fb_schedule`
 - [x] The NFL idle rotation and the scene selection above, with the clock as the fallback (#422;
       `NflMode._idle_kind`, the registry in `football/idle_screens.py`).
 - [ ] Demo steps and `scripts/render-screens.py --sport nfl` images for each

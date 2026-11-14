@@ -274,6 +274,8 @@ class Scene:
     fb_stage: str = ""
     #: What an idle screen draws (#419): the view its builder in ``football/idle_screens.py`` made.
     fb_idle: Any = None
+    #: Which page of a several-page idle screen (the standings' division, then conference).
+    fb_page: int = 0
     fb_elapsed: float = field(default=0.0, compare=False)
     fb_seconds: float = 0.0
     animating: bool = False
@@ -2938,6 +2940,8 @@ class ScoreboardApp:
             r.draw_fb_halftime(self.canvas, scene.fb_game)
         elif scene.kind == "fb_countdown":
             r.draw_fb_countdown(self.canvas, scene.fb_game, self.clock())
+        elif scene.kind == "fb_standings":
+            r.draw_fb_standings(self.canvas, scene.fb_idle, scene.fb_page)
         elif scene.kind == "fb_final":
             r.draw_fb_final(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind == "fb_bye":

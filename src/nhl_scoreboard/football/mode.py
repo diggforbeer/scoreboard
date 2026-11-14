@@ -91,6 +91,9 @@ class NflMode:
         #: Final games' first sighting while live, per game id, so the hold after the whistle is
         #: timed from the end of the game we watched (a board that joins late gets no hold).
         self._seen_live: set[int] = set()
+        #: How far through its slot the chosen rotation screen is (0 to 1): a screen of several
+        #: pages shares its seconds between them, so the page is read off this. Render loop only.
+        self._slot_fraction = 0.0
         self._final_since: dict[int, float] = {}
         #: The idle screens' data cache (#421): the feed worker's thread owns it.
         self._idle_cache = IdleCache(monotonic)
@@ -297,6 +300,7 @@ class NflMode:
         """
         from .idle_screens import IDLE_SCREENS
 
+        self._slot_fraction = 0.0
         cfg = self._football() if self._football else _no_football()
         followed = cfg.followed_teams
         for game in games:
@@ -325,7 +329,8 @@ class NflMode:
         if favourite:
             slots = self._rotation(cfg, ctx, favourite)
             if slots:
-                return _slot_at(slots, now)
+                screen, self._slot_fraction = _slot_at(slots, now)
+                return screen
         if not games:
             return "clock" if _has_clock(cfg) else None
         return None
@@ -381,8 +386,13 @@ class NflMode:
         mine = next((g for g in games if favourite and g.involves(favourite)), None)
         build = IDLE_SCREENS.get(kind)
         view = build(self._idle_context(games, snap, now, cfg)) if build is not None else None
+        pages = max(int(getattr(view, "pages", 1) or 1), 1)
+        page = min(int(self._slot_fraction * pages), pages - 1)
         return Scene(
-            kind, fb_game=mine if kind in ("fb_countdown", "fb_final") else None, fb_idle=view
+            kind,
+            fb_game=mine if kind in ("fb_countdown", "fb_final") else None,
+            fb_idle=view,
+            fb_page=page,
         )
 
     def _play_scene(self, current: Any, base: Scene) -> Scene:
@@ -443,16 +453,17 @@ def resting_kind(game: FbGame) -> str:
     return "fb_field" if game.is_live else "fb_scores"
 
 
-def _slot_at(slots: Sequence[tuple[str, float]], now: float) -> str:
-    """The slot on screen at monotonic time ``now``: a pure function of the clock, so a refresh
-    that changes the slots never makes the board lose its place by more than one turn."""
+def _slot_at(slots: Sequence[tuple[str, float]], now: float) -> tuple[str, float]:
+    """The slot on screen at monotonic time ``now`` and how far through it (0 to 1): a pure
+    function of the clock, so a refresh that changes the slots never makes the board lose its
+    place by more than one turn."""
     total = sum(seconds for _, seconds in slots)
     at = now % total
     for screen, seconds in slots:
         if at < seconds:
-            return screen
+            return screen, at / seconds
         at -= seconds
-    return slots[-1][0]
+    return slots[-1][0], 0.0
 
 
 def _has_clock(cfg: FootballConfig) -> bool:

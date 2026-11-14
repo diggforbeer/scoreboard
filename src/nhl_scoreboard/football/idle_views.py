@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from .teams import is_team, team, team_by_id
 
 if TYPE_CHECKING:
-    from .idle import CalendarEntry
+    from .idle import CalendarEntry, StandingsRow
     from .idle_screens import IdleContext
     from .models import FbGame
 
@@ -259,4 +259,61 @@ def build_final(ctx: IdleContext) -> FinalView | None:
         status="FINAL/OT" if overtime else "FINAL",
         recap=recap_lines(game),
         margin=margin_line(game),
+    )
+
+
+#: Seeds 1 to this are in the playoffs; the cut line is drawn under it.
+PLAYOFF_SEEDS = 7
+
+
+@dataclass(frozen=True, slots=True)
+class StandingsView:
+    """The favourite's division and conference. Two pages when the conference has seeds: the
+    division, then the conference (``pages`` is read by the scene's page timing)."""
+
+    team: str
+    #: ``NFC EAST``.
+    division_name: str
+    #: The division's teams in standings order.
+    division: tuple[StandingsRow, ...]
+    #: ``NFC``.
+    conference: str
+    #: Seeds 1 to 7, in order; empty before the feed has seeded the conference.
+    seeds: tuple[StandingsRow, ...]
+    #: The first team out of the playoffs (seed 8, or the best unseeded team), if any.
+    first_out: StandingsRow | None
+    #: ``WK 10``; empty when the scoreboard has not given the week.
+    week: str
+
+    @property
+    def pages(self) -> int:
+        return 2 if self.seeds else 1
+
+
+def build_standings(ctx: IdleContext) -> StandingsView | None:
+    """The standings pages for the favourite, or None (no favourite, no table yet, or a favourite
+    the table does not list)."""
+    favourite = ctx.config.favourite_team.strip().upper()
+    table = ctx.idle.standings(ctx.now)
+    if not favourite or table is None:
+        return None
+    division = table.division_of(favourite)
+    conference = table.conference_of(favourite)
+    if division is None or conference is None:
+        return None
+    seeded = conference.seeds()
+    out = seeded[PLAYOFF_SEEDS] if len(seeded) > PLAYOFF_SEEDS else None
+    if out is None:
+        rest = conference.unseeded()
+        out = rest[0] if rest else None
+    board = ctx.idle.scoreboard
+    week = f"WK {board.week}" if board is not None and board.week is not None else ""
+    return StandingsView(
+        team=favourite,
+        division_name=division.name.upper(),
+        division=division.rows,
+        conference=conference.abbreviation.upper(),
+        seeds=seeded[:PLAYOFF_SEEDS],
+        first_out=out,
+        week=week,
     )
