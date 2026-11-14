@@ -533,6 +533,18 @@ def _preview_steps() -> list[DemoStep]:
     ]
 
 
+def _bye_steps() -> list[DemoStep]:
+    """The bye-week screen (#425): with the next game known, and without."""
+    from .idle_views import ByeView, PreviewView
+
+    start = datetime(2026, 11, 22, 18, 0, tzinfo=UTC)
+    nxt = PreviewView("NYG", "DAL", start, "", "WEEK 11")
+    return [
+        DemoStep(Scene("fb_bye", fb_idle=ByeView("NYG", nxt)), name="fb_bye"),
+        DemoStep(Scene("fb_bye", fb_idle=ByeView("NYG")), name="fb_bye_no_next"),
+    ]
+
+
 def nfl_demo_steps(now: datetime) -> list[DemoStep]:
     """Every NFL screen there is, in a sensible viewing order."""
     pregame = _game(now, "pre", name="STATUS_SCHEDULED", start=now + timedelta(days=2, hours=3))
@@ -559,6 +571,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_scores", "fb_scores_pregame", pregame),
         step("fb_countdown", "fb_countdown", countdown),
         *_preview_steps(),
+        *_bye_steps(),
         step("fb_scores", "fb_scores_live", live),
         step("fb_scores", "fb_scores_redzone", red),
         step("fb_scores", "fb_scores_halftime", half),

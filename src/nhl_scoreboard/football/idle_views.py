@@ -162,3 +162,22 @@ def build_preview(ctx: IdleContext) -> PreviewView | None:
         away_record=event.away.record if event is not None else "",
         home_record=event.home.record if event is not None else "",
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ByeView:
+    """The favourite's bye week and, when the schedule knows it, the game after."""
+
+    team: str
+    #: ``None`` when the board has no schedule (or no next game) yet.
+    next_game: PreviewView | None = None
+
+
+def build_bye(ctx: IdleContext) -> ByeView | None:
+    """The bye screen: only when the scoreboard lists the favourite among the week's teams on a
+    bye. Nothing for a team that plays, with no favourite, or before the scoreboard has answered."""
+    favourite = ctx.config.favourite_team
+    board = ctx.idle.scoreboard
+    if not favourite or not _known(favourite) or board is None or not board.on_bye(favourite):
+        return None
+    return ByeView(favourite.strip().upper(), build_preview(ctx))

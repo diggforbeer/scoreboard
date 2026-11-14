@@ -48,15 +48,6 @@ def team_text(p: Panel, name: str, x: int, y: int, team: str, s: str, dim: float
 # -- the screens ---------------------------------------------------------------------------------
 
 
-def fb_bye() -> Panel:
-    p = Panel()
-    p.logo(14, 16, FAV, 9)
-    p.center("7x13B", 15, TEAMS[FAV], "BYE WEEK", 28, p.w - 4)
-    p.center("4x6", 24, DIM, "NEXT GAME", 28, p.w - 4)
-    p.center("5x7", 31, WHITE, "SUN 11/22 @ DAL", 28, p.w - 4)
-    return p
-
-
 def fb_final() -> Panel:
     """The final, held for an hour: both logos, the score, and the recap across the bottom."""
     p = Panel()
@@ -165,7 +156,6 @@ def fb_schedule() -> Panel:
 
 
 SCREENS = {
-    "fb_bye": fb_bye,
     "fb_final": fb_final,
     "fb_standings_division": fb_standings_division,
     "fb_standings_conference": fb_standings_conference,
