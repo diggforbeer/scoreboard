@@ -16,14 +16,58 @@ from __future__ import annotations
 import dataclasses
 import math
 import random
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-from .teams import TEAM_COLORS, team_color, team_secondary_color
+from .teams import TEAM_COLORS
+from .teams import team_color as nhl_team_color
+from .teams import team_secondary_color as nhl_team_secondary_color
 
 RGB = tuple[int, int, int]
+
+#: Whose team colours the decorations use (#430): NHL by default; NFL mode draws its overlay inside
+#: ``use_sport("nfl")``, so a team-coloured egg or tree ornament takes the NFL table instead of
+#: looking an NFL abbreviation up in the NHL one.
+_SPORT: ContextVar[str] = ContextVar("holiday_sport", default="nhl")
+
+
+@contextmanager
+def use_sport(sport: str) -> Iterator[None]:
+    """Draw the decorations in ``sport``'s team colours (``nhl`` or ``nfl``) inside the block."""
+    token = _SPORT.set(sport)
+    try:
+        yield
+    finally:
+        _SPORT.reset(token)
+
+
+def team_color(abbrev: str) -> RGB:
+    if _SPORT.get() == "nfl":
+        from ..football.teams import team_color as nfl_color
+
+        return nfl_color(abbrev)
+    return nhl_team_color(abbrev)
+
+
+def team_secondary_color(abbrev: str) -> RGB:
+    if _SPORT.get() == "nfl":
+        from ..football.teams import team_secondary_color as nfl_secondary
+
+        return nfl_secondary(abbrev)
+    return nhl_team_secondary_color(abbrev)
+
+
+def team_codes() -> tuple[str, ...]:
+    """Every team abbreviation of the current sport."""
+    if _SPORT.get() == "nfl":
+        from ..football.teams import TEAMS
+
+        return tuple(TEAMS)
+    return tuple(TEAM_COLORS)
 
 
 #: The scoring moments and the Wi-Fi setup screens stay clean: a ghost
@@ -1142,7 +1186,7 @@ def egg_teams(favourite: str, day: date | None) -> tuple[str, ...]:
     NHL teams picked afresh each day -- seeded by the date, so it holds all
     day and the snapshot is deterministic. No favourite: four random teams.
     """
-    others = sorted(t for t in TEAM_COLORS if t != favourite)
+    others = sorted(t for t in team_codes() if t != favourite)
     picks = random.Random(day.toordinal() if day else 0).sample(others, 4)
     return (favourite, *picks[:3]) if favourite else tuple(picks)
 

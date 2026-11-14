@@ -134,7 +134,7 @@ The NHL side is in [`screens.md`](screens.md), "Between games". Proposed fate of
 | NHL screen | In NFL mode |
 |---|---|
 | `clock` (`clock`, `show_clock_when_idle`) | **Carries over unchanged**: it is not sport-specific. The fallback when nothing else has anything to show. |
-| `christmas_tree` and the holiday decorations | **Carry over unchanged**, with the one known gap in `CLAUDE.md`: the holiday overlay still uses NHL team colours with NFL abbreviations. |
+| `christmas_tree` and the holiday decorations | **Carry over unchanged**; the holiday overlay is sport-aware (#430): NFL team colours in NFL mode, and on a game screen only on Thanksgiving and Christmas games. |
 | `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games` | **Carry over** (`fb_connecting`, `fb_no_data` and `fb_no_games` already exist). |
 | `preview`, `countdown` | Become `fb_preview`, `fb_countdown` above. |
 | `standings`, `division`, `wildcard`, `conference_leaders` | Become `fb_standings` (a division page and a conference page). |
@@ -223,9 +223,9 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
       `THANKSGIVING`, `CHRISTMAS`, from the feed's broadcast and date) **and the existing holiday
       overlay** on Thanksgiving and Christmas games.
 - [x] **Holiday decorations on Thanksgiving and Christmas games only**, using the existing holiday
-      overlays, drawn in the playing teams' **NFL** colours (the overlay still uses the NHL colour
-      table with NFL abbreviations, a known gap in `CLAUDE.md`, to be fixed as part of this). No other
-      holiday touches a game screen.
+      overlays, drawn in the playing teams' **NFL** colours (done in #430: `display/holiday.use_sport`;
+      the date rules are `football/idle_views.game_holiday`, by the game's own date in the board's
+      zone). No other holiday touches a game screen.
 - [x] **The default NFL idle rotation:** `fb_preview` 8s, `fb_standings` 8s (the division, then the
       conference), `fb_week` 10s, `fb_schedule` 8s, then the clock 6s. A screen with nothing to show is
       skipped. `fb_bye` joins the loop on a bye week and `fb_final` holds for its 60 minutes after a
