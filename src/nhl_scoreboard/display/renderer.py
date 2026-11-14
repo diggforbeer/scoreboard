@@ -1235,6 +1235,12 @@ class Renderer:
 
         football_idle.draw_fb_final(self, canvas, view, now)
 
+    def draw_fb_standings(self, canvas: Any, view: Any, page: int = 0) -> None:
+        """The NFL division and conference standings (#427); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_standings(self, canvas, view, page)
+
     def draw_fb_play_scene(self, canvas: Any, scene: Any) -> None:
         """An NFL play, its text, or an event on screen (#377); see ``football_plays``."""
         from . import football_plays

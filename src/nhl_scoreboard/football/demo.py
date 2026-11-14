@@ -576,6 +576,41 @@ def _final_steps(now: datetime) -> list[DemoStep]:
     ]
 
 
+def _standings_steps() -> list[DemoStep]:
+    """The two standings pages (#427): the division, then the conference's seeds."""
+    from .idle import StandingsRow
+    from .idle_views import StandingsView
+
+    def row(team: str, record: str, seed: int | None, streak: str, pf: int, pa: int):
+        wins, losses, *ties = (int(n) for n in record.split("-"))
+        return StandingsRow(
+            team, TEAMS[team].espn_id, record, wins, losses, ties[0] if ties else 0,
+            "", seed, streak, pf, pa,
+        )  # fmt: skip
+
+    division = (
+        row("NYG", "5-3-1", 3, "W2", 256, 187),
+        row("DAL", "4-5", 7, "L1", 201, 222),
+        row("PHI", "4-4", 6, "W1", 190, 198),
+        row("WSH", "3-6", 9, "L3", 151, 240),
+    )
+    seeds = (
+        row("PHI", "7-1", 1, "W3", 250, 180),
+        row("DET", "7-2", 2, "W2", 270, 200),
+        row("NYG", "5-3-1", 3, "W2", 256, 187),
+        row("SEA", "5-4", 4, "L1", 210, 205),
+        row("GB", "6-2", 5, "W1", 230, 190),
+        row("SF", "5-4", 6, "L2", 200, 195),
+        row("DAL", "4-5", 7, "L1", 201, 222),
+    )
+    out = row("CHI", "4-5", 8, "W1", 190, 210)
+    view = StandingsView("NYG", "NFC EAST", division, "NFC", seeds, out, "WK 10")
+    return [
+        DemoStep(Scene("fb_standings", fb_idle=view, fb_page=0), name="fb_standings_division"),
+        DemoStep(Scene("fb_standings", fb_idle=view, fb_page=1), name="fb_standings_conference"),
+    ]
+
+
 def _bye_steps() -> list[DemoStep]:
     """The bye-week screen (#425): with the next game known, and without."""
     from .idle_views import ByeView, PreviewView
@@ -615,6 +650,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_countdown", "fb_countdown", countdown),
         *_preview_steps(),
         *_bye_steps(),
+        *_standings_steps(),
         *_final_steps(now),
         step("fb_scores", "fb_scores_live", live),
         step("fb_scores", "fb_scores_redzone", red),
