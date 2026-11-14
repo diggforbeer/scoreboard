@@ -20,10 +20,12 @@ from .idle_views import (
     FinalView,
     PreviewView,
     StandingsView,
+    WeekView,
     build_bye,
     build_final,
     build_preview,
     build_standings,
+    build_week,
 )
 
 if TYPE_CHECKING:
@@ -103,3 +105,8 @@ def _final(ctx: IdleContext) -> FinalView | None:
 @idle_screen("fb_standings")
 def _standings(ctx: IdleContext) -> StandingsView | None:
     return build_standings(ctx)
+
+
+@idle_screen("fb_week")
+def _week(ctx: IdleContext) -> WeekView | None:
+    return build_week(ctx)

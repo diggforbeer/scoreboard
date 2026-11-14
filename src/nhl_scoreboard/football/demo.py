@@ -65,6 +65,7 @@ def _game(
     records: tuple[str, str] = ("", ""),
     broadcast: str = "",
     leaders: tuple[tuple[str, str, str, str], ...] = (),
+    teams: tuple[str, str] = (AWAY, HOME),
 ) -> FbGame:
     """``records`` are (home, away); ``broadcast`` is the network, if any."""
     start = (start or now).astimezone(UTC)  # the feed's times are UTC
@@ -83,8 +84,8 @@ def _game(
             },
         },
         "competitors": [
-            _side(HOME, "home", home_score, records[0]),
-            _side(AWAY, "away", away_score, records[1]),
+            _side(teams[1], "home", home_score, records[0]),
+            _side(teams[0], "away", away_score, records[1]),
         ],
     }
     if broadcast:
@@ -611,6 +612,31 @@ def _standings_steps() -> list[DemoStep]:
     ]
 
 
+def _week_steps(now: datetime) -> list[DemoStep]:
+    """The league's week (#428): two pages, with finals, a live game and games to come."""
+    from .idle_views import WeekView, week_order
+
+    def g(away: str, home: str, state: str, a: int = 0, h: int = 0, hour: int = 13):
+        name = {"post": "STATUS_FINAL", "in": "STATUS_IN_PROGRESS"}.get(state, "STATUS_SCHEDULED")
+        start = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        return _game(now, state, a, h, "Final" if state == "post" else "", name, start=start,
+                     teams=(away, home))  # fmt: skip
+
+    games = (
+        g("WSH", "NYG", "post", 17, 24), g("DAL", "PHI", "post", 20, 27),
+        g("DET", "GB", "post", 31, 28), g("SF", "SEA", "in", 14, 10),
+        g("BUF", "CHI", "pre", hour=16), g("MIA", "NE", "pre", hour=16),
+        g("KC", "LV", "pre", hour=20), g("LAR", "ARI", "pre", hour=20),
+        g("DEN", "LAC", "post", 10, 13), g("HOU", "IND", "post", 24, 17),
+        g("MIN", "TB", "post", 21, 20), g("NO", "ATL", "post", 14, 28),
+    )  # fmt: skip
+    view = WeekView(week_order(games))
+    return [
+        DemoStep(Scene("fb_week", fb_idle=view, fb_page=0), name="fb_week"),
+        DemoStep(Scene("fb_week", fb_idle=view, fb_page=1), name="fb_week_page2"),
+    ]
+
+
 def _bye_steps() -> list[DemoStep]:
     """The bye-week screen (#425): with the next game known, and without."""
     from .idle_views import ByeView, PreviewView
@@ -650,6 +676,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_countdown", "fb_countdown", countdown),
         *_preview_steps(),
         *_bye_steps(),
+        *_week_steps(now),
         *_standings_steps(),
         *_final_steps(now),
         step("fb_scores", "fb_scores_live", live),

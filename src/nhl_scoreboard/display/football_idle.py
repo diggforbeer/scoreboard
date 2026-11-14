@@ -275,3 +275,57 @@ def _draw_conference(r: Renderer, canvas: Any, view: Any) -> None:
 
 
 PLAYOFF_NEXT = 8
+
+
+CELL_W = 31
+#: A cell's two lines (away over home): the baselines of the first and second row of cells.
+WEEK_TOPS = (7, 24)
+WEEK_RULE_Y = 17
+
+
+def kickoff_hour(game: Any, r: Renderer) -> str:
+    """``4P``: the kickoff hour in the board's zone; a cell is too narrow for minutes."""
+    if game.start_utc is None:
+        return ""
+    local = game.start_utc.astimezone(r.tz)
+    hour = local.hour % 12 or 12
+    return f"{hour}{'A' if local.hour < 12 else 'P'}"
+
+
+def _draw_cell(r: Renderer, canvas: Any, game: Any, x: int, top: int) -> None:
+    font = r.fonts.tiny
+    final, live = game.is_final, game.is_live
+    scores = (game.away.score, game.home.score)
+    for j, (side, score) in enumerate(((game.away, scores[0]), (game.home, scores[1]))):
+        y = top + j * 6
+        winner = final and score == max(scores) and scores[0] != scores[1]
+        dim = 0.55 if final and not winner else 1.0
+        r.text(canvas, font, x, y, _team_ink(side.abbrev, dim), side.abbrev)
+        if final:
+            r.text_right(canvas, font, x + 24, y, WHITE if winner else DIM, str(score))
+        elif live:
+            r.text_right(canvas, font, x + 24, y, LIVE, str(score))
+    if not (final or live):
+        r.text_right(canvas, font, x + 24, top, DIM, kickoff_hour(game, r))
+
+
+def draw_fb_week(r: Renderer, canvas: Any, view: Any, page: int = 0) -> None:
+    """The week's games, eight a page in two rows of four cells, away over home: a final with
+    the winner bright and the loser dim, a live game's score in green, a game to come with its
+    kickoff hour. Fewer than eight games fill from the top left."""
+    canvas.Clear()
+    games = view.page(min(max(page, 0), view.pages - 1))
+    for i, game in enumerate(games):
+        col, row = i % 4, i // 4
+        _draw_cell(r, canvas, game, 3 + col * CELL_W, WEEK_TOPS[row])
+    if len(games) > 4:
+        r.hline(canvas, 0, r.width - 1, WEEK_RULE_Y, _dimmed(DIM, 0.35))
+    if view.pages > 1:
+        for n in range(view.pages):
+            r.hline(
+                canvas,
+                60 + n * 6,
+                61 + n * 6,
+                r.height - 1,
+                DIM if n == page else _dimmed(DIM, 0.35),
+            )
