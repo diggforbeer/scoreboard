@@ -11,7 +11,7 @@ here (and its picture to ``football_screen.md``) and retires its hand-drawn mock
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..app import Scene
@@ -27,12 +27,15 @@ from .teams import TEAMS
 AWAY, HOME = "WSH", "NYG"
 
 
-def _side(abbrev: str, home_away: str, score: int) -> dict[str, Any]:
-    return {
+def _side(abbrev: str, home_away: str, score: int, record: str = "") -> dict[str, Any]:
+    side: dict[str, Any] = {
         "homeAway": home_away,
         "score": str(score),
         "team": {"id": str(TEAMS[abbrev].espn_id), "abbreviation": abbrev},
     }
+    if record:
+        side["records"] = [{"type": "total", "summary": record}]
+    return side
 
 
 def _situation(
@@ -59,11 +62,14 @@ def _game(
     name: str = "STATUS_IN_PROGRESS",
     situation: dict[str, Any] | None = None,
     start: datetime | None = None,
+    records: tuple[str, str] = ("", ""),
+    broadcast: str = "",
 ) -> FbGame:
-    start = start or now
+    """``records`` are (home, away); ``broadcast`` is the network, if any."""
+    start = (start or now).astimezone(UTC)  # the feed's times are UTC
     comp: dict[str, Any] = {
         "id": "1",
-        "startDate": start.strftime("%Y-%m-%dT%H:%MZ"),
+        "startDate": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "status": {
             "period": 3,
             "clock": 744.0,
@@ -75,12 +81,17 @@ def _game(
                 "completed": state == "post",
             },
         },
-        "competitors": [_side(HOME, "home", home_score), _side(AWAY, "away", away_score)],
+        "competitors": [
+            _side(HOME, "home", home_score, records[0]),
+            _side(AWAY, "away", away_score, records[1]),
+        ],
     }
+    if broadcast:
+        comp["broadcasts"] = [{"names": [broadcast]}]
     if situation is not None:
         comp["situation"] = situation
     return FbGame.from_api(
-        {"id": "1", "date": start.strftime("%Y-%m-%dT%H:%MZ"), "competitions": [comp]}
+        {"id": "1", "date": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "competitions": [comp]}
     )
 
 
@@ -501,6 +512,14 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
 def nfl_demo_steps(now: datetime) -> list[DemoStep]:
     """Every NFL screen there is, in a sensible viewing order."""
     pregame = _game(now, "pre", name="STATUS_SCHEDULED", start=now + timedelta(days=2, hours=3))
+    countdown = _game(
+        now,
+        "pre",
+        name="STATUS_SCHEDULED",
+        start=now + timedelta(minutes=42, seconds=15),
+        records=("5-3-1", "4-5"),
+        broadcast="FOX",
+    )
     live = _game(now, "in", 10, 17, "12:24 - 3rd", situation=_situation(HOME, 62, 2, 7))
     red = _game(now, "in", 10, 17, "2:01 - 4th", situation=_situation(AWAY, 6, 1, 6, red_zone=True))
     half = _game(now, "in", 10, 17, "Halftime", name="STATUS_HALFTIME")
@@ -514,6 +533,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_no_data", "fb_no_data"),
         step("fb_no_games", "fb_no_games"),
         step("fb_scores", "fb_scores_pregame", pregame),
+        step("fb_countdown", "fb_countdown", countdown),
         step("fb_scores", "fb_scores_live", live),
         step("fb_scores", "fb_scores_redzone", red),
         step("fb_scores", "fb_scores_halftime", half),

@@ -116,7 +116,7 @@ shown is NYG. The tiny 4x6 font has no `@` and no `#`, so away games read `AT`.
 
 | | |
 |---|---|
-| ![Countdown](docs/football-idle/fb_countdown.png) | ![Preview](docs/football-idle/fb_preview.png) |
+| ![Countdown](docs/football/fb_countdown.png) | ![Preview](docs/football-idle/fb_preview.png) |
 | `fb_countdown`: kickoff in the hour. Both logos and records (from the scoreboard), the countdown between them, the day, time and broadcast under it. | `fb_preview`: the next game, days away. The week, the day, the time, the records. |
 | ![Primetime](docs/football-idle/fb_preview_primetime.png) | ![Thanksgiving](docs/football-idle/fb_preview_thanksgiving.png) |
 | A primetime game: the tag (`THU NIGHT`) goes before the week. | A holiday game: the tag (`THANKSGIVING`) and, suggested here by the trim along the top, the existing holiday overlay in NFL colours. |
@@ -250,7 +250,8 @@ None left. The next step is the build, one story each (see the todo).
 
 ### Build (after the design is agreed, one story each)
 - [x] The schedule, standings and week fetch and cache (#421, `football/idle.py`).
-- [ ] `fb_countdown`, `fb_preview`, `fb_bye`
+- [x] `fb_countdown` (#423, `display/football_idle.py`; the real render is `docs/football/fb_countdown.png`)
+- [ ] `fb_preview`, `fb_bye`
 - [ ] `fb_final` (the hold, and the recap if kept)
 - [ ] `fb_standings`, `fb_week`, `fb_schedule`
 - [x] The NFL idle rotation and the scene selection above, with the clock as the fallback (#422;
