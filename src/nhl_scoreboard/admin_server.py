@@ -292,6 +292,7 @@ from .audio_normalize import Normalized, normalize
 from .config import (
     DEFAULT_NFL_ROTATION,
     FLYBY_FREQUENCIES,
+    FOOTBALL_TIMING_RANGES,
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
     NFL_ROTATION_SCREENS,
@@ -623,12 +624,14 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "final_hold_minutes": cfg.final_hold_minutes,
             "countdown_minutes": cfg.countdown_minutes,
             "page_seconds": cfg.page_seconds,
+            "timings": {n: getattr(cfg, f"{n}_seconds") for n in FOOTBALL_TIMING_RANGES},
             "show_countdown": cfg.show_countdown,
             "show_bye": cfg.show_bye,
             "show_final": cfg.show_final,
         },
         "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_NFL_ROTATION],
         "screens": list(NFL_ROTATION_SCREENS),
+        "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
 
 
@@ -1432,6 +1435,19 @@ def _coerce_football_rotation(data: object) -> dict[str, object]:
         if not 0 <= seconds <= 60:
             raise ValueError(json.dumps({"page_seconds": "must be between 0 and 60"}))
         values["page_seconds"] = float(seconds)
+    if "timings" in data:
+        timings = data["timings"]
+        if not isinstance(timings, dict):
+            raise ValueError(json.dumps({"timings": "must be an object"}))
+        for name, seconds in timings.items():
+            if name not in FOOTBALL_TIMING_RANGES:
+                raise ValueError(json.dumps({"timings": f"unknown screen length {name!r}"}))
+            _, low, high = FOOTBALL_TIMING_RANGES[name]
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+                raise ValueError(json.dumps({name: "must be a number of seconds"}))
+            if not low <= seconds <= high:
+                raise ValueError(json.dumps({name: f"must be between {low:g} and {high:g}"}))
+            values[f"{name}_seconds"] = float(seconds)
     for key in _FOOTBALL_TOGGLES:
         if key not in data:
             continue

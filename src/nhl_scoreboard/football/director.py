@@ -68,7 +68,8 @@ PLAY, PLAYTEXT, EVENT, DETAIL, REVERSAL = "play", "playtext", "event", "detail",
 @dataclass(frozen=True, slots=True)
 class Timings:
     """Seconds each stage lasts at normal speed: the proposed values in ``football_screen.md``
-    ("Timing"). Held to the ranges below by :meth:`clamped`; settings come later."""
+    ("Timing"). Held to the ranges below by :meth:`clamped`; the owner's own come from
+    ``[football]`` (``timings_from``)."""
 
     play: float = 3.0
     playtext: float = 5.0
@@ -95,6 +96,13 @@ class Timings:
             reversal=hold(self.reversal, 3.0, 15.0),
             cointoss=hold(self.cointoss, 4.0, 12.0),
         )
+
+
+def timings_from(cfg: FootballConfig) -> Timings:
+    """The stage lengths the owner set in ``[football]`` (``<name>_seconds``), held to range."""
+    from ..config import FOOTBALL_TIMING_RANGES
+
+    return Timings(**{n: getattr(cfg, f"{n}_seconds") for n in FOOTBALL_TIMING_RANGES}).clamped()
 
 
 @dataclass(frozen=True, slots=True)

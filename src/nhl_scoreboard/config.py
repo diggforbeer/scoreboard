@@ -352,6 +352,20 @@ ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 #: ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself when they
 #: apply (a bye week, the kickoff window, the hold after a game).
 NFL_ROTATION_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock")
+#: The in-game screen lengths (#445): name -> (default, lowest, highest) seconds. The defaults are
+#: the proposed values in ``football_screen.md`` and the ranges are ``football.director.Timings``'s
+#: own; a test keeps the two in step. Each is the ``[football]`` key ``<name>_seconds``.
+FOOTBALL_TIMING_RANGES: dict[str, tuple[float, float, float]] = {
+    "play": (3.0, 1.0, 8.0),
+    "playtext": (5.0, 2.0, 30.0),
+    "score": (6.0, 4.0, 15.0),
+    "score_detail": (8.0, 3.0, 20.0),
+    "quick": (4.0, 2.0, 10.0),
+    "fg_miss": (3.0, 2.0, 10.0),
+    "turnover": (4.0, 2.0, 10.0),
+    "reversal": (5.0, 3.0, 15.0),
+    "cointoss": (6.0, 4.0, 12.0),
+}
 #: What NFL mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
 DEFAULT_NFL_ROTATION: tuple[tuple[str, float], ...] = (
     ("fb_preview", 8.0),
@@ -551,12 +565,30 @@ class FootballConfig:
     #: Seconds each page of a paged screen (the standings, the week grid) shows (#444). 0 keeps the
     #: old behaviour: the pages split the rotation row's seconds between them.
     page_seconds: float = 0.0
+    #: How long each in-game stage stays up (#445); out-of-range values are held to the range.
+    play_seconds: float = 3.0
+    playtext_seconds: float = 5.0
+    score_seconds: float = 6.0
+    score_detail_seconds: float = 8.0
+    quick_seconds: float = 4.0
+    fg_miss_seconds: float = 3.0
+    turnover_seconds: float = 4.0
+    reversal_seconds: float = 5.0
+    cointoss_seconds: float = 6.0
     show_countdown: bool = True
     show_bye: bool = True
     show_final: bool = True
 
     def __post_init__(self) -> None:
         self.page_seconds = _non_negative(self.page_seconds, "football.page_seconds")
+        for name, (default, low, high) in FOOTBALL_TIMING_RANGES.items():
+            key = f"{name}_seconds"
+            try:
+                value = float(getattr(self, key))
+            except (TypeError, ValueError):
+                log.warning("Ignoring non-numeric football.%s %r", key, getattr(self, key))
+                value = default
+            setattr(self, key, max(low, min(high, value)))
         self.show_countdown = bool(self.show_countdown)
         self.show_bye = bool(self.show_bye)
         self.show_final = bool(self.show_final)

@@ -168,6 +168,7 @@ interface NflRotationConfig {
   final_hold_minutes: number
   countdown_minutes: number
   page_seconds: number
+  timings: Record<string, number>
   show_countdown: boolean
   show_bye: boolean
   show_final: boolean
@@ -319,6 +320,7 @@ type ServerMessage =
       section: 'football_rotation'
       data: NflRotationConfig
       defaults: RotationRow[]
+      timing_ranges: Record<string, [number, number, number]>
       screens: string[]
     }
   | {
@@ -536,6 +538,7 @@ function App() {
   const nflRotation = nflRotationState.value
   const [nflRotationDefaults, setNflRotationDefaults] = useState<RotationRow[]>([])
   const [nflRotationScreens, setNflRotationScreens] = useState<string[]>([])
+  const [nflTimingRanges, setNflTimingRanges] = useState<Record<string, [number, number, number]>>({})
 
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
     (v) => save('holiday', v),
@@ -649,6 +652,7 @@ function App() {
               nflRotationSave.receiveConfig(message.data)
               setNflRotationDefaults(message.defaults)
               setNflRotationScreens(message.screens)
+              setNflTimingRanges(message.timing_ranges)
             }
             else if (message.section === 'holiday') {
               holidaySave.receiveConfig(message.data)
@@ -1794,6 +1798,57 @@ function App() {
             ) : (
               <p className="text-body-secondary mb-0">waiting for server...</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {scoreboard?.sport === 'nfl' && nflRotation && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">NFL game screen lengths</h2>
+            <p className="text-body-secondary small">
+              How long each in-game screen stays up, in seconds. Each is held to its range.
+            </p>
+            <div className="row g-3">
+              {(
+                [
+                  ['play', 'Play animation'],
+                  ['playtext', 'Play text'],
+                  ['score', 'Score celebration'],
+                  ['score_detail', 'Score detail card'],
+                  ['quick', "Followed team's score"],
+                  ['fg_miss', 'Missed field goal'],
+                  ['turnover', 'Turnover'],
+                  ['reversal', 'Reversal'],
+                  ['cointoss', 'Coin toss'],
+                ] as const
+              ).map(([key, label]) => {
+                const range = nflTimingRanges[key]
+                return (
+                  <div className="col-sm-4" key={key}>
+                    <label className="form-label" htmlFor={`nfl-timing-${key}`}>
+                      {label}
+                    </label>
+                    <input
+                      className="form-control"
+                      id={`nfl-timing-${key}`}
+                      type="number"
+                      step="any"
+                      min={range?.[1]}
+                      max={range?.[2]}
+                      value={nflRotation.timings[key] ?? ''}
+                      onChange={(e) =>
+                        numberEdit(nflRotationSave, e, {
+                          ...nflRotation,
+                          timings: { ...nflRotation.timings, [key]: Number(e.target.value) },
+                        })
+                      }
+                      onBlur={nflRotationSave.flush}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}

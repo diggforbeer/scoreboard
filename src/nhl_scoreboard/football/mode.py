@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from .api import MIN_POLL_SECONDS
-from .director import Director, Timings
+from .director import Director, Timings, timings_from
 from .idle import (
     SCHEDULE_TTL,
     STANDINGS_TTL,
@@ -105,6 +105,8 @@ class NflMode:
             idle=self._collect_idle,
         )
         #: Which play, celebration or reversal is on screen (#377). Render loop only.
+        if timings is None and football is not None:
+            timings = lambda: timings_from(football())  # noqa: E731 - the owner's [football] lengths
         self.director = Director(
             football or _no_football, monotonic, delay_seconds, utc_now, timings
         )
