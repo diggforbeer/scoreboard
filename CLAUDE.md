@@ -1685,6 +1685,17 @@ when it was written; that history is left as-is rather than rewritten.
   updated by the in-app update, since that doesn't install these files;
   only a reflash replaces it. The "unknown" notice repeats for each
   release rather than being shown once. Not verified on hardware (#4).
+- **Tabs (#449): Home | Display | Audio | Holiday Cheer | Setup | Logs.**
+  Split by how often a person touches a setting, not by feature. Home: status,
+  Live view, favourite and also-follow. Display: screens/logos, game timing,
+  brightness, idle rotation, night mode. Setup (set once): Panel hardware,
+  time zone, status page, Wi-Fi, update, reboot. The old Scoreboard card is now
+  several cards sharing one `scoreboardSave` hook. Brightness is a slice of
+  `[panel]` shown on Display with its own Save (`saveBrightness`): it sends only
+  its five fields so a half-edited, restart-required Setup form never rides
+  along; a server echo of `[panel]` does replace that unsaved Setup draft.
+  The planned Sports tab (NHL | NFL pills) and the decisions it waits on are
+  in #449.
 - **Autosave + Undo (#273).** Every section except Panel and Status saves
   itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
   the Save buttons are gone). One `AutosaveToast` bar pinned to the
