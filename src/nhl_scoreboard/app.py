@@ -272,6 +272,8 @@ class Scene:
     fb_people: tuple[Person, ...] = ()
     fb_event: FbEvent | None = None
     fb_stage: str = ""
+    #: What an idle screen draws (#419): the view its builder in ``football/idle_screens.py`` made.
+    fb_idle: Any = None
     fb_elapsed: float = field(default=0.0, compare=False)
     fb_seconds: float = 0.0
     animating: bool = False
@@ -2936,6 +2938,8 @@ class ScoreboardApp:
             r.draw_fb_halftime(self.canvas, scene.fb_game)
         elif scene.kind == "fb_countdown":
             r.draw_fb_countdown(self.canvas, scene.fb_game, self.clock())
+        elif scene.kind == "fb_preview":
+            r.draw_fb_preview(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
         elif scene.kind == "clock":

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from .idle_views import PreviewView, build_preview
+
 if TYPE_CHECKING:
     from ..config import FootballConfig
     from .idle import IdleSnapshot
@@ -67,8 +69,13 @@ def _favourite_game(ctx: IdleContext) -> FbGame | None:
 
 
 @idle_screen("fb_countdown")
-def _countdown(ctx: IdleContext) -> bool:
-    """The favourite has a game that has not started and has a kickoff time to count to.
+def _countdown(ctx: IdleContext) -> FbGame | None:
+    """The favourite's game, if it has not started and has a kickoff time to count to.
     (The window itself is ``NflMode._in_countdown``: this screen is not in the rotation.)"""
     game = _favourite_game(ctx)
-    return game is not None and game.is_pregame and game.start_utc is not None
+    return game if game is not None and game.is_pregame and game.start_utc is not None else None
+
+
+@idle_screen("fb_preview")
+def _preview(ctx: IdleContext) -> PreviewView | None:
+    return build_preview(ctx)

@@ -48,44 +48,6 @@ def team_text(p: Panel, name: str, x: int, y: int, team: str, s: str, dim: float
 # -- the screens ---------------------------------------------------------------------------------
 
 
-def preview(tag: str = "", tag_color=AMBER, day: str = "SUN 11/22", when: str = "12:00 PM",
-            opp: str = "DAL", home: bool = True, week: str = "WEEK 11") -> Panel:  # fmt: skip
-    p = Panel()
-    left, right = (FAV, opp) if not home else (opp, FAV)
-    p.logo(14, 13, left, 8)
-    p.logo(p.w - 15, 13, right, 8)
-    top = f"{tag}  {week}" if tag else week
-    p.center("4x6", 7, tag_color if tag else DIM, top, 24, p.w - 24)
-    p.center("5x7", 16, WHITE, day, 28, p.w - 28)
-    p.center("7x13B", 28, WHITE, when, 28, p.w - 28)
-    p.center("4x6", 31, DIM, "5-3-1" if left == FAV else "4-5", 0, 28)
-    p.center("4x6", 31, DIM, "4-5" if left == FAV else "5-3-1", p.w - 28, p.w)
-    return p
-
-
-def fb_preview() -> Panel:
-    return preview(tag="")
-
-
-def fb_preview_primetime() -> Panel:
-    return preview(tag="THU NIGHT", day="THU 11/26", when="7:20 PM", opp="DAL", week="WEEK 12")
-
-
-def fb_preview_thanksgiving() -> Panel:
-    p = preview(
-        tag="THANKSGIVING",
-        tag_color=AMBER,
-        day="THU 11/26",
-        when="12:30 PM",
-        opp="DET",
-        week="WEEK 12",
-    )
-    for x in range(0, p.w, 6):  # the holiday overlay's trim, suggested
-        p.px(x, 0, scale((255, 120, 0), 0.8))
-        p.px(x + 2, 1, scale((200, 60, 0), 0.8))
-    return p
-
-
 def fb_bye() -> Panel:
     p = Panel()
     p.logo(14, 16, FAV, 9)
@@ -203,9 +165,6 @@ def fb_schedule() -> Panel:
 
 
 SCREENS = {
-    "fb_preview": fb_preview,
-    "fb_preview_primetime": fb_preview_primetime,
-    "fb_preview_thanksgiving": fb_preview_thanksgiving,
     "fb_bye": fb_bye,
     "fb_final": fb_final,
     "fb_standings_division": fb_standings_division,

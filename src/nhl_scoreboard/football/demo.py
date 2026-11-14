@@ -509,6 +509,30 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     ]
 
 
+def _preview_steps() -> list[DemoStep]:
+    """The next-game preview (#424): plain, a Thursday-night game, and Thanksgiving."""
+    from .idle_views import PreviewView, game_tag
+
+    def view(start: datetime, away: str, home: str, week: str, records: tuple[str, str]):
+        return Scene(
+            "fb_preview",
+            fb_idle=PreviewView(away, home, start, game_tag(start), week, *records),
+        )
+
+    plain = datetime(2026, 11, 22, 18, 0, tzinfo=UTC)
+    night = datetime(2026, 12, 4, 0, 20, tzinfo=UTC)
+    turkey = datetime(2026, 11, 26, 17, 30, tzinfo=UTC)
+    return [
+        DemoStep(view(plain, "DAL", "NYG", "WEEK 11", ("4-5", "5-3-1")), name="fb_preview"),
+        DemoStep(
+            view(night, "NYG", "PHI", "WEEK 13", ("5-3-1", "7-2")), name="fb_preview_primetime"
+        ),
+        DemoStep(
+            view(turkey, "DET", "NYG", "WEEK 12", ("6-3", "5-3-1")), name="fb_preview_thanksgiving"
+        ),
+    ]
+
+
 def nfl_demo_steps(now: datetime) -> list[DemoStep]:
     """Every NFL screen there is, in a sensible viewing order."""
     pregame = _game(now, "pre", name="STATUS_SCHEDULED", start=now + timedelta(days=2, hours=3))
@@ -534,6 +558,7 @@ def nfl_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_no_games", "fb_no_games"),
         step("fb_scores", "fb_scores_pregame", pregame),
         step("fb_countdown", "fb_countdown", countdown),
+        *_preview_steps(),
         step("fb_scores", "fb_scores_live", live),
         step("fb_scores", "fb_scores_redzone", red),
         step("fb_scores", "fb_scores_halftime", half),

@@ -9,8 +9,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from ..football.models import FbGame, FbTeam
-from .football_scenes import DIM, WHITE, side_color
+from ..football.models import FbGame
+from ..football.teams import is_team, team_color
+from .fonts import text_width
+from .football_scenes import DIM, UNKNOWN_TEAM, WHITE
 
 if TYPE_CHECKING:
     from .renderer import Renderer
@@ -21,12 +23,13 @@ LEFT_X, RIGHT_DX = 14, 15
 LOGO_CY = 13
 
 
-def draw_side_logo(r: Renderer, canvas: Any, side: FbTeam, x: int, cy: int = LOGO_CY) -> None:
-    """``side``'s 16px crest centred on ``x``, else its abbreviation in its colour."""
-    have_art = r.nfl_logos is not None and side.is_nfl
-    logo = r.nfl_logos.get(side.abbrev, LOGO_SIZE) if have_art else None
+def draw_side_logo(r: Renderer, canvas: Any, abbrev: str, x: int, cy: int = LOGO_CY) -> None:
+    """``abbrev``'s 16px crest centred on ``x``, else the abbreviation in its colour."""
+    known = is_team(abbrev)
+    logo = r.nfl_logos.get(abbrev, LOGO_SIZE) if r.nfl_logos is not None and known else None
     if logo is None:
-        r.text_center(canvas, r.fonts.small, x, cy + 3, side_color(side), side.abbrev)
+        color = team_color(abbrev) if known else UNKNOWN_TEAM
+        r.text_center(canvas, r.fonts.small, x, cy + 3, color, abbrev)
         return
     ox, oy = x - logo.width // 2, cy - logo.height // 2
     for dx, dy, (red, green, blue) in logo.pixels:
@@ -58,8 +61,8 @@ def draw_fb_countdown(r: Renderer, canvas: Any, game: FbGame, now: datetime) -> 
     canvas.Clear()
     cx = r.width // 2
     away, home = game.away, game.home
-    draw_side_logo(r, canvas, away, LEFT_X)
-    draw_side_logo(r, canvas, home, r.width - RIGHT_DX)
+    draw_side_logo(r, canvas, away.abbrev, LEFT_X)
+    draw_side_logo(r, canvas, home.abbrev, r.width - RIGHT_DX)
     r.text_center(canvas, r.fonts.tiny, cx, 7, DIM, "KICKOFF IN")
     remaining = (game.start_utc - now).total_seconds() if game.start_utc is not None else 0.0
     r.text_center(canvas, r.fonts.large, cx, 21, WHITE, countdown_text(remaining))
@@ -69,3 +72,38 @@ def draw_fb_countdown(r: Renderer, canvas: Any, game: FbGame, now: datetime) -> 
     for side, x in ((away, LEFT_X), (home, r.width - RIGHT_DX)):
         if side.record:
             r.text_center(canvas, r.fonts.tiny, x, 31, DIM, side.record)
+
+
+AMBER = (255, 170, 0)
+
+
+def preview_top_line(r: Renderer, view: Any, room: int) -> str:
+    """``THU NIGHT  WEEK 12`` if it fits ``room`` px, else the tag alone, else the week."""
+    tags = [f"{view.tag}  {view.week}".strip(), view.tag, view.week] if view.tag else [view.week]
+    for text in tags:
+        if text and text_width(r.fonts.tiny, text) <= room:
+            return text
+    return r._fit_text(r.fonts.tiny, tags[-1], room)
+
+
+def draw_fb_preview(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
+    """The favourite's next game: both crests with their records at the edges, the week (and
+    a primetime or holiday tag in amber) over the day, and the kickoff time in the large face.
+    Away is on the left. A record the feed did not give is left out."""
+    canvas.Clear()
+    cx = r.width // 2
+    draw_side_logo(r, canvas, view.away, LEFT_X)
+    draw_side_logo(r, canvas, view.home, r.width - RIGHT_DX)
+    room = r.width - 48
+    top = preview_top_line(r, view, room)
+    if top:
+        r.text_center(canvas, r.fonts.tiny, cx, 7, AMBER if view.tag else DIM, top)
+    local = view.start_utc.astimezone(r.tz)
+    r.text_center(
+        canvas, r.fonts.small, cx, 16, WHITE, f"{local:%a} {local.month}/{local.day}".upper()
+    )
+    when = f"{local:%I:%M %p}".lstrip("0")
+    r.text_center(canvas, r.fonts.large, cx, 28, WHITE, when)
+    for record, x in ((view.away_record, LEFT_X), (view.home_record, r.width - RIGHT_DX)):
+        if record:
+            r.text_center(canvas, r.fonts.tiny, x, 31, DIM, record)

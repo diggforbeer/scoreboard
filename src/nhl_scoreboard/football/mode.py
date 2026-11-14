@@ -270,7 +270,7 @@ class NflMode:
         games = snap.games or ()
         idle_kind = self._idle_kind(games, snap, now)
         if idle_kind is not None:
-            return self._idle_scene(idle_kind, games)
+            return self._idle_scene(idle_kind, games, snap, now)
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
@@ -295,7 +295,7 @@ class NflMode:
         rotation's clock (or ``fb_no_games``). 128px panels only: on 64px this returns None except
         for the empty slate's clock.
         """
-        from .idle_screens import IDLE_SCREENS, IdleContext
+        from .idle_screens import IDLE_SCREENS
 
         cfg = self._football() if self._football else _no_football()
         followed = cfg.followed_teams
@@ -311,7 +311,7 @@ class NflMode:
         if not wide:
             return "clock" if not games and _has_clock(cfg) else None
         favourite = cfg.favourite_team
-        ctx = IdleContext(now, self._utc_now(), games, snap.idle, cfg)
+        ctx = self._idle_context(games, snap, now, cfg)
         mine = next((g for g in games if favourite and g.involves(favourite)), None)
         if mine is not None and "fb_countdown" in IDLE_SCREENS and self._in_countdown(mine, cfg):
             return "fb_countdown"
@@ -362,12 +362,28 @@ class NflMode:
             slots.append(("fb_bye", 8.0))
         return slots + clock if slots else []
 
-    def _idle_scene(self, kind: str, games: Sequence[FbGame]) -> Scene:
-        from ..app import Scene
+    def _idle_context(
+        self, games: Sequence[FbGame], snap: FeedSnapshot, now: float, cfg: FootballConfig
+    ) -> Any:
+        from .idle_screens import IdleContext
 
-        favourite = self._football().favourite_team if self._football else ""
+        return IdleContext(now, self._utc_now(), games, snap.idle, cfg)
+
+    def _idle_scene(
+        self, kind: str, games: Sequence[FbGame], snap: FeedSnapshot, now: float
+    ) -> Scene:
+        """The scene for the chosen idle screen: its builder's view, and the favourite's game."""
+        from ..app import Scene
+        from .idle_screens import IDLE_SCREENS
+
+        cfg = self._football() if self._football else _no_football()
+        favourite = cfg.favourite_team
         mine = next((g for g in games if favourite and g.involves(favourite)), None)
-        return Scene(kind, fb_game=mine if kind in ("fb_countdown", "fb_final") else None)
+        build = IDLE_SCREENS.get(kind)
+        view = build(self._idle_context(games, snap, now, cfg)) if build is not None else None
+        return Scene(
+            kind, fb_game=mine if kind in ("fb_countdown", "fb_final") else None, fb_idle=view
+        )
 
     def _play_scene(self, current: Any, base: Scene) -> Scene:
         """The scene for the stage on screen (#377), over the game's latest score."""
