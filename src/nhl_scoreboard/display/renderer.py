@@ -29,7 +29,7 @@ from ..nhl.models import (
 from . import goal_light
 from . import penalty as penalty_screen
 from .fonts import FontSet, text_width
-from .logos import Logo, LogoLibrary
+from .logos import Logo, LogoLibrary, LogoSet
 from .teams import team_color, team_name, team_secondary_color
 
 log = logging.getLogger(__name__)
@@ -67,6 +67,9 @@ class Renderer:
         self.height = height
         self.tz = tz
         self.logos = logos
+        #: The football's logos at several sizes (#349), kept apart from the NHL's because the
+        #: abbreviations overlap. ``None`` with logos switched off or in NHL mode.
+        self.football_logos: LogoSet | None = None
         self._colors: dict[tuple[int, int, int], Any] = {}
         #: goal_light's GOAL letters, rasterised once.
         self.goal_glyphs: dict[str, Any] = {}
@@ -1194,6 +1197,72 @@ class Renderer:
         self.text_center(canvas, self.fonts.large, cx, 14, (255, 40, 40), "BLOWOUT")
         line = f"{mine.abbrev} {mine.score} - {theirs.score} {theirs.abbrev}"
         self.text_center(canvas, self.fonts.small, cx, self.height - 5, WHITE, line)
+
+    def draw_fb_scores(self, canvas: Any, game: Any) -> None:
+        """The plain football scoreboard for one game (#352); see ``football_scenes``."""
+        from . import football_scenes
+
+        football_scenes.draw_fb_scores(self, canvas, game)
+
+    def draw_fb_field(self, canvas: Any, game: Any) -> None:
+        """The resting football field (#359); see ``football_scenes``."""
+        from . import football_scenes
+
+        football_scenes.draw_fb_field(self, canvas, game)
+
+    def draw_fb_halftime(self, canvas: Any, game: Any) -> None:
+        """The halftime card (#388); see ``football_scenes``."""
+        from . import football_scenes
+
+        football_scenes.draw_fb_halftime(self, canvas, game)
+
+    def draw_fb_countdown(self, canvas: Any, game: Any, now: Any) -> None:
+        """The football kickoff countdown (#423); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_countdown(self, canvas, game, now)
+
+    def draw_fb_preview(self, canvas: Any, view: Any, now: Any) -> None:
+        """The football next-game preview (#424); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_preview(self, canvas, view, now)
+
+    def draw_fb_bye(self, canvas: Any, view: Any, now: Any) -> None:
+        """The football bye-week screen (#425); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_bye(self, canvas, view, now)
+
+    def draw_fb_final(self, canvas: Any, view: Any, now: Any) -> None:
+        """The held football final with its recap (#426); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_final(self, canvas, view, now)
+
+    def draw_fb_standings(self, canvas: Any, view: Any, page: int = 0) -> None:
+        """The football division and conference standings (#427); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_standings(self, canvas, view, page)
+
+    def draw_fb_week(self, canvas: Any, view: Any, page: int = 0) -> None:
+        """The league's week as a grid of scores (#428); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_week(self, canvas, view, page)
+
+    def draw_fb_schedule(self, canvas: Any, view: Any, now: Any) -> None:
+        """The favourite's next three games (#429); see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_schedule(self, canvas, view, now)
+
+    def draw_fb_play_scene(self, canvas: Any, scene: Any) -> None:
+        """A football play, its text, or an event on screen (#377); see ``football_plays``."""
+        from . import football_plays
+
+        football_plays.draw(self, canvas, scene)
 
     def draw_message(self, canvas: Any, title: str, subtitle: str = "") -> None:
         canvas.Clear()

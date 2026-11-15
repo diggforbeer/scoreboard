@@ -1,0 +1,464 @@
+{
+ "events": [
+  {
+   "id": "401873052",
+   "date": "2026-11-13T01:15Z",
+   "name": "Washington Commanders at New York Giants",
+   "shortName": "WSH @ NYG",
+   "week": {
+    "number": 10
+   },
+   "status": {
+    "clock": 744.0,
+    "displayClock": "12:24",
+    "period": 3,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "12:24 - 3rd Quarter",
+     "shortDetail": "12:24 - 3rd"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873052",
+     "date": "2026-11-13T01:15Z",
+     "startDate": "2026-11-13T01:15Z",
+     "neutralSite": false,
+     "status": {
+      "clock": 744.0,
+      "displayClock": "12:24",
+      "period": 3,
+      "type": {
+       "id": "2",
+       "name": "STATUS_IN_PROGRESS",
+       "state": "in",
+       "completed": false,
+       "description": "In Progress",
+       "detail": "12:24 - 3rd Quarter",
+       "shortDetail": "12:24 - 3rd"
+      },
+      "isTBDFlex": false
+     },
+     "situation": {
+      "lastPlay": {
+       "id": "4018730522271",
+       "type": {
+        "id": "24",
+        "text": "Pass Reception",
+        "abbreviation": "REC"
+       },
+       "text": " (Shotgun) J.McCarthy pass deep left to M.Fields pushed ob at WAS 30 for 25 yards (P.Butler).",
+       "scoreValue": 0,
+       "team": {
+        "id": "19"
+       },
+       "probability": {
+        "tiePercentage": 0.0,
+        "homeWinPercentage": 0.5042,
+        "awayWinPercentage": 0.4958,
+        "secondsLeft": 0
+       },
+       "statYardage": 25,
+       "drive": {
+        "description": "1 play, 25 yards, 0:00",
+        "start": {
+         "yardLine": 45,
+         "text": "NYG 45"
+        },
+        "timeElapsed": {
+         "displayValue": "0:00"
+        }
+       },
+       "start": {
+        "yardLine": 45,
+        "team": {
+         "id": "19"
+        }
+       },
+       "end": {
+        "yardLine": 70,
+        "team": {
+         "id": "19"
+        }
+       },
+       "athletesInvolved": [
+        {
+         "id": "4682648",
+         "fullName": "Malachi Fields",
+         "displayName": "Malachi Fields",
+         "shortName": "M. Fields",
+         "links": [
+          {
+           "rel": [
+            "playercard",
+            "desktop",
+            "athlete"
+           ],
+           "href": "https://www.espn.com/nfl/player/_/id/4682648/malachi-fields"
+          }
+         ],
+         "headshot": "https://a.espncdn.com/i/headshots/nfl/players/full/4682648.png",
+         "jersey": "88",
+         "position": "WR",
+         "team": {
+          "id": "19"
+         }
+        }
+       ]
+      },
+      "down": 1,
+      "yardLine": 70,
+      "distance": 10,
+      "downDistanceText": "1st & 10 at WSH 30",
+      "shortDownDistanceText": "1st & 10",
+      "possessionText": "WSH 30",
+      "isRedZone": false,
+      "homeTimeouts": 3,
+      "awayTimeouts": 3,
+      "possession": "19"
+     },
+     "venue": {
+      "fullName": "MetLife Stadium"
+     },
+     "competitors": [
+      {
+       "id": "19",
+       "homeAway": "home",
+       "score": "7",
+       "linescores": [
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 1
+        },
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 2
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 3
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "5-2-1"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "3-1"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-1-1"
+        }
+       ],
+       "team": {
+        "id": "19",
+        "abbreviation": "NYG",
+        "location": "New York",
+        "name": "Giants",
+        "displayName": "New York Giants",
+        "color": "003c7f",
+        "alternateColor": "c9243f"
+       }
+      },
+      {
+       "id": "28",
+       "homeAway": "away",
+       "score": "10",
+       "linescores": [
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 1
+        },
+        {
+         "value": 10.0,
+         "displayValue": "10",
+         "period": 2
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 3
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "2-5-1"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "2-2-1"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "0-3"
+        }
+       ],
+       "team": {
+        "id": "28",
+        "abbreviation": "WSH",
+        "location": "Washington",
+        "name": "Commanders",
+        "displayName": "Washington Commanders",
+        "color": "5a1414",
+        "alternateColor": "ffb612"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401873053",
+   "date": "2026-11-15T14:30Z",
+   "name": "New England Patriots at Detroit Lions",
+   "shortName": "NE VS DET",
+   "week": {
+    "number": 10
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sun, November 15th at 9:30 AM EST",
+     "shortDetail": "11/15 - 9:30 AM EST"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873053",
+     "date": "2026-11-15T14:30Z",
+     "startDate": "2026-11-15T14:30Z",
+     "neutralSite": true,
+     "status": {
+      "clock": 0.0,
+      "displayClock": "0:00",
+      "period": 0,
+      "type": {
+       "id": "1",
+       "name": "STATUS_SCHEDULED",
+       "state": "pre",
+       "completed": false,
+       "description": "Scheduled",
+       "detail": "Sun, November 15th at 9:30 AM EST",
+       "shortDetail": "11/15 - 9:30 AM EST"
+      },
+      "isTBDFlex": false
+     },
+     "venue": {
+      "fullName": "FC Bayern Munich Stadium"
+     },
+     "competitors": [
+      {
+       "id": "8",
+       "homeAway": "home",
+       "score": "0",
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "6-2"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "4-0"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-2"
+        }
+       ],
+       "team": {
+        "id": "8",
+        "abbreviation": "DET",
+        "location": "Detroit",
+        "name": "Lions",
+        "displayName": "Detroit Lions",
+        "color": "0076b6",
+        "alternateColor": "bbbbbb"
+       }
+      },
+      {
+       "id": "17",
+       "homeAway": "away",
+       "score": "0",
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "5-4"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "3-1"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-3"
+        }
+       ],
+       "team": {
+        "id": "17",
+        "abbreviation": "NE",
+        "location": "New England",
+        "name": "Patriots",
+        "displayName": "New England Patriots",
+        "color": "002a5c",
+        "alternateColor": "c60c30"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401873058",
+   "date": "2026-11-15T18:00Z",
+   "name": "Kansas City Chiefs at Atlanta Falcons",
+   "shortName": "KC @ ATL",
+   "week": {
+    "number": 10
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Sun, November 15th at 1:00 PM EST",
+     "shortDetail": "11/15 - 1:00 PM EST"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873058",
+     "date": "2026-11-15T18:00Z",
+     "startDate": "2026-11-15T18:00Z",
+     "neutralSite": false,
+     "status": {
+      "clock": 0.0,
+      "displayClock": "0:00",
+      "period": 0,
+      "type": {
+       "id": "1",
+       "name": "STATUS_SCHEDULED",
+       "state": "pre",
+       "completed": false,
+       "description": "Scheduled",
+       "detail": "Sun, November 15th at 1:00 PM EST",
+       "shortDetail": "11/15 - 1:00 PM EST"
+      },
+      "isTBDFlex": false
+     },
+     "venue": {
+      "fullName": "Mercedes-Benz Stadium"
+     },
+     "competitors": [
+      {
+       "id": "1",
+       "homeAway": "home",
+       "score": "0",
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "3-6"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "1-4"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-2"
+        }
+       ],
+       "team": {
+        "id": "1",
+        "abbreviation": "ATL",
+        "location": "Atlanta",
+        "name": "Falcons",
+        "displayName": "Atlanta Falcons",
+        "color": "a71930",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "id": "12",
+       "homeAway": "away",
+       "score": "0",
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Any",
+         "type": "total",
+         "summary": "6-2"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "4-0"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-2"
+        }
+       ],
+       "team": {
+        "id": "12",
+        "abbreviation": "KC",
+        "location": "Kansas City",
+        "name": "Chiefs",
+        "displayName": "Kansas City Chiefs",
+        "color": "e31837",
+        "alternateColor": "ffb612"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "week": {
+  "number": 10
+ }
+}

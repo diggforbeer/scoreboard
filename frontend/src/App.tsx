@@ -132,6 +132,7 @@ interface HornEntry {
 }
 
 interface ScoreboardConfig {
+  sport: string
   favourite_team: string
   also_follow: string[]
   timezone: string
@@ -152,6 +153,30 @@ interface ScoreboardConfig {
   show_standings: boolean
   show_clock_between_games: boolean
   scores_grid: boolean
+}
+
+// The football favourite and followed teams (#348), stored apart from the NHL ones because
+// abbreviations like BUF overlap between the leagues. `available` (the 32 teams) comes from
+// the server's football table, so this page has no second copy of that list.
+interface FootballConfig {
+  favourite_team: string
+  also_follow: string[]
+}
+
+interface FootballRotationConfig {
+  rotation: RotationRow[]
+  final_hold_minutes: number
+  countdown_minutes: number
+  page_seconds: number
+  timings: Record<string, number>
+  show_countdown: boolean
+  show_bye: boolean
+  show_final: boolean
+}
+
+interface FootballTeamOption {
+  abbrev: string
+  name: string
 }
 
 interface StatusConfig {
@@ -284,11 +309,20 @@ type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
+  | { type: 'config'; section: 'football'; data: FootballConfig; available: FootballTeamOption[] }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
   | { type: 'config'; section: 'wifi'; data: WifiConfig }
   | { type: 'config'; section: 'rotation'; data: RotationRow[] }
+  | {
+      type: 'config'
+      section: 'football_rotation'
+      data: FootballRotationConfig
+      defaults: RotationRow[]
+      timing_ranges: Record<string, [number, number, number]>
+      screens: string[]
+    }
   | {
       type: 'config'
       section: 'holiday'
@@ -334,6 +368,86 @@ function saveFeedback(status: SaveStatus, error: string | null) {
 function teamName(abbrev: string) {
   const team = NHL_TEAMS.find(([code]) => code === abbrev)
   return team ? team[1] : '(none)'
+}
+
+// The favourite dropdown and the "also follow" checklist, shared by the NHL and football pickers so
+// the two cannot drift apart. `idPrefix` keeps their element ids apart ('sb' for the NHL
+// ones, which the e2e test relies on, 'fb' for the football ones).
+function TeamPickers({
+  idPrefix,
+  teams,
+  favourite,
+  alsoFollow,
+  onChange,
+  followHelp,
+}: {
+  idPrefix: string
+  teams: readonly (readonly [string, string])[]
+  favourite: string
+  alsoFollow: string[]
+  onChange: (next: { favourite_team: string; also_follow: string[] }) => void
+  followHelp: string
+}) {
+  const nameOf = (abbrev: string) => teams.find(([code]) => code === abbrev)?.[1] ?? '(none)'
+  return (
+    <>
+      <div className="mb-3">
+        <label className="form-label" htmlFor={`${idPrefix}-favourite-team`}>
+          Favourite team
+        </label>
+        <select
+          className="form-select"
+          style={{ width: 'auto' }}
+          id={`${idPrefix}-favourite-team`}
+          value={favourite}
+          onChange={(e) => onChange({ favourite_team: e.target.value, also_follow: alsoFollow })}
+        >
+          <option value="">(none)</option>
+          {teams.map(([abbrev, name]) => (
+            <option key={abbrev} value={abbrev}>
+              {name} ({abbrev})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="mb-3">
+        <label className="form-label">Also follow</label>
+        <p className="text-body-secondary small mb-2">{followHelp}</p>
+        <div
+          className="border rounded p-2"
+          id={`${idPrefix}-also-follow`}
+          style={{ maxHeight: '14rem', overflowY: 'auto' }}
+        >
+          {teams
+            .filter(([abbrev]) => abbrev !== favourite)
+            .map(([abbrev, name]) => (
+              <div className="form-check" key={abbrev}>
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id={`${idPrefix}-follow-${abbrev}`}
+                  checked={alsoFollow.includes(abbrev)}
+                  onChange={(e) =>
+                    onChange({
+                      favourite_team: favourite,
+                      also_follow: e.target.checked
+                        ? [...alsoFollow, abbrev]
+                        : alsoFollow.filter((t) => t !== abbrev),
+                    })
+                  }
+                />
+                <label className="form-check-label" htmlFor={`${idPrefix}-follow-${abbrev}`}>
+                  {name} ({abbrev})
+                </label>
+              </div>
+            ))}
+        </div>
+        <div className="form-text">
+          {alsoFollow.length ? `Following ${alsoFollow.map(nameOf).join(', ')}.` : 'Nobody else yet.'}
+        </div>
+      </div>
+    </>
+  )
 }
 
 // One line, colour-coded, for the "Software update" status box -- the same
@@ -387,6 +501,13 @@ function App() {
   }, NOT_CONNECTED_ERROR)
   const scoreboard = scoreboardState.value
 
+  const [footballState, footballSave] = useAutosave<FootballConfig>(
+    (v) => save('football', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const football = footballState.value
+  const [footballTeams, setFootballTeams] = useState<FootballTeamOption[]>([])
+
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
   const [statusSaveError, setStatusSaveError] = useState<string | null>(null)
@@ -409,6 +530,15 @@ function App() {
     NOT_CONNECTED_ERROR,
   )
   const rotation = rotationState.value
+
+  const [footballRotationState, footballRotationSave] = useAutosave<FootballRotationConfig>(
+    (v) => save('football_rotation', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const footballRotation = footballRotationState.value
+  const [footballRotationDefaults, setFootballRotationDefaults] = useState<RotationRow[]>([])
+  const [footballRotationScreens, setFootballRotationScreens] = useState<string[]>([])
+  const [footballTimingRanges, setFootballTimingRanges] = useState<Record<string, [number, number, number]>>({})
 
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
     (v) => save('holiday', v),
@@ -438,7 +568,7 @@ function App() {
   const [pageVisible, setPageVisible] = useState(!document.hidden)
 
   // Two pages don't justify a router (#193): plain view state.
-  const [page, setPage] = useState<'home' | 'audio' | 'holidays' | 'logs'>('home')
+  const [page, setPage] = useState<'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'logs'>('home')
   const [logLines, setLogLines] = useState<LogEntry[]>([])
   const [logError, setLogError] = useState<string | null>(null)
   const logBoxRef = useRef<HTMLPreElement | null>(null)
@@ -464,6 +594,7 @@ function App() {
     const autosaved = [
       audioSave,
       scoreboardSave,
+      footballSave,
       nightModeSave,
       wifiSave,
       rotationSave,
@@ -508,11 +639,21 @@ function App() {
           case 'config':
             if (message.section === 'audio') audioSave.receiveConfig(message.data)
             else if (message.section === 'scoreboard') scoreboardSave.receiveConfig(message.data)
+            else if (message.section === 'football') {
+              footballSave.receiveConfig(message.data)
+              setFootballTeams(message.available)
+            }
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
             else if (message.section === 'night_mode') nightModeSave.receiveConfig(message.data)
             else if (message.section === 'wifi') wifiSave.receiveConfig(message.data)
             else if (message.section === 'rotation') rotationSave.receiveConfig(message.data)
+            else if (message.section === 'football_rotation') {
+              footballRotationSave.receiveConfig(message.data)
+              setFootballRotationDefaults(message.defaults)
+              setFootballRotationScreens(message.screens)
+              setFootballTimingRanges(message.timing_ranges)
+            }
             else if (message.section === 'holiday') {
               holidaySave.receiveConfig(message.data)
               setHolidayOptions(message.available)
@@ -543,6 +684,8 @@ function App() {
           case 'saved':
             if (message.section === 'audio') audioSave.receiveSaved()
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
+            else if (message.section === 'football') footballSave.receiveSaved()
+            else if (message.section === 'football_rotation') footballRotationSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
             else if (message.section === 'night_mode') nightModeSave.receiveSaved()
@@ -611,6 +754,10 @@ function App() {
               audioSave.receiveError(message.message)
             } else if (message.section === 'scoreboard') {
               scoreboardSave.receiveError(message.message)
+            } else if (message.section === 'football') {
+              footballSave.receiveError(message.message)
+            } else if (message.section === 'football_rotation') {
+              footballRotationSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -673,7 +820,16 @@ function App() {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       socketRef.current?.close()
     }
-  }, [audioSave, scoreboardSave, nightModeSave, wifiSave, rotationSave, holidaySave])
+  }, [
+    audioSave,
+    scoreboardSave,
+    footballSave,
+    footballRotationSave,
+    nightModeSave,
+    wifiSave,
+    rotationSave,
+    holidaySave,
+  ])
 
   // Logs are opt-in (#197): subscribe only while the tab is showing, and
   // again after a reconnect (`connection` flips back to 'open').
@@ -782,6 +938,30 @@ function App() {
     }
   }
 
+  // Brightness lives on the Display tab but is one slice of the Panel section.
+  // Send only those fields: the rest of Panel is restart-required and has its
+  // own Save, so a half-edited Setup form must not ride along.
+  function saveBrightness(event: React.FormEvent) {
+    event.preventDefault()
+    if (!panel) return
+    setPanelSaveStatus('saving')
+    setPanelSaveError(null)
+    const { brightness, auto_brightness, min_brightness, max_brightness, brightness_poll_seconds } =
+      panel
+    if (
+      !save('panel', {
+        brightness,
+        auto_brightness,
+        min_brightness,
+        max_brightness,
+        brightness_poll_seconds,
+      })
+    ) {
+      setPanelSaveStatus('error')
+      setPanelSaveError(NOT_CONNECTED_ERROR)
+    }
+  }
+
   function toggleHolidayTheme(name: string, ticked: boolean) {
     if (!holiday) return
     // Keep registry order, whatever order the boxes were ticked in.
@@ -813,6 +993,26 @@ function App() {
     const next = [...rotation]
     ;[next[index], next[target]] = [next[target], next[index]]
     rotationSave.edit(next)
+  }
+
+  function setFootballRows(rows: RotationRow[]) {
+    if (!footballRotation) return
+    footballRotationSave.edit({ ...footballRotation, rotation: rows })
+  }
+
+  function addFootballRow() {
+    if (!footballRotation || footballRotation.rotation.length >= ROTATION_MAX_ROWS) return
+    const screen = footballRotationScreens[0] ?? 'fb_preview'
+    setFootballRows([...footballRotation.rotation, { screen, seconds: 8 }])
+  }
+
+  function moveFootballRow(index: number, delta: -1 | 1) {
+    if (!footballRotation) return
+    const target = index + delta
+    const rows = [...footballRotation.rotation]
+    if (target < 0 || target >= rows.length) return
+    ;[rows[index], rows[target]] = [rows[target], rows[index]]
+    setFootballRows(rows)
   }
 
   function checkForUpdate() {
@@ -984,7 +1184,12 @@ function App() {
             <div className="card-body text-center py-2">
               <div className="text-body-secondary small">Favourite team</div>
               <div className="fs-5">
-                {scoreboard ? teamName(scoreboard.favourite_team) : 'waiting...'}
+                {!scoreboard
+                  ? 'waiting...'
+                  : scoreboard.sport === 'football'
+                    ? (footballTeams.find((t) => t.abbrev === football?.favourite_team)?.name ??
+                      '(none)')
+                    : teamName(scoreboard.favourite_team)}
               </div>
             </div>
           </div>
@@ -992,7 +1197,7 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'audio', 'holidays', 'logs'] as const).map((name) => (
+        {(['home', 'display', 'audio', 'holidays', 'setup', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
@@ -1000,7 +1205,14 @@ function App() {
               onClick={() => setPage(name)}
             >
               {
-                { home: 'Home', audio: 'Audio', holidays: 'Holiday Cheer', logs: 'Logs' }[name]
+                {
+                  home: 'Home',
+                  display: 'Display',
+                  audio: 'Audio',
+                  holidays: 'Holiday Cheer',
+                  setup: 'Setup',
+                  logs: 'Logs',
+                }[name]
               }
             </button>
           </li>
@@ -1072,131 +1284,71 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Scoreboard</h2>
+          <h2 className="card-title h5">Teams</h2>
           {scoreboard ? (
             <form onSubmit={flushOnSubmit(scoreboardSave)}>
               <div className="mb-3">
-                <label className="form-label" htmlFor="sb-favourite-team">
-                  Favourite team
+                <label className="form-label" htmlFor="sb-sport">
+                  Sport
                 </label>
                 <select
                   className="form-select"
                   style={{ width: 'auto' }}
-                  id="sb-favourite-team"
-                  value={scoreboard.favourite_team}
-                  onChange={(e) =>
-                    scoreboardSave.edit({ ...scoreboard, favourite_team: e.target.value })
-                  }
+                  id="sb-sport"
+                  value={scoreboard.sport}
+                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, sport: e.target.value })}
                 >
-                  <option value="">(none)</option>
-                  {NHL_TEAMS.map(([abbrev, name]) => (
-                    <option key={abbrev} value={abbrev}>
-                      {name} ({abbrev})
-                    </option>
-                  ))}
+                  <option value="nhl">NHL</option>
+                  <option value="football">Football</option>
                 </select>
               </div>
-              <div className="mb-3">
-                <label className="form-label">
-                  Also follow
-                </label>
-                <p className="text-body-secondary small mb-2">
-                  Their live games take turns on screen with your favourite's, and their goals
-                  jump to the goal screen. The horn only plays for your favourite.
-                </p>
-                <div
-                  className="border rounded p-2"
-                  id="sb-also-follow"
-                  style={{ maxHeight: '14rem', overflowY: 'auto' }}
-                >
-                  {NHL_TEAMS.filter(([abbrev]) => abbrev !== scoreboard.favourite_team).map(
-                    ([abbrev, name]) => (
-                      <div className="form-check" key={abbrev}>
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id={`sb-follow-${abbrev}`}
-                          checked={scoreboard.also_follow.includes(abbrev)}
-                          onChange={(e) =>
-                            scoreboardSave.edit({
-                              ...scoreboard,
-                              also_follow: e.target.checked
-                                ? [...scoreboard.also_follow, abbrev]
-                                : scoreboard.also_follow.filter((t) => t !== abbrev),
-                            })
-                          }
-                        />
-                        <label className="form-check-label" htmlFor={`sb-follow-${abbrev}`}>
-                          {name} ({abbrev})
-                        </label>
-                      </div>
-                    ),
-                  )}
-                </div>
-                <div className="form-text">
-                  {scoreboard.also_follow.length
-                    ? `Following ${scoreboard.also_follow.map(teamName).join(', ')}.`
-                    : 'Nobody else yet.'}
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="sb-timezone">
-                  Timezone
-                </label>
-                <select
-                  className="form-select"
-                  style={{ width: 'auto' }}
-                  id="sb-timezone"
-                  value={scoreboard.timezone}
-                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, timezone: e.target.value })}
-                >
-                  {!US_TIMEZONES.some(([zone]) => zone === scoreboard.timezone) && (
-                    <option value={scoreboard.timezone}>{scoreboard.timezone}</option>
-                  )}
-                  {US_TIMEZONES.map(([zone, label]) => (
-                    <option key={zone} value={zone}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <h3 className="h6 text-body-secondary mt-4">Timing</h3>
-              {(
-                [
-                  ['rotate_seconds', 'Seconds per game in rotation'],
-                  ['poll_seconds', 'Score poll interval (seconds)'],
-                  ['live_poll_seconds', 'Live score poll interval (seconds)'],
-                  ['shootout_poll_seconds', 'Shootout poll interval (seconds)'],
-                  ['countdown_hours', 'Countdown window before puck drop (hours)'],
-                  ['final_hold_minutes', 'Final score hold time (minutes)'],
-                  ['goal_flash_seconds', 'Goal celebration duration (seconds, 4–15)'],
-                  ['goal_detail_seconds', 'Goal detail duration (seconds)'],
-                  ['three_stars_seconds', 'Three stars duration (seconds)'],
-                  ['broadcast_delay_seconds', 'TV broadcast delay (seconds)'],
-                ] as const
-              ).map(([key, label]) => (
-                <div className="mb-3" key={key}>
-                  <label className="form-label" htmlFor={`sb-${key}`}>
-                    {label}
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '10rem' }}
-                    id={`sb-${key}`}
-                    type="number"
-                    step="any"
-                    {...(NUMBER_LIMITS[key] ?? {})}
-                    value={scoreboard[key]}
-                    onChange={(e) =>
-                      numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
-                    }
-                    onBlur={scoreboardSave.flush}
+              {scoreboard.sport === 'football' ? (
+                football && (
+                  <TeamPickers
+                    idPrefix="fb"
+                    teams={footballTeams.map((t) => [t.abbrev, t.name] as const)}
+                    favourite={football.favourite_team}
+                    alsoFollow={football.also_follow}
+                    onChange={(next) => footballSave.edit({ ...football, ...next })}
+                    followHelp="Their live games take turns on screen with your favourite's, and their scores get a quick update. Your football teams are kept apart from your NHL ones."
                   />
-                </div>
-              ))}
+                )
+              ) : (
+                <TeamPickers
+                  idPrefix="sb"
+                  teams={NHL_TEAMS}
+                  favourite={scoreboard.favourite_team}
+                  alsoFollow={scoreboard.also_follow}
+                  onChange={(next) => scoreboardSave.edit({ ...scoreboard, ...next })}
+                  followHelp="Their live games take turns on screen with your favourite's, and their goals jump to the goal screen. The horn only plays for your favourite."
+                />
+              )}
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
 
-              <h3 className="h6 text-body-secondary mt-4">Display</h3>
+
+      </div>
+      <div className="col-lg-6">
+
+      </div>
+      </div>
+        </>
+      )}
+
+      {page === 'display' && (
+        <>
+      <div className="row g-4">
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Screens</h2>
+          {scoreboard ? (
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
               {(
                 [
                   ['show_clock_when_idle', 'Show clock when there are no games'],
@@ -1238,13 +1390,615 @@ function App() {
                   <option value="light">light</option>
                 </select>
               </div>
-
             </form>
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
           )}
         </div>
       </div>
+
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Game timing</h2>
+          {scoreboard ? (
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
+              {(
+                [
+                  ['rotate_seconds', 'Seconds per game in rotation'],
+                  ['poll_seconds', 'Score poll interval (seconds)'],
+                  ['live_poll_seconds', 'Live score poll interval (seconds)'],
+                  ['shootout_poll_seconds', 'Shootout poll interval (seconds)'],
+                  ['countdown_hours', 'Countdown window before puck drop (hours)'],
+                  ['final_hold_minutes', 'Final score hold time (minutes)'],
+                  ['goal_flash_seconds', 'Goal celebration duration (seconds, 4–15)'],
+                  ['goal_detail_seconds', 'Goal detail duration (seconds)'],
+                  ['three_stars_seconds', 'Three stars duration (seconds)'],
+                  ['broadcast_delay_seconds', 'TV broadcast delay (seconds)'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`sb-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`sb-${key}`}
+                    type="number"
+                    step="any"
+                    {...(NUMBER_LIMITS[key] ?? {})}
+                    value={scoreboard[key]}
+                    onChange={(e) =>
+                      numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
+                    }
+                    onBlur={scoreboardSave.flush}
+                  />
+                </div>
+              ))}
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Brightness</h2>
+          {panel ? (
+            <form onSubmit={saveBrightness}>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-brightness">
+                  Brightness (1-100)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="panel-brightness"
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="100"
+                  value={panel.brightness}
+                  onChange={(e) => setPanel({ ...panel, brightness: Number(e.target.value) })}
+                />
+              </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="panel-auto-brightness"
+                  checked={panel.auto_brightness}
+                  onChange={(e) => setPanel({ ...panel, auto_brightness: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="panel-auto-brightness">
+                  Auto brightness from ambient sensor
+                </label>
+              </div>
+              {(
+                [
+                  ['min_brightness', 'Auto-brightness minimum'],
+                  ['max_brightness', 'Auto-brightness maximum'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`panel-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`panel-${key}`}
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="100"
+                    value={panel[key]}
+                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-brightness-poll-seconds">
+                  Brightness sensor poll interval (seconds)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="panel-brightness-poll-seconds"
+                  type="number"
+                  step="any"
+                  value={panel.brightness_poll_seconds}
+                  onChange={(e) =>
+                    setPanel({ ...panel, brightness_poll_seconds: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button type="submit" className="btn btn-primary" disabled={panelSaveStatus === 'saving'}>
+                  Save brightness
+                </button>
+                {saveFeedback(panelSaveStatus, panelSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+
+      </div>
+      <div className="col-lg-6">
+
+      {scoreboard?.sport === 'football' && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Football idle rotation</h2>
+            {footballRotation ? (
+              <form onSubmit={flushOnSubmit(footballRotationSave)}>
+                <p className="text-body-secondary small">
+                  Screens shown between your favourite team&apos;s games, in this order (128px panels
+                  only). The countdown, the final and the bye-week screen join by themselves when they
+                  apply. Up to {ROTATION_MAX_ROWS} rows. Empty uses the built-in default:{' '}
+                  {footballRotationDefaults.map((d) => `${d.screen} ${d.seconds}s`).join(', ')}.
+                </p>
+                {footballRotation.rotation.map((row, i) => (
+                  <div className="d-flex align-items-center gap-2 mb-2" key={i}>
+                    <select
+                      className="form-select"
+                      style={{ width: 'auto' }}
+                      aria-label={`football rotation screen ${i + 1}`}
+                      value={row.screen}
+                      onChange={(e) =>
+                        setFootballRows(
+                          footballRotation.rotation.map((r, j) =>
+                            j === i ? { ...row, screen: e.target.value } : r,
+                          ),
+                        )
+                      }
+                    >
+                      {footballRotationScreens.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="form-control"
+                      style={{ width: '6rem' }}
+                      type="number"
+                      step="any"
+                      min="0"
+                      aria-label={`football rotation seconds ${i + 1}`}
+                      value={row.seconds}
+                      onChange={(e) =>
+                        numberEdit(
+                          footballRotationSave,
+                          e,
+                          {
+                            ...footballRotation,
+                            rotation: footballRotation.rotation.map((r, j) =>
+                              j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                            ),
+                          },
+                          `football-rotation-seconds-${i}`,
+                        )
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                    <span className="text-body-secondary small">seconds</span>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => moveFootballRow(i, -1)}
+                      disabled={i === 0}
+                      aria-label="Move football row up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => moveFootballRow(i, 1)}
+                      disabled={i === footballRotation.rotation.length - 1}
+                      aria-label="Move football row down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger btn-sm"
+                      onClick={() => setFootballRows(footballRotation.rotation.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <div className="d-flex align-items-center gap-3 mt-3 mb-3">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={addFootballRow}
+                    disabled={footballRotation.rotation.length >= ROTATION_MAX_ROWS}
+                  >
+                    Add row
+                  </button>
+                </div>
+                <div className="row g-3">
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-final-hold">
+                      Hold the final for (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-final-hold"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={footballRotation.final_hold_minutes}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          final_hold_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-countdown-window">
+                      Countdown starts before kickoff (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-countdown-window"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={footballRotation.countdown_minutes}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          countdown_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                    <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-page-seconds">
+                      Seconds per page, standings and week (0 = split the row&apos;s seconds)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-page-seconds"
+                      type="number"
+                      step="any"
+                      min="0"
+                      max="60"
+                      value={footballRotation.page_seconds}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          page_seconds: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                </div>
+                </div>
+                <div className="mt-3">
+                  {(
+                    [
+                      ['show_countdown', 'Countdown before kickoff'],
+                      ['show_bye', 'Bye-week screen'],
+                      ['show_final', 'Hold the final after a game'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <div className="form-check" key={key}>
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id={`football-${key}`}
+                        checked={footballRotation[key]}
+                        onChange={(e) =>
+                          footballRotationSave.edit({ ...footballRotation, [key]: e.target.checked })
+                        }
+                      />
+                      <label className="form-check-label" htmlFor={`football-${key}`}>
+                        {label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </form>
+            ) : (
+              <p className="text-body-secondary mb-0">waiting for server...</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {scoreboard?.sport === 'football' && footballRotation && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Football game screen lengths</h2>
+            <p className="text-body-secondary small">
+              How long each in-game screen stays up, in seconds. Each is held to its range.
+            </p>
+            <div className="row g-3">
+              {(
+                [
+                  ['play', 'Play animation'],
+                  ['playtext', 'Play text'],
+                  ['score', 'Score celebration'],
+                  ['score_detail', 'Score detail card'],
+                  ['quick', "Followed team's score"],
+                  ['fg_miss', 'Missed field goal'],
+                  ['turnover', 'Turnover'],
+                  ['reversal', 'Reversal'],
+                  ['cointoss', 'Coin toss'],
+                  ['stats', 'Team stats page (official timeout)'],
+                ] as const
+              ).map(([key, label]) => {
+                const range = footballTimingRanges[key]
+                return (
+                  <div className="col-sm-4" key={key}>
+                    <label className="form-label" htmlFor={`football-timing-${key}`}>
+                      {label}
+                    </label>
+                    <input
+                      className="form-control"
+                      id={`football-timing-${key}`}
+                      type="number"
+                      step="any"
+                      min={range?.[1]}
+                      max={range?.[2]}
+                      value={footballRotation.timings[key] ?? ''}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          timings: { ...footballRotation.timings, [key]: Number(e.target.value) },
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scoreboard?.sport !== 'football' && (
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Idle rotation</h2>
+          {rotation ? (
+            <form onSubmit={flushOnSubmit(rotationSave)}>
+              <p className="text-body-secondary small">
+                Screens shown when the favourite is not live, in this order. Up to{' '}
+                {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
+                (countdown/preview, standings, clock).
+              </p>
+              {rotation.map((row, i) => (
+                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
+                  <select
+                    className="form-select"
+                    style={{ width: 'auto' }}
+                    value={row.screen}
+                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
+                  >
+                    {ROTATION_SCREENS.map((screen) => (
+                      <option key={screen} value={screen}>
+                        {screen}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="form-control"
+                    style={{ width: '6rem' }}
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={row.seconds}
+                    onChange={(e) =>
+                      numberEdit(
+                        rotationSave,
+                        e,
+                        rotation.map((r, j) =>
+                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                        ),
+                        `rotation-seconds-${i}`,
+                      )
+                    }
+                    onBlur={rotationSave.flush}
+                  />
+                  <span className="text-body-secondary small">seconds</span>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, -1)}
+                    disabled={i === 0}
+                    aria-label="Move up"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, 1)}
+                    disabled={i === rotation.length - 1}
+                    aria-label="Move down"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm"
+                    onClick={() => removeRow(i)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={addRow}
+                  disabled={rotation.length >= ROTATION_MAX_ROWS}
+                >
+                  Add row
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+      )}
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Night mode</h2>
+          {nightMode ? (
+            <form onSubmit={flushOnSubmit(nightModeSave)}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="night-mode-enabled"
+                  checked={nightMode.enabled}
+                  onChange={(e) => nightModeSave.edit({ ...nightMode, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="night-mode-enabled">
+                  Night mode enabled
+                </label>
+              </div>
+              <div className="d-flex gap-3">
+                <div className="mb-3">
+                  <label className="form-label" htmlFor="night-mode-start-time">
+                    Dim window start (24-hour HH:MM)
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '8rem' }}
+                    id="night-mode-start-time"
+                    type="text"
+                    value={nightMode.start_time}
+                    onChange={(e) =>
+                      nightModeSave.edit(
+                        { ...nightMode, start_time: e.target.value },
+                        TYPING_DELAY_MS,
+                      )
+                    }
+                    onBlur={nightModeSave.flush}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label" htmlFor="night-mode-end-time">
+                    Dim window end (24-hour HH:MM)
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '8rem' }}
+                    id="night-mode-end-time"
+                    type="text"
+                    value={nightMode.end_time}
+                    onChange={(e) =>
+                      nightModeSave.edit(
+                        { ...nightMode, end_time: e.target.value },
+                        TYPING_DELAY_MS,
+                      )
+                    }
+                    onBlur={nightModeSave.flush}
+                  />
+                </div>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="night-mode-dim-brightness">
+                  Dimmed brightness (0-100)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="night-mode-dim-brightness"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={nightMode.dim_brightness}
+                  onChange={(e) =>
+                    numberEdit(nightModeSave, e, {
+                      ...nightMode,
+                      dim_brightness: Number(e.target.value),
+                    })
+                  }
+                  onBlur={nightModeSave.flush}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="night-mode-suppress-scope">
+                  Suppress scope
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="night-mode-suppress-scope"
+                  value={nightMode.suppress_scope}
+                  onChange={(e) =>
+                    nightModeSave.edit({ ...nightMode, suppress_scope: e.target.value })
+                  }
+                >
+                  <option value="tracked">tracked (favourite's game only)</option>
+                  <option value="all">all (any live game)</option>
+                </select>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="night-mode-cooldown-minutes">
+                  Cooldown after game ends (minutes)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="night-mode-cooldown-minutes"
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={nightMode.cooldown_minutes}
+                  onChange={(e) =>
+                    numberEdit(nightModeSave, e, {
+                      ...nightMode,
+                      cooldown_minutes: Number(e.target.value),
+                    })
+                  }
+                  onBlur={nightModeSave.flush}
+                />
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      </div>
+      </div>
+        </>
+      )}
+
+      {page === 'setup' && (
+        <>
+      <div className="row g-4">
+      <div className="col-lg-6">
 
       <div className="card mb-4">
         <div className="card-body">
@@ -1369,75 +2123,6 @@ function App() {
                 />
               </div>
 
-              <h3 className="h6 text-body-secondary mt-4">Brightness</h3>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="panel-brightness">
-                  Brightness (1-100)
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="panel-brightness"
-                  type="number"
-                  step="1"
-                  min="1"
-                  max="100"
-                  value={panel.brightness}
-                  onChange={(e) => setPanel({ ...panel, brightness: Number(e.target.value) })}
-                />
-              </div>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="panel-auto-brightness"
-                  checked={panel.auto_brightness}
-                  onChange={(e) => setPanel({ ...panel, auto_brightness: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="panel-auto-brightness">
-                  Auto brightness from ambient sensor
-                </label>
-              </div>
-              {(
-                [
-                  ['min_brightness', 'Auto-brightness minimum'],
-                  ['max_brightness', 'Auto-brightness maximum'],
-                ] as const
-              ).map(([key, label]) => (
-                <div className="mb-3" key={key}>
-                  <label className="form-label" htmlFor={`panel-${key}`}>
-                    {label}
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '10rem' }}
-                    id={`panel-${key}`}
-                    type="number"
-                    step="1"
-                    min="1"
-                    max="100"
-                    value={panel[key]}
-                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
-                  />
-                </div>
-              ))}
-              <div className="mb-3">
-                <label className="form-label" htmlFor="panel-brightness-poll-seconds">
-                  Brightness sensor poll interval (seconds)
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="panel-brightness-poll-seconds"
-                  type="number"
-                  step="any"
-                  value={panel.brightness_poll_seconds}
-                  onChange={(e) =>
-                    setPanel({ ...panel, brightness_poll_seconds: Number(e.target.value) })
-                  }
-                />
-              </div>
-
               <div className="d-flex align-items-center gap-3 mt-3">
                 <button
                   type="submit"
@@ -1460,84 +2145,29 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Idle rotation</h2>
-          {rotation ? (
-            <form onSubmit={flushOnSubmit(rotationSave)}>
-              <p className="text-body-secondary small">
-                Screens shown when the favourite is not live, in this order. Up to{' '}
-                {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
-                (countdown/preview, standings, clock).
-              </p>
-              {rotation.map((row, i) => (
-                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
-                  <select
-                    className="form-select"
-                    style={{ width: 'auto' }}
-                    value={row.screen}
-                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
-                  >
-                    {ROTATION_SCREENS.map((screen) => (
-                      <option key={screen} value={screen}>
-                        {screen}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="form-control"
-                    style={{ width: '6rem' }}
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={row.seconds}
-                    onChange={(e) =>
-                      numberEdit(
-                        rotationSave,
-                        e,
-                        rotation.map((r, j) =>
-                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
-                        ),
-                        `rotation-seconds-${i}`,
-                      )
-                    }
-                    onBlur={rotationSave.flush}
-                  />
-                  <span className="text-body-secondary small">seconds</span>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, -1)}
-                    disabled={i === 0}
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, 1)}
-                    disabled={i === rotation.length - 1}
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => removeRow(i)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={addRow}
-                  disabled={rotation.length >= ROTATION_MAX_ROWS}
+          <h2 className="card-title h5">Time zone</h2>
+          {scoreboard ? (
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="sb-timezone">
+                  Timezone
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="sb-timezone"
+                  value={scoreboard.timezone}
+                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, timezone: e.target.value })}
                 >
-                  Add row
-                </button>
+                  {!US_TIMEZONES.some(([zone]) => zone === scoreboard.timezone) && (
+                    <option value={scoreboard.timezone}>{scoreboard.timezone}</option>
+                  )}
+                  {US_TIMEZONES.map(([zone, label]) => (
+                    <option key={zone} value={zone}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </form>
           ) : (
@@ -1545,6 +2175,7 @@ function App() {
           )}
         </div>
       </div>
+
 
       <div className="card mb-4">
         <div className="card-body">
@@ -1640,130 +2271,6 @@ function App() {
                   Save Status page
                 </button>
                 {saveFeedback(statusSaveStatus, statusSaveError)}
-              </div>
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Night mode</h2>
-          {nightMode ? (
-            <form onSubmit={flushOnSubmit(nightModeSave)}>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="night-mode-enabled"
-                  checked={nightMode.enabled}
-                  onChange={(e) => nightModeSave.edit({ ...nightMode, enabled: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="night-mode-enabled">
-                  Night mode enabled
-                </label>
-              </div>
-              <div className="d-flex gap-3">
-                <div className="mb-3">
-                  <label className="form-label" htmlFor="night-mode-start-time">
-                    Dim window start (24-hour HH:MM)
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '8rem' }}
-                    id="night-mode-start-time"
-                    type="text"
-                    value={nightMode.start_time}
-                    onChange={(e) =>
-                      nightModeSave.edit(
-                        { ...nightMode, start_time: e.target.value },
-                        TYPING_DELAY_MS,
-                      )
-                    }
-                    onBlur={nightModeSave.flush}
-                  />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label" htmlFor="night-mode-end-time">
-                    Dim window end (24-hour HH:MM)
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '8rem' }}
-                    id="night-mode-end-time"
-                    type="text"
-                    value={nightMode.end_time}
-                    onChange={(e) =>
-                      nightModeSave.edit(
-                        { ...nightMode, end_time: e.target.value },
-                        TYPING_DELAY_MS,
-                      )
-                    }
-                    onBlur={nightModeSave.flush}
-                  />
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="night-mode-dim-brightness">
-                  Dimmed brightness (0-100)
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="night-mode-dim-brightness"
-                  type="number"
-                  step="1"
-                  min="0"
-                  max="100"
-                  value={nightMode.dim_brightness}
-                  onChange={(e) =>
-                    numberEdit(nightModeSave, e, {
-                      ...nightMode,
-                      dim_brightness: Number(e.target.value),
-                    })
-                  }
-                  onBlur={nightModeSave.flush}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="night-mode-suppress-scope">
-                  Suppress scope
-                </label>
-                <select
-                  className="form-select"
-                  style={{ width: 'auto' }}
-                  id="night-mode-suppress-scope"
-                  value={nightMode.suppress_scope}
-                  onChange={(e) =>
-                    nightModeSave.edit({ ...nightMode, suppress_scope: e.target.value })
-                  }
-                >
-                  <option value="tracked">tracked (favourite's game only)</option>
-                  <option value="all">all (any live game)</option>
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="night-mode-cooldown-minutes">
-                  Cooldown after game ends (minutes)
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="night-mode-cooldown-minutes"
-                  type="number"
-                  step="any"
-                  min="0"
-                  value={nightMode.cooldown_minutes}
-                  onChange={(e) =>
-                    numberEdit(nightModeSave, e, {
-                      ...nightMode,
-                      cooldown_minutes: Number(e.target.value),
-                    })
-                  }
-                  onBlur={nightModeSave.flush}
-                />
               </div>
             </form>
           ) : (
@@ -2295,7 +2802,9 @@ function App() {
       <AutosaveToast
         sections={[
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
+          { label: 'Football teams', state: footballState, onUndo: footballSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
+          { label: 'Football idle rotation', state: footballRotationState, onUndo: footballRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
           { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },
           { label: 'Audio', state: audioState, onUndo: audioSave.undo },

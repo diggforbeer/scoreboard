@@ -1,0 +1,211 @@
+{
+ "team": {
+  "id": "4",
+  "abbreviation": "CIN"
+ },
+ "athletes": [
+  {
+   "position": "offense",
+   "items": [
+    {
+     "id": "4879478",
+     "fullName": "Jacob Bayer",
+     "displayName": "Jacob Bayer",
+     "shortName": "J. Bayer",
+     "firstName": "Jacob",
+     "lastName": "Bayer",
+     "jersey": "69",
+     "position": {
+      "abbreviation": "C"
+     }
+    },
+    {
+     "id": "4429299",
+     "fullName": "Tahj Brooks",
+     "displayName": "Tahj Brooks",
+     "shortName": "T. Brooks",
+     "firstName": "Tahj",
+     "lastName": "Brooks",
+     "jersey": "25",
+     "position": {
+      "abbreviation": "RB"
+     }
+    },
+    {
+     "id": "3915511",
+     "fullName": "Joe Burrow",
+     "displayName": "Joe Burrow",
+     "shortName": "J. Burrow",
+     "firstName": "Joe",
+     "lastName": "Burrow",
+     "jersey": "9",
+     "position": {
+      "abbreviation": "QB"
+     }
+    },
+    {
+     "id": "4384852",
+     "fullName": "Dohnte Meyers",
+     "displayName": "Dohnte Meyers",
+     "shortName": "D. Meyers",
+     "firstName": "Dohnte",
+     "lastName": "Meyers",
+     "jersey": "81",
+     "position": {
+      "abbreviation": "WR"
+     }
+    }
+   ]
+  },
+  {
+   "position": "defense",
+   "items": [
+    {
+     "id": "3054840",
+     "fullName": "Jonathan Allen",
+     "displayName": "Jonathan Allen",
+     "shortName": "J. Allen",
+     "firstName": "Jonathan",
+     "lastName": "Allen",
+     "jersey": "93",
+     "position": {
+      "abbreviation": "DT"
+     }
+    },
+    {
+     "id": "4567098",
+     "fullName": "Jordan Battle",
+     "displayName": "Jordan Battle",
+     "shortName": "J. Battle",
+     "firstName": "Jordan",
+     "lastName": "Battle",
+     "jersey": "27",
+     "position": {
+      "abbreviation": "S"
+     }
+    },
+    {
+     "id": "4431519",
+     "fullName": "Barrett Carter",
+     "displayName": "Barrett Carter",
+     "shortName": "B. Carter",
+     "firstName": "Barrett",
+     "lastName": "Carter",
+     "jersey": "49",
+     "position": {
+      "abbreviation": "LB"
+     }
+    },
+    {
+     "id": "4427729",
+     "fullName": "Demetrius Knight Jr.",
+     "displayName": "Demetrius Knight Jr.",
+     "shortName": "D. Knight Jr.",
+     "firstName": "Demetrius",
+     "lastName": "Knight Jr.",
+     "jersey": "44",
+     "position": {
+      "abbreviation": "LB"
+     }
+    },
+    {
+     "id": "4428985",
+     "fullName": "Myles Murphy",
+     "displayName": "Myles Murphy",
+     "shortName": "M. Murphy",
+     "firstName": "Myles",
+     "lastName": "Murphy",
+     "jersey": "99",
+     "position": {
+      "abbreviation": "DE"
+     }
+    }
+   ]
+  },
+  {
+   "position": "specialTeam",
+   "items": [
+    {
+     "id": "4360234",
+     "fullName": "Evan McPherson",
+     "displayName": "Evan McPherson",
+     "shortName": "E. McPherson",
+     "firstName": "Evan",
+     "lastName": "McPherson",
+     "jersey": "2",
+     "position": {
+      "abbreviation": "PK"
+     }
+    },
+    {
+     "id": "4608820",
+     "fullName": "Ryan Rehkow",
+     "displayName": "Ryan Rehkow",
+     "shortName": "R. Rehkow",
+     "firstName": "Ryan",
+     "lastName": "Rehkow",
+     "jersey": "8",
+     "position": {
+      "abbreviation": "P"
+     }
+    }
+   ]
+  },
+  {
+   "position": "injuredReserveOrOut",
+   "items": [
+    {
+     "id": "4427834",
+     "fullName": "Erick All Jr.",
+     "displayName": "Erick All Jr.",
+     "shortName": "E. All Jr.",
+     "firstName": "Erick",
+     "lastName": "All Jr.",
+     "jersey": "83",
+     "position": {
+      "abbreviation": "TE"
+     }
+    },
+    {
+     "id": "4570546",
+     "fullName": "Swayze Bozeman",
+     "displayName": "Swayze Bozeman",
+     "shortName": "S. Bozeman",
+     "firstName": "Swayze",
+     "lastName": "Bozeman",
+     "jersey": "47",
+     "position": {
+      "abbreviation": "LB"
+     }
+    }
+   ]
+  },
+  {
+   "position": "practiceSquad",
+   "items": [
+    {
+     "id": "4429291",
+     "fullName": "Beau Brade",
+     "displayName": "Beau Brade",
+     "shortName": "B. Brade",
+     "firstName": "Beau",
+     "lastName": "Brade",
+     "position": {
+      "abbreviation": "S"
+     }
+    },
+    {
+     "id": "4426513",
+     "fullName": "Trikweze Bridges",
+     "displayName": "Trikweze Bridges",
+     "shortName": "T. Bridges",
+     "firstName": "Trikweze",
+     "lastName": "Bridges",
+     "position": {
+      "abbreviation": "CB"
+     }
+    }
+   ]
+  }
+ ]
+}

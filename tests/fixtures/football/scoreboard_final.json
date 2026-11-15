@@ -1,0 +1,490 @@
+{
+ "events": [
+  {
+   "id": "401873038",
+   "date": "2026-11-08T14:30Z",
+   "name": "Cincinnati Bengals at Atlanta Falcons",
+   "shortName": "CIN VS ATL",
+   "week": {
+    "number": 9
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873038",
+     "date": "2026-11-08T14:30Z",
+     "startDate": "2026-11-08T14:30Z",
+     "neutralSite": true,
+     "status": {
+      "clock": 0.0,
+      "displayClock": "0:00",
+      "period": 4,
+      "type": {
+       "id": "3",
+       "name": "STATUS_FINAL",
+       "state": "post",
+       "completed": true,
+       "description": "Final",
+       "detail": "Final",
+       "shortDetail": "Final"
+      },
+      "isTBDFlex": false
+     },
+     "venue": {
+      "fullName": "Santiago Bernab\u00e9u"
+     },
+     "competitors": [
+      {
+       "id": "1",
+       "homeAway": "home",
+       "score": "17",
+       "linescores": [
+        {
+         "value": 10.0,
+         "displayValue": "10",
+         "period": 1
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 2
+        },
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 3
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 4
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Game",
+         "type": "total",
+         "summary": "3-6"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "1-4"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-2"
+        }
+       ],
+       "winner": false,
+       "team": {
+        "id": "1",
+        "abbreviation": "ATL",
+        "location": "Atlanta",
+        "name": "Falcons",
+        "displayName": "Atlanta Falcons",
+        "color": "a71930",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "id": "4",
+       "homeAway": "away",
+       "score": "34",
+       "linescores": [
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 1
+        },
+        {
+         "value": 17.0,
+         "displayValue": "17",
+         "period": 2
+        },
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 3
+        },
+        {
+         "value": 3.0,
+         "displayValue": "3",
+         "period": 4
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Game",
+         "type": "total",
+         "summary": "6-2"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "2-1"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "4-1"
+        }
+       ],
+       "winner": true,
+       "team": {
+        "id": "4",
+        "abbreviation": "CIN",
+        "location": "Cincinnati",
+        "name": "Bengals",
+        "displayName": "Cincinnati Bengals",
+        "color": "fb4f14",
+        "alternateColor": "000000"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401873040",
+   "date": "2026-11-08T18:00Z",
+   "name": "Dallas Cowboys at Indianapolis Colts",
+   "shortName": "DAL @ IND",
+   "week": {
+    "number": 9
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873040",
+     "date": "2026-11-08T18:00Z",
+     "startDate": "2026-11-08T18:00Z",
+     "neutralSite": false,
+     "status": {
+      "clock": 0.0,
+      "displayClock": "0:00",
+      "period": 4,
+      "type": {
+       "id": "3",
+       "name": "STATUS_FINAL",
+       "state": "post",
+       "completed": true,
+       "description": "Final",
+       "detail": "Final",
+       "shortDetail": "Final"
+      },
+      "isTBDFlex": false
+     },
+     "venue": {
+      "fullName": "Lucas Oil Stadium"
+     },
+     "competitors": [
+      {
+       "id": "11",
+       "homeAway": "home",
+       "score": "23",
+       "linescores": [
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 1
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 2
+        },
+        {
+         "value": 10.0,
+         "displayValue": "10",
+         "period": 3
+        },
+        {
+         "value": 6.0,
+         "displayValue": "6",
+         "period": 4
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Game",
+         "type": "total",
+         "summary": "2-7"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "1-3"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "1-4"
+        }
+       ],
+       "winner": false,
+       "team": {
+        "id": "11",
+        "abbreviation": "IND",
+        "location": "Indianapolis",
+        "name": "Colts",
+        "displayName": "Indianapolis Colts",
+        "color": "003b75",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "id": "6",
+       "homeAway": "away",
+       "score": "27",
+       "linescores": [
+        {
+         "value": 3.0,
+         "displayValue": "3",
+         "period": 1
+        },
+        {
+         "value": 14.0,
+         "displayValue": "14",
+         "period": 2
+        },
+        {
+         "value": 3.0,
+         "displayValue": "3",
+         "period": 3
+        },
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 4
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Game",
+         "type": "total",
+         "summary": "4-5"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "1-3"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "3-2"
+        }
+       ],
+       "winner": true,
+       "team": {
+        "id": "6",
+        "abbreviation": "DAL",
+        "location": "Dallas",
+        "name": "Cowboys",
+        "displayName": "Dallas Cowboys",
+        "color": "002a5c",
+        "alternateColor": "b0b7bc"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401873045",
+   "date": "2026-11-08T18:00Z",
+   "name": "New York Jets at Kansas City Chiefs",
+   "shortName": "NYJ @ KC",
+   "week": {
+    "number": 9
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401873045",
+     "date": "2026-11-08T18:00Z",
+     "startDate": "2026-11-08T18:00Z",
+     "neutralSite": false,
+     "status": {
+      "clock": 0.0,
+      "displayClock": "0:00",
+      "period": 4,
+      "type": {
+       "id": "3",
+       "name": "STATUS_FINAL",
+       "state": "post",
+       "completed": true,
+       "description": "Final",
+       "detail": "Final",
+       "shortDetail": "Final"
+      },
+      "isTBDFlex": false
+     },
+     "venue": {
+      "fullName": "Arrowhead Stadium"
+     },
+     "competitors": [
+      {
+       "id": "12",
+       "homeAway": "home",
+       "score": "35",
+       "linescores": [
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 1
+        },
+        {
+         "value": 14.0,
+         "displayValue": "14",
+         "period": 2
+        },
+        {
+         "value": 14.0,
+         "displayValue": "14",
+         "period": 3
+        },
+        {
+         "value": 7.0,
+         "displayValue": "7",
+         "period": 4
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Game",
+         "type": "total",
+         "summary": "6-2"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "4-0"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "2-2"
+        }
+       ],
+       "winner": true,
+       "team": {
+        "id": "12",
+        "abbreviation": "KC",
+        "location": "Kansas City",
+        "name": "Chiefs",
+        "displayName": "Kansas City Chiefs",
+        "color": "e31837",
+        "alternateColor": "ffb612"
+       }
+      },
+      {
+       "id": "20",
+       "homeAway": "away",
+       "score": "12",
+       "linescores": [
+        {
+         "value": 6.0,
+         "displayValue": "6",
+         "period": 1
+        },
+        {
+         "value": 6.0,
+         "displayValue": "6",
+         "period": 2
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 3
+        },
+        {
+         "value": 0.0,
+         "displayValue": "0",
+         "period": 4
+        }
+       ],
+       "records": [
+        {
+         "name": "overall",
+         "abbreviation": "Game",
+         "type": "total",
+         "summary": "2-7"
+        },
+        {
+         "name": "Home",
+         "type": "home",
+         "summary": "1-3"
+        },
+        {
+         "name": "Road",
+         "type": "road",
+         "summary": "1-4"
+        }
+       ],
+       "winner": false,
+       "team": {
+        "id": "20",
+        "abbreviation": "NYJ",
+        "location": "New York",
+        "name": "Jets",
+        "displayName": "New York Jets",
+        "color": "115740",
+        "alternateColor": "ffffff"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "week": {
+  "number": 9
+ }
+}

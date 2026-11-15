@@ -77,7 +77,7 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   ```bash
   python3 -m venv .venv && source .venv/bin/activate   # skip if .venv already exists
   pip install -e '.[dev]'
-  pytest --cov --cov-report=term-missing   # plain `pytest` (no --cov) is fine too, just less CI-faithful
+  pytest -n auto --cov --cov-report=term-missing   # plain `pytest` (no --cov, no -n) is fine too, just less CI-faithful; `-n 4` runs the whole suite in under two minutes
   ruff check .
   ruff format --check .
   ```
@@ -89,6 +89,34 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   run can't reproduce those two locally; they're still checked by CI
   itself on the PR regardless.
 
+## Football work (`football` branch)
+
+Football screens are designed and tracked in two files at the repo root, which go
+together: **`football_screen.md`** (screens, timing, open questions, the todo
+list) and **`football_api.md`** (what ESPN's undocumented feed returns, checked
+against real games). Read both before touching football code, tick the todo
+list in the PR that does the work, and put new findings about the feed in
+`football_api.md`. What the board shows with no game on (pregame, bye, the idle
+rotation) is proposed in **`screens_not_during_games.md`**. Boards only get this branch's builds if the owner picks
+`football` under Software update (see README, "Following a branch").
+
+**Adding a football screen:** `football/director.py` decides what is on screen (stages per play,
+scope, reversals; it draws nothing) and `display/football_plays.py` draws it. A screen is one
+registered function (`@play_screen(PlayKind.X)` or `@event_screen(EventClass, stage)`); anything
+unregistered falls back to a generic version. Add its demo steps to `football/demo.py`, render
+with `scripts/render-screens.py --sport football`, and retire its mockup (see `football_screen.md`,
+"Play scenes" and "Real renders").
+
+**Adding a football idle screen** (#423-#429): register it in `football/idle_screens.py` with
+`@idle_screen("fb_...")`, a `should_show(IdleContext)` that is false when its data is missing, and draw
+it in the app's `fb_*` dispatch. `FootballMode._idle_kind` picks the screen (live game, countdown, final
+hold, the `[[football.rotation]]` list, the clock); the idle screens are 128px only. The rotation and
+its two timers are `[football]` settings with their own admin-page section, `football_rotation`.
+The holiday overlay is sport-aware (`display/holiday.use_sport`): in football mode a **game screen**
+(`app.FOOTBALL_GAME_SCENES`) is decorated only on a Thanksgiving or Christmas game
+(`football/idle_views.game_holiday`, the game's own date in the board's zone) and only if that theme
+is ticked; the clock and the other football screens keep the season's holiday.
+
 ## Commands
 
 ```bash
@@ -99,11 +127,14 @@ pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
 ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (RUF100)
 
+nhl-scoreboard --demo                                            # loop every scene with made-up games; with sport = "football", the football steps (silent)
 nhl-scoreboard --dump                                            # today's scores as text; no display
 nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live board at http://localhost:8888
 python scripts/preview.py --fixture                              # frames as ASCII, offline
 python scripts/render-screens.py                                 # docs/screens/*.png for screens.md; rerun after a layout change
+python scripts/render-screens.py --sport football                     # docs/football/*.png from football.demo steps; --check fails when stale
 python scripts/fetch-logos.py                                    # team logos -> assets/logos/ (git-ignored)
+python scripts/fetch-logos.py --sport football                        # football logos (12px, 16px) -> assets/logos/football/ (git-ignored)
 ./scripts/fetch-vendor.sh                                        # HUB75 driver source -> image/files/vendor/
 ```
 
@@ -1671,6 +1702,17 @@ when it was written; that history is left as-is rather than rewritten.
   updated by the in-app update, since that doesn't install these files;
   only a reflash replaces it. The "unknown" notice repeats for each
   release rather than being shown once. Not verified on hardware (#4).
+- **Tabs (#449): Home | Display | Audio | Holiday Cheer | Setup | Logs.**
+  Split by how often a person touches a setting, not by feature. Home: status,
+  Live view, favourite and also-follow. Display: screens/logos, game timing,
+  brightness, idle rotation, night mode. Setup (set once): Panel hardware,
+  time zone, status page, Wi-Fi, update, reboot. The old Scoreboard card is now
+  several cards sharing one `scoreboardSave` hook. Brightness is a slice of
+  `[panel]` shown on Display with its own Save (`saveBrightness`): it sends only
+  its five fields so a half-edited, restart-required Setup form never rides
+  along; a server echo of `[panel]` does replace that unsaved Setup draft.
+  The planned Sports tab (NHL | Football pills) and the decisions it waits on are
+  in #449.
 - **Autosave + Undo (#273).** Every section except Panel and Status saves
   itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
   the Save buttons are gone). One `AutosaveToast` bar pinned to the

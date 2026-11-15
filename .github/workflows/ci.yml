@@ -108,7 +108,11 @@ jobs:
       - name: Install
         run: pip install -e '.[dev]'
       - name: Test
-        run: pytest --cov --cov-report=term-missing
+        # -n auto: ~4,800 hermetic tests run across the runner's cores (pytest-cov merges the
+        # workers' data), instead of one after another for ~20 minutes. Coverage (which roughly
+        # triples the run) is measured on 3.13 only: that is the leg that posts the comment, and
+        # 3.11 is here to prove the floor version runs the suite, not to measure it again.
+        run: pytest -n auto ${{ matrix.python-version == '3.13' && '--cov --cov-report=term-missing' || '' }}
 
       # Runs once, not once per matrix leg -- coverage is identical between
       # 3.11/3.13 (confirmed: both report 88.81% locally and in CI), and

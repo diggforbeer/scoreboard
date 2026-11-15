@@ -290,10 +290,14 @@ from .audio import (
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
+    DEFAULT_FOOTBALL_ROTATION,
     FLYBY_FREQUENCIES,
+    FOOTBALL_ROTATION_SCREENS,
+    FOOTBALL_TIMING_RANGES,
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
     PANEL_HARDWARE_MAPPING_CHOICES,
+    SPORT_CHOICES,
     VALID_ROTATION_SCREENS,
     ConfigWriteError,
     Settings,
@@ -301,6 +305,7 @@ from .config import (
 from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
+from .football import teams as football_teams
 from .hostname import (
     apply_hostname,
     current_hostname,
@@ -388,7 +393,9 @@ WS_MAX_SIZE = HORN_MAX_BYTES * 4 // 3 + 4096
 
 @dataclasses.dataclass(frozen=True)
 class _FieldSpec:
-    kind: str  # "bool" | "str" | "float" | "int" | "select" | "teams"
+    #: "bool" | "str" | "float" | "int" | "select" | "teams" (NHL abbreviations) |
+    #: "football_team" (one football abbreviation, or empty) | "football_teams" (a list of them)
+    kind: str
     choices: tuple[str, ...] = ()
     #: Mirrors status_server.py's own per-field flag (#178 story 7) -- a
     #: value that only takes effect after nhl-scoreboard.service restarts,
@@ -417,6 +424,7 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
 _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
+    "sport": _FieldSpec("select", choices=SPORT_CHOICES),
     "favourite_team": _FieldSpec("str"),
     "also_follow": _FieldSpec("teams"),
     "timezone": _FieldSpec("str"),
@@ -456,6 +464,13 @@ _STATUS_FIELDS: dict[str, _FieldSpec] = {
 #: it's informational only, the driver never reads it (CLAUDE.md). The
 #: five brightness-related fields hot-apply; every other field here is
 #: restart_required, since it's baked into the constructed RGBMatrix.
+#: ``[football]`` (#348): the football favourite and followed teams, validated against the football
+#: table, not the NHL one (abbreviations like BUF overlap but mean different teams).
+_FOOTBALL_FIELDS: dict[str, _FieldSpec] = {
+    "favourite_team": _FieldSpec("football_team"),
+    "also_follow": _FieldSpec("football_teams"),
+}
+
 _PANEL_FIELDS: dict[str, _FieldSpec] = {
     "brightness": _FieldSpec("int"),
     "auto_brightness": _FieldSpec("bool"),
@@ -573,6 +588,50 @@ def _holiday_payload(settings: Settings) -> dict[str, object]:
             {"name": name, "label": f.label, "description": f.description}
             for name, f in FLYBY_FREQUENCIES.items()
         ],
+    }
+
+
+def _football_payload(settings: Settings) -> dict[str, object]:
+    """``[football]`` plus the 32 teams it picks from (#348).
+
+    ``available`` comes from the football table itself, so the page has no second copy of the
+    team list to drift out of date (the NHL picker still has one, in ``App.tsx``).
+    """
+    cfg = settings.football
+    return {
+        "type": "config",
+        "section": "football",
+        "data": {"favourite_team": cfg.favourite_team, "also_follow": list(cfg.also_follow)},
+        "available": [
+            {"abbrev": t.abbrev, "name": f"{t.city} {t.nickname}"}
+            for t in sorted(football_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
+        ],
+    }
+
+
+def _football_rotation_payload(settings: Settings) -> dict[str, object]:
+    """Football mode's idle rotation (``[[football.rotation]]``) and its two timers (#422).
+
+    ``defaults`` is what the board rotates through when the list is empty, so the page can show
+    it as the starting point rather than a blank list.
+    """
+    cfg = settings.football
+    return {
+        "type": "config",
+        "section": "football_rotation",
+        "data": {
+            "rotation": [dataclasses.asdict(entry) for entry in cfg.rotation],
+            "final_hold_minutes": cfg.final_hold_minutes,
+            "countdown_minutes": cfg.countdown_minutes,
+            "page_seconds": cfg.page_seconds,
+            "timings": {n: getattr(cfg, f"{n}_seconds") for n in FOOTBALL_TIMING_RANGES},
+            "show_countdown": cfg.show_countdown,
+            "show_bye": cfg.show_bye,
+            "show_final": cfg.show_final,
+        },
+        "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_FOOTBALL_ROTATION],
+        "screens": list(FOOTBALL_ROTATION_SCREENS),
+        "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
 
 
@@ -864,6 +923,20 @@ async def _send_holiday_config(
 async def _send_wifi_config(connection: ServerConnection, settings: Settings | None = None) -> None:
     settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_wifi_payload(settings)))
+
+
+async def _send_football_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_football_payload(settings)))
+
+
+async def _send_football_rotation_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_football_rotation_payload(settings)))
 
 
 async def _send_snapshot(connection: ServerConnection) -> None:
@@ -1256,6 +1329,15 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             not isinstance(value, list) or not all(t in TEAM_COLORS for t in value)
         ):
             errors[key] = "must be a list of team abbreviations"
+        elif spec.kind == "football_team" and (
+            not isinstance(value, str) or (value != "" and not football_teams.is_team(value))
+        ):
+            errors[key] = "must be a football team abbreviation, or empty for none"
+        elif spec.kind == "football_teams" and (
+            not isinstance(value, list)
+            or not all(isinstance(t, str) and football_teams.is_team(t) for t in value)
+        ):
+            errors[key] = "must be a list of football team abbreviations"
         elif spec.kind in ("float", "int") and (
             (spec.minimum is not None and value < spec.minimum)
             or (spec.maximum is not None and value > spec.maximum)
@@ -1302,6 +1384,77 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
             raise ValueError(json.dumps({f"row {i + 1}": "seconds must be a positive number"}))
         entries.append({"screen": screen, "seconds": float(seconds)})
     return entries
+
+
+#: Bounds for football mode's two timers (minutes), so a typo cannot hold a final for a week.
+_FOOTBALL_MINUTES = {"final_hold_minutes": (1.0, 720.0), "countdown_minutes": (1.0, 720.0)}
+
+
+#: The screens football mode adds by itself, each switchable (#443).
+_FOOTBALL_TOGGLES = ("show_countdown", "show_bye", "show_final")
+
+
+def _coerce_football_rotation(data: object) -> dict[str, object]:
+    """Validate a ``football_rotation`` save: the rows (rejected whole on the first bad one, like
+    ``_coerce_rotation``) and the two timers. A missing key is left alone."""
+    if not isinstance(data, dict):
+        raise ValueError(json.dumps({"football_rotation": "must be an object"}))
+    values: dict[str, object] = {}
+    if "rotation" in data:
+        rows = data["rotation"]
+        if not isinstance(rows, list):
+            raise ValueError(json.dumps({"rotation": "must be a list"}))
+        if len(rows) > ROTATION_MAX_ROWS:
+            raise ValueError(json.dumps({"rotation": f"at most {ROTATION_MAX_ROWS} rows"}))
+        entries: list[dict[str, object]] = []
+        for i, item in enumerate(rows):
+            if not isinstance(item, dict):
+                raise ValueError(json.dumps({f"row {i + 1}": "must be an object"}))
+            screen = item.get("screen")
+            if screen not in FOOTBALL_ROTATION_SCREENS:
+                choices = ", ".join(FOOTBALL_ROTATION_SCREENS)
+                raise ValueError(json.dumps({f"row {i + 1}": f"screen must be one of {choices}"}))
+            seconds = item.get("seconds")
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0:
+                raise ValueError(json.dumps({f"row {i + 1}": "seconds must be a positive number"}))
+            entries.append({"screen": screen, "seconds": float(seconds)})
+        values["rotation"] = entries
+    for key, (low, high) in _FOOTBALL_MINUTES.items():
+        if key not in data:
+            continue
+        minutes = data[key]
+        if not isinstance(minutes, (int, float)) or isinstance(minutes, bool):
+            raise ValueError(json.dumps({key: "must be a number of minutes"}))
+        if not low <= minutes <= high:
+            raise ValueError(json.dumps({key: f"must be between {low:g} and {high:g}"}))
+        values[key] = float(minutes)
+    if "page_seconds" in data:
+        seconds = data["page_seconds"]
+        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+            raise ValueError(json.dumps({"page_seconds": "must be a number of seconds"}))
+        if not 0 <= seconds <= 60:
+            raise ValueError(json.dumps({"page_seconds": "must be between 0 and 60"}))
+        values["page_seconds"] = float(seconds)
+    if "timings" in data:
+        timings = data["timings"]
+        if not isinstance(timings, dict):
+            raise ValueError(json.dumps({"timings": "must be an object"}))
+        for name, seconds in timings.items():
+            if name not in FOOTBALL_TIMING_RANGES:
+                raise ValueError(json.dumps({"timings": f"unknown screen length {name!r}"}))
+            _, low, high = FOOTBALL_TIMING_RANGES[name]
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+                raise ValueError(json.dumps({name: "must be a number of seconds"}))
+            if not low <= seconds <= high:
+                raise ValueError(json.dumps({name: f"must be between {low:g} and {high:g}"}))
+            values[f"{name}_seconds"] = float(seconds)
+    for key in _FOOTBALL_TOGGLES:
+        if key not in data:
+            continue
+        if not isinstance(data[key], bool):
+            raise ValueError(json.dumps({key: "must be true or false"}))
+        values[key] = data[key]
+    return values
 
 
 #: The scalar half of ``[holiday]``; ``themes`` is a list, checked by
@@ -1352,6 +1505,8 @@ _SEND_AFTER_SAVE = {
     "rotation": _send_rotation_config,
     "holiday": _send_holiday_config,
     "update": _send_update_config,
+    "football": _send_football_config,
+    "football_rotation": _send_football_rotation_config,
 }
 
 
@@ -1411,11 +1566,18 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_holiday(message.get("data"))
         elif section == "update":
             values = _coerce_update(message.get("data"))
+        elif section == "football":
+            values = _coerce_scalar_fields(message.get("data"), _FOOTBALL_FIELDS)
+        elif section == "football_rotation":
+            values = _coerce_football_rotation(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
             return
-        Settings.load(CONFIG_PATH).save({section: values})
+        # The football rotation lives in ``[football]``; it has its own page section only.
+        Settings.load(CONFIG_PATH).save(
+            {"football" if section == "football_rotation" else section: values}
+        )
     except (ValueError, ConfigWriteError) as exc:
         error = {"type": "error", "section": section, "message": str(exc)}
         await connection.send(json.dumps(error))
@@ -1449,6 +1611,9 @@ async def _handle(connection: ServerConnection) -> None:
         # included) that counts the initial messages up to the snapshot
         # keeps working unchanged.
         await _send_holiday_config(connection, settings)
+        # After holiday for the same reason: nothing that counts the earlier messages moves.
+        await _send_football_config(connection, settings)
+        await _send_football_rotation_config(connection, settings)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:
