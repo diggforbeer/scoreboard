@@ -478,11 +478,14 @@ def test_football_mode_has_its_own_idle_rotation_card(admin_page):
             page = browser.new_page()
             page.goto(admin_page.url)
             page.wait_for_selector("#sb-sport", timeout=15000)
-            assert page.get_by_role("heading", name="football idle rotation").count() == 0
+            page.get_by_role("button", name="Display", exact=True).click()
+            assert page.get_by_role("heading", name="Football idle rotation").count() == 0
             assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 1
 
+            page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#sb-sport", "football")
-            page.get_by_role("heading", name="football idle rotation").wait_for(timeout=15000)
+            page.get_by_role("button", name="Display", exact=True).click()
+            page.get_by_role("heading", name="Football idle rotation").wait_for(timeout=15000)
             assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 0
 
             page.get_by_role("button", name="Add row").click()
@@ -508,6 +511,7 @@ def test_football_mode_has_its_own_idle_rotation_card(admin_page):
             ]
 
             page.reload()
+            page.get_by_role("button", name="Display", exact=True).click()
             page.wait_for_selector("#football-final-hold", timeout=15000)
             assert page.input_value("#football-final-hold") == "45"
             assert page.input_value('[aria-label="football rotation screen 1"]') == "fb_week"
