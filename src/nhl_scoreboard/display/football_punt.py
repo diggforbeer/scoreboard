@@ -115,7 +115,7 @@ def draw_punt(r: Renderer, canvas: Any, scene: Scene) -> None:
 
     receiving = possession_side(game, end_pos.team_id) if end_pos else None
     ff.draw_field(
-        r, canvas, layout, game.home.abbrev, game.away.abbrev, receiving, logos=r.nfl_logos
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, receiving, logos=r.football_logos
     )
     if share >= SETTLED:
         draw_markers_for(r, canvas, layout, receiving, end_pos, end_pos, True)

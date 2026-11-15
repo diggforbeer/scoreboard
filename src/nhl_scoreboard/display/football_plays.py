@@ -1,4 +1,4 @@
-"""The NFL play scenes (#377): what is drawn while a play, its text or an event is on screen.
+"""The football play scenes (#377): what is drawn while a play, its text or an event is on screen.
 
 Three scene kinds, chosen by ``football.director``:
 
@@ -151,7 +151,9 @@ def draw_generic_play(r: Renderer, canvas: Any, scene: Scene) -> None:
     layout = FieldLayout.for_panel(r.width)
     team_id = (play.start or play.end).team_id if (play.start or play.end) else None
     side = _side(game, team_id)
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     start = _spot(play.start, 50.0)
     end = _spot(play.end, start)
     progress = (

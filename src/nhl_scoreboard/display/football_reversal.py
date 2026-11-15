@@ -86,7 +86,9 @@ def last_row(score: str, down: str, width: int, font: Any) -> str:
 
 
 def _logo(r: Renderer, canvas: Any, team: str) -> None:
-    logo = r.nfl_logos.get(team, 16) if r.nfl_logos is not None and is_team(team) else None
+    logo = (
+        r.football_logos.get(team, 16) if r.football_logos is not None and is_team(team) else None
+    )
     if logo is not None:
         ox, oy = LOGO_X + 1 - logo.width // 2, 16 - logo.height // 2
         for dx, dy, (red, green, blue) in logo.pixels:

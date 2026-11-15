@@ -10,10 +10,10 @@ drift from it.
     python scripts/render-screens.py            # write docs/screens/*.png
     python scripts/render-screens.py --check    # fail if the committed ones are stale
     python scripts/render-screens.py --real-logos   # use assets/logos (not for committing)
-    python scripts/render-screens.py --sport nfl    # write docs/football/*.png (#359)
-    python scripts/render-screens.py --sport nfl --check
+    python scripts/render-screens.py --sport football    # write docs/football/*.png (#359)
+    python scripts/render-screens.py --sport football --check
 
-``--sport nfl`` does the same for ``football.demo.nfl_demo_steps()`` and never touches
+``--sport football`` does the same for ``football.demo.football_demo_steps()`` and never touches
 ``docs/screens/``. A football step named like a hand-drawn mockup (``scripts/football-mockups.py``)
 replaces it; mockups with no real screen yet stay, and are not reported as orphans. When the last
 mockup is replaced, delete ``scripts/football-mockups.py`` (a test fails while it lists a name that
@@ -52,7 +52,7 @@ from nhl_scoreboard.display.mirror import Frame  # noqa: E402
 from nhl_scoreboard.display.teams import TEAM_COLORS, team_color  # noqa: E402
 
 DEFAULT_OUT = REPO_ROOT / "docs" / "screens"
-NFL_OUT = REPO_ROOT / "docs" / "football"
+FOOTBALL_OUT = REPO_ROOT / "docs" / "football"
 MOCKUPS = REPO_ROOT / "scripts" / "football-mockups.py"
 #: A fixed clock keeps every image reproducible: the clock face, the
 #: countdown and the "in two days" preview read the same on every run.
@@ -151,7 +151,7 @@ def capture(app: ScoreboardApp, step) -> Frame:
     # the live view but not for a still of an animated screen.
     app._overlay_animating = app._shootout_animating = app._scroll_animating = False
     app._goal_building = False
-    if scene.animating:  # a still of an NFL play scene: not held back as mid-animation
+    if scene.animating:  # a still of a football play scene: not held back as mid-animation
         scene = dataclasses.replace(scene, animating=False)
     app.mirror.requested = True
     before = app.mirror.latest()
@@ -195,24 +195,24 @@ def _render(real_logos: bool, sport: str) -> dict[str, Image.Image]:
         root = Path(tmp)
         logos = LogoLibrary.default() if real_logos else synthetic_logos(root)
         app = make_app(logos)
-        if sport == "nfl":
+        if sport == "football":
             from nhl_scoreboard.display.logos import LogoSet
-            from nhl_scoreboard.football.demo import nfl_demo_steps
+            from nhl_scoreboard.football.demo import football_demo_steps
 
             sys.path.insert(0, str(REPO_ROOT / "tests"))
-            from nfl_logos import write_synthetic_nfl_logos
+            from football_logos import write_synthetic_football_logos
 
             if real_logos:
-                app.renderer.nfl_logos = LogoSet("nfl")
+                app.renderer.football_logos = LogoSet("football")
             else:
-                base = write_synthetic_nfl_logos(root / "nfl-logos") / "nfl"
+                base = write_synthetic_football_logos(root / "football-logos") / "football"
                 # Every size a screen asks for must be synthetic: a size missing here would fall
                 # back to the real (git-ignored) artwork and end up in the committed images.
                 libraries = {
                     size: LogoLibrary([base / str(size) / "dark"], size) for size in (12, 16)
                 }
-                app.renderer.nfl_logos = LogoSet("nfl", "dark", libraries)
-            steps = nfl_demo_steps(NOW)
+                app.renderer.football_logos = LogoSet("football", "dark", libraries)
+            steps = football_demo_steps(NOW)
         else:
             steps = demo_steps(app.settings.scoreboard.favourite_team, NOW)
         images = {step.name: to_image(capture(app, step)) for step in steps}
@@ -257,15 +257,17 @@ def stale(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--sport", choices=("nhl", "nfl"), default="nhl", help="Which demo steps")
+    parser.add_argument(
+        "--sport", choices=("nhl", "football"), default="nhl", help="Which demo steps"
+    )
     parser.add_argument("--out", type=Path, default=None, help="Output directory")
     parser.add_argument("--check", action="store_true", help="Compare, don't write")
     parser.add_argument("--real-logos", action="store_true", help="Use assets/logos")
     args = parser.parse_args(argv)
 
-    nfl = args.sport == "nfl"
-    out = args.out or (NFL_OUT if nfl else DEFAULT_OUT)
-    keep = mockup_names() if nfl else set()
+    football = args.sport == "football"
+    out = args.out or (FOOTBALL_OUT if football else DEFAULT_OUT)
+    keep = mockup_names() if football else set()
     images = render_all(out, args.real_logos, args.sport)
     if args.check:
         problems = stale(out, images, keep)
@@ -273,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
             print(problem, file=sys.stderr)
         if problems:
             print(
-                "Run: python scripts/render-screens.py" + (" --sport nfl" if nfl else ""),
+                "Run: python scripts/render-screens.py" + (" --sport football" if football else ""),
                 file=sys.stderr,
             )
         return 1 if problems else 0

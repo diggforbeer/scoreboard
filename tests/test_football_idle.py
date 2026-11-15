@@ -12,8 +12,8 @@ from pathlib import Path
 
 from nhl_scoreboard.config import FootballConfig
 from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.api import STANDINGS_URL, NflClient
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.api import STANDINGS_URL, FootballClient
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.models import FbGame
 from nhl_scoreboard.football.teams import TEAMS
 from test_football_plays import FakeResponse, FakeSession
@@ -251,7 +251,7 @@ def test_the_snapshot_reports_old_data_as_missing_rather_than_fresh():
 
 
 def client(*responses):
-    return NflClient(session=FakeSession(*responses))
+    return FootballClient(session=FakeSession(*responses))
 
 
 def test_the_client_asks_for_a_whole_week_with_its_season_type():
@@ -346,7 +346,7 @@ def live(game_id=2):
 
 def make_mode(feed, clock, favourite="NYG", follow=()):
     cfg = FootballConfig(favourite_team=favourite, also_follow=list(follow))
-    return NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    return FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
 
 
 def test_an_idle_poll_fetches_the_favourites_schedule_the_standings_and_the_week_once():
@@ -378,7 +378,7 @@ def test_each_kind_of_data_is_fetched_again_on_its_own_cadence():
     assert feed.count("schedule") == 2
 
 
-def test_followed_teams_schedules_are_fetched_too_and_a_team_that_is_not_nfl_is_skipped():
+def test_followed_teams_schedules_are_fetched_too_and_a_team_that_is_not_football_is_skipped():
     clock, feed = Clock(), IdleFeed([pregame()])
     mode = make_mode(feed, clock, "NYG", ["DAL", "NSH"])  # NSH is NHL-only: dropped by the config
     mode.worker.poll_once()
@@ -429,7 +429,7 @@ def test_a_client_without_the_idle_endpoints_is_simply_skipped():
     from test_football_scenes import Feed
 
     clock = Clock()
-    mode = NflMode(client_factory=lambda: Feed([pregame()]), monotonic=clock,
+    mode = FootballMode(client_factory=lambda: Feed([pregame()]), monotonic=clock,
                    football=lambda: FootballConfig(favourite_team="NYG"))  # fmt: skip
     mode.worker.poll_once()
     assert mode.snapshot.games and mode.snapshot.idle.scoreboard is None

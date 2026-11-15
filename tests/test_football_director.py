@@ -1,4 +1,4 @@
-"""The director (#377): what is on the NFL panel, play by play.
+"""The director (#377): what is on the football panel, play by play.
 
 Plays come from the real fixtures (``tests/fixtures/football/play_cases.json``) through the
 real queue and detectors; only the clock is fake.

@@ -22,7 +22,7 @@ import tomlkit
 
 from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 from .display.teams import TEAM_COLORS
-from .football.teams import is_team as nfl_team_exists
+from .football.teams import is_team as football_team_exists
 
 log = logging.getLogger(__name__)
 
@@ -212,14 +212,14 @@ def next_hardware_mapping(current: str) -> str:
 
 
 #: ``[scoreboard] sport`` choices; the first is the default.
-SPORT_CHOICES = ("nhl", "nfl")
+SPORT_CHOICES = ("nhl", "football")
 
 
 @dataclass(slots=True)
 class ScoreboardConfig:
     """Behaviour of the scoreboard itself."""
 
-    #: Which sport the board runs: "nhl" or "nfl". Anything else is warned
+    #: Which sport the board runs: "nhl" or "football". Anything else is warned
     #: about and treated as "nhl". Nothing acts on it yet (football #345).
     sport: str = "nhl"
     #: Pinned to the front of the rotation and eligible for the special-teams
@@ -348,10 +348,10 @@ VALID_ROTATION_SCREENS = (
 #: current name at load (the admin page names the screen after what it shows, #269 follow-up).
 ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 
-#: The screens NFL mode's own idle rotation (``[[football.rotation]]``, #422) can list. ``fb_bye``,
+#: The screens football mode's idle rotation (``[[football.rotation]]``, #422) can list. ``fb_bye``,
 #: ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself when they
 #: apply (a bye week, the kickoff window, the hold after a game).
-NFL_ROTATION_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock")
+FOOTBALL_ROTATION_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock")
 #: The in-game screen lengths (#445): name -> (default, lowest, highest) seconds. The defaults are
 #: the proposed values in ``football_screen.md`` and the ranges are ``football.director.Timings``'s
 #: own; a test keeps the two in step. Each is the ``[football]`` key ``<name>_seconds``.
@@ -366,8 +366,8 @@ FOOTBALL_TIMING_RANGES: dict[str, tuple[float, float, float]] = {
     "reversal": (5.0, 3.0, 15.0),
     "cointoss": (6.0, 4.0, 12.0),
 }
-#: What NFL mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
-DEFAULT_NFL_ROTATION: tuple[tuple[str, float], ...] = (
+#: What football mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
+DEFAULT_FOOTBALL_ROTATION: tuple[tuple[str, float], ...] = (
     ("fb_preview", 8.0),
     ("fb_standings", 8.0),
     ("fb_week", 10.0),
@@ -396,7 +396,7 @@ def _parse_rotation(
 ) -> list[RotationEntry]:
     """Parse ``[[rotation]]`` (an array of tables), dropping invalid entries.
 
-    ``valid`` and ``label`` let NFL mode's own list (``[[football.rotation]]``, #422) use the
+    ``valid`` and ``label`` let football mode's own list (``[[football.rotation]]``, #422) use the
     same rules with its own screen names.
 
     Per #150's decision 3, an invalid entry is never displayed on the panel
@@ -538,24 +538,24 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
 
 @dataclass(slots=True)
 class FootballConfig:
-    """Which NFL teams the board follows in NFL mode (#348).
+    """Which football teams the board follows in football mode (#348).
 
     Kept apart from ``[scoreboard]`` (the NHL favourite and followed teams) because
     abbreviations overlap between the leagues (``BUF``, ``CAR``, ``DAL``, ``DET``,
     ``MIN`` ...) and mean different teams: sharing one list would make an NHL
-    abbreviation silently select an NFL team. Switching sport and back keeps each
+    abbreviation silently select a football team. Switching sport and back keeps each
     sport's choices.
 
     There is no default favourite: the NHL side defaults to Nashville, but nothing
-    obvious plays that role for the NFL, so it starts empty and the board shows
+    obvious plays that role for the football, so it starts empty and the board shows
     every game until one is chosen.
     """
 
     favourite_team: str = ""
-    #: More NFL teams to follow, like ``scoreboard.also_follow``.
+    #: More football teams to follow, like ``scoreboard.also_follow``.
     also_follow: list[str] = field(default_factory=list)
-    #: NFL mode's own idle rotation (``[[football.rotation]]``, #422): NFL screen names only.
-    #: Empty means ``DEFAULT_NFL_ROTATION``; read it through ``idle_rotation``.
+    #: Football mode's idle rotation (``[[football.rotation]]``, #422): football screen names only.
+    #: Empty means ``DEFAULT_FOOTBALL_ROTATION``; read it through ``idle_rotation``.
     rotation: list[Any] = field(default_factory=list)
     #: How long the favourite's final stays up before the idle rotation resumes (decided: 60).
     final_hold_minutes: float = 60.0
@@ -594,7 +594,7 @@ class FootballConfig:
         self.show_final = bool(self.show_final)
         self.rotation = _parse_rotation(
             self.rotation if isinstance(self.rotation, list) else [],
-            NFL_ROTATION_SCREENS,
+            FOOTBALL_ROTATION_SCREENS,
             "[[football.rotation]]",
         )
         self.final_hold_minutes = _positive_minutes(
@@ -604,7 +604,7 @@ class FootballConfig:
             self.countdown_minutes, 60.0, "football.countdown_minutes"
         )
         favourite = str(self.favourite_team).strip().upper()
-        if favourite and not nfl_team_exists(favourite):
+        if favourite and not football_team_exists(favourite):
             log.warning("Ignoring unknown football.favourite_team %r", self.favourite_team)
             favourite = ""
         self.favourite_team = favourite
@@ -612,7 +612,7 @@ class FootballConfig:
         follow: list[str] = []
         for raw in raw_follow if isinstance(raw_follow, list) else []:
             team = str(raw).strip().upper()
-            if not nfl_team_exists(team):
+            if not football_team_exists(team):
                 log.warning("Ignoring unknown football.also_follow team %r", raw)
             elif team != self.favourite_team and team not in follow:
                 follow.append(team)
@@ -628,7 +628,7 @@ class FootballConfig:
         """The idle rotation in force: the configured list, else the built-in default."""
         if self.rotation:
             return list(self.rotation)
-        return [RotationEntry(screen, seconds) for screen, seconds in DEFAULT_NFL_ROTATION]
+        return [RotationEntry(screen, seconds) for screen, seconds in DEFAULT_FOOTBALL_ROTATION]
 
 
 @dataclass(slots=True)

@@ -2626,16 +2626,16 @@ def test_admin_stays_off_the_setup_port_when_they_differ(fake_backend, games, tm
         app.setup_server.stop()
 
 
-def test_demo_in_nfl_mode_loops_the_nfl_steps_and_stays_silent(fake_backend, games):
-    from nhl_scoreboard.football.demo import nfl_demo_steps
+def test_demo_in_football_mode_loops_the_football_steps_and_stays_silent(fake_backend, games):
+    from nhl_scoreboard.football.demo import football_demo_steps
 
     app, src = demo_app(fake_backend, games)
-    app._sport = "nfl"
+    app._sport = "football"
     stub_renderer(app)
     calls = spy_draw_scene(app)
     horn = []
     app._on_goal = lambda *a, **k: horn.append(a)  # type: ignore[method-assign]
-    steps = nfl_demo_steps(DEMO_NOW)
+    steps = football_demo_steps(DEMO_NOW)
 
     run_demo_for_frames(app, src, 2 * TICKS_PER_SCENE)
 

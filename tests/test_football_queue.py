@@ -1,4 +1,4 @@
-"""The play queue, its delay hand-off and ``--watch-nfl`` (#355).
+"""The play queue, its delay hand-off and ``--watch-football`` (#355).
 
 Plays are real ones from ``play_cases.json`` given fresh ids, sequence numbers and
 wallclock times, so a feed can be scripted exactly. Time is a fake clock throughout.
@@ -356,7 +356,7 @@ def test_each_game_has_its_own_queue_and_baseline():
     assert watcher.queue(1).baselined is False, "a forgotten game starts over"
 
 
-# -- --watch-nfl --------------------------------------------------------------------------
+# -- --watch-football --------------------------------------------------------------------------
 
 
 def test_replaying_a_fixture_shows_every_new_play_once_in_order():
@@ -411,7 +411,7 @@ def test_a_failed_poll_is_skipped_not_fatal():
 
 def test_the_cli_replays_a_fixture_file(capsys, caplog):
     path = FIXTURES / "summary_drives.json"
-    assert cli.main(["--watch-nfl", "401873038", "--fixture", str(path), "--chunk", "5"]) == 0
+    assert cli.main(["--watch-football", "401873038", "--fixture", str(path), "--chunk", "5"]) == 0
     out = capsys.readouterr().out.splitlines()
     assert out and all(line.startswith("+") and "depth=" in line for line in out)
     assert any("skipped=" in line for line in out)
@@ -423,11 +423,12 @@ def test_the_cli_uses_the_configured_broadcast_delay(tmp_path, capsys):
     cfg.write_text("[scoreboard]\nbroadcast_delay_seconds = 30\n")
     path = FIXTURES / "summary_drives.json"
     assert (
-        cli.main(["--watch-nfl", "1", "--fixture", str(path), "--chunk", "3", "-c", str(cfg)]) == 0
+        cli.main(["--watch-football", "1", "--fixture", str(path), "--chunk", "3", "-c", str(cfg)])
+        == 0
     )
     first = capsys.readouterr().out.splitlines()[0]
     assert first.startswith("+  40."), first
-    assert cli.main(["--watch-nfl", "1", "--fixture", str(path), "--chunk", "3"]) == 0
+    assert cli.main(["--watch-football", "1", "--fixture", str(path), "--chunk", "3"]) == 0
     assert capsys.readouterr().out.splitlines()[0].startswith("+  10."), "no delay: shown at once"
 
 

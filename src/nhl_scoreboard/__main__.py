@@ -34,17 +34,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dump-plays",
         metavar="EVENT_ID",
-        help="Print every play of an NFL game (ESPN event id) in order and exit",
+        help="Print every play of a football game (ESPN event id) in order and exit",
     )
     parser.add_argument(
-        "--watch-nfl",
+        "--watch-football",
         metavar="EVENT_ID",
-        help="Print the plays of an NFL game as the animation queue would show them",
+        help="Print the plays of a football game as the animation queue would show them",
     )
     parser.add_argument(
         "--fixture",
         metavar="FILE",
-        help="With --watch-nfl: replay a saved summary file instead of polling ESPN",
+        help="With --watch-football: replay a saved summary file instead of polling ESPN",
     )
     parser.add_argument(
         "--chunk",
@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--sport",
-        choices=["nhl", "nfl"],
+        choices=["nhl", "football"],
         help="Which sport --dump prints (default: the configured [scoreboard] sport)",
     )
     parser.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING, ERROR")
@@ -69,13 +69,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     settings = Settings.load(args.config)
 
-    if args.watch_nfl:
-        return _watch_nfl(args.watch_nfl, args.fixture, args.chunk, settings)
+    if args.watch_football:
+        return _watch_football(args.watch_football, args.fixture, args.chunk, settings)
     if args.dump_plays:
         return _dump_plays(args.dump_plays)
     if args.dump:
-        if (args.sport or settings.scoreboard.sport) == "nfl":
-            return _dump_nfl(settings)
+        if (args.sport or settings.scoreboard.sport) == "football":
+            return _dump_football(settings)
         return _dump(settings)
 
     # Imported lazily so --dump works on a machine with no matrix backend.
@@ -113,12 +113,12 @@ def _dump(settings: Settings) -> int:
     return 0
 
 
-def _dump_nfl(settings: Settings) -> int:
-    """Today's NFL games as text, like ``_dump`` does for the NHL (#350)."""
-    from .football.api import NflClient
+def _dump_football(settings: Settings) -> int:
+    """Today's football games as text, like ``_dump`` does for the NHL (#350)."""
+    from .football.api import FootballClient
 
     tz = resolve_timezone(settings.scoreboard.timezone)
-    with NflClient() as client:
+    with FootballClient() as client:
         games = client.scores()
         if games is None:
             print(f"error: {client.last_error}", file=sys.stderr)
@@ -138,10 +138,10 @@ def _dump_nfl(settings: Settings) -> int:
     return 0
 
 
-def _watch_nfl(event_id: str, fixture: str | None, chunk: int, settings: Settings) -> int:
-    """Show an NFL game's plays as the animation queue would hand them out (#355)."""
+def _watch_football(event_id: str, fixture: str | None, chunk: int, settings: Settings) -> int:
+    """Show a football game's plays as the animation queue would hand them out (#355)."""
     from .football import watch as w
-    from .football.api import NflClient
+    from .football.api import FootballClient
 
     delay = settings.scoreboard.broadcast_delay_seconds
     if fixture:
@@ -150,16 +150,16 @@ def _watch_nfl(event_id: str, fixture: str | None, chunk: int, settings: Setting
         w.watch(feed, event_id, delay_seconds=delay, exhausted=lambda: feed.exhausted,
                 monotonic=monotonic, sleep=sleep, utc_now=utc_now)  # fmt: skip
         return 0
-    with NflClient() as client:
+    with FootballClient() as client:
         w.watch(lambda: client.plays(event_id), event_id, delay_seconds=delay)
     return 0
 
 
 def _dump_plays(event_id: str) -> int:
-    """Every play of one NFL game, in order, as text (#353)."""
-    from .football.api import NflClient
+    """Every play of one football game, in order, as text (#353)."""
+    from .football.api import FootballClient
 
-    with NflClient() as client:
+    with FootballClient() as client:
         plays = client.plays(event_id)
         if plays is None:
             print(f"error: {client.last_error}", file=sys.stderr)

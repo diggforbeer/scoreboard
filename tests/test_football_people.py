@@ -17,7 +17,7 @@ import requests
 from nhl_scoreboard.config import FootballConfig
 from nhl_scoreboard.football import api, people
 from nhl_scoreboard.football.events import CoinToss, EventDetector, Scope
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.models import Participant, Play, PlayKind, normalise_ref, ref_id
 from nhl_scoreboard.football.people import (
     CoreSync,
@@ -61,7 +61,7 @@ def players() -> dict[int, RosterPlayer]:
 
 
 def client(*responses):
-    return api.NflClient(session=FakeSession(*responses))
+    return api.FootballClient(session=FakeSession(*responses))
 
 
 # -- ids from links ------------------------------------------------------------------------------
@@ -132,7 +132,7 @@ def test_a_site_play_without_participants_has_none():
 
 def test_one_request_covers_a_whole_game_and_the_ids_cost_nothing_more():
     session = FakeSession(FakeResponse(CORE))
-    plays = api.NflClient(session=session).core_plays(EVENT)
+    plays = api.FootballClient(session=session).core_plays(EVENT)
     assert session.calls == [
         (f"{api.CORE_URL}/events/{EVENT}/competitions/{EVENT}/plays", {"limit": "300"})
     ], "one request: no athlete or team link was followed"
@@ -154,7 +154,7 @@ def test_a_longer_game_follows_the_page_count():
         payload["items"] = CORE["items"][(n - 1) * 3 : n * 3]
         pages.append(FakeResponse(payload))
     session = FakeSession(*pages)
-    plays = api.NflClient(session=session).core_plays(EVENT)
+    plays = api.FootballClient(session=session).core_plays(EVENT)
     assert [c[1] for c in session.calls] == [
         {"limit": "300"},
         {"limit": "300", "page": "2"},
@@ -199,7 +199,7 @@ def test_a_roster_gives_name_number_and_position_by_athlete_id():
 
 def test_the_roster_client_reads_the_team_endpoint():
     session = FakeSession(FakeResponse(load("roster_ATL.json")))
-    roster = api.NflClient(session=session).roster(1)
+    roster = api.FootballClient(session=session).roster(1)
     assert session.calls == [(f"{api.BASE_URL}/teams/1/roster", None)]
     assert 4430807 in roster
     assert client(requests.ConnectionError("x")).roster(1) is None
@@ -477,7 +477,7 @@ def test_clear_forgets_everything():
 # -- dropped on a sport switch -------------------------------------------------------------------
 
 
-class FakeNfl:
+class FakeFootball:
     def __init__(self):
         self.roster_calls = []
         self.closed = False
@@ -495,8 +495,8 @@ class FakeNfl:
 
 
 def test_the_mode_owns_a_roster_cache_that_uses_its_own_client_and_is_dropped_on_stop():
-    fake = FakeNfl()
-    mode = NflMode(client_factory=lambda: fake)
+    fake = FakeFootball()
+    mode = FootballMode(client_factory=lambda: fake)
     assert mode.rosters.get(5) == A and mode.rosters.get(5) == A
     assert fake.roster_calls == [5], "cached"
     mode.stop()
@@ -504,7 +504,7 @@ def test_the_mode_owns_a_roster_cache_that_uses_its_own_client_and_is_dropped_on
 
 
 def test_a_fresh_mode_after_a_sport_switch_starts_with_no_rosters():
-    first = NflMode(client_factory=FakeNfl)
+    first = FootballMode(client_factory=FakeFootball)
     first.rosters.get(5)
-    second = NflMode(client_factory=FakeNfl)
+    second = FootballMode(client_factory=FakeFootball)
     assert second.rosters.age(5) is None and second.rosters is not first.rosters

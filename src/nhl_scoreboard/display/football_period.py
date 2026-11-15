@@ -52,7 +52,9 @@ def draw_period_card(r: Renderer, canvas: Any, scene: Scene) -> None:
     layout = FieldLayout.for_panel(r.width)
     pos = play.end or play.start
     side = possession_side(game, pos.team_id) if pos else None
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     if pos is not None and pos.yard_line is not None:
         ff.draw_ball(canvas, layout, clamp_yard_line(float(pos.yard_line)))
 

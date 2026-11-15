@@ -1,6 +1,6 @@
-"""The 32 NFL teams (#347): names, ESPN ids and LED-tuned colours.
+"""The 32 football teams (#347): names, ESPN ids and LED-tuned colours.
 
-Kept apart from ``display/teams.py`` on purpose. NFL and NHL abbreviations
+Kept apart from ``display/teams.py`` on purpose. Football and NHL abbreviations
 overlap (``BUF``, ``CAR``, ``DAL``, ``DET``, ``MIN`` and others) and mean
 different teams, so the two tables must never be merged or looked up across.
 Nothing in here imports the NHL table.
@@ -20,7 +20,7 @@ RGB = tuple[int, int, int]
 
 
 @dataclass(frozen=True, slots=True)
-class NflTeam:
+class FootballTeam:
     abbrev: str  #: ESPN's abbreviation: ``NYG``, ``WSH``
     espn_id: int
     city: str
@@ -33,12 +33,12 @@ class NflTeam:
     secondary: RGB  #: a second accent, also LED-tuned
 
 
-def _t(abbrev, espn_id, city, nickname, name, color, secondary) -> NflTeam:
-    return NflTeam(abbrev, espn_id, city, nickname, name, color, secondary)
+def _t(abbrev, espn_id, city, nickname, name, color, secondary) -> FootballTeam:
+    return FootballTeam(abbrev, espn_id, city, nickname, name, color, secondary)
 
 
 #: In ESPN's alphabetical order by abbreviation.
-_TEAMS: tuple[NflTeam, ...] = (
+_TEAMS: tuple[FootballTeam, ...] = (
     _t("ARI", 22, "Arizona", "Cardinals", "ARIZONA", (226, 36, 66), (255, 255, 255)),
     _t(
         "ATL", 1, "Atlanta", "Falcons", "ATLANTA", (230, 30, 60), (190, 190, 190)
@@ -93,15 +93,15 @@ _TEAMS: tuple[NflTeam, ...] = (
     ),  # burgundy -> gold
 )
 
-TEAMS: dict[str, NflTeam] = {t.abbrev: t for t in _TEAMS}
-_BY_ID: dict[int, NflTeam] = {t.espn_id: t for t in _TEAMS}
+TEAMS: dict[str, FootballTeam] = {t.abbrev: t for t in _TEAMS}
+_BY_ID: dict[int, FootballTeam] = {t.espn_id: t for t in _TEAMS}
 
 #: The abbreviations the favourite and followed pickers accept (#348).
 ABBREVIATIONS: tuple[str, ...] = tuple(sorted(TEAMS))
 
 
 class UnknownTeamError(KeyError):
-    """An abbreviation or id that is not one of the 32 NFL teams."""
+    """An abbreviation or id that is not one of the 32 football teams."""
 
     def __str__(self) -> str:  # KeyError would repr() the message
         return str(self.args[0])
@@ -111,21 +111,21 @@ def is_team(abbrev: str) -> bool:
     return str(abbrev).strip().upper() in TEAMS
 
 
-def team(abbrev: str) -> NflTeam:
+def team(abbrev: str) -> FootballTeam:
     """The team for an abbreviation (case and spaces ignored); raises if unknown."""
     key = str(abbrev).strip().upper()
     try:
         return TEAMS[key]
     except KeyError:
-        raise UnknownTeamError(f"{abbrev!r} is not an NFL team abbreviation") from None
+        raise UnknownTeamError(f"{abbrev!r} is not a football team abbreviation") from None
 
 
-def team_by_id(espn_id: int | str) -> NflTeam:
+def team_by_id(espn_id: int | str) -> FootballTeam:
     """The team for an ESPN team id, given as an int or the string the feed uses."""
     try:
         return _BY_ID[int(espn_id)]
     except (KeyError, TypeError, ValueError):
-        raise UnknownTeamError(f"{espn_id!r} is not an ESPN NFL team id") from None
+        raise UnknownTeamError(f"{espn_id!r} is not an ESPN football team id") from None
 
 
 def team_color(abbrev: str) -> RGB:

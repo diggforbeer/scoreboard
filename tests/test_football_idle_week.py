@@ -14,7 +14,7 @@ from nhl_scoreboard.display.football_scenes import LIVE
 from nhl_scoreboard.football import idle
 from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
 from nhl_scoreboard.football.idle_views import WEEK_MAX_GAMES, WeekView, build_week, week_order
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.models import FbGame
 from nhl_scoreboard.football.teams import TEAMS
 from test_football_idle import Clock, IdleFeed
@@ -179,7 +179,7 @@ def test_the_pages_split_the_entrys_seconds_and_one_page_stays_put():
         favourite_team="NYG",
         rotation=[{"screen": "fb_week", "seconds": 10}, {"screen": "clock", "seconds": 5}],
     )
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     seen = []
     for t in range(0, 15):
@@ -225,7 +225,7 @@ def test_a_one_page_screen_keeps_the_rows_seconds_even_with_a_page_length_set():
         page_seconds=2,
         rotation=[{"screen": "fb_week", "seconds": 10}, {"screen": "clock", "seconds": 5}],
     )
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     kinds = []
     for t in range(0, 15):

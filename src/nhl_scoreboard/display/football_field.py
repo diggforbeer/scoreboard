@@ -55,7 +55,7 @@ def _scale(color: RGB, factor: float) -> RGB:
 
 
 def team_rgb(abbrev: str) -> RGB:
-    """An NFL team's colour; a stand-in colour for anything that is not one of the 32."""
+    """A football team's colour; a stand-in colour for anything that is not one of the 32."""
     return team_color(abbrev) if is_team(abbrev) else UNKNOWN_TEAM
 
 

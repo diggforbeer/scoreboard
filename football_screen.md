@@ -1,4 +1,4 @@
-# Football (NFL) screens: design and todo
+# Football (football) screens: design and todo
 
 Lives on the `football` branch. Boards only get it if they pick `football`
 under Software update on the admin page. Replaces issue #341 as the place this
@@ -49,20 +49,20 @@ Known gaps:
 
 ## Choosing the sport
 
-Decided by the owner: a board runs **NHL or NFL, one at a time**, chosen with a
+Decided by the owner: a board runs **NHL or football, one at a time**, chosen with a
 picker. There is no mixing, no priority between the two sports, and no
 "NHL wins" rule.
 
 - A new setting picks the sport: `[scoreboard] sport = "nhl"` (the default, so a
-  board that never touches it behaves exactly as today) or `"nfl"`. The admin
+  board that never touches it behaves exactly as today) or `"football"`. The admin
   page's Scoreboard card gets a matching dropdown.
 - With `nhl`, the app is exactly the existing NHL app. Nothing in `screens.md`
   changes and no football code runs.
-- With `nfl`, the board runs the football logic in this file: its own data
+- With `football`, the board runs the football logic in this file: its own data
   source (ESPN), its own scene selection and its own `fb_` screens. The NHL
   logic stays idle.
-- **Teams work like NHL.** In NFL mode the admin page's Scoreboard card shows an
-  NFL **favourite team** and **followed teams** (the 32 NFL teams), in place of the
+- **Teams work like NHL.** In football mode the admin page's Scoreboard card shows an
+  Football **favourite team** and **followed teams** (the 32 football teams), in place of the
   NHL ones, set the same way. Changing the picker swaps which pickers show.
   - They are stored separately from the NHL settings (proposed: a `[football]`
     section with `favourite_team` and `also_follow`), not shared, because the
@@ -74,11 +74,11 @@ picker. There is no mixing, no priority between the two sports, and no
     board uses the favourite's. Followed teams are the secondary ones: they take
     their turn on the screen and get the quick score updates, as in NHL.
   - **Built (story #348):** `[football] favourite_team` and `also_follow` in the config
-    (`FootballConfig`), the 32 teams sent to the admin page from the NFL table so it has no
-    second list, validated against the NFL table (an NHL-only abbreviation such as `NSH` is
+    (`FootballConfig`), the 32 teams sent to the admin page from the football table so it has no
+    second list, validated against the football table (an NHL-only abbreviation such as `NSH` is
     rejected on a live save and ignored with a warning from a hand-edited TOML). The favourite
     is not also followed, duplicates collapse, and with no favourite set the board shows every
-    game. In NFL mode the Scoreboard card shows the NFL pickers in place of the NHL ones; its
+    game. In football mode the Scoreboard card shows the football pickers in place of the NHL ones; its
     other settings (puck-drop countdown, shootout polling, goal timings) are NHL-only and are
     still shown, which a later story should hide.
   - Open: whether the followed-team rules (primary-first, quick turns, goal-style
@@ -89,14 +89,14 @@ picker. There is no mixing, no priority between the two sports, and no
   sport-specific.
 - The screens that are not sport-specific stay: `ap_setup`, `wifi_join`,
   `address`, `connecting`, `no_data`, `no_games`, and the idle clock. How much of
-  the idle rotation (standings and so on) carries over is for the NFL side to
+  the idle rotation (standings and so on) carries over is for the football side to
   decide; the NHL-only ones (NHL standings, matchup, leaders) do not apply.
-- **NFL mode fetches off the render thread** (story #351). A feed worker
+- **Football mode fetches off the render thread** (story #351). A feed worker
   (`football/worker.py`) owns the ESPN client and polls on its own thread; the render
   loop only reads the latest immutable snapshot, so a slow request never freezes the
   panel or an animation. The NHL side still fetches on the render loop (#267), so this is
   a difference between the sports on purpose. How it behaves:
-  - It starts when the board enters NFL mode (or when `run()` starts in NFL mode) and
+  - It starts when the board enters football mode (or when `run()` starts in football mode) and
     stops on a switch back to NHL or on exit; nothing runs, and nothing fetches, otherwise.
   - A failed fetch **keeps the last good games** and records the error, so the panel does
     not blank on a blip. Failures back off (the poll interval, doubling, capped at 120s).
@@ -109,24 +109,24 @@ picker. There is no mixing, no priority between the two sports, and no
 - The picker keeps all sport-specific code behind one switch, which is what lets
   the branch merge to `main` later without changing NHL boards.
 
-## Base scenes (what NFL mode shows today)
+## Base scenes (what football mode shows today)
 
-Before any of the designed screens below exist, NFL mode shows four plain scenes (story
-#352; the play scenes of #377 are below). They are the thin base that gets real ESPN data onto the panel, the NFL counterpart
+Before any of the designed screens below exist, football mode shows four plain scenes (story
+#352; the play scenes of #377 are below). They are the thin base that gets real ESPN data onto the panel, the football counterpart
 of the NHL text layout, and the designed screens build on them. `football/mode.py` keeps the
 list (`FB_SCENE_KINDS`) and a test keeps this section, that list and the renderer in step.
 
 | Scene | When | What it draws |
 |---|---|---|
-| `fb_connecting` | The feed has not answered yet | `NFL` over `CONNECTING` |
-| `fb_no_data` | The last **successful** fetch is over 15 minutes old, or the feed has been failing for 15 minutes without ever answering | `NO DATA` over `NFL CHECK NETWORK` |
-| `fb_no_games` | The feed answered and there are no games on the slate (a bye, the off-season) | `NO GAMES` over `NFL` |
+| `fb_connecting` | The feed has not answered yet | `football` over `CONNECTING` |
+| `fb_no_data` | The last **successful** fetch is over 15 minutes old, or the feed has been failing for 15 minutes without ever answering | `NO DATA` over `football CHECK NETWORK` |
+| `fb_no_games` | The feed answered and there are no games on the slate (a bye, the off-season) | `NO GAMES` over `football` |
 | `fb_scores` | A game before kickoff or once it is final | One game as text (below) |
 | `fb_field` | A game that is live (between plays) | The resting field (below) |
 | `fb_halftime` | A game at the half | The halftime card (below) |
 
 **`fb_scores`** (`display/football_scenes.py`): away on the left half and home on the right,
-each abbreviation in its **NFL team colour** (never the NHL one) with its score in white at
+each abbreviation in its **football team colour** (never the NHL one) with its score in white at
 the edge of its half; the down and distance (`2ND & 3 AT WSH 13`) in amber while a game is
 live, red in the red zone; the state along the bottom in the state's colour: green for live
 play, amber at halftime, grey once final, blue before kickoff. Before kickoff there is no
@@ -135,7 +135,7 @@ score, and the line is the kickoff time in the board's timezone (`SUN 11/15 12:0
 drawn plain. On a 64px panel the abbreviations and scores drop to the smaller font so both
 sides fit.
 
-**Which game** (`NflMode.pick_game`), using the NFL favourite and followed teams:
+**Which game** (`FootballMode.pick_game`), using the football favourite and followed teams:
 
 1. The favourite's game holds the screen **alone while it is live**.
 2. Otherwise the games the followed teams are in take turns, `rotate_seconds` each, the
@@ -187,7 +187,7 @@ play text`, then the board returns to `fb_scores` (the resting field arrives wit
 - The live view does not show a stage mid-animation (it waits for it to end, like the NHL
   shootout and goal light); what the panel shows is exact.
 
-The admin page's status box and Live view work in NFL mode: the status box reports the
+The admin page's status box and Live view work in football mode: the status box reports the
 feed's last successful poll and last error, and the Live view mirrors these scenes pixel for
 pixel (tested for every state).
 
@@ -1034,10 +1034,10 @@ celebrated. It compares **outcomes**, and reports the rules that fired: `play_go
 ## Real renders
 
 Screens the board actually draws are rendered from the code, not by hand:
-`python scripts/render-screens.py --sport nfl` walks `football.demo.nfl_demo_steps()` (the
-same steps `nhl-scoreboard --demo` loops when `sport = "nfl"`) through the real app and writes
+`python scripts/render-screens.py --sport football` walks `football.demo.football_demo_steps()` (the
+same steps `nhl-scoreboard --demo` loops when `sport = "football"`) through the real app and writes
 `docs/football/<step name>.png` with synthetic team-coloured circles for logos and a fixed clock,
-so they are reproducible. `--sport nfl --check` fails when a committed image is stale, and a
+so they are reproducible. `--sport football --check` fails when a committed image is stale, and a
 test does the same. Nothing here touches `docs/screens/`.
 
 | | |
@@ -1242,7 +1242,7 @@ renders now; see "Real renders").
 **What these are and are not.** They are **design mockups, not renderer output**:
 no football renderer exists yet, so each frame is drawn pixel by pixel by that
 script, using the project's own BDF fonts and dot rendering so type size and pitch
-are true to the panel. Teams are real NFL abbreviations (NYG and WSH) with plain
+are true to the panel. Teams are real football abbreviations (NYG and WSH) with plain
 colour circles for logos, as the NHL guide does, because the crests are artwork
 and are not committed. They are stills: a ball arc is drawn partway along its path,
 a coin mid-flip, a touchdown at its settled look. When the real renderer lands,
@@ -1265,7 +1265,7 @@ open for the owner's review:
   against 62 or more for every other team, so the fetch script **brightens a crest that dim**
   (CAR is the only one at present), the same idea as lifting navy team colours on the NHL side.
   Washington, Houston, Atlanta and the Jets are the next dimmest but read fine. A hand-picked
-  override for any crest can go in `assets/logos/nfl/overrides/<size>/<variant>/`.
+  override for any crest can go in `assets/logos/football/overrides/<size>/<variant>/`.
 - **A one-line band across the top** (tiny 4x6 type): clock and quarter on the
   left, the down and distance or the play label on the right, in a colour that
   says the kind of play (green gain, red loss, amber neutral).
@@ -1348,7 +1348,7 @@ and **per team**. Nothing else makes a sound: not the coin toss, interceptions,
 fumbles, missed field goals, reversals, kickoffs or any other play. More can be
 added later.
 
-- **Two sound slots per team:** a touchdown sound and a field-goal sound. Each NFL
+- **Two sound slots per team:** a touchdown sound and a field-goal sound. Each football
   team can have its own pair, like the NHL's per-team horns, plus a **default**
   touchdown sound and a default field-goal sound used when a team has no file of
   its own.
@@ -1356,12 +1356,12 @@ added later.
   is detected (not when the screen appears), and whatever is on screen. Opponents'
   scores are silent: the NHL's wah-wah has no counterpart here. Followed teams are
   silent by default (see the open question).
-- **Stored apart from the NHL horns.** NFL and NHL abbreviations overlap (`BUF`,
-  `CAR`, `DAL`, `DET`, `MIN` and more), so the NFL files live in their own folder
-  or carry an `nfl` prefix. Proposed: `nfl/{ABBR}_td.wav`, `nfl/{ABBR}_fg.wav`,
-  `nfl/_td.wav`, `nfl/_fg.wav`. The same upload directory and the same lookup
+- **Stored apart from the NHL horns.** football and NHL abbreviations overlap (`BUF`,
+  `CAR`, `DAL`, `DET`, `MIN` and more), so the football files live in their own folder
+  or carry an `football` prefix. Proposed: `football/{ABBR}_td.wav`, `football/{ABBR}_fg.wav`,
+  `football/_td.wav`, `football/_fg.wav`. The same upload directory and the same lookup
   order as the NHL horns (uploads before shipped files).
-- **Admin page:** in NFL mode the Audio tab shows the touchdown and field-goal
+- **Admin page:** in football mode the Audio tab shows the touchdown and field-goal
   slots per team, with upload, Play and Delete like the NHL horns. Uploads are
   normalised the same way (RMS match, mono, WAV).
 - **Existing controls apply:** the `audio` enabled switch, the volume, and the
@@ -1394,10 +1394,10 @@ added later.
 
 ## Open questions
 
-- [x] NFL only (decided). College football and other leagues are out of scope;
-      the code can use the `nfl` league path and the 32 NFL teams directly.
+- [x] football only (decided). College football and other leagues are out of scope;
+      the code can use the `football` league path and the 32 football teams directly.
 - [x] One sport per board, chosen with a **picker** (decided): a board runs NHL
-      or NFL, never both. No mixing and no priority rules between the sports. See
+      or football, never both. No mixing and no priority rules between the sports. See
       "Choosing the sport".
 - [x] Sport picker lives on the **admin page, just like the NHL settings** (decided):
       a dropdown on the Scoreboard card that saves itself with an Undo, like the other
@@ -1420,7 +1420,7 @@ added later.
       shown in full? Not decided: build it, run it on a **Pi 4**, and see how slow or
       laggy it really is. The catch-up rules under "Every other play" stay as the
       provisional default until there are measurements.
-- [x] Teams (decided): in NFL mode the admin page lets the owner set a **favourite
+- [x] Teams (decided): in football mode the admin page lets the owner set a **favourite
       team and followed teams, just like NHL**. See "Choosing the sport".
 - [x] Coin toss (decided): "`<TEAM>` RECEIVE" is enough. The feed only says who
       receives, and the screen does not claim who won or deferred. No hunt for another
@@ -1488,18 +1488,18 @@ added later.
 - [~] Mockups: `fb_touchdown` (128px and 64px), `fb_score_detail`, `fb_fieldgoal`
       (favourite and opponent), `fb_fg_miss`, `fb_turnover`, `fb_reversal` drawn at
       128px. Still to draw at 64px: all but the touchdown
-- [~] Which non-sport screens and idle-rotation entries carry over to the NFL mode: proposed in `screens_not_during_games.md`, awaiting the owner
+- [~] Which non-sport screens and idle-rotation entries carry over to the football mode: proposed in `screens_not_during_games.md`, awaiting the owner
 
 ### Build (after the design is agreed)
 
 - [x] Field geometry and the static field background (#358): `football/geometry.py`,
       `display/football_field.py`, snapshots at 128px and 64px; the screens that use it come next
-- [x] NFL logos: `scripts/fetch-logos.py --sport nfl` (12px and 16px, dark), `LogoSet` for a team
+- [x] football logos: `scripts/fetch-logos.py --sport football` (12px and 16px, dark), `LogoSet` for a team
       at several sizes, kept apart from the NHL art (#349)
 
 - [x] Base scenes: the status screens and a plain text scoreboard with the favourite and
       followed-team selection (#352); see "Base scenes"
-- [x] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport nfl`
+- [x] Data layer: ESPN client and models. Scoreboard client, models and `--dump --sport football`
       done (#350); play feed, `Play` model, play-text parser and `--dump-plays` done (#353);
       rosters, participants and jersey numbers done (#354, `football/people.py`). Not wired into
       the loop yet: the worker will fetch the core feed when the site summary shows a new play
@@ -1512,7 +1512,7 @@ added later.
 - [x] Incompletion (#384), sack (#385) and penalty (#386) animations, including a play wiped out by a penalty
 - [x] Timeout, official timeout, two-minute warning (#387), end-of-period, halftime and final cards (#388)
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
-      `football/queue.py`, with `--watch-nfl` to see it run and lag logged per play)
+      `football/queue.py`, with `--watch-football` to see it run and lag logged per play)
 - [x] Play-text layout and scrolling (#379)
 - [x] (#356) Score detection from the `awayScore` / `homeScore` delta, with a baseline on
       first sight
@@ -1525,7 +1525,7 @@ added later.
 - [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)
 - [x] `fb_reversal` screen (#396)
 - [x] Live sport switch: tear down the old sport's state and baseline the new one cleanly
-- [x] `[scoreboard] sport` setting and the admin page picker (#345); NFL favourite and followed teams (`[football]`), shown instead of the NHL pickers in NFL mode (#348)
+- [x] `[scoreboard] sport` setting and the admin page picker (#345); football favourite and followed teams (`[football]`), shown instead of the NHL pickers in football mode (#348)
 - [ ] Config and admin page settings
 - [ ] Demo mode steps and `scripts/render-screens.py` images
 - [ ] Tests

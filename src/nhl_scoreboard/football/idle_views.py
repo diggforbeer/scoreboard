@@ -1,4 +1,4 @@
-"""What the NFL idle screens show, as plain data (#424 onward).
+"""What the football idle screens show, as plain data (#424 onward).
 
 Pure functions from the cached feed data and the clock to a small frozen view: no drawing, no
 fetching. ``idle_screens.py`` registers them; ``display/football_idle.py`` draws them.
@@ -260,7 +260,7 @@ def recap_lines(game: FbGame) -> tuple[RecapLine, ...]:
 
 def build_final(ctx: IdleContext) -> FinalView | None:
     """The favourite's game if it is over; ``None`` otherwise. (How long it stays up is
-    ``NflMode``'s hold, not this builder's.)"""
+    ``FootballMode``'s hold, not this builder's.)"""
     favourite = ctx.config.favourite_team
     game = next((g for g in ctx.games if favourite and g.involves(favourite) and g.is_final), None)
     if game is None:

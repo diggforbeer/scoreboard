@@ -1,4 +1,4 @@
-"""Client for ESPN's public NFL scoreboard (#350).
+"""Client for ESPN's public football scoreboard (#350).
 
 Free, keyless and undocumented, so it can change without notice (see
 ``football_api.md``). Modelled on ``nhl/api.py`` -- the same retry policy and
@@ -72,7 +72,7 @@ def _build_session() -> requests.Session:
     return session
 
 
-class NflClient:
+class FootballClient:
     def __init__(
         self,
         base_url: str = BASE_URL,
@@ -90,7 +90,7 @@ class NflClient:
     def close(self) -> None:
         self.session.close()
 
-    def __enter__(self) -> NflClient:
+    def __enter__(self) -> FootballClient:
         return self
 
     def __exit__(self, *_exc: object) -> None:

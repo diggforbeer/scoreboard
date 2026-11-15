@@ -1,4 +1,4 @@
-"""The NFL team table (#347)."""
+"""The football team table (#347)."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def test_an_unknown_team_fails_clearly():
         teams.team_by_id("99")
     with pytest.raises(teams.UnknownTeamError):
         teams.team_by_id(None)
-    assert not teams.is_team("NSH")  # an NHL team is not an NFL team
+    assert not teams.is_team("NSH")  # an NHL team is not a football team
     assert teams.is_team("kc")
 
 
@@ -86,12 +86,12 @@ def test_abbreviations_are_the_sorted_set_of_valid_teams():
     assert tuple(sorted(ESPN_IDS)) == teams.ABBREVIATIONS
 
 
-def test_the_nfl_and_nhl_tables_are_separate():
+def test_the_football_and_nhl_tables_are_separate():
     assert teams.TEAMS is not nhl_teams.TEAM_COLORS
     # Abbreviations that exist in both leagues resolve to different teams.
     shared = set(teams.TEAMS) & set(nhl_teams.TEAM_COLORS)
     assert {"BUF", "CAR", "DAL", "DET", "MIN"} <= shared
     assert teams.team("BUF").color != nhl_teams.team_color("BUF")
     assert teams.team("DAL").color != nhl_teams.team_color("DAL")
-    # And NHL-only abbreviations are not NFL teams.
+    # And NHL-only abbreviations are not football teams.
     assert "NSH" not in teams.TEAMS and "NSH" in nhl_teams.TEAM_COLORS

@@ -75,7 +75,7 @@ def test_the_next_game_line_says_at_for_away_and_vs_for_home():
 
 def draw(view, logos=True, width=128):
     r = renderer(width)
-    r.nfl_logos = Logos() if logos else None
+    r.football_logos = Logos() if logos else None
     c = AsciiCanvas(width, H)
     r.draw_fb_bye(c, view, utc(2026, 11, 3))
     return c
@@ -121,12 +121,12 @@ class Feed(IdleFeed):
 def test_a_favourite_on_a_bye_gets_the_bye_in_the_real_rotation_and_the_app_draws_it(
     app,  # noqa: F811
 ):
-    from nhl_scoreboard.football.mode import NflMode
+    from nhl_scoreboard.football.mode import FootballMode
 
     other = game("DAL", "PHI", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)
     clock, feed = Clock(960.0), Feed([other])  # the IdleFeed's scoreboard lists CHI on a bye
     cfg = FootballConfig(favourite_team="CHI")
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     seen = {}
     for t in range(0, 60):

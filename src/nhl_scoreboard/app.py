@@ -52,7 +52,7 @@ from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
 from .football.events import Event as FbEvent
-from .football.mode import NflMode
+from .football.mode import FootballMode
 from .football.models import FbGame, Play
 from .football.people import Person
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
@@ -202,9 +202,9 @@ def _restart_scoreboard_service() -> None:
     threading.Thread(target=_run, daemon=True, name="hw-mapping-restart").start()
 
 
-#: The NFL scenes that are a game's own screens (#430): a holiday decorates these only on a
+#: The football scenes that are a game's own screens (#430): a holiday decorates these only on a
 #: Thanksgiving or Christmas game. The clock, the standings, the week grid and the schedule are not.
-NFL_GAME_SCENES = frozenset(
+FOOTBALL_GAME_SCENES = frozenset(
     {
         "fb_scores",
         "fb_field",
@@ -229,7 +229,7 @@ class Scene:
     ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
 
-    NFL mode (football) adds the ``fb_`` kinds listed in ``football.mode.FB_SCENE_KINDS``,
+    Football mode (football) adds the ``fb_`` kinds listed in ``football.mode.FB_SCENE_KINDS``,
     documented in ``football_screen.md`` rather than ``screens.md``.
     """
 
@@ -278,9 +278,9 @@ class Scene:
     #: The board's mDNS name (``<host>.local``, #292), None when unknown.
     address_name: str | None = None
     address_qr: tuple[tuple[bool, ...], ...] | None = None
-    #: Set only for ``fb_scores`` (#352) -- the NFL game to show.
+    #: Set only for ``fb_scores`` (#352) -- the football game to show.
     fb_game: FbGame | None = None
-    #: Set only for the NFL play scenes (``fb_play``, ``fb_playtext``, ``fb_event``, #377):
+    #: Set only for the football play scenes (``fb_play``, ``fb_playtext``, ``fb_event``, #377):
     #: the play, who was on it (jersey numbers), the event being celebrated or alerted, which
     #: stage of it this is (``football.director``), how many animation seconds in and how long
     #: the stage runs. ``fb_elapsed`` is not part of the scene's identity (it changes every
@@ -325,7 +325,7 @@ class ScoreboardApp:
         ip_lookup: Callable[[], str | None] | None = None,
         hostname_lookup: Callable[[], str] | None = None,
         alias_publisher: AliasPublisher | None = None,
-        nfl_client_factory: Callable[[], Any] | None = None,
+        football_client_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.settings = settings
         self._hostname_lookup = hostname_lookup or current_hostname
@@ -433,7 +433,7 @@ class ScoreboardApp:
             tz=self.tz,
             logos=logos,
         )
-        self.renderer.nfl_logos = self._make_nfl_logos(settings)
+        self.renderer.football_logos = self._make_football_logos(settings)
         self.games: list[Game] = []
         self.index = 0
         #: Fetch results waiting out ``broadcast_delay_seconds`` (#301), and the
@@ -571,8 +571,10 @@ class ScoreboardApp:
         #: ``_switch_sport`` changes it, so ``current_mode()`` is the one
         #: place that decides which sport's code runs.
         self._sport = settings.scoreboard.sport
-        self._nfl_client_factory = nfl_client_factory
-        self._nfl: NflMode | None = self._new_nfl() if self._sport == "nfl" else None
+        self._football_client_factory = football_client_factory
+        self._football: FootballMode | None = (
+            self._new_football() if self._sport == "football" else None
+        )
         #: Set by a sport switch so run() fetches on its next pass rather than
         #: leaving the new sport on ``connecting`` for a whole poll interval.
         self._poll_asap = False
@@ -612,8 +614,8 @@ class ScoreboardApp:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "NHL", "CONNECTING")
         self.swap_canvas()
-        if self._nfl is not None:
-            self._nfl.start()
+        if self._football is not None:
+            self._football.start()
 
         next_poll = 0.0
         next_rotate = 0.0
@@ -698,12 +700,12 @@ class ScoreboardApp:
         self.shutdown()
 
     def _demo_step_list(self) -> list[DemoStep]:
-        """The steps for the board's sport; NFL's are all text and field, never a sound (#359)."""
+        """The steps for the board's sport; football's are all text and field, no sound (#359)."""
         # Imported here: demo builds Scene objects, so a top-level import would be circular.
-        if self._sport == "nfl":
-            from .football.demo import nfl_demo_steps
+        if self._sport == "football":
+            from .football.demo import football_demo_steps
 
-            return nfl_demo_steps(self.clock())
+            return football_demo_steps(self.clock())
         from .demo import demo_steps
 
         return demo_steps(self.settings.scoreboard.favourite_team, self.clock())
@@ -794,8 +796,8 @@ class ScoreboardApp:
 
     def shutdown(self) -> None:
         try:
-            if self._nfl is not None:
-                self._nfl.stop()
+            if self._football is not None:
+                self._football.stop()
             if self.admin_server is not None:
                 self.admin_server.stop()
             if self.setup_server is not None:
@@ -812,19 +814,19 @@ class ScoreboardApp:
     # -- data ------------------------------------------------------------
 
     @staticmethod
-    def _make_nfl_logos(settings: Settings) -> LogoSet | None:
-        """The NFL logo set, or ``None`` with logos switched off (#349). Cheap: the files
+    def _make_football_logos(settings: Settings) -> LogoSet | None:
+        """The football logo set, or ``None`` with logos switched off (#349). Cheap: the files
         are only read when a screen first asks for a team at a size."""
         if not settings.scoreboard.show_logos:
             return None
-        return LogoSet("nfl", settings.scoreboard.logo_variant)
+        return LogoSet("football", settings.scoreboard.logo_variant)
 
-    def _new_nfl(self) -> NflMode:
-        """A fresh NFL mode over the live settings. Its feed thread is not started here:
+    def _new_football(self) -> FootballMode:
+        """A fresh football mode over the live settings. Its feed thread is not started here:
         ``run()`` starts it, and a live sport switch starts it once the loop is running."""
-        return NflMode(
+        return FootballMode(
             lambda: self.settings.scoreboard,
-            client_factory=self._nfl_client_factory,
+            client_factory=self._football_client_factory,
             monotonic=self.monotonic,
             football=lambda: self.settings.football,
             delay_seconds=self._delay_seconds,
@@ -833,7 +835,7 @@ class ScoreboardApp:
         )
 
     def current_mode(self) -> str:
-        """``nhl`` or ``nfl``: the one place that says which sport is running (#346)."""
+        """``nhl`` or ``football``: the one place that says which sport is running (#346)."""
         return self._sport
 
     def _switch_sport(self, sport: str) -> None:
@@ -846,12 +848,12 @@ class ScoreboardApp:
         owner's, not the sport's, so it survives.
         """
         log.info("Switching sport %s -> %s", self._sport, sport)
-        if self._nfl is not None:
-            self._nfl.stop()  # its feed thread must not outlive the mode
+        if self._football is not None:
+            self._football.stop()  # its feed thread must not outlive the mode
         self._sport = sport
-        self._nfl = self._new_nfl() if sport == "nfl" else None
-        if self._nfl is not None and self._running:
-            self._nfl.start()
+        self._football = self._new_football() if sport == "football" else None
+        if self._football is not None and self._running:
+            self._football.start()
         self._poll_asap = True
         self.games = []
         self.index = 0
@@ -899,8 +901,8 @@ class ScoreboardApp:
         self.mirror.requested = True
 
     def refresh(self) -> None:
-        if self._nfl is not None:
-            self._nfl.refresh()
+        if self._football is not None:
+            self._football.refresh()
             return
         try:
             games = self.client.scores()
@@ -1160,7 +1162,7 @@ class ScoreboardApp:
                     variant=new_settings.scoreboard.logo_variant,
                 )
             self.renderer.logos = logos
-            self.renderer.nfl_logos = self._make_nfl_logos(new_settings)
+            self.renderer.football_logos = self._make_football_logos(new_settings)
 
         if auto_brightness_changed:
             # Same lazy probe as __init__: only touch the I2C bus when the
@@ -2016,8 +2018,8 @@ class ScoreboardApp:
             address_scene = self._address_scene()
             if address_scene is not None:
                 return address_scene
-        if self._nfl is not None:
-            return self._nfl.scene()
+        if self._football is not None:
+            return self._football.scene()
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
 
@@ -2731,8 +2733,8 @@ class ScoreboardApp:
         the two threads must not race into duplicate fetches.
         """
         scene = self.select_scene(allow_fetch=False)
-        if self._nfl is not None:
-            return self._nfl_status(scene)
+        if self._football is not None:
+            return self._football_status(scene)
         cfg = self.settings.scoreboard
         return {
             "version": installed_version() or "unknown (factory image)",
@@ -2747,12 +2749,12 @@ class ScoreboardApp:
             "last error at": self._error_time_label(),
         }
 
-    def _nfl_status(self, scene: Scene) -> dict[str, str]:
-        """The status box in NFL mode (#352): the feed worker's snapshot in the NHL keys' place.
+    def _football_status(self, scene: Scene) -> dict[str, str]:
+        """The status box in football mode (#352): the worker's snapshot, in the NHL keys' place.
 
         The snapshot's times are monotonic, so they are turned into wall-clock times here.
         """
-        snap = self._nfl.snapshot if self._nfl is not None else None
+        snap = self._football.snapshot if self._football is not None else None
         cfg = self.settings.football
 
         def wall(mono: float | None) -> datetime | None:
@@ -2887,10 +2889,10 @@ class ScoreboardApp:
         self._goal_building = goal_age is not None and goal_age < goal_light.BUILD_SECONDS
         favourite = (
             self.settings.football.favourite_team
-            if self._nfl is not None
+            if self._football is not None
             else self.settings.scoreboard.favourite_team
         )
-        if self._nfl is None and self.april_fools_active():
+        if self._football is None and self.april_fools_active():
             favourite = april_fools.PRANK_AS
             scene = self._april_fools_scene(scene)
         if scene.kind == "game":
@@ -2945,11 +2947,11 @@ class ScoreboardApp:
         elif scene.kind == "connecting":
             r.draw_message(self.canvas, "NHL", "CONNECTING")
         elif scene.kind == "fb_connecting":
-            r.draw_message(self.canvas, "NFL", "CONNECTING")
+            r.draw_message(self.canvas, "FOOTBALL", "CONNECTING")
         elif scene.kind == "fb_no_data":
-            r.draw_message(self.canvas, "NO DATA", "NFL CHECK NETWORK")
+            r.draw_message(self.canvas, "NO DATA", "FOOTBALL CHECK NETWORK")
         elif scene.kind == "fb_no_games":
-            r.draw_message(self.canvas, "NO GAMES", "NFL")
+            r.draw_message(self.canvas, "NO GAMES", "FOOTBALL")
         elif scene.kind == "fb_scores":
             r.draw_fb_scores(self.canvas, scene.fb_game)
         elif scene.kind == "fb_field":
@@ -2973,8 +2975,8 @@ class ScoreboardApp:
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
         elif scene.kind == "clock":
-            # The clock's colours are keyed on NHL abbreviations: an NFL abbreviation is no key.
-            r.draw_clock(self.canvas, self.clock(), "" if self._sport == "nfl" else favourite)
+            # The clock's colours are keyed on NHL abbreviations: a football abbreviation is no key.
+            r.draw_clock(self.canvas, self.clock(), "" if self._sport == "football" else favourite)
         elif scene.kind == "christmas_tree":
             r.draw_christmas_tree(self.canvas, self.clock(), favourite)
         elif scene.kind == "address":
@@ -3013,17 +3015,17 @@ class ScoreboardApp:
             return None
         return active_holiday(cfg.themes, self.clock().astimezone(self.tz).date())
 
-    def _nfl_game_holiday(self, scene: Scene, season: Holiday | None) -> Holiday | None:
-        """The holiday to draw over an NFL scene (#430).
+    def _football_game_holiday(self, scene: Scene, season: Holiday | None) -> Holiday | None:
+        """The holiday to draw over a football scene (#430).
 
         A **game screen** (the field, the plays, the countdown, the preview, the final...) gets a
         decoration only for a Thanksgiving or Christmas game, by the game's own date in the board's
         zone, and only when that holiday is ticked; no other holiday touches it, whatever the
-        calendar says. Every other NFL scene (the clock, the standings...) keeps the season's.
+        calendar says. Every other football scene (the clock, the standings...) keeps the season's.
         """
         from .football.idle_views import game_holiday
 
-        if scene.kind not in NFL_GAME_SCENES:
+        if scene.kind not in FOOTBALL_GAME_SCENES:
             return season
         start = None
         if scene.fb_game is not None:
@@ -3038,10 +3040,10 @@ class ScoreboardApp:
 
     def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
-        if self._nfl is not None and not self._demo_drawing:
-            holiday = self._nfl_game_holiday(scene, holiday)
+        if self._football is not None and not self._demo_drawing:
+            holiday = self._football_game_holiday(scene, holiday)
         min_gap, max_gap = self.settings.holiday.flyby_gap_minutes
-        with use_sport("nfl" if self._nfl is not None else "nhl"):
+        with use_sport("football" if self._football is not None else "nhl"):
             self._overlay_animating = self.holiday_overlay.draw(
                 self.canvas,
                 scene_kind=scene.kind,

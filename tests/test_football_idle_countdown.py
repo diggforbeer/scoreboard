@@ -41,7 +41,7 @@ class Logos:
 
 def draw(game, now, *, logos=False, width=128):
     r = renderer(width)
-    r.nfl_logos = Logos() if logos else None
+    r.football_logos = Logos() if logos else None
     c = AsciiCanvas(width, H)
     r.draw_fb_countdown(c, game, now)
     return c
@@ -129,7 +129,7 @@ def test_through_the_real_app_the_countdown_replaces_the_pregame_scores_inside_t
     def land(start):
         raw = raw_game("WSH", "NYG", "pre", start=start, short="x", name="STATUS_SCHEDULED")
         feed.answers = [[FbGame.from_api(raw)]]
-        app._nfl.worker.poll_once()
+        app._football.worker.poll_once()
 
     app.select_scene()
     land("2026-11-15T20:30:00Z")  # 90 minutes after the app's clock: outside the window
@@ -146,5 +146,5 @@ def test_through_the_real_app_the_countdown_replaces_the_pregame_scores_inside_t
     assert app.select_scene().kind == "fb_countdown"
     land("2026-11-15T19:00:00Z")
     feed.answers = [[FbGame.from_api(raw_game("WSH", "NYG", "in", 0, 0, short="1st"))]]
-    app._nfl.worker.poll_once()
+    app._football.worker.poll_once()
     assert app.select_scene().kind in ("fb_field", "fb_scores", "fb_play", "fb_playtext")

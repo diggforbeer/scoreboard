@@ -86,7 +86,9 @@ def draw_incomplete(r: Renderer, canvas: Any, scene: Scene) -> None:
     share = 1.0 if scene.fb_seconds <= 0 else max(0.0, scene.fb_elapsed / scene.fb_seconds)
     qb_y = lane_y(QB_LANE, direction, layout)
 
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     # The ball marker stays put: the plays own lines, the resting ball at the quarterback.
     if side is not None and pos is not None:
         ff.draw_markers(r, canvas, layout, start, pos.distance or 0, side)

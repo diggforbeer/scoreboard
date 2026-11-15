@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from nfl_logos import write_synthetic_nfl_logos
+from football_logos import write_synthetic_football_logos
 from nhl_scoreboard.app import Scene
 from nhl_scoreboard.display import football_period as fper
 from nhl_scoreboard.display import football_plays as fp
@@ -121,7 +121,7 @@ def half_game(away=10, home=17):
 def halftime(g=None, width=128, logos=None):
     canvas = AsciiCanvas(width, 32)
     r = renderer(width)
-    r.nfl_logos = logos
+    r.football_logos = logos
     r.draw_fb_halftime(canvas, g or half_game())
     assert not canvas.out_of_bounds
     return canvas
@@ -149,9 +149,9 @@ def test_the_card_says_halftime_with_both_teams_and_the_score():
 
 
 def test_the_logos_are_at_the_edges_on_a_wide_panel_and_dropped_on_a_narrow_one(tmp_path):
-    base = write_synthetic_nfl_logos(tmp_path) / "nfl"
+    base = write_synthetic_football_logos(tmp_path) / "football"
     libs = {s: LogoLibrary([base / str(s) / "dark"], s) for s in (12, 16)}
-    logos = LogoSet("nfl", "dark", libs)
+    logos = LogoSet("football", "dark", libs)
     plain, with_logos = halftime(), halftime(logos=logos)
     assert len(with_logos.pixels) > len(plain.pixels)
     assert [p for p in with_logos.pixels if p[0] < 24] and [

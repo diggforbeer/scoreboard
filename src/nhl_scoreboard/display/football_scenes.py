@@ -1,8 +1,8 @@
-"""The plain NFL scoreboard (#352): the base every designed ``fb_*`` screen builds on.
+"""The plain football scoreboard (#352): the base every designed ``fb_*`` screen builds on.
 
 This is deliberately **not** one of the designed football screens (the field, the run, the
 pass, ...): it is the thin, honest text scoreboard that gets real ESPN data onto the panel,
-the NFL counterpart of the NHL text layout in ``Renderer._draw_game_text``. Away on the
+the football counterpart of the NHL text layout in ``Renderer._draw_game_text``. Away on the
 left, home on the right, each abbreviation in its team colour with the score at the edge of
 its half; the down and distance (and a red tint in the red zone) while a game is live; the
 state of the game along the bottom.
@@ -36,7 +36,7 @@ UNKNOWN_TEAM = (220, 220, 220)
 
 
 def side_color(side: FbTeam) -> tuple[int, int, int]:
-    return team_color(side.abbrev) if side.is_nfl else UNKNOWN_TEAM
+    return team_color(side.abbrev) if side.is_football else UNKNOWN_TEAM
 
 
 def status_color(game: FbGame) -> tuple[int, int, int]:
@@ -111,7 +111,7 @@ def draw_fb_field(r: Renderer, canvas: Any, game: FbGame) -> None:
         game.home.abbrev,
         game.away.abbrev,
         side,
-        logos=r.nfl_logos,
+        logos=r.football_logos,
         red_zone=side if in_red_zone else None,
     )
     if sit is not None and sit.yard_line is not None:
@@ -194,8 +194,8 @@ def draw_fb_halftime(r: Renderer, canvas: Any, game: FbGame) -> None:
     if wide:
         for side, x in ((game.away, 14), (game.home, r.width - 15)):
             logo = (
-                r.nfl_logos.get(side.abbrev, 16)
-                if r.nfl_logos is not None and side.is_nfl
+                r.football_logos.get(side.abbrev, 16)
+                if r.football_logos is not None and side.is_football
                 else None
             )
             if logo is not None:

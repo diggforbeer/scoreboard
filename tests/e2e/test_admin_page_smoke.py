@@ -377,10 +377,10 @@ def _wait_until(condition, timeout=15.0):
     raise AssertionError("condition never became true")
 
 
-def test_nfl_mode_has_its_own_favourite_and_followed_teams(admin_page):
-    """#348: in NFL mode the Scoreboard card shows the NFL pickers, backed by the separate
+def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
+    """#348: in football mode the Scoreboard card shows the football pickers, backed by the separate
     ``[football]`` section. Switching sport swaps the pickers without losing either set of
-    choices, and BUF as the NHL favourite and BUF as the NFL favourite are two settings."""
+    choices, and BUF as the NHL favourite and BUF as the football favourite are two settings."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -390,21 +390,23 @@ def test_nfl_mode_has_its_own_favourite_and_followed_teams(admin_page):
             page.goto(admin_page.url)
             page.wait_for_selector("#sb-favourite-team", timeout=15000)
 
-            # NHL mode: the NHL pickers, and no NFL ones.
+            # NHL mode: the NHL pickers, and no football ones.
             assert page.locator("#fb-favourite-team").count() == 0
             page.select_option("#sb-favourite-team", "BUF")
             _wait_until(lambda: admin_page.config()["scoreboard"].get("favourite_team") == "BUF")
 
-            # Switching to NFL swaps the pickers.
-            page.select_option("#sb-sport", "nfl")
+            # Switching to football swaps the pickers.
+            page.select_option("#sb-sport", "football")
             page.wait_for_selector("#fb-favourite-team", timeout=15000)
             assert page.locator("#sb-favourite-team").count() == 0
-            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "nfl")
-            # All 32 NFL teams are offered, plus "(none)", and there is no default favourite.
+            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "football")
+            # All 32 football teams are offered, plus "(none)", and there is no default favourite.
             assert page.locator("#fb-favourite-team option").count() == 33
             assert page.input_value("#fb-favourite-team") == ""
 
-            page.select_option("#fb-favourite-team", "BUF")  # the same abbreviation, NFL's team
+            page.select_option(
+                "#fb-favourite-team", "BUF"
+            )  # the same abbreviation, football's team
             page.check("#fb-follow-NYG")
             page.check("#fb-follow-WSH")
             _wait_until(
@@ -417,13 +419,13 @@ def test_nfl_mode_has_its_own_favourite_and_followed_teams(admin_page):
             # The favourite is not also offered as a followed team.
             assert page.locator("#fb-follow-BUF").count() == 0
 
-            # A reload keeps the sport and the NFL choices.
+            # A reload keeps the sport and the football choices.
             page.reload()
             page.wait_for_selector("#fb-favourite-team", timeout=15000)
             assert page.input_value("#fb-favourite-team") == "BUF"
             assert page.is_checked("#fb-follow-NYG") and page.is_checked("#fb-follow-WSH")
 
-            # Back to NHL: its own favourite is still there, and the NFL choices are kept on disk.
+            # Back to NHL: its own favourite is still there; the football choices are kept on disk.
             page.select_option("#sb-sport", "nhl")
             page.wait_for_selector("#sb-favourite-team", timeout=15000)
             assert page.input_value("#sb-favourite-team") == "BUF"
@@ -434,8 +436,8 @@ def test_nfl_mode_has_its_own_favourite_and_followed_teams(admin_page):
             browser.close()
 
 
-def test_nfl_mode_has_its_own_idle_rotation_card(admin_page):
-    """#422: the NFL idle rotation card replaces the NHL one in NFL mode, saves
+def test_football_mode_has_its_own_idle_rotation_card(admin_page):
+    """#422: the football idle rotation card replaces the NHL one in football mode, saves
     ``[[football.rotation]]`` and the two timers, and leaves the NHL ``[[rotation]]`` alone."""
     from playwright.sync_api import sync_playwright
 
@@ -445,20 +447,20 @@ def test_nfl_mode_has_its_own_idle_rotation_card(admin_page):
             page = browser.new_page()
             page.goto(admin_page.url)
             page.wait_for_selector("#sb-sport", timeout=15000)
-            assert page.get_by_role("heading", name="NFL idle rotation").count() == 0
+            assert page.get_by_role("heading", name="football idle rotation").count() == 0
             assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 1
 
-            page.select_option("#sb-sport", "nfl")
-            page.get_by_role("heading", name="NFL idle rotation").wait_for(timeout=15000)
+            page.select_option("#sb-sport", "football")
+            page.get_by_role("heading", name="football idle rotation").wait_for(timeout=15000)
             assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 0
 
             page.get_by_role("button", name="Add row").click()
-            page.select_option('[aria-label="NFL rotation screen 1"]', "fb_week")
-            page.fill('[aria-label="NFL rotation seconds 1"]', "12")
-            page.fill("#nfl-final-hold", "45")
-            page.fill("#nfl-page-seconds", "4")
-            page.fill("#nfl-timing-score", "10")
-            page.uncheck("#nfl-show_bye")
+            page.select_option('[aria-label="football rotation screen 1"]', "fb_week")
+            page.fill('[aria-label="football rotation seconds 1"]', "12")
+            page.fill("#football-final-hold", "45")
+            page.fill("#football-page-seconds", "4")
+            page.fill("#football-timing-score", "10")
+            page.uncheck("#football-show_bye")
             page.keyboard.press("Tab")
             _wait_until(
                 lambda: (
@@ -475,8 +477,8 @@ def test_nfl_mode_has_its_own_idle_rotation_card(admin_page):
             ]
 
             page.reload()
-            page.wait_for_selector("#nfl-final-hold", timeout=15000)
-            assert page.input_value("#nfl-final-hold") == "45"
-            assert page.input_value('[aria-label="NFL rotation screen 1"]') == "fb_week"
+            page.wait_for_selector("#football-final-hold", timeout=15000)
+            assert page.input_value("#football-final-hold") == "45"
+            assert page.input_value('[aria-label="football rotation screen 1"]') == "fb_week"
         finally:
             browser.close()

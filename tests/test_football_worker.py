@@ -1,4 +1,4 @@
-"""The NFL feed worker and NFL mode over it (#351).
+"""The football feed worker and football mode over it (#351).
 
 Deterministic where it can be (``poll_once`` with a fake clock) and real threads
 only where the point is threading: a fetch in flight, stop/restart, many switches.
@@ -18,7 +18,7 @@ import pytest
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.football import worker as worker_mod
 from nhl_scoreboard.football.api import MIN_POLL_SECONDS
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.models import FbGame
 from nhl_scoreboard.football.worker import (
     STALE_AFTER_SECONDS,
@@ -85,7 +85,7 @@ def wait_for(condition, timeout=3.0):
 
 
 def feed_threads():
-    return [t for t in threading.enumerate() if t.name == "nfl-feed" and t.is_alive()]
+    return [t for t in threading.enumerate() if t.name == "football-feed" and t.is_alive()]
 
 
 # -- poll_once: publishing, errors, backoff --------------------------------------
@@ -333,7 +333,7 @@ def test_a_result_that_lands_after_stop_is_never_published():
     assert not feed_threads()
 
 
-# -- NflMode ---------------------------------------------------------------------
+# -- FootballMode ---------------------------------------------------------------------
 
 
 def settings_with(poll=60.0, live=15.0):
@@ -344,7 +344,7 @@ def settings_with(poll=60.0, live=15.0):
 
 def test_mode_polls_fast_while_live_and_slow_otherwise_never_below_the_feed_cache():
     cfg = [settings_with(poll=60, live=15)]
-    mode = NflMode(lambda: cfg[0], client_factory=lambda: ScriptedClient(GAMES))
+    mode = FootballMode(lambda: cfg[0], client_factory=lambda: ScriptedClient(GAMES))
     live_snap = FeedSnapshot(games=tuple(GAMES))
     quiet_snap = FeedSnapshot(games=tuple(UPCOMING))
     assert mode._interval(live_snap) == 15.0
@@ -357,7 +357,7 @@ def test_mode_polls_fast_while_live_and_slow_otherwise_never_below_the_feed_cach
 
 
 def test_mode_shows_connecting_until_the_first_result_then_the_scoreboard():
-    mode = NflMode(client_factory=lambda: ScriptedClient(GAMES))
+    mode = FootballMode(client_factory=lambda: ScriptedClient(GAMES))
     assert mode.scene().kind == "fb_connecting" and not mode.ready
     mode.refresh()  # the app's poll hook is a no-op
     assert mode.scene().kind == "fb_connecting"
@@ -368,7 +368,7 @@ def test_mode_shows_connecting_until_the_first_result_then_the_scoreboard():
 
 
 def test_mode_start_and_stop_run_the_worker_thread():
-    mode = NflMode(client_factory=lambda: ScriptedClient(GAMES))
+    mode = FootballMode(client_factory=lambda: ScriptedClient(GAMES))
     mode.start()
     try:
         assert wait_for(lambda: mode.ready)
@@ -399,15 +399,15 @@ def app_factory(fake_backend):
             settings,
             client=_NhlStub(),
             backend=fake_backend,
-            nfl_client_factory=client_factory,
+            football_client_factory=client_factory,
         )
         made.append(app)
         return app
 
     yield make
     for app in made:
-        if app._nfl is not None:
-            app._nfl.stop()
+        if app._football is not None:
+            app._football.stop()
 
 
 class _NhlStub:
@@ -427,7 +427,7 @@ def test_the_render_loop_keeps_drawing_while_a_fetch_is_in_flight(app_factory):
     client = BlockingClient(GAMES)
     app = app_factory(lambda: client)
     app._running = True  # as in run(): a switch now starts the feed thread
-    switch_sport(app, "nfl")
+    switch_sport(app, "football")
     try:
         assert client.entered.wait(2)
         started = time.monotonic()
@@ -446,10 +446,10 @@ def test_switching_sport_starts_and_stops_the_feed_thread(app_factory):
     app = app_factory(lambda: ScriptedClient(GAMES))
     app._running = True
     base = len(feed_threads())
-    switch_sport(app, "nfl")
-    assert wait_for(lambda: app._nfl.ready) and len(feed_threads()) == base + 1
+    switch_sport(app, "football")
+    assert wait_for(lambda: app._football.ready) and len(feed_threads()) == base + 1
     switch_sport(app, "nhl")
-    assert app._nfl is None and len(feed_threads()) == base
+    assert app._football is None and len(feed_threads()) == base
 
 
 def test_rapid_switching_with_a_live_loop_leaves_no_threads(app_factory):
@@ -457,7 +457,7 @@ def test_rapid_switching_with_a_live_loop_leaves_no_threads(app_factory):
     app._running = True
     before = threading.active_count()
     for i in range(60):
-        switch_sport(app, "nfl" if i % 2 == 0 else "nhl")
+        switch_sport(app, "football" if i % 2 == 0 else "nhl")
     assert app.current_mode() == "nhl"
     assert wait_for(lambda: threading.active_count() == before)
     assert not feed_threads()
@@ -467,14 +467,14 @@ def test_nothing_starts_a_thread_until_the_loop_runs(app_factory):
     """Constructing the app, or switching while it is not running, must not fetch."""
     made = []
     app = app_factory(lambda: made.append(1) or ScriptedClient(GAMES))
-    switch_sport(app, "nfl")
+    switch_sport(app, "football")
     assert not feed_threads() and made == []
 
 
 def test_shutdown_stops_the_feed_thread(app_factory):
     app = app_factory(lambda: ScriptedClient(GAMES))
     app._running = True
-    switch_sport(app, "nfl")
-    assert wait_for(lambda: app._nfl.ready)
+    switch_sport(app, "football")
+    assert wait_for(lambda: app._football.ready)
     app.shutdown()
     assert not feed_threads()

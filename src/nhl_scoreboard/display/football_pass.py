@@ -97,7 +97,9 @@ def draw_pass(r: Renderer, canvas: Any, scene: Scene) -> None:
     caught = catch_spot(start, end, play.yards_after_catch, direction)
 
     share = 1.0 if scene.fb_seconds <= 0 else max(0.0, scene.fb_elapsed / scene.fb_seconds)
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     arrived = share >= RUN_END
     draw_markers_for(r, canvas, layout, side, start_pos, end_pos, arrived)
 

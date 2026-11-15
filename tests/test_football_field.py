@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from nfl_logos import write_synthetic_nfl_logos
+from football_logos import write_synthetic_football_logos
 from nhl_scoreboard.display import football_field as ff
 from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.logos import LogoSet
@@ -31,10 +31,12 @@ NARROW = FieldLayout.for_panel(64)
 
 @pytest.fixture
 def logos(tmp_path, monkeypatch):
-    """Synthetic NFL logos at 12px, found through the environment variable the library reads."""
-    write_synthetic_nfl_logos(tmp_path)
-    monkeypatch.setenv("NHL_SCOREBOARD_NFL_LOGO_DIR", str(tmp_path / "nfl" / "12" / "dark"))
-    return LogoSet("nfl", "dark")
+    """Synthetic football logos at 12px, found through the environment variable."""
+    write_synthetic_football_logos(tmp_path)
+    monkeypatch.setenv(
+        "NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark")
+    )
+    return LogoSet("football", "dark")
 
 
 def draw(width=128, possession=HOME, logos=None, yard=28, distance=7, ball=True, markers=True,

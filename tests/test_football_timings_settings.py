@@ -7,7 +7,7 @@ import dataclasses
 from nhl_scoreboard.config import FOOTBALL_TIMING_RANGES, FootballConfig, Settings
 from nhl_scoreboard.football import events as ev
 from nhl_scoreboard.football.director import PLAY, PLAYTEXT, Timings, timings_from
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from test_football_director import started, td
 from test_football_events import make_play
 
@@ -50,13 +50,13 @@ def test_the_owners_lengths_reach_the_director():
     assert stages[0].stage == PLAY and isinstance(stages[1].event, ev.Touchdown)
 
 
-def test_nflmode_builds_its_timings_from_the_football_settings():
+def test_football_mode_builds_its_timings_from_the_football_settings():
     cfg = FootballConfig(favourite_team="NYG", score_seconds=11)
-    mode = NflMode(client_factory=lambda: None, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: None, football=lambda: cfg)
     assert mode.director._timings().score == 11.0
     cfg.score_seconds = 13  # read afresh each time, so an admin change needs no restart
     assert mode.director._timings().score == 13.0
-    plain = NflMode(client_factory=lambda: None)
+    plain = FootballMode(client_factory=lambda: None)
     assert plain.director._timings().score == 6.0
 
 

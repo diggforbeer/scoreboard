@@ -1,4 +1,4 @@
-"""NFL logos (#349): the lookup by sport, the multi-size set, the fetch script and its lift."""
+"""Football logos (#349): the lookup by sport, the multi-size set, the fetch script and its lift."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from nfl_logos import write_synthetic_nfl_logos
+from football_logos import write_synthetic_football_logos
 from nhl_scoreboard.display import logos as logos_mod
 from nhl_scoreboard.display.logos import LogoLibrary, LogoSet, default_directories
 from nhl_scoreboard.football.teams import ABBREVIATIONS
@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def load_script():
     spec = importlib.util.spec_from_file_location(
-        "fetch_logos_nfl", REPO_ROOT / "scripts" / "fetch-logos.py"
+        "fetch_logos_football", REPO_ROOT / "scripts" / "fetch-logos.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -54,13 +54,13 @@ def test_nhl_directories_keep_their_original_layout():
     dirs = default_directories(32, "dark")
     assert dirs[-1] == REPO_ROOT / "assets" / "logos" / "32" / "dark"
     assert dirs[-2] == Path("/usr/share/nhl-scoreboard/logos/32/dark")
-    assert not any("nfl" in str(d) for d in dirs)
+    assert not any("football" in str(d) for d in dirs)
 
 
-def test_nfl_directories_sit_beside_them_under_nfl_with_the_same_override_slot():
-    dirs = default_directories(12, "dark", "nfl")
-    assets = REPO_ROOT / "assets" / "logos" / "nfl"
-    system = Path("/usr/share/nhl-scoreboard/logos/nfl")
+def test_football_directories_sit_beside_them_under_football_with_the_same_override_slot():
+    dirs = default_directories(12, "dark", "football")
+    assets = REPO_ROOT / "assets" / "logos" / "football"
+    system = Path("/usr/share/nhl-scoreboard/logos/football")
     assert dirs == [
         system / "overrides" / "12" / "dark",
         assets / "overrides" / "12" / "dark",
@@ -71,11 +71,11 @@ def test_nfl_directories_sit_beside_them_under_nfl_with_the_same_override_slot()
 
 def test_each_sport_has_its_own_environment_variable(monkeypatch, tmp_path):
     monkeypatch.setenv("NHL_SCOREBOARD_LOGO_DIR", str(tmp_path / "nhl"))
-    monkeypatch.setenv("NHL_SCOREBOARD_NFL_LOGO_DIR", str(tmp_path / "nfl"))
+    monkeypatch.setenv("NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
     assert default_directories(32, "dark", "nhl")[0] == tmp_path / "nhl"
-    assert default_directories(12, "dark", "nfl")[0] == tmp_path / "nfl"
-    monkeypatch.delenv("NHL_SCOREBOARD_NFL_LOGO_DIR")
-    assert tmp_path / "nhl" not in default_directories(12, "dark", "nfl")
+    assert default_directories(12, "dark", "football")[0] == tmp_path / "football"
+    monkeypatch.delenv("NHL_SCOREBOARD_FOOTBALL_LOGO_DIR")
+    assert tmp_path / "nhl" not in default_directories(12, "dark", "football")
 
 
 def test_an_unknown_sport_is_refused():
@@ -86,13 +86,13 @@ def test_an_unknown_sport_is_refused():
 def test_buf_is_different_art_in_each_league(monkeypatch, tmp_path):
     """``BUF`` is Buffalo in both, but the Sabres and the Bills are different logos."""
     solid(tmp_path / "nhl" / "BUF.png", (250, 20, 20), 32)
-    solid(tmp_path / "nfl" / "BUF.png", (20, 20, 250), 12)
+    solid(tmp_path / "football" / "BUF.png", (20, 20, 250), 12)
     monkeypatch.setenv("NHL_SCOREBOARD_LOGO_DIR", str(tmp_path / "nhl"))
-    monkeypatch.setenv("NHL_SCOREBOARD_NFL_LOGO_DIR", str(tmp_path / "nfl"))
+    monkeypatch.setenv("NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
     nhl = LogoLibrary.default(32, "dark", "nhl").get("BUF")
-    nfl = LogoLibrary.default(12, "dark", "nfl").get("BUF")
-    assert nhl.pixels[0][2] == (250, 20, 20) and nfl.pixels[0][2] == (20, 20, 250)
-    assert (nhl.width, nfl.width) == (32, 12)
+    football = LogoLibrary.default(12, "dark", "football").get("BUF")
+    assert nhl.pixels[0][2] == (250, 20, 20) and football.pixels[0][2] == (20, 20, 250)
+    assert (nhl.width, football.width) == (32, 12)
 
 
 def test_the_default_library_is_still_the_nhl_one():
@@ -103,45 +103,47 @@ def test_the_default_library_is_still_the_nhl_one():
 
 
 def test_a_logo_set_hands_out_a_library_per_size_and_remembers_it(monkeypatch, tmp_path):
-    write_synthetic_nfl_logos(tmp_path)
-    monkeypatch.setenv("NHL_SCOREBOARD_NFL_LOGO_DIR", str(tmp_path / "nfl" / "12" / "dark"))
-    logos = LogoSet("nfl", "dark")
+    write_synthetic_football_logos(tmp_path)
+    monkeypatch.setenv(
+        "NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark")
+    )
+    logos = LogoSet("football", "dark")
     small = logos.get("KC", 12)
     assert small is not None and (small.width, small.height) == (12, 12)
     assert logos.for_size(12) is logos.for_size(12), "one library per size"
     assert logos.for_size(16) is not logos.for_size(12)
-    assert logos.sport == "nfl" and logos.variant == "dark"
+    assert logos.sport == "football" and logos.variant == "dark"
 
 
 def test_both_sizes_resolve_when_both_were_fetched(monkeypatch, tmp_path):
-    write_synthetic_nfl_logos(tmp_path)
+    write_synthetic_football_logos(tmp_path)
     monkeypatch.setattr(
         logos_mod,
         "default_directories",
         lambda size, variant, sport="nhl": [tmp_path / sport / str(size) / variant],
     )
-    logos = LogoSet("nfl")
+    logos = LogoSet("football")
     for abbrev in ABBREVIATIONS:
         assert logos.get(abbrev, 12).width == 12 and logos.get(abbrev, 16).width == 16
 
 
 def test_a_missing_logo_or_size_is_none_so_the_screen_can_fall_back_to_text(tmp_path, monkeypatch):
-    write_synthetic_nfl_logos(tmp_path, sizes=(12,))
+    write_synthetic_football_logos(tmp_path, sizes=(12,))
     monkeypatch.setattr(
         logos_mod,
         "default_directories",
         lambda size, variant, sport="nhl": [tmp_path / sport / str(size) / variant],
     )
-    logos = LogoSet("nfl")
+    logos = LogoSet("football")
     assert logos.get("KC", 12) is not None
     assert logos.get("KC", 16) is None, "16px was never fetched"
     assert logos.get("ZZZ", 12) is None
-    assert not logos.for_size(12).has("NSH"), "an NHL-only abbreviation has no NFL logo"
+    assert not logos.for_size(12).has("NSH"), "an NHL-only abbreviation has no football logo"
 
 
 def test_a_pre_built_library_can_be_injected():
     lib = LogoLibrary([], size=12)
-    assert LogoSet("nfl", libraries={12: lib}).for_size(12) is lib
+    assert LogoSet("football", libraries={12: lib}).for_size(12) is lib
 
 
 # -- the app -------------------------------------------------------------------------------------
@@ -178,26 +180,31 @@ def fake_backend_factory():
     return lambda: Backend("fake", FakeMatrix, FakeOptions, FakeGraphics)
 
 
-def test_the_renderer_has_an_nfl_logo_set_when_logos_are_on(make_app):
+def test_the_renderer_has_an_football_logo_set_when_logos_are_on(make_app):
     app = make_app(show_logos=True, variant="light")
-    assert isinstance(app.renderer.nfl_logos, LogoSet)
-    assert app.renderer.nfl_logos.sport == "nfl" and app.renderer.nfl_logos.variant == "light"
+    assert isinstance(app.renderer.football_logos, LogoSet)
+    assert (
+        app.renderer.football_logos.sport == "football"
+        and app.renderer.football_logos.variant == "light"
+    )
 
 
 def test_and_none_when_logos_are_off(make_app):
-    assert make_app(show_logos=False).renderer.nfl_logos is None
+    assert make_app(show_logos=False).renderer.football_logos is None
 
 
-def test_a_live_change_of_the_logo_settings_updates_the_nfl_logos_too(make_app):
+def test_a_live_change_of_the_logo_settings_updates_the_football_logos_too(make_app):
     import dataclasses
 
     app = make_app(show_logos=True)
     new = dataclasses.replace(app.settings.scoreboard, show_logos=False)
     app._apply_reloaded_settings(dataclasses.replace(app.settings, scoreboard=new))
-    assert app.renderer.logos is None and app.renderer.nfl_logos is None
+    assert app.renderer.logos is None and app.renderer.football_logos is None
     back = dataclasses.replace(new, show_logos=True, logo_variant="light")
     app._apply_reloaded_settings(dataclasses.replace(app.settings, scoreboard=back))
-    assert app.renderer.nfl_logos is not None and app.renderer.nfl_logos.variant == "light"
+    assert (
+        app.renderer.football_logos is not None and app.renderer.football_logos.variant == "light"
+    )
 
 
 # -- the fetch script ----------------------------------------------------------------------------
@@ -234,53 +241,56 @@ class Net:
 @pytest.fixture
 def net(monkeypatch):
     n = Net()
-    monkeypatch.setattr(script, "fetch_nfl_index", n.index)
+    monkeypatch.setattr(script, "fetch_football_index", n.index)
     monkeypatch.setattr(script, "fetch_url", n.url)
     return n
 
 
 def test_the_defaults_are_the_two_sizes_and_the_dark_variant(net, tmp_path):
-    assert script.main(["--sport", "nfl", "--out", str(tmp_path)]) == 0
+    assert script.main(["--sport", "football", "--out", str(tmp_path)]) == 0
     for size in (12, 16):
-        files = sorted((tmp_path / "nfl" / str(size) / "dark").glob("*.png"))
+        files = sorted((tmp_path / "football" / str(size) / "dark").glob("*.png"))
         assert [f.stem for f in files] == sorted(ABBREVIATIONS), f"all 32 teams at {size}px"
         assert Image.open(files[0]).size == (size, size)
-    assert not (tmp_path / "nfl" / "12" / "light").exists()
+    assert not (tmp_path / "football" / "12" / "light").exists()
 
 
 def test_each_logo_is_downloaded_once_not_once_per_size(net, tmp_path):
-    script.main(["--sport", "nfl", "--out", str(tmp_path)])
+    script.main(["--sport", "football", "--out", str(tmp_path)])
     assert len(net.fetched) == 32
 
 
 def test_the_margin_is_cropped_so_the_pixels_go_to_the_crest(net, tmp_path):
-    script.main(["--sport", "nfl", "--out", str(tmp_path), "--teams", "KC", "--size", "12"])
-    image = Image.open(tmp_path / "nfl" / "12" / "dark" / "KC.png")
+    script.main(["--sport", "football", "--out", str(tmp_path), "--teams", "KC", "--size", "12"])
+    image = Image.open(tmp_path / "football" / "12" / "dark" / "KC.png")
     x0, y0, x1, y1 = image.getbbox()
     assert x1 - x0 >= 11 and y1 - y0 >= 11, "a 40px square in a 100px canvas fills the 12px logo"
 
 
 def test_both_variants_and_the_light_variant_means_espns_default(net, tmp_path):
-    assert script.main(["--sport", "nfl", "--out", str(tmp_path), "--variant", "both",
+    assert script.main(["--sport", "football", "--out", str(tmp_path), "--variant", "both",
                         "--teams", "KC", "--size", "12"]) == 0  # fmt: skip
-    assert (tmp_path / "nfl" / "12" / "dark" / "KC.png").is_file()
-    assert (tmp_path / "nfl" / "12" / "light" / "KC.png").is_file()
+    assert (tmp_path / "football" / "12" / "dark" / "KC.png").is_file()
+    assert (tmp_path / "football" / "12" / "light" / "KC.png").is_file()
     assert "https://logos/light/KC.png" in net.fetched
 
 
 def test_a_subset_of_teams_and_a_custom_size(net, tmp_path):
-    assert script.main(["--sport", "nfl", "--out", str(tmp_path), "--teams", "kc", "NYG",
+    assert script.main(["--sport", "football", "--out", str(tmp_path), "--teams", "kc", "NYG",
                         "--size", "8"]) == 0  # fmt: skip
-    assert sorted(p.stem for p in (tmp_path / "nfl" / "8" / "dark").glob("*.png")) == ["KC", "NYG"]
+    assert sorted(p.stem for p in (tmp_path / "football" / "8" / "dark").glob("*.png")) == [
+        "KC",
+        "NYG",
+    ]
 
 
 def test_one_bad_logo_does_not_stop_the_rest(monkeypatch, tmp_path, capsys):
     n = Net(fail={"GB"})
-    monkeypatch.setattr(script, "fetch_nfl_index", n.index)
+    monkeypatch.setattr(script, "fetch_football_index", n.index)
     monkeypatch.setattr(script, "fetch_url", n.url)
-    code = script.main(["--sport", "nfl", "--out", str(tmp_path), "--size", "12"])
+    code = script.main(["--sport", "football", "--out", str(tmp_path), "--size", "12"])
     assert code == 1
-    files = {p.stem for p in (tmp_path / "nfl" / "12" / "dark").glob("*.png")}
+    files = {p.stem for p in (tmp_path / "football" / "12" / "dark").glob("*.png")}
     assert "GB" not in files and len(files) == 31
     assert "GB (dark, 12px): 404" in capsys.readouterr().err
 
@@ -289,9 +299,9 @@ def test_a_team_with_no_logo_for_the_variant_is_a_failure_not_a_crash(
     monkeypatch, tmp_path, capsys
 ):
     n = Net(missing={"KC"})
-    monkeypatch.setattr(script, "fetch_nfl_index", n.index)
+    monkeypatch.setattr(script, "fetch_football_index", n.index)
     monkeypatch.setattr(script, "fetch_url", n.url)
-    assert script.main(["--sport", "nfl", "--out", str(tmp_path), "--size", "12"]) == 1
+    assert script.main(["--sport", "football", "--out", str(tmp_path), "--size", "12"]) == 1
     assert "KC (dark, 12px): ESPN lists no dark logo" in capsys.readouterr().err
 
 
@@ -299,19 +309,21 @@ def test_an_unreachable_team_list_is_a_clear_error(monkeypatch, tmp_path, capsys
     def boom():
         raise OSError("no route")
 
-    monkeypatch.setattr(script, "fetch_nfl_index", boom)
-    assert script.main(["--sport", "nfl", "--out", str(tmp_path)]) == 1
+    monkeypatch.setattr(script, "fetch_football_index", boom)
+    assert script.main(["--sport", "football", "--out", str(tmp_path)]) == 1
     assert "could not read ESPN's team list: no route" in capsys.readouterr().err
     assert not list(tmp_path.rglob("*.png"))
 
 
-def test_a_team_that_is_not_in_the_nfl_is_refused_before_anything_is_fetched(net, tmp_path, capsys):
-    assert script.main(["--sport", "nfl", "--out", str(tmp_path), "--teams", "NSH"]) == 2
-    assert "not NFL teams: NSH" in capsys.readouterr().err
+def test_a_team_that_is_not_in_the_football_is_refused_before_anything_is_fetched(
+    net, tmp_path, capsys
+):
+    assert script.main(["--sport", "football", "--out", str(tmp_path), "--teams", "NSH"]) == 2
+    assert "not football teams: NSH" in capsys.readouterr().err
     assert net.fetched == []
 
 
-def test_nhl_art_never_lands_in_the_nfl_tree(monkeypatch, tmp_path):
+def test_nhl_art_never_lands_in_the_football_tree(monkeypatch, tmp_path):
     monkeypatch.setattr(
         script,
         "fetch",
@@ -325,7 +337,7 @@ def test_nhl_art_never_lands_in_the_nfl_tree(monkeypatch, tmp_path):
     assert (tmp_path / "16" / "dark" / "NSH.png").is_file() and (
         tmp_path / "32" / "dark" / "NSH.png"
     ).is_file()
-    assert not (tmp_path / "nfl").exists()
+    assert not (tmp_path / "football").exists()
 
 
 def test_the_index_is_read_from_espns_team_list(monkeypatch):
@@ -348,7 +360,7 @@ def test_the_index_is_read_from_espns_team_list(monkeypatch):
     import requests
 
     monkeypatch.setattr(requests, "get", lambda *a, **k: Response())
-    index = script.fetch_nfl_index()
+    index = script.fetch_football_index()
     assert index["KC"] == {"dark": "https://a/kc-dark.png", "light": "https://a/kc.png"}
     assert index["NYG"] == {"light": "https://a/nyg.png"}, "a variant ESPN does not list is absent"
     assert index["XX"] == {}
@@ -395,21 +407,23 @@ def test_an_empty_image_is_left_alone():
 def test_the_script_lifts_a_dim_crest_and_says_so(monkeypatch, tmp_path, capsys):
     dark = png((10, 10, 25), canvas=40, square=30)
     n = Net(bodies={"https://logos/dark/CAR.png": dark})
-    monkeypatch.setattr(script, "fetch_nfl_index", n.index)
+    monkeypatch.setattr(script, "fetch_football_index", n.index)
     monkeypatch.setattr(script, "fetch_url", n.url)
-    script.main(["--sport", "nfl", "--out", str(tmp_path), "--teams", "CAR", "KC", "--size", "12"])
+    script.main(
+        ["--sport", "football", "--out", str(tmp_path), "--teams", "CAR", "KC", "--size", "12"]
+    )
     out = capsys.readouterr().out
     car_line = next(line for line in out.splitlines() if " CAR " in line)
     assert "too dim: brightened" in car_line
     assert "too dim" not in next(line for line in out.splitlines() if " KC " in line)
     # (10, 10, 25) averages 11; brightened by the 3x cap it reaches 33.
-    assert lit_mean(Image.open(tmp_path / "nfl" / "12" / "dark" / "CAR.png")) >= 25
+    assert lit_mean(Image.open(tmp_path / "football" / "12" / "dark" / "CAR.png")) >= 25
 
 
 # -- the files are never committed ---------------------------------------------------------------
 
 
-def test_fetched_nfl_art_is_git_ignored_but_the_override_slot_is_not():
+def test_fetched_football_art_is_git_ignored_but_the_override_slot_is_not():
     def ignored(path):
         result = subprocess.run(["git", "check-ignore", "-q", path], cwd=REPO_ROOT, check=False)
         return result.returncode == 0
@@ -418,8 +432,8 @@ def test_fetched_nfl_art_is_git_ignored_but_the_override_slot_is_not():
         subprocess.run(["git", "--version"], capture_output=True, check=True)
     except (OSError, subprocess.CalledProcessError):
         pytest.skip("git is not available")
-    assert ignored("assets/logos/nfl/12/dark/KC.png") and ignored(
-        "assets/logos/nfl/16/light/KC.png"
+    assert ignored("assets/logos/football/12/dark/KC.png") and ignored(
+        "assets/logos/football/16/light/KC.png"
     )
-    assert not ignored("assets/logos/nfl/overrides/12/dark/KC.png")
+    assert not ignored("assets/logos/football/overrides/12/dark/KC.png")
     assert ignored("assets/logos/32/dark/NSH.png"), "the NHL rule is unchanged"

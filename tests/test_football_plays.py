@@ -61,7 +61,7 @@ class FakeSession:
 
 
 def client(*responses):
-    return api.NflClient(session=FakeSession(*responses))
+    return api.FootballClient(session=FakeSession(*responses))
 
 
 # What each real play should parse to: (kind, {PlayText field: value}).
@@ -585,7 +585,7 @@ def test_a_failure_is_no_data_not_an_exception():
 
 def test_the_request_is_the_summary_for_that_event():
     session = FakeSession(FakeResponse({"drives": {}}))
-    api.NflClient(session=session).plays(401873052)
+    api.FootballClient(session=session).plays(401873052)
     assert session.calls == [(f"{api.BASE_URL}/summary", {"event": "401873052"})]
 
 

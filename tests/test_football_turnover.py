@@ -8,7 +8,7 @@ import dataclasses
 
 import pytest
 
-from nfl_logos import write_synthetic_nfl_logos
+from football_logos import write_synthetic_football_logos
 from nhl_scoreboard.app import Scene
 from nhl_scoreboard.display import football_plays as fp
 from nhl_scoreboard.display import football_turnover as ft
@@ -55,16 +55,16 @@ def scene(event, share=1.0):
 def draw(event, share=1.0, width=128, art=None):
     canvas = AsciiCanvas(width, 32)
     r = renderer(width)
-    r.nfl_logos = art
+    r.football_logos = art
     r.draw_fb_play_scene(canvas, scene(event, share))
     assert not canvas.out_of_bounds
     return canvas
 
 
 def logos(tmp_path):
-    base = write_synthetic_nfl_logos(tmp_path) / "nfl"
+    base = write_synthetic_football_logos(tmp_path) / "football"
     libs = {s: LogoLibrary([base / str(s) / "dark"], s) for s in (12, 16)}
-    return LogoSet("nfl", "dark", libs)
+    return LogoSet("football", "dark", libs)
 
 
 # -- the words and the colour --------------------------------------------------------

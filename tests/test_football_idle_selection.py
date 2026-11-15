@@ -1,4 +1,4 @@
-"""Which idle screen the NFL board picks (#422): the ladder in ``NflMode._idle_kind``.
+"""Which idle screen the football board picks (#422): the ladder in ``FootballMode._idle_kind``.
 
 The screens themselves arrive in #423-#429, so these tests register stand-ins in
 ``IDLE_SCREENS`` (restored after each test)."""
@@ -12,7 +12,7 @@ import pytest
 from nhl_scoreboard.config import FootballConfig, RotationEntry, Settings
 from nhl_scoreboard.football import idle
 from nhl_scoreboard.football.idle_screens import IDLE_SCREENS
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from test_football_idle import Clock, pregame
 from test_football_idle import IdleFeed as _IdleFeed
 from test_football_scenes import game
@@ -62,7 +62,7 @@ def build(
         **cfg,
     )
     feed = IdleFeed(games)
-    mode = NflMode(
+    mode = FootballMode(
         client_factory=lambda: feed,
         monotonic=clock,
         football=lambda: config,
@@ -125,7 +125,7 @@ def test_a_game_seen_live_then_final_holds_for_the_hold_then_rotates():
     clock = Clock(BASE)
     feed = IdleFeed([nyg_game("in")])
     config = FootballConfig(favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 5}])
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: config)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: config)
     mode.worker.poll_once()
     mode.scene()  # seen live
     feed.games = [nyg_game("post")]
@@ -209,7 +209,7 @@ def test_a_live_game_nobody_follows_does_not_stop_the_idle_rotation():
     assert mode.scene().kind == "fb_preview"
 
 
-def test_the_nfl_rotation_round_trips_through_the_config_file(tmp_path):
+def test_the_football_rotation_round_trips_through_the_config_file(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("[football]\nfavourite_team = 'NYG'\n")
     Settings.load(path).save(
@@ -254,7 +254,7 @@ def test_the_final_hold_can_be_turned_off():
         cfg = FootballConfig(
             favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 5}], show_final=show
         )
-        mode = NflMode(
+        mode = FootballMode(
             client_factory=lambda feed=feed: feed, monotonic=clock, football=lambda cfg=cfg: cfg
         )
         mode.worker.poll_once()
