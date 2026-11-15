@@ -1,7 +1,7 @@
-# Football (NFL) screens when no game is on: design and todo
+# Football (football) screens when no game is on: design and todo
 
-What an NFL board shows **between games**: before kickoff, after the final whistle, on
-and on a bye week. It is the NFL counterpart of the NHL
+What a football board shows **between games**: before kickoff, after the final whistle, on
+and on a bye week. It is the football counterpart of the NHL
 guide's "Before a game" and "Between games" sections in [`screens.md`](screens.md)
 (`preview`, `countdown`, `standings`, the idle rotation, `clock`).
 
@@ -11,7 +11,7 @@ in [`football_screen.md`](football_screen.md); what ESPN's feed returns is in
 [`football_api.md`](football_api.md). Read those two first. Open work for this file is
 the todo at the bottom; update it in the PR that does the work.
 
-An NFL season is 17 games in about 18 weeks, so a board is **idle most of the time**:
+A football season is 17 games in about 18 weeks, so a board is **idle most of the time**:
 one live game on a Sunday (three hours), then six days of nothing. What it shows then
 is most of what anyone sees of it. That is the reason for this file.
 
@@ -25,11 +25,11 @@ board falls back to these, and only these:
 | Before the game | `fb_scores`: the matchup and the kickoff time (`SUN 11/15 12:00 PM`), blue |
 | At the half | `fb_halftime` (#388) |
 | Once final | `fb_scores`: the score and `FINAL`, grey, held until the slate moves on |
-| Games today, none involve the favourite or followed teams | every game takes a turn, `rotate_seconds` each (`NflMode.pick_game`) |
-| The feed answered and the slate is empty (a bye week) | `fb_no_games`: `NO GAMES` over `NFL` |
+| Games today, none involve the favourite or followed teams | every game takes a turn, `rotate_seconds` each (`FootballMode.pick_game`) |
+| The feed answered and the slate is empty (a bye week) | `fb_no_games`: `NO GAMES` over `football` |
 | The feed is stale or never answered | `fb_no_data` / `fb_connecting` |
 
-So on a bye week or in March the board says `NO GAMES NFL` and nothing else, and the
+So on a bye week or in March the board says `NO GAMES football` and nothing else, and the
 idle clock, holidays and everything between games that the NHL board has are absent.
 The scoreboard feed is asked for **today's slate only** (`scores(date=None)`), so the
 board cannot say when the next game is. The research below (`football_api.md`, "Between
@@ -46,7 +46,7 @@ teams on a bye, and the whole season's calendar.
 - **Football is a weekly sport.** The next game is days away, not hours: the useful
   numbers are days and the day and time of kickoff, not a puck-drop countdown.
 - **Same machinery as the NHL idle rotation where it fits**: a list of screens, each for
-  its own number of seconds, a screen with nothing to show skipped. Whether NFL mode reads
+  its own number of seconds, a screen with nothing to show skipped. Whether football mode reads
   the existing `[[rotation]]` setting or gets its own is an open question.
 - **Cheap on the feed.** Anything that needs more than the live scoreboard (a schedule, a
   standings table) is fetched rarely (hourly or daily) and cached, never per frame.
@@ -68,7 +68,7 @@ inside the window. Data: the game's start time, already in the scoreboard feed.
 ### `fb_preview`: the next game, days away
 
 The favourite's next game, up to a week out: `SUN 12:00 PM`, `@ WSH` or `vs DAL`, both
-logos, the week number, optionally the records and the broadcast. The NFL equivalent of the
+logos, the week number, optionally the records and the broadcast. The football equivalent of the
 NHL `preview`, with days instead of hours. Data: the team **schedule** (`/teams/{id}/schedule`, 17 games, 300 KB, fetched daily) gives
 the next game's date and opponent; **records** and the **broadcast** are on the scoreboard
 events (`records`, `broadcasts`) once the game is in the week being polled.
@@ -90,7 +90,7 @@ final score and, for the recap, the final event's `leaders` (the game's top pass
 ### `fb_standings`: the playoff picture
 
 The favourite's **division** (four teams, W-L-T, the favourite highlighted) and, as a
-second page, the **conference** seeds (1-7 with the cut line). The NFL counterpart of
+second page, the **conference** seeds (1-7 with the cut line). The football counterpart of
 `division`, `wildcard` and `standings`. Data: the **standings** endpoint (`/apis/v2/sports/football/nfl/standings`, `?level=3` for
 divisions): each team's `overall` record, `playoffSeed`, `streak` and points for and against.
 
@@ -109,7 +109,7 @@ schedule (`/teams/{id}/schedule`); a missing week number in it is the bye.
 ## Mockups
 
 Real renders at 128x32 (these screens are skipped on a 64px panel) from the demo steps in
-`football/demo.py`, by `python scripts/render-screens.py --sport nfl` into
+`football/demo.py`, by `python scripts/render-screens.py --sport football` into
 [`docs/football/`](docs/football/), with synthetic crests (the artwork is not committed) and made-up
 numbers; the favourite shown is NYG. They began as hand-drawn mockups, now retired. The tiny 4x6
 font has no `@` and no `#`, so away games read `AT`.
@@ -119,7 +119,7 @@ font has no `@` and no `#`, so away games read `AT`.
 | ![Countdown](docs/football/fb_countdown.png) | ![Preview](docs/football/fb_preview.png) |
 | `fb_countdown`: kickoff in the hour. Both logos and records (from the scoreboard), the countdown between them, the day, time and broadcast under it. | `fb_preview`: the next game, days away. The week, the day, the time, the records. |
 | ![Primetime](docs/football/fb_preview_primetime.png) | ![Thanksgiving](docs/football/fb_preview_thanksgiving.png) |
-| A primetime game: the tag (`THU NIGHT`) goes before the week. | A holiday game: the tag (`THANKSGIVING`) and, suggested here by the trim along the top, the existing holiday overlay in NFL colours. |
+| A primetime game: the tag (`THU NIGHT`) goes before the week. | A holiday game: the tag (`THANKSGIVING`) and, suggested here by the trim along the top, the existing holiday overlay in football colours. |
 | ![Bye](docs/football/fb_bye.png) | ![Final](docs/football/fb_final.png) |
 | `fb_bye`: the logo, `BYE WEEK` and the next game, from the schedule. Without a schedule yet (`docs/football/fb_bye_no_next.png`) the title stands alone. | `fb_final`, held 60 minutes: the score, the loser's logo dimmed, and the recap (the leading passer and rusher) across the bottom. Without leaders (`docs/football/fb_final_no_recap.png`) the margin stands in. |
 | ![Division](docs/football/fb_standings_division.png) | ![Conference](docs/football/fb_standings_conference.png) |
@@ -131,10 +131,10 @@ font has no `@` and no `#`, so away games read `AT`.
 
 The NHL side is in [`screens.md`](screens.md), "Between games". Proposed fate of each:
 
-| NHL screen | In NFL mode |
+| NHL screen | In football mode |
 |---|---|
 | `clock` (`clock`, `show_clock_when_idle`) | **Carries over unchanged**: it is not sport-specific. The fallback when nothing else has anything to show. |
-| `christmas_tree` and the holiday decorations | **Carry over unchanged**; the holiday overlay is sport-aware (#430): NFL team colours in NFL mode, and on a game screen only on Thanksgiving and Christmas games. |
+| `christmas_tree` and the holiday decorations | **Carry over unchanged**; the holiday overlay is sport-aware (#430): Football team colours in football mode, and on a game screen only on Thanksgiving and Christmas games. |
 | `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games` | **Carry over** (`fb_connecting`, `fb_no_data` and `fb_no_games` already exist). |
 | `preview`, `countdown` | Become `fb_preview`, `fb_countdown` above. |
 | `standings`, `division`, `wildcard`, `conference_leaders` | Become `fb_standings` (a division page and a conference page). |
@@ -184,7 +184,7 @@ Checked against the live feed on 2026-11-13 and written up in `football_api.md`,
 
 ## Built: the data layer (#421)
 
-`football/idle.py` parses and caches what these screens read; nothing draws yet. `NflClient` gained
+`football/idle.py` parses and caches what these screens read; nothing draws yet. `FootballClient` gained
 `scoreboard()` (the games **and** the week, the teams on a bye and the season calendar; `scores()` is
 now its games), `week(number, season_type)` (a whole week in one request), `schedule(team_id)` and
 `standings()` (on the `/apis/v2/` base, `?level=3`). The feed worker publishes an immutable
@@ -192,7 +192,7 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
 
 - **Cadences:** a team's schedule **daily**, the standings **hourly**, the week's games every
   **5 minutes**; each only when due. The schedule is fetched for the favourite and the followed teams
-  (NFL teams only), the standings only when someone is followed, the week whenever the board is idle.
+  (Football teams only), the standings only when someone is followed, the week whenever the board is idle.
 - **Nothing is fetched while any game is live**; the last data is kept, and the week, byes and calendar
   from the poll the worker makes anyway still update.
 - **A failed fetch keeps the last good data** and is retried after 60 seconds, not every frame; data older
@@ -204,9 +204,9 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
 
 ## Decisions (owner, 2026-11-13)
 
-- [x] **Its own rotation.** NFL mode has its own idle rotation under `[football]` (NFL screen names),
+- [x] **Its own rotation.** football mode has its own idle rotation under `[football]` (football screen names),
       not the shared `[[rotation]]`, so switching sport never shows screens that do not exist. The
-      admin page gets an NFL version of the Idle rotation card.
+      admin page gets a football version of the Idle rotation card.
 - [x] **The final is held 60 minutes, with a recap line.** A setting (default 60 minutes, like the
       NHL's `final_hold_minutes`); the final screen adds a **recap**: the leading passer and rusher
       (the per-event `leaders`: see #420 in `football_api.md`).
@@ -223,13 +223,13 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
       `THANKSGIVING`, `CHRISTMAS`, from the feed's broadcast and date) **and the existing holiday
       overlay** on Thanksgiving and Christmas games.
 - [x] **Holiday decorations on Thanksgiving and Christmas games only**, using the existing holiday
-      overlays, drawn in the playing teams' **NFL** colours (done in #430: `display/holiday.use_sport`;
+      overlays, drawn in the playing teams' **football** colours (done in #430: `display/holiday.use_sport`;
       the date rules are `football/idle_views.game_holiday`, by the game's own date in the board's
       zone). No other holiday touches a game screen.
-- [x] **The default NFL idle rotation:** `fb_preview` 8s, `fb_standings` 8s (the division, then the
+- [x] **The default football idle rotation:** `fb_preview` 8s, `fb_standings` 8s (the division, then the
       conference), `fb_week` 10s, `fb_schedule` 8s, then the clock 6s. A screen with nothing to show is
       skipped. `fb_bye` joins the loop on a bye week and `fb_final` holds for its 60 minutes after a
-      game. All are settings under `[football]` and the admin page's NFL rotation card.
+      game. All are settings under `[football]` and the admin page's football rotation card.
 
 ## Open questions
 
@@ -245,8 +245,8 @@ None left. The next step is the build, one story each (see the todo).
 ### Design
 - [x] Decide the main open questions (above); the three left are small.
 - [x] First-draft mockups for each screen (128px only), reviewed by the owner and since replaced by
-      the real renders (`scripts/render-screens.py --sport nfl`); the mockup script is deleted.
-- [x] The default idle rotation and its settings; the admin page's rotation card for NFL mode (#422).
+      the real renders (`scripts/render-screens.py --sport football`); the mockup script is deleted.
+- [x] The default idle rotation and its settings; the admin page's rotation card for football mode (#422).
 
 ### Build (after the design is agreed, one story each)
 - [x] The schedule, standings and week fetch and cache (#421, `football/idle.py`).
@@ -254,11 +254,11 @@ None left. The next step is the build, one story each (see the todo).
 - [x] `fb_preview` (#424: `football/idle_views.py` builds it, the tag and round rules are pure functions; a
       tag too long to sit beside the week, `THANKSGIVING`, drops the week)
 - [x] `fb_bye` (#425)
-- [x] `fb_final` (#426: the hold is `NflMode`'s, the recap `football/idle_views.py`)
+- [x] `fb_final` (#426: the hold is `FootballMode`'s, the recap `football/idle_views.py`)
 - [x] `fb_standings` (#427; the pages share the rotation entry's seconds)
 - [x] `fb_week` (#428: live games first, then those to come by kickoff, then finals; a second page
       is `docs/football/fb_week_page2.png`)
 - [x] `fb_schedule` (#429; the end of the season is `docs/football/fb_schedule_last.png`)
-- [x] The NFL idle rotation and the scene selection above, with the clock as the fallback (#422;
-      `NflMode._idle_kind`, the registry in `football/idle_screens.py`).
-- [ ] Demo steps and `scripts/render-screens.py --sport nfl` images for each
+- [x] The football idle rotation and the scene selection above, with the clock as the fallback (#422;
+      `FootballMode._idle_kind`, the registry in `football/idle_screens.py`).
+- [ ] Demo steps and `scripts/render-screens.py --sport football` images for each

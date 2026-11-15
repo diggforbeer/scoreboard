@@ -33,31 +33,31 @@ class Logo:
     pixels: tuple[tuple[int, int, RGB], ...]
 
 
-#: The sports with logos. NFL and NHL abbreviations overlap (``BUF``, ``CAR``, ``DAL``, ``DET``,
-#: ``MIN`` ...) and mean different teams, so each sport has its own directories and its own
+#: The sports with logos. Football and NHL abbreviations overlap (``BUF``, ``CAR``, ``DAL``,
+#: ``DET``, ``MIN`` ...) and mean different teams, so each sport has its own directories and its own
 #: library: ``BUF`` is never looked up across them.
-SPORTS = ("nhl", "nfl")
+SPORTS = ("nhl", "football")
 
 
 def default_directories(size: int, variant: str, sport: str = "nhl") -> list[Path]:
     """Where to look, most specific first.
 
-    NHL art keeps its original layout (``assets/logos/32/dark``). NFL art lives beside it
-    under ``nfl/`` (``assets/logos/nfl/12/dark``), with the same ``overrides`` slot, and its
-    own environment variable.
+    NHL art keeps its original layout (``assets/logos/32/dark``). Football art lives beside it
+    under ``football/`` (``assets/logos/football/12/dark``), with the same ``overrides`` slot and
+    its own environment variable.
     """
     if sport not in SPORTS:
         raise ValueError(f"unknown sport {sport!r}; expected one of {SPORTS}")
     dirs: list[Path] = []
     env = os.environ.get(
-        "NHL_SCOREBOARD_LOGO_DIR" if sport == "nhl" else "NHL_SCOREBOARD_NFL_LOGO_DIR"
+        "NHL_SCOREBOARD_LOGO_DIR" if sport == "nhl" else "NHL_SCOREBOARD_FOOTBALL_LOGO_DIR"
     )
     if env:
         dirs.append(Path(env))
     repo_root = Path(__file__).resolve().parents[3]
-    if sport == "nfl":
-        system = Path("/usr/share/nhl-scoreboard/logos/nfl")
-        assets = repo_root / "assets" / "logos" / "nfl"
+    if sport == "football":
+        system = Path("/usr/share/nhl-scoreboard/logos/football")
+        assets = repo_root / "assets" / "logos" / "football"
         return [
             *dirs,
             system / "overrides" / str(size) / variant,

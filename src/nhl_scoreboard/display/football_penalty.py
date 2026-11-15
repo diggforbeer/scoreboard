@@ -146,7 +146,7 @@ def draw_penalty(r: Renderer, canvas: Any, scene: Scene) -> None:
     if side is not None and distance:
         first_down = first_down_line(end if settled else start, distance, direction)
     ff.draw_field(
-        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos,
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos,
         scrimmage=here, first_down=first_down,
     )  # fmt: skip
     if gain is not None and share < COMPRESS_END:

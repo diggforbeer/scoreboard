@@ -764,13 +764,13 @@ def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
 def test_scoreboard_save_writes_the_sport(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
-        data = {**_SCOREBOARD_SAVE_DATA, "sport": "nfl"}
+        data = {**_SCOREBOARD_SAVE_DATA, "sport": "football"}
         await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
         return await client.recv()
 
     message = json.loads(asyncio.run(_serve_and_run(scenario)))
     assert message["type"] != "error"
-    assert 'sport = "nfl"' in config_path.read_text()
+    assert 'sport = "football"' in config_path.read_text()
 
 
 def test_scoreboard_save_rejects_an_invalid_sport(app_dir, config_path):
@@ -2386,7 +2386,7 @@ def test_save_update_branch_rejects_a_path_like_name(app_dir, config_path):
     assert config_path.read_text() == ""
 
 
-# -- [football]: NFL favourite and followed teams (#348) ----------------------------
+# -- [football]: Football favourite and followed teams (#348) ----------------------------
 
 
 async def _next(client, timeout=5):
@@ -2417,7 +2417,7 @@ def test_sends_the_football_config_with_all_32_teams(app_dir, config_path):
     assert names == sorted(names), "sorted for the dropdown"
 
 
-def test_saving_the_nfl_favourite_and_followed_teams_writes_the_football_section(
+def test_saving_the_football_favourite_and_followed_teams_writes_the_football_section(
     app_dir, config_path
 ):
     async def scenario(client):
@@ -2438,7 +2438,7 @@ def test_saving_the_nfl_favourite_and_followed_teams_writes_the_football_section
     assert reloaded.football.also_follow == ["NYG", "WSH"]
 
 
-def test_an_nhl_abbreviation_is_rejected_for_the_nfl_favourite_and_nothing_is_written(
+def test_an_nhl_abbreviation_is_rejected_for_the_football_favourite_and_nothing_is_written(
     app_dir, config_path
 ):
     async def scenario(client):
@@ -2447,11 +2447,11 @@ def test_an_nhl_abbreviation_is_rejected_for_the_nfl_favourite_and_nothing_is_wr
 
     message = asyncio.run(_serve_and_run(scenario))
     assert message["type"] == "error" and message["section"] == "football"
-    assert "favourite_team" in message["message"] and "NFL" in message["message"]
+    assert "favourite_team" in message["message"] and "football" in message["message"]
     assert config_path.read_text() == ""
 
 
-def test_an_nhl_abbreviation_in_the_nfl_followed_list_is_rejected(app_dir, config_path):
+def test_an_nhl_abbreviation_in_the_football_followed_list_is_rejected(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
         return await _save_football(client, {"also_follow": ["KC", "TOR"]})
@@ -2461,7 +2461,7 @@ def test_an_nhl_abbreviation_in_the_nfl_followed_list_is_rejected(app_dir, confi
     assert config_path.read_text() == ""
 
 
-def test_an_empty_nfl_favourite_is_allowed_and_means_none(app_dir, config_path):
+def test_an_empty_football_favourite_is_allowed_and_means_none(app_dir, config_path):
     config_path.write_text('[football]\nfavourite_team = "KC"\n')
 
     async def scenario(client):
@@ -2487,7 +2487,7 @@ def test_unknown_and_mistyped_football_fields_are_rejected(app_dir, config_path)
     assert config_path.read_text() == ""
 
 
-def test_the_nfl_and_nhl_favourites_are_saved_independently(app_dir, config_path):
+def test_the_football_and_nhl_favourites_are_saved_independently(app_dir, config_path):
     """BUF means Buffalo in both leagues but they are two different teams."""
 
     async def scenario(client):
@@ -2505,7 +2505,7 @@ def test_the_nfl_and_nhl_favourites_are_saved_independently(app_dir, config_path
     assert settings.scoreboard.favourite_team == "BUF" and settings.football.favourite_team == "KC"
 
 
-# -- [[football.rotation]]: NFL idle rotation (#422) ---------------------------------
+# -- [[football.rotation]]: Football idle rotation (#422) ---------------------------------
 
 
 async def _save_football_rotation(client, data):
@@ -2514,7 +2514,7 @@ async def _save_football_rotation(client, data):
     return await _next(client)
 
 
-def test_sends_the_nfl_rotation_last_with_the_defaults_and_screens(app_dir, config_path):
+def test_sends_the_football_rotation_last_with_the_defaults_and_screens(app_dir, config_path):
     config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
 
     async def scenario(client):
@@ -2549,7 +2549,7 @@ def test_sends_the_nfl_rotation_last_with_the_defaults_and_screens(app_dir, conf
     assert message["screens"] == ["fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock"]
 
 
-def test_saving_the_nfl_rotation_writes_football_rotation_tables(app_dir, config_path):
+def test_saving_the_football_rotation_writes_football_rotation_tables(app_dir, config_path):
     config_path.write_text('[football]\nfavourite_team = "NYG"\n')
 
     async def scenario(client):
@@ -2600,7 +2600,7 @@ def test_saving_the_nfl_rotation_writes_football_rotation_tables(app_dir, config
         "nope",
     ],
 )
-def test_a_bad_nfl_rotation_save_is_rejected_and_writes_nothing(app_dir, config_path, data):
+def test_a_bad_football_rotation_save_is_rejected_and_writes_nothing(app_dir, config_path, data):
     config_path.write_text("[football]\n")
 
     async def scenario(client):
@@ -2613,7 +2613,7 @@ def test_a_bad_nfl_rotation_save_is_rejected_and_writes_nothing(app_dir, config_
     assert Settings.load(config_path).football.final_hold_minutes == 60.0
 
 
-def test_the_nfl_screen_toggles_save_and_reload(app_dir, config_path):
+def test_the_football_screen_toggles_save_and_reload(app_dir, config_path):
     config_path.write_text("[football]\n")
 
     async def scenario(client):
@@ -2628,7 +2628,7 @@ def test_the_nfl_screen_toggles_save_and_reload(app_dir, config_path):
     assert (football.show_bye, football.show_countdown, football.show_final) == (False, False, True)
 
 
-def test_the_nfl_screen_lengths_save_to_the_football_section(app_dir, config_path):
+def test_the_football_screen_lengths_save_to_the_football_section(app_dir, config_path):
     config_path.write_text("[football]\n")
 
     async def scenario(client):

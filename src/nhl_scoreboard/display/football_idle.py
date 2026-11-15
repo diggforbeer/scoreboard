@@ -1,4 +1,4 @@
-"""The NFL screens between games (#423-#429), 128px only (decided; see
+"""The football screens between games (#423-#429), 128px only (decided; see
 ``screens_not_during_games.md``). Each is a pure function of the data and the clock.
 
 ``football/idle_screens.py`` decides when one is chosen; this draws it.
@@ -33,7 +33,9 @@ def draw_side_logo(
     """``abbrev``'s 16px crest centred on ``x``, else the abbreviation in its colour.
     ``dim`` (0-1) darkens it: the loser of a final."""
     known = is_team(abbrev)
-    logo = r.nfl_logos.get(abbrev, LOGO_SIZE) if r.nfl_logos is not None and known else None
+    logo = (
+        r.football_logos.get(abbrev, LOGO_SIZE) if r.football_logos is not None and known else None
+    )
     if logo is None:
         color = _dimmed(team_color(abbrev) if known else UNKNOWN_TEAM, dim)
         r.text_center(canvas, r.fonts.small, x, cy + 3, color, abbrev)

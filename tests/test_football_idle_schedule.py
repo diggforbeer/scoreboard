@@ -18,7 +18,7 @@ from nhl_scoreboard.football.idle_views import (
     ScheduleView,
     build_schedule,
 )
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.teams import TEAMS
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import NYG, SCHEDULE, utc
@@ -193,7 +193,7 @@ def test_the_schedule_takes_its_slot_in_the_real_rotation():
         favourite_team="NYG",
         rotation=[{"screen": "fb_schedule", "seconds": 8}, {"screen": "clock", "seconds": 4}],
     )
-    mode = NflMode(
+    mode = FootballMode(
         client_factory=lambda: feed, monotonic=clock, football=lambda: cfg,
         utc_now=lambda: utc(2026, 11, 20),
     )  # fmt: skip

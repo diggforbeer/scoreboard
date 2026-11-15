@@ -133,7 +133,9 @@ def draw_kick(r: Renderer, canvas: Any, scene: Scene) -> None:
     color = team_color(team) if is_team(team) else WHITE
     posts = _scaled(YELLOW, PLAIN_DIM) if plain else YELLOW
 
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     draw_posts(r, canvas, layout, side, posts, flash=False)
 
     share = 1.0 if scene.fb_seconds <= 0 else max(0.0, scene.fb_elapsed / scene.fb_seconds)

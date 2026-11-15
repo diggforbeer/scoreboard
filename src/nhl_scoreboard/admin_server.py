@@ -290,12 +290,12 @@ from .audio import (
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
-    DEFAULT_NFL_ROTATION,
+    DEFAULT_FOOTBALL_ROTATION,
     FLYBY_FREQUENCIES,
+    FOOTBALL_ROTATION_SCREENS,
     FOOTBALL_TIMING_RANGES,
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
-    NFL_ROTATION_SCREENS,
     PANEL_HARDWARE_MAPPING_CHOICES,
     SPORT_CHOICES,
     VALID_ROTATION_SCREENS,
@@ -305,7 +305,7 @@ from .config import (
 from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
-from .football import teams as nfl_teams
+from .football import teams as football_teams
 from .hostname import (
     apply_hostname,
     current_hostname,
@@ -394,7 +394,7 @@ WS_MAX_SIZE = HORN_MAX_BYTES * 4 // 3 + 4096
 @dataclasses.dataclass(frozen=True)
 class _FieldSpec:
     #: "bool" | "str" | "float" | "int" | "select" | "teams" (NHL abbreviations) |
-    #: "nfl_team" (one NFL abbreviation, or empty) | "nfl_teams" (a list of them)
+    #: "football_team" (one football abbreviation, or empty) | "football_teams" (a list of them)
     kind: str
     choices: tuple[str, ...] = ()
     #: Mirrors status_server.py's own per-field flag (#178 story 7) -- a
@@ -464,11 +464,11 @@ _STATUS_FIELDS: dict[str, _FieldSpec] = {
 #: it's informational only, the driver never reads it (CLAUDE.md). The
 #: five brightness-related fields hot-apply; every other field here is
 #: restart_required, since it's baked into the constructed RGBMatrix.
-#: ``[football]`` (#348): the NFL favourite and followed teams, validated against the NFL
+#: ``[football]`` (#348): the football favourite and followed teams, validated against the football
 #: table, not the NHL one (abbreviations like BUF overlap but mean different teams).
 _FOOTBALL_FIELDS: dict[str, _FieldSpec] = {
-    "favourite_team": _FieldSpec("nfl_team"),
-    "also_follow": _FieldSpec("nfl_teams"),
+    "favourite_team": _FieldSpec("football_team"),
+    "also_follow": _FieldSpec("football_teams"),
 }
 
 _PANEL_FIELDS: dict[str, _FieldSpec] = {
@@ -594,7 +594,7 @@ def _holiday_payload(settings: Settings) -> dict[str, object]:
 def _football_payload(settings: Settings) -> dict[str, object]:
     """``[football]`` plus the 32 teams it picks from (#348).
 
-    ``available`` comes from the NFL table itself, so the page has no second copy of the
+    ``available`` comes from the football table itself, so the page has no second copy of the
     team list to drift out of date (the NHL picker still has one, in ``App.tsx``).
     """
     cfg = settings.football
@@ -604,13 +604,13 @@ def _football_payload(settings: Settings) -> dict[str, object]:
         "data": {"favourite_team": cfg.favourite_team, "also_follow": list(cfg.also_follow)},
         "available": [
             {"abbrev": t.abbrev, "name": f"{t.city} {t.nickname}"}
-            for t in sorted(nfl_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
+            for t in sorted(football_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
         ],
     }
 
 
 def _football_rotation_payload(settings: Settings) -> dict[str, object]:
-    """NFL mode's idle rotation (``[[football.rotation]]``) and its two timers (#422).
+    """Football mode's idle rotation (``[[football.rotation]]``) and its two timers (#422).
 
     ``defaults`` is what the board rotates through when the list is empty, so the page can show
     it as the starting point rather than a blank list.
@@ -629,8 +629,8 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "show_bye": cfg.show_bye,
             "show_final": cfg.show_final,
         },
-        "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_NFL_ROTATION],
-        "screens": list(NFL_ROTATION_SCREENS),
+        "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_FOOTBALL_ROTATION],
+        "screens": list(FOOTBALL_ROTATION_SCREENS),
         "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
 
@@ -1329,15 +1329,15 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             not isinstance(value, list) or not all(t in TEAM_COLORS for t in value)
         ):
             errors[key] = "must be a list of team abbreviations"
-        elif spec.kind == "nfl_team" and (
-            not isinstance(value, str) or (value != "" and not nfl_teams.is_team(value))
+        elif spec.kind == "football_team" and (
+            not isinstance(value, str) or (value != "" and not football_teams.is_team(value))
         ):
-            errors[key] = "must be an NFL team abbreviation, or empty for none"
-        elif spec.kind == "nfl_teams" and (
+            errors[key] = "must be a football team abbreviation, or empty for none"
+        elif spec.kind == "football_teams" and (
             not isinstance(value, list)
-            or not all(isinstance(t, str) and nfl_teams.is_team(t) for t in value)
+            or not all(isinstance(t, str) and football_teams.is_team(t) for t in value)
         ):
-            errors[key] = "must be a list of NFL team abbreviations"
+            errors[key] = "must be a list of football team abbreviations"
         elif spec.kind in ("float", "int") and (
             (spec.minimum is not None and value < spec.minimum)
             or (spec.maximum is not None and value > spec.maximum)
@@ -1386,11 +1386,11 @@ def _coerce_rotation(data: object) -> list[dict[str, object]]:
     return entries
 
 
-#: Bounds for NFL mode's two timers (minutes), so a typo cannot hold a final for a week.
+#: Bounds for football mode's two timers (minutes), so a typo cannot hold a final for a week.
 _FOOTBALL_MINUTES = {"final_hold_minutes": (1.0, 720.0), "countdown_minutes": (1.0, 720.0)}
 
 
-#: The screens NFL mode adds by itself, each switchable (#443).
+#: The screens football mode adds by itself, each switchable (#443).
 _FOOTBALL_TOGGLES = ("show_countdown", "show_bye", "show_final")
 
 
@@ -1411,8 +1411,8 @@ def _coerce_football_rotation(data: object) -> dict[str, object]:
             if not isinstance(item, dict):
                 raise ValueError(json.dumps({f"row {i + 1}": "must be an object"}))
             screen = item.get("screen")
-            if screen not in NFL_ROTATION_SCREENS:
-                choices = ", ".join(NFL_ROTATION_SCREENS)
+            if screen not in FOOTBALL_ROTATION_SCREENS:
+                choices = ", ".join(FOOTBALL_ROTATION_SCREENS)
                 raise ValueError(json.dumps({f"row {i + 1}": f"screen must be one of {choices}"}))
             seconds = item.get("seconds")
             if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0:
@@ -1574,7 +1574,7 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
             return
-        # The NFL rotation lives in ``[football]``; it has its own page section only.
+        # The football rotation lives in ``[football]``; it has its own page section only.
         Settings.load(CONFIG_PATH).save(
             {"football" if section == "football_rotation" else section: values}
         )

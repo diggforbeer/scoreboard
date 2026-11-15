@@ -89,7 +89,9 @@ def draw_run(r: Renderer, canvas: Any, scene: Scene) -> None:
     arrived = progress >= 1.0
     here = start + (end - start) * eased(progress)
 
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     draw_markers_for(r, canvas, layout, side, start_pos, end_pos, arrived)
     y = lane_y(play.info.run_gap, direction, layout)
     draw_trail(canvas, layout, start, here, y)

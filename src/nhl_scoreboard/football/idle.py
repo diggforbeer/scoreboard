@@ -45,7 +45,7 @@ T = TypeVar("T")
 
 
 def _abbrev(team_id: int | None, fallback: str = "") -> str:
-    """The NFL abbreviation for an ESPN team id, else the feed's own abbreviation."""
+    """The football abbreviation for an ESPN team id, else the feed's own abbreviation."""
     if team_id is not None:
         try:
             return team_by_id(team_id).abbrev

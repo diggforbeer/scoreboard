@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 from ..football.director import EVENT
 from ..football.events import GenericScore, Scope
 from ..football.teams import is_team, team_color
-from ..football.teams import team as nfl_team
+from ..football.teams import team as football_team
 from .fonts import text_width
 from .football_plays import DIM, WHITE, event_screen, r_fit
 from .goal_light import _Buffer, _ease, _scaled
@@ -49,7 +49,7 @@ def title(scene: Scene) -> str:
 
 
 def team_name(abbrev: str) -> str:
-    return nfl_team(abbrev).name if is_team(abbrev) else abbrev
+    return football_team(abbrev).name if is_team(abbrev) else abbrev
 
 
 def score_line(scene: Scene) -> str:

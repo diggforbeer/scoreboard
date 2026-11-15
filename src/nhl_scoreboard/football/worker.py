@@ -1,8 +1,8 @@
-"""Fetch the NFL scoreboard off the render thread (#351).
+"""Fetch the football scoreboard off the render thread (#351).
 
 The NHL side fetches on the render loop, so a slow request freezes the panel for
 as long as it takes (#267, ``CLAUDE.md``: "Every fetch blocks the render loop").
-The football design animates every play at up to 20fps, so NFL mode never does
+The football design animates every play at up to 20fps, so football mode never does
 that: a :class:`FeedWorker` owns the client, polls on its own thread, and
 publishes the **latest immutable snapshot**. The render loop only ever reads the
 snapshot, which is a reference swap and never waits on the network.
@@ -110,7 +110,7 @@ class FeedWorker:
         client_factory: Callable[[], Any],
         interval: Callable[[FeedSnapshot], float],
         monotonic: Callable[[], float] = time.monotonic,
-        name: str = "nfl-feed",
+        name: str = "football-feed",
         collect: Callable[[Any, list[FbGame], FeedSnapshot], tuple[dict, dict]] | None = None,
         idle: Callable[[Any, list[FbGame], Scoreboard | None, IdleSnapshot], IdleSnapshot]
         | None = None,
@@ -211,13 +211,13 @@ class FeedWorker:
                 error = getattr(client, "last_error", "") or "no data"
         except Exception as exc:  # the thread must survive whatever the client does
             error = f"{type(exc).__name__}: {exc}"
-            log.warning("NFL fetch raised %s", error)
+            log.warning("football fetch raised %s", error)
         finished = self._monotonic()
         took = max(0.0, finished - started)
         if took > SLOW_FETCH_SECONDS:
-            log.warning("NFL fetch was slow: %.1fs", took)
+            log.warning("football fetch was slow: %.1fs", took)
         else:
-            log.debug("NFL fetch took %.2fs", took)
+            log.debug("football fetch took %.2fs", took)
 
         with self._lock:
             before = self._snapshot
@@ -226,14 +226,14 @@ class FeedWorker:
             try:
                 plays, players = self._collect(client, games, before)
             except Exception:  # plays are a bonus: the scores must still reach the panel
-                log.warning("collecting NFL plays failed", exc_info=True)
+                log.warning("collecting football plays failed", exc_info=True)
 
         idle = before.idle
         if games is not None and self._idle is not None:
             try:
                 idle = self._idle(client, games, scoreboard, before.idle)
             except Exception:  # the idle screens are a bonus too
-                log.warning("collecting the NFL idle data failed", exc_info=True)
+                log.warning("collecting the football idle data failed", exc_info=True)
 
         with self._lock:
             if generation is not None and generation != self._generation:
@@ -267,7 +267,7 @@ class FeedWorker:
         try:
             base = float(self._interval(snap))
         except Exception:
-            log.exception("NFL poll interval callback failed; using 60s")
+            log.exception("football poll interval callback failed; using 60s")
             base = 60.0
         base = max(base, MIN_DELAY_SECONDS)
         if snap.failures == 0:
@@ -296,4 +296,4 @@ class FeedWorker:
             try:
                 client.close()
             except Exception:
-                log.debug("closing the NFL client failed", exc_info=True)
+                log.debug("closing the football client failed", exc_info=True)

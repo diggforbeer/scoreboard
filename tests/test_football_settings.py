@@ -1,4 +1,4 @@
-"""``[football]``: the NFL favourite and followed teams (#348)."""
+"""``[football]``: the football favourite and followed teams (#348)."""
 
 from __future__ import annotations
 
@@ -57,15 +57,15 @@ def test_buf_is_a_different_team_in_each_sport_and_the_settings_are_independent(
     assert Settings().scoreboard.favourite_team == ScoreboardConfig().favourite_team == "NSH"
 
 
-def test_an_nfl_abbreviation_is_not_accepted_as_an_nhl_team_that_does_not_exist():
-    # KC is an NFL team only: the NHL side must still reject it.
+def test_an_football_abbreviation_is_not_accepted_as_an_nhl_team_that_does_not_exist():
+    # KC is a football team only: the NHL side must still reject it.
     cfg = ScoreboardConfig(also_follow=["KC", "TOR"])
     assert cfg.also_follow == ["TOR"]
 
 
 def test_the_section_round_trips_through_the_toml_file(tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('# my comment\n[scoreboard]\nfavourite_team = "BUF"\nsport = "nfl"\n')
+    path.write_text('# my comment\n[scoreboard]\nfavourite_team = "BUF"\nsport = "football"\n')
     settings = Settings.from_toml(path)
     settings.save({"football": {"favourite_team": "KC", "also_follow": ["NYG", "WSH"]}})
     text = path.read_text()
@@ -80,7 +80,7 @@ def test_the_section_round_trips_through_the_toml_file(tmp_path):
     assert settings.football.followed_teams == ["KC", "NYG", "WSH"]
 
 
-def test_saving_the_nhl_side_leaves_the_nfl_choices_alone(tmp_path):
+def test_saving_the_nhl_side_leaves_the_football_choices_alone(tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[football]\nfavourite_team = "KC"\nalso_follow = ["NYG"]\n')
     settings = Settings.from_toml(path)
@@ -88,7 +88,7 @@ def test_saving_the_nhl_side_leaves_the_nfl_choices_alone(tmp_path):
     again = Settings.from_toml(path)
     assert again.scoreboard.favourite_team == "TOR"
     assert again.football.favourite_team == "KC" and again.football.also_follow == ["NYG"]
-    settings.save({"scoreboard": {"sport": "nfl"}})
+    settings.save({"scoreboard": {"sport": "football"}})
     settings.save({"scoreboard": {"sport": "nhl"}})
     assert Settings.from_toml(path).football.also_follow == ["NYG"], "switching back keeps them"
 

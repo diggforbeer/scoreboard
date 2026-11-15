@@ -1,8 +1,8 @@
-"""The registry of NFL idle screens (#422).
+"""The registry of football idle screens (#422).
 
 Each idle screen story (#423-#429) adds one entry here with ``@idle_screen("fb_...")``: a
 ``should_show(ctx)`` predicate saying whether the screen has anything to show right now. The
-selection in ``NflMode.scene`` only ever picks registered screens whose predicate is true, so a
+selection in ``FootballMode.scene`` only ever picks registered screens whose predicate is true, so a
 screen without data (a feed that failed, a team with no next game) drops out of the rotation
 instead of showing an empty card. Until the screens exist the registry is empty and the board
 behaves as before.
@@ -84,7 +84,7 @@ def _favourite_game(ctx: IdleContext) -> FbGame | None:
 @idle_screen("fb_countdown")
 def _countdown(ctx: IdleContext) -> FbGame | None:
     """The favourite's game, if it has not started and has a kickoff time to count to.
-    (The window itself is ``NflMode._in_countdown``: this screen is not in the rotation.)"""
+    (The window itself is ``FootballMode._in_countdown``: this screen is not in the rotation.)"""
     game = _favourite_game(ctx)
     return game if game is not None and game.is_pregame and game.start_utc is not None else None
 

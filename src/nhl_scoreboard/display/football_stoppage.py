@@ -139,7 +139,11 @@ def _draw(r: Renderer, canvas: Any, scene: Scene) -> None:
     icon_x = 40 if wide else 10
     text_x = 52 if wide else 22
     if wide and team:
-        logo = r.nfl_logos.get(team, 16) if r.nfl_logos is not None and is_team(team) else None
+        logo = (
+            r.football_logos.get(team, 16)
+            if r.football_logos is not None and is_team(team)
+            else None
+        )
         if logo is not None:
             ox, oy = 14 - logo.width // 2, 16 - logo.height // 2
             for dx, dy, (red, green, blue) in logo.pixels:

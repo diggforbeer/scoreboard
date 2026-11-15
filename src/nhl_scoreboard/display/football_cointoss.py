@@ -98,7 +98,9 @@ def draw_cointoss(r: Renderer, canvas: Any, scene: Scene) -> None:
         )
         return
 
-    logo = r.nfl_logos.get(team, 16) if r.nfl_logos is not None and is_team(team) else None
+    logo = (
+        r.football_logos.get(team, 16) if r.football_logos is not None and is_team(team) else None
+    )
     if logo is not None:
         draw_logo(canvas, logo, cx, CENTRE_Y)
     else:
@@ -113,7 +115,11 @@ def draw_cointoss(r: Renderer, canvas: Any, scene: Scene) -> None:
     font = r.fonts.small if text_width(r.fonts.small, text) <= r.width - 4 else r.fonts.tiny
     r.text_center(canvas, font, cx, r.height - 3, shade, r_fit(text, r.width - 4, font))
     if r.width >= 128 and kicker:
-        small = r.nfl_logos.get(kicker, 12) if r.nfl_logos is not None and is_team(kicker) else None
+        small = (
+            r.football_logos.get(kicker, 12)
+            if r.football_logos is not None and is_team(kicker)
+            else None
+        )
         x = r.width - 14
         if small is not None:
             draw_logo(canvas, small, x, CENTRE_Y + 1, KICKER_DIM * fade)

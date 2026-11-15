@@ -1,4 +1,4 @@
-"""Models for the ESPN NFL scoreboard (#350).
+"""Models for the ESPN football scoreboard (#350).
 
 ESPN's API is free, keyless and **undocumented**, so everything here parses
 defensively (see ``football_api.md``): every field is optional, a missing or
@@ -93,12 +93,12 @@ def _parse_time(value: Any) -> datetime | None:
 
 @dataclass(frozen=True, slots=True)
 class FbTeam:
-    #: The NFL abbreviation (``NYG``). For a team that is not one of the 32
+    #: The football abbreviation (``NYG``). For a team that is not one of the 32
     #: (a Pro Bowl side, say) it is ESPN's own abbreviation, kept as sent.
     abbrev: str
     espn_id: int | None
-    #: True when ``espn_id`` is one of the 32 NFL teams in ``football/teams.py``.
-    is_nfl: bool
+    #: True when ``espn_id`` is one of the 32 football teams in ``football/teams.py``.
+    is_football: bool
     home: bool
     score: int = 0
     #: Points per period, in order. Empty before the game starts.
@@ -116,11 +116,11 @@ class FbTeam:
         team = _dict(co.get("team"))
         espn_id = _int(team.get("id", co.get("id")), None)
         abbrev = _str(team.get("abbreviation")).strip().upper()
-        is_nfl = False
+        is_football = False
         if espn_id is not None:
             try:
                 abbrev = team_by_id(espn_id).abbrev
-                is_nfl = True
+                is_football = True
             except KeyError:
                 pass
         if not abbrev:
@@ -133,7 +133,7 @@ class FbTeam:
         return FbTeam(
             abbrev=abbrev,
             espn_id=espn_id,
-            is_nfl=is_nfl,
+            is_football=is_football,
             home=_str(co.get("homeAway")) == "home",
             score=_int(co.get("score")) or 0,
             linescores=tuple(

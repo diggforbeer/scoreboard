@@ -11,7 +11,7 @@ from itertools import pairwise
 
 import pytest
 
-from nfl_logos import write_synthetic_nfl_logos
+from football_logos import write_synthetic_football_logos
 from nhl_scoreboard.app import Scene
 from nhl_scoreboard.display import football_plays as fp
 from nhl_scoreboard.display import football_stoppage as fs
@@ -38,7 +38,7 @@ def scene(play, share, g=None):
 def draw(play, share, width=128, g=None, logos=None):
     canvas = AsciiCanvas(width, 32)
     r = renderer(width)
-    r.nfl_logos = logos
+    r.football_logos = logos
     r.draw_fb_play_scene(canvas, scene(play, share, g))
     assert not canvas.out_of_bounds
     return canvas
@@ -127,9 +127,9 @@ def test_an_official_timeout_and_the_warning_have_no_dots_and_no_team():
 
 
 def test_the_calling_teams_logo_is_shown_and_falls_back_to_its_abbreviation(tmp_path):
-    base = write_synthetic_nfl_logos(tmp_path) / "nfl"
+    base = write_synthetic_football_logos(tmp_path) / "football"
     libs = {s: LogoLibrary([base / str(s) / "dark"], s) for s in (12, 16)}
-    with_logo = draw(NYG_TIMEOUT, 1.0, logos=LogoSet("nfl", "dark", libs))
+    with_logo = draw(NYG_TIMEOUT, 1.0, logos=LogoSet("football", "dark", libs))
     without = draw(NYG_TIMEOUT, 1.0)
     left = lambda c: {p for p in c.pixels if p[0] < 28}  # noqa: E731
     assert len(left(with_logo)) > len(left(without)) > 0

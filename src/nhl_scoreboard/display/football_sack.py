@@ -96,7 +96,7 @@ def draw_sack(r: Renderer, canvas: Any, scene: Scene) -> None:
     line = start + (end - start) * slide
     fixed_first_down = first_down_line(start, distance, direction) if distance else None
     ff.draw_field(
-        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos,
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos,
         scrimmage=line, first_down=fixed_first_down,
     )  # fmt: skip
 

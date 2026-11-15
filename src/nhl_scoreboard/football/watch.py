@@ -1,4 +1,4 @@
-"""``nhl-scoreboard --watch-nfl``: see the play queue run (#355).
+"""``nhl-scoreboard --watch-football``: see the play queue run (#355).
 
 Prints each play as it would be animated, with the queue depth, how far behind the live
 game it ran and whether the queue was catching up. Driven by the live feed, or by a

@@ -75,7 +75,9 @@ def draw_fg_miss(r: Renderer, canvas: Any, scene: Scene) -> None:
     kind = miss_kind(scene)
     share = 1.0 if scene.fb_seconds <= 0 else max(0.0, scene.fb_elapsed / scene.fb_seconds)
 
-    ff.draw_field(r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.nfl_logos)
+    ff.draw_field(
+        r, canvas, layout, game.home.abbrev, game.away.abbrev, side, logos=r.football_logos
+    )
     draw_posts(r, canvas, layout, side, YELLOW, flash=False)
 
     base_y = lane_y("middle", direction, layout)

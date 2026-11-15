@@ -1,11 +1,11 @@
-"""Synthetic NFL scenes for ``--demo`` and the docs images (#359): every screen, no ESPN needed.
+"""Synthetic football scenes for ``--demo`` and the docs images (#359): every screen, no ESPN.
 
-The NFL counterpart of ``nhl_scoreboard.demo``. Games are built from raw ESPN-shaped dicts
+The football counterpart of ``nhl_scoreboard.demo``. Games are built from raw ESPN-shaped dicts
 through ``FbGame.from_api()`` -- the construction the tests and the live worker use -- so a
 demo frame goes through exactly the parsing and drawing a real one would, with made-up numbers.
 
 Steps are ``DemoStep``s with a unique file-safe ``name``; ``scripts/render-screens.py --sport
-nfl`` writes one ``docs/football/<name>.png`` per step. A new designed screen adds its steps
+football`` writes one ``docs/football/<name>.png`` per step. A new designed screen adds its steps
 here (and its picture to ``football_screen.md``) and retires its hand-drawn mockup.
 """
 
@@ -666,8 +666,8 @@ def _bye_steps() -> list[DemoStep]:
     ]
 
 
-def nfl_demo_steps(now: datetime) -> list[DemoStep]:
-    """Every NFL screen there is, in a sensible viewing order."""
+def football_demo_steps(now: datetime) -> list[DemoStep]:
+    """Every football screen there is, in a sensible viewing order."""
     pregame = _game(now, "pre", name="STATUS_SCHEDULED", start=now + timedelta(days=2, hours=3))
     countdown = _game(
         now,

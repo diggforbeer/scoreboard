@@ -7,7 +7,7 @@ These are **design mockups, not renderer output**: no football renderer exists
 yet, so each frame is drawn here, pixel by pixel, to show the layout the design
 describes. They reuse the NHL guide's dot rendering (``scripts/render-screens.py``)
 and the project's own BDF fonts, so size, pitch and type match the real panel.
-Teams are real NFL abbreviations in plain colour circles, as the NHL guide does,
+Teams are real football abbreviations in plain colour circles, as the NHL guide does,
 because the crests are team artwork and are not committed.
 
 When the real renderer lands, the images should come from it (the way
@@ -349,10 +349,11 @@ SCREENS = {
 
 def real_screens() -> set[str]:
     """Screens the real renderer now draws (``football.demo``): their images come from
-    ``render-screens.py --sport nfl``, so a mockup of the same name is retired, not rewritten."""
-    from nhl_scoreboard.football.demo import nfl_demo_steps
+    ``render-screens.py --sport football``, so a mockup of the same name is retired,
+    not rewritten."""
+    from nhl_scoreboard.football.demo import football_demo_steps
 
-    return {step.name for step in nfl_demo_steps(render_screens.NOW)}
+    return {step.name for step in football_demo_steps(render_screens.NOW)}
 
 
 def main() -> int:

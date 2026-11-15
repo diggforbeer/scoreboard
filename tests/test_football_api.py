@@ -1,4 +1,4 @@
-"""The ESPN scoreboard client, models and ``--dump --sport nfl`` (#350).
+"""The ESPN scoreboard client, models and ``--dump --sport football`` (#350).
 
 Hermetic: a fake session stands in for ``requests``, fed by trimmed real
 payloads in ``tests/fixtures/football/``.
@@ -60,8 +60,8 @@ class FakeSession:
         self.closed = True
 
 
-def client(*responses) -> api.NflClient:
-    return api.NflClient(session=FakeSession(*responses))
+def client(*responses) -> api.FootballClient:
+    return api.FootballClient(session=FakeSession(*responses))
 
 
 # -- parsing real payloads ------------------------------------------------------
@@ -133,9 +133,9 @@ def test_status_label_for_each_state():
     assert final.status_label(CENTRAL) == "Final"
 
 
-def test_teams_map_through_the_nfl_table():
+def test_teams_map_through_the_football_table():
     live = client(FakeResponse(load("scoreboard_live.json"))).scores()[0]
-    assert live.home.is_nfl and live.home.espn_id == 19
+    assert live.home.is_football and live.home.espn_id == 19
     assert live.team("nyg") is live.home and live.team("XYZ") is None
     assert live.involves("wsh") and not live.involves("NSH")
 
@@ -143,13 +143,13 @@ def test_teams_map_through_the_nfl_table():
 # -- defensive parsing ----------------------------------------------------------
 
 
-def test_unknown_team_keeps_the_feeds_abbreviation_and_is_not_nfl():
+def test_unknown_team_keeps_the_feeds_abbreviation_and_is_not_football():
     event = copy.deepcopy(load("scoreboard_live.json")["events"][0])
     comp = event["competitions"][0]["competitors"][0]["team"]
     comp.update(id="9999", abbreviation="afc")  # the home side, e.g. a Pro Bowl team
     game = FbGame.from_api(event)
-    assert game.home.abbrev == "AFC" and not game.home.is_nfl and game.home.espn_id == 9999
-    assert game.away.abbrev == "WSH" and game.away.is_nfl
+    assert game.home.abbrev == "AFC" and not game.home.is_football and game.home.espn_id == 9999
+    assert game.away.abbrev == "WSH" and game.away.is_football
 
 
 def test_removing_fields_never_raises():
@@ -285,7 +285,7 @@ def test_a_payload_without_events_is_an_empty_slate():
 
 def test_the_request_is_the_scoreboard_with_an_optional_date():
     session = FakeSession(FakeResponse({"events": []}))
-    c = api.NflClient(session=session)
+    c = api.FootballClient(session=session)
     c.scores()
     c.scores("20261108")
     assert session.calls == [
@@ -296,7 +296,7 @@ def test_the_request_is_the_scoreboard_with_an_optional_date():
 
 def test_client_is_a_context_manager_that_closes_its_session():
     session = FakeSession(FakeResponse({"events": []}))
-    with api.NflClient(session=session) as c:
+    with api.FootballClient(session=session) as c:
         assert c.base_url == api.BASE_URL
     assert session.closed
 
@@ -312,7 +312,7 @@ def test_default_session_retries_and_identifies_itself():
     session.close()
 
 
-# -- --dump --sport nfl ---------------------------------------------------------
+# -- --dump --sport football ---------------------------------------------------------
 
 
 def test_dump_prints_todays_games_from_a_fixture(monkeypatch, capsys, tmp_path):
@@ -321,7 +321,7 @@ def test_dump_prints_todays_games_from_a_fixture(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(
         api, "_build_session", lambda: FakeSession(FakeResponse(load("scoreboard_live.json")))
     )
-    assert cli.main(["--dump", "--sport", "nfl", "-c", str(cfg)]) == 0
+    assert cli.main(["--dump", "--sport", "football", "-c", str(cfg)]) == 0
     out = capsys.readouterr().out.splitlines()
     assert out[0] == "WSH 10 @ NYG  7  12:24 - 3rd  | 1st & 10 at WSH 30"
     assert out[1].startswith(" NE  0 @ DET  0  Sun 11/15")
@@ -330,7 +330,7 @@ def test_dump_prints_todays_games_from_a_fixture(monkeypatch, capsys, tmp_path):
 
 def test_dump_says_when_there_are_no_games(monkeypatch, capsys):
     monkeypatch.setattr(api, "_build_session", lambda: FakeSession(FakeResponse({"events": []})))
-    assert cli.main(["--dump", "--sport", "nfl"]) == 0
+    assert cli.main(["--dump", "--sport", "football"]) == 0
     assert capsys.readouterr().out.strip() == "No games today."
 
 
@@ -338,13 +338,13 @@ def test_dump_reports_an_unreachable_feed_and_exits_nonzero(monkeypatch, capsys)
     monkeypatch.setattr(
         api, "_build_session", lambda: FakeSession(requests.ConnectionError("no route"))
     )
-    assert cli.main(["--dump", "--sport", "nfl"]) == 1
+    assert cli.main(["--dump", "--sport", "football"]) == 1
     assert "no route" in capsys.readouterr().err
 
 
 def test_dump_follows_the_configured_sport_when_not_told(monkeypatch, capsys, tmp_path):
     cfg = tmp_path / "scoreboard.toml"
-    cfg.write_text('[scoreboard]\nsport = "nfl"\n')
+    cfg.write_text('[scoreboard]\nsport = "football"\n')
     monkeypatch.setattr(api, "_build_session", lambda: FakeSession(FakeResponse({"events": []})))
     assert cli.main(["--dump", "-c", str(cfg)]) == 0
     assert "No games today." in capsys.readouterr().out

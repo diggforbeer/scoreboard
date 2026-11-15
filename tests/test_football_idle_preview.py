@@ -157,7 +157,7 @@ def test_a_game_with_a_team_not_yet_known_is_skipped():
     raw = raw_game("DAL", "NYG", "pre", start="2027-01-16T21:00Z", short="x")
     raw["competitions"][0]["competitors"][1]["team"] = {"id": "0", "abbreviation": "TBD"}
     tbd = FbGame.from_api(raw)
-    assert not tbd.home.is_nfl or not tbd.away.is_nfl
+    assert not tbd.home.is_football or not tbd.away.is_football
     view = build_preview(ctx(games=[tbd], now=utc(2027, 1, 12), schedule=None))
     assert view is None
 
@@ -215,7 +215,7 @@ class Logos:
 
 def draw(view, logos=False, width=128):
     r = renderer(width)
-    r.nfl_logos = Logos() if logos else None
+    r.football_logos = Logos() if logos else None
     c = AsciiCanvas(width, H)
     r.draw_fb_preview(c, view, utc(2026, 11, 20))
     return c
@@ -288,7 +288,7 @@ def test_through_the_real_app_the_preview_takes_its_slot_between_games_and_the_c
     )
     app.select_scene()
     feed.answers = [[event("WSH", "NYG", utc(2026, 11, 17, 18), week=10)]]
-    app._nfl.worker.poll_once()
+    app._football.worker.poll_once()
     clock.t = 14 * 100  # the default rotation: preview 8s then clock 6s (the rest unbuilt)
     scene = app.select_scene()
     assert scene.kind == "fb_preview" and scene.fb_idle.away == "WSH"
@@ -297,7 +297,7 @@ def test_through_the_real_app_the_preview_takes_its_slot_between_games_and_the_c
     clock.t += 9
     assert app.select_scene().kind == "clock"
     feed.answers = [[event("WSH", "NYG", utc(2026, 11, 15, 17, 0), state="in")]]
-    app._nfl.worker.poll_once()
+    app._football.worker.poll_once()
     clock.t += 15
     assert app.select_scene().kind in ("fb_field", "fb_scores", "fb_play", "fb_playtext")
 

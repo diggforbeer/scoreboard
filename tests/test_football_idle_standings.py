@@ -12,7 +12,7 @@ from nhl_scoreboard.football import idle
 from nhl_scoreboard.football.idle import Conference, Division, Standings, StandingsRow
 from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
 from nhl_scoreboard.football.idle_views import PLAYOFF_SEEDS, StandingsView, build_standings
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.teams import TEAMS
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, utc
@@ -199,7 +199,7 @@ def test_the_two_pages_split_the_rotation_entrys_seconds():
         also_follow=["DAL"],  # standings are only fetched when someone is followed
         rotation=[{"screen": "fb_standings", "seconds": 10}, {"screen": "clock", "seconds": 5}],
     )
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     seen = []
     for t in range(0, 15):
@@ -218,7 +218,7 @@ def test_a_single_page_screen_stays_on_page_zero():
         favourite_team="NYG", also_follow=["DAL"],
         rotation=[{"screen": "fb_standings", "seconds": 10}, {"screen": "clock", "seconds": 5}],
     )  # fmt: skip
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     view = mode.scene().fb_idle
     assert view is not None and view.pages == 2
@@ -234,7 +234,7 @@ def test_a_page_length_replaces_the_rows_seconds_for_a_paged_screen_only():
         page_seconds=3,
         rotation=[{"screen": "fb_standings", "seconds": 100}, {"screen": "clock", "seconds": 4}],
     )
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     seen = []
     for t in range(0, 10):

@@ -17,7 +17,7 @@ from nhl_scoreboard.football.idle_views import (
     recap_lines,
     surname,
 )
-from nhl_scoreboard.football.mode import NflMode
+from nhl_scoreboard.football.mode import FootballMode
 from nhl_scoreboard.football.models import FbGame
 from nhl_scoreboard.football.teams import TEAMS, team_color
 from test_football_idle import Clock, IdleFeed
@@ -145,7 +145,7 @@ def test_the_builder_wants_the_favourites_final_and_marks_overtime():
 
 def draw(view, logos=True, width=128):
     r = renderer(width)
-    r.nfl_logos = Logos() if logos else None
+    r.football_logos = Logos() if logos else None
     c = AsciiCanvas(width, H)
     r.draw_fb_final(c, view, utc(2026, 11, 15))
     return c
@@ -232,7 +232,7 @@ def test_the_hold_is_sixty_minutes_from_the_end_we_watched_and_never_replays_aft
     object.__setattr__(done, "id", live.id) if False else None
     feed = Feed([live])
     cfg = FootballConfig(favourite_team="NYG", rotation=[{"screen": "clock", "seconds": 5}])
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     mode.scene()  # watched live
     feed.games = [FbGame.from_api({**raw_game("WSH", "NYG", "post", 24, 21, short="Final",
@@ -249,7 +249,7 @@ def test_the_hold_is_sixty_minutes_from_the_end_we_watched_and_never_replays_aft
         mode.worker.poll_once()
     assert mode.scene().kind != "fb_final"
     # A fresh board (a restart) that only ever sees the final never holds it.
-    fresh = NflMode(client_factory=lambda: feed, monotonic=Clock(5000.0), football=lambda: cfg)
+    fresh = FootballMode(client_factory=lambda: feed, monotonic=Clock(5000.0), football=lambda: cfg)
     fresh.worker.poll_once()
     assert fresh.scene().kind != "fb_final"
 
@@ -258,7 +258,7 @@ def test_the_hold_length_is_the_settings():
     clock = Clock(1000.0)
     feed = Feed([game("WSH", "NYG", "in", 10, 7, game_id=3)])
     cfg = FootballConfig(favourite_team="NYG", final_hold_minutes=5)
-    mode = NflMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
+    mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     mode.scene()
     feed.games = [FbGame.from_api(raw_game("WSH", "NYG", "post", 24, 21, short="Final",

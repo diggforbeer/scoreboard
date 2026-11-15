@@ -155,15 +155,15 @@ interface ScoreboardConfig {
   scores_grid: boolean
 }
 
-// The NFL favourite and followed teams (#348), stored apart from the NHL ones because
+// The football favourite and followed teams (#348), stored apart from the NHL ones because
 // abbreviations like BUF overlap between the leagues. `available` (the 32 teams) comes from
-// the server's NFL table, so this page has no second copy of that list.
+// the server's football table, so this page has no second copy of that list.
 interface FootballConfig {
   favourite_team: string
   also_follow: string[]
 }
 
-interface NflRotationConfig {
+interface FootballRotationConfig {
   rotation: RotationRow[]
   final_hold_minutes: number
   countdown_minutes: number
@@ -174,7 +174,7 @@ interface NflRotationConfig {
   show_final: boolean
 }
 
-interface NflTeamOption {
+interface FootballTeamOption {
   abbrev: string
   name: string
 }
@@ -309,7 +309,7 @@ type ServerMessage =
   | { type: 'version'; value: string }
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
-  | { type: 'config'; section: 'football'; data: FootballConfig; available: NflTeamOption[] }
+  | { type: 'config'; section: 'football'; data: FootballConfig; available: FootballTeamOption[] }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
@@ -318,7 +318,7 @@ type ServerMessage =
   | {
       type: 'config'
       section: 'football_rotation'
-      data: NflRotationConfig
+      data: FootballRotationConfig
       defaults: RotationRow[]
       timing_ranges: Record<string, [number, number, number]>
       screens: string[]
@@ -370,9 +370,9 @@ function teamName(abbrev: string) {
   return team ? team[1] : '(none)'
 }
 
-// The favourite dropdown and the "also follow" checklist, shared by the NHL and NFL pickers so
+// The favourite dropdown and the "also follow" checklist, shared by the NHL and football pickers so
 // the two cannot drift apart. `idPrefix` keeps their element ids apart ('sb' for the NHL
-// ones, which the e2e test relies on, 'fb' for the NFL ones).
+// ones, which the e2e test relies on, 'fb' for the football ones).
 function TeamPickers({
   idPrefix,
   teams,
@@ -506,7 +506,7 @@ function App() {
     NOT_CONNECTED_ERROR,
   )
   const football = footballState.value
-  const [nflTeams, setNflTeams] = useState<NflTeamOption[]>([])
+  const [footballTeams, setFootballTeams] = useState<FootballTeamOption[]>([])
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
@@ -531,14 +531,14 @@ function App() {
   )
   const rotation = rotationState.value
 
-  const [nflRotationState, nflRotationSave] = useAutosave<NflRotationConfig>(
+  const [footballRotationState, footballRotationSave] = useAutosave<FootballRotationConfig>(
     (v) => save('football_rotation', v),
     NOT_CONNECTED_ERROR,
   )
-  const nflRotation = nflRotationState.value
-  const [nflRotationDefaults, setNflRotationDefaults] = useState<RotationRow[]>([])
-  const [nflRotationScreens, setNflRotationScreens] = useState<string[]>([])
-  const [nflTimingRanges, setNflTimingRanges] = useState<Record<string, [number, number, number]>>({})
+  const footballRotation = footballRotationState.value
+  const [footballRotationDefaults, setFootballRotationDefaults] = useState<RotationRow[]>([])
+  const [footballRotationScreens, setFootballRotationScreens] = useState<string[]>([])
+  const [footballTimingRanges, setFootballTimingRanges] = useState<Record<string, [number, number, number]>>({})
 
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
     (v) => save('holiday', v),
@@ -641,7 +641,7 @@ function App() {
             else if (message.section === 'scoreboard') scoreboardSave.receiveConfig(message.data)
             else if (message.section === 'football') {
               footballSave.receiveConfig(message.data)
-              setNflTeams(message.available)
+              setFootballTeams(message.available)
             }
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
@@ -649,10 +649,10 @@ function App() {
             else if (message.section === 'wifi') wifiSave.receiveConfig(message.data)
             else if (message.section === 'rotation') rotationSave.receiveConfig(message.data)
             else if (message.section === 'football_rotation') {
-              nflRotationSave.receiveConfig(message.data)
-              setNflRotationDefaults(message.defaults)
-              setNflRotationScreens(message.screens)
-              setNflTimingRanges(message.timing_ranges)
+              footballRotationSave.receiveConfig(message.data)
+              setFootballRotationDefaults(message.defaults)
+              setFootballRotationScreens(message.screens)
+              setFootballTimingRanges(message.timing_ranges)
             }
             else if (message.section === 'holiday') {
               holidaySave.receiveConfig(message.data)
@@ -685,7 +685,7 @@ function App() {
             if (message.section === 'audio') audioSave.receiveSaved()
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
             else if (message.section === 'football') footballSave.receiveSaved()
-            else if (message.section === 'football_rotation') nflRotationSave.receiveSaved()
+            else if (message.section === 'football_rotation') footballRotationSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
             else if (message.section === 'night_mode') nightModeSave.receiveSaved()
@@ -757,7 +757,7 @@ function App() {
             } else if (message.section === 'football') {
               footballSave.receiveError(message.message)
             } else if (message.section === 'football_rotation') {
-              nflRotationSave.receiveError(message.message)
+              footballRotationSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -824,7 +824,7 @@ function App() {
     audioSave,
     scoreboardSave,
     footballSave,
-    nflRotationSave,
+    footballRotationSave,
     nightModeSave,
     wifiSave,
     rotationSave,
@@ -971,24 +971,24 @@ function App() {
     rotationSave.edit(next)
   }
 
-  function setNflRows(rows: RotationRow[]) {
-    if (!nflRotation) return
-    nflRotationSave.edit({ ...nflRotation, rotation: rows })
+  function setFootballRows(rows: RotationRow[]) {
+    if (!footballRotation) return
+    footballRotationSave.edit({ ...footballRotation, rotation: rows })
   }
 
-  function addNflRow() {
-    if (!nflRotation || nflRotation.rotation.length >= ROTATION_MAX_ROWS) return
-    const screen = nflRotationScreens[0] ?? 'fb_preview'
-    setNflRows([...nflRotation.rotation, { screen, seconds: 8 }])
+  function addFootballRow() {
+    if (!footballRotation || footballRotation.rotation.length >= ROTATION_MAX_ROWS) return
+    const screen = footballRotationScreens[0] ?? 'fb_preview'
+    setFootballRows([...footballRotation.rotation, { screen, seconds: 8 }])
   }
 
-  function moveNflRow(index: number, delta: -1 | 1) {
-    if (!nflRotation) return
+  function moveFootballRow(index: number, delta: -1 | 1) {
+    if (!footballRotation) return
     const target = index + delta
-    const rows = [...nflRotation.rotation]
+    const rows = [...footballRotation.rotation]
     if (target < 0 || target >= rows.length) return
     ;[rows[index], rows[target]] = [rows[target], rows[index]]
-    setNflRows(rows)
+    setFootballRows(rows)
   }
 
   function checkForUpdate() {
@@ -1162,8 +1162,8 @@ function App() {
               <div className="fs-5">
                 {!scoreboard
                   ? 'waiting...'
-                  : scoreboard.sport === 'nfl'
-                    ? (nflTeams.find((t) => t.abbrev === football?.favourite_team)?.name ??
+                  : scoreboard.sport === 'football'
+                    ? (footballTeams.find((t) => t.abbrev === football?.favourite_team)?.name ??
                       '(none)')
                     : teamName(scoreboard.favourite_team)}
               </div>
@@ -1268,18 +1268,18 @@ function App() {
                   onChange={(e) => scoreboardSave.edit({ ...scoreboard, sport: e.target.value })}
                 >
                   <option value="nhl">NHL</option>
-                  <option value="nfl">NFL</option>
+                  <option value="football">Football</option>
                 </select>
               </div>
-              {scoreboard.sport === 'nfl' ? (
+              {scoreboard.sport === 'football' ? (
                 football && (
                   <TeamPickers
                     idPrefix="fb"
-                    teams={nflTeams.map((t) => [t.abbrev, t.name] as const)}
+                    teams={footballTeams.map((t) => [t.abbrev, t.name] as const)}
                     favourite={football.favourite_team}
                     alsoFollow={football.also_follow}
                     onChange={(next) => footballSave.edit({ ...football, ...next })}
-                    followHelp="Their live games take turns on screen with your favourite's, and their scores get a quick update. Your NFL teams are kept apart from your NHL ones."
+                    followHelp="Their live games take turns on screen with your favourite's, and their scores get a quick update. Your football teams are kept apart from your NHL ones."
                   />
                 )
               ) : (
@@ -1611,34 +1611,34 @@ function App() {
       </div>
       <div className="col-lg-6">
 
-      {scoreboard?.sport === 'nfl' && (
+      {scoreboard?.sport === 'football' && (
         <div className="card mb-4">
           <div className="card-body">
-            <h2 className="card-title h5">NFL idle rotation</h2>
-            {nflRotation ? (
-              <form onSubmit={flushOnSubmit(nflRotationSave)}>
+            <h2 className="card-title h5">Football idle rotation</h2>
+            {footballRotation ? (
+              <form onSubmit={flushOnSubmit(footballRotationSave)}>
                 <p className="text-body-secondary small">
                   Screens shown between your favourite team&apos;s games, in this order (128px panels
                   only). The countdown, the final and the bye-week screen join by themselves when they
                   apply. Up to {ROTATION_MAX_ROWS} rows. Empty uses the built-in default:{' '}
-                  {nflRotationDefaults.map((d) => `${d.screen} ${d.seconds}s`).join(', ')}.
+                  {footballRotationDefaults.map((d) => `${d.screen} ${d.seconds}s`).join(', ')}.
                 </p>
-                {nflRotation.rotation.map((row, i) => (
+                {footballRotation.rotation.map((row, i) => (
                   <div className="d-flex align-items-center gap-2 mb-2" key={i}>
                     <select
                       className="form-select"
                       style={{ width: 'auto' }}
-                      aria-label={`NFL rotation screen ${i + 1}`}
+                      aria-label={`football rotation screen ${i + 1}`}
                       value={row.screen}
                       onChange={(e) =>
-                        setNflRows(
-                          nflRotation.rotation.map((r, j) =>
+                        setFootballRows(
+                          footballRotation.rotation.map((r, j) =>
                             j === i ? { ...row, screen: e.target.value } : r,
                           ),
                         )
                       }
                     >
-                      {nflRotationScreens.map((screen) => (
+                      {footballRotationScreens.map((screen) => (
                         <option key={screen} value={screen}>
                           {screen}
                         </option>
@@ -1650,46 +1650,46 @@ function App() {
                       type="number"
                       step="any"
                       min="0"
-                      aria-label={`NFL rotation seconds ${i + 1}`}
+                      aria-label={`football rotation seconds ${i + 1}`}
                       value={row.seconds}
                       onChange={(e) =>
                         numberEdit(
-                          nflRotationSave,
+                          footballRotationSave,
                           e,
                           {
-                            ...nflRotation,
-                            rotation: nflRotation.rotation.map((r, j) =>
+                            ...footballRotation,
+                            rotation: footballRotation.rotation.map((r, j) =>
                               j === i ? { ...row, seconds: Number(e.target.value) } : r,
                             ),
                           },
-                          `nfl-rotation-seconds-${i}`,
+                          `football-rotation-seconds-${i}`,
                         )
                       }
-                      onBlur={nflRotationSave.flush}
+                      onBlur={footballRotationSave.flush}
                     />
                     <span className="text-body-secondary small">seconds</span>
                     <button
                       type="button"
                       className="btn btn-outline-secondary btn-sm"
-                      onClick={() => moveNflRow(i, -1)}
+                      onClick={() => moveFootballRow(i, -1)}
                       disabled={i === 0}
-                      aria-label="Move NFL row up"
+                      aria-label="Move football row up"
                     >
                       ↑
                     </button>
                     <button
                       type="button"
                       className="btn btn-outline-secondary btn-sm"
-                      onClick={() => moveNflRow(i, 1)}
-                      disabled={i === nflRotation.rotation.length - 1}
-                      aria-label="Move NFL row down"
+                      onClick={() => moveFootballRow(i, 1)}
+                      disabled={i === footballRotation.rotation.length - 1}
+                      aria-label="Move football row down"
                     >
                       ↓
                     </button>
                     <button
                       type="button"
                       className="btn btn-outline-danger btn-sm"
-                      onClick={() => setNflRows(nflRotation.rotation.filter((_, j) => j !== i))}
+                      onClick={() => setFootballRows(footballRotation.rotation.filter((_, j) => j !== i))}
                     >
                       Remove
                     </button>
@@ -1699,73 +1699,73 @@ function App() {
                   <button
                     type="button"
                     className="btn btn-outline-secondary"
-                    onClick={addNflRow}
-                    disabled={nflRotation.rotation.length >= ROTATION_MAX_ROWS}
+                    onClick={addFootballRow}
+                    disabled={footballRotation.rotation.length >= ROTATION_MAX_ROWS}
                   >
                     Add row
                   </button>
                 </div>
                 <div className="row g-3">
                   <div className="col-sm-6">
-                    <label className="form-label" htmlFor="nfl-final-hold">
+                    <label className="form-label" htmlFor="football-final-hold">
                       Hold the final for (minutes)
                     </label>
                     <input
                       className="form-control"
-                      id="nfl-final-hold"
+                      id="football-final-hold"
                       type="number"
                       step="any"
                       min="1"
                       max="720"
-                      value={nflRotation.final_hold_minutes}
+                      value={footballRotation.final_hold_minutes}
                       onChange={(e) =>
-                        numberEdit(nflRotationSave, e, {
-                          ...nflRotation,
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
                           final_hold_minutes: Number(e.target.value),
                         })
                       }
-                      onBlur={nflRotationSave.flush}
+                      onBlur={footballRotationSave.flush}
                     />
                   </div>
                   <div className="col-sm-6">
-                    <label className="form-label" htmlFor="nfl-countdown-window">
+                    <label className="form-label" htmlFor="football-countdown-window">
                       Countdown starts before kickoff (minutes)
                     </label>
                     <input
                       className="form-control"
-                      id="nfl-countdown-window"
+                      id="football-countdown-window"
                       type="number"
                       step="any"
                       min="1"
                       max="720"
-                      value={nflRotation.countdown_minutes}
+                      value={footballRotation.countdown_minutes}
                       onChange={(e) =>
-                        numberEdit(nflRotationSave, e, {
-                          ...nflRotation,
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
                           countdown_minutes: Number(e.target.value),
                         })
                       }
-                      onBlur={nflRotationSave.flush}
+                      onBlur={footballRotationSave.flush}
                     />
                     <div className="col-sm-6">
-                    <label className="form-label" htmlFor="nfl-page-seconds">
+                    <label className="form-label" htmlFor="football-page-seconds">
                       Seconds per page, standings and week (0 = split the row&apos;s seconds)
                     </label>
                     <input
                       className="form-control"
-                      id="nfl-page-seconds"
+                      id="football-page-seconds"
                       type="number"
                       step="any"
                       min="0"
                       max="60"
-                      value={nflRotation.page_seconds}
+                      value={footballRotation.page_seconds}
                       onChange={(e) =>
-                        numberEdit(nflRotationSave, e, {
-                          ...nflRotation,
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
                           page_seconds: Number(e.target.value),
                         })
                       }
-                      onBlur={nflRotationSave.flush}
+                      onBlur={footballRotationSave.flush}
                     />
                   </div>
                 </div>
@@ -1782,13 +1782,13 @@ function App() {
                       <input
                         className="form-check-input"
                         type="checkbox"
-                        id={`nfl-${key}`}
-                        checked={nflRotation[key]}
+                        id={`football-${key}`}
+                        checked={footballRotation[key]}
                         onChange={(e) =>
-                          nflRotationSave.edit({ ...nflRotation, [key]: e.target.checked })
+                          footballRotationSave.edit({ ...footballRotation, [key]: e.target.checked })
                         }
                       />
-                      <label className="form-check-label" htmlFor={`nfl-${key}`}>
+                      <label className="form-check-label" htmlFor={`football-${key}`}>
                         {label}
                       </label>
                     </div>
@@ -1802,10 +1802,10 @@ function App() {
         </div>
       )}
 
-      {scoreboard?.sport === 'nfl' && nflRotation && (
+      {scoreboard?.sport === 'football' && footballRotation && (
         <div className="card mb-4">
           <div className="card-body">
-            <h2 className="card-title h5">NFL game screen lengths</h2>
+            <h2 className="card-title h5">Football game screen lengths</h2>
             <p className="text-body-secondary small">
               How long each in-game screen stays up, in seconds. Each is held to its range.
             </p>
@@ -1823,27 +1823,27 @@ function App() {
                   ['cointoss', 'Coin toss'],
                 ] as const
               ).map(([key, label]) => {
-                const range = nflTimingRanges[key]
+                const range = footballTimingRanges[key]
                 return (
                   <div className="col-sm-4" key={key}>
-                    <label className="form-label" htmlFor={`nfl-timing-${key}`}>
+                    <label className="form-label" htmlFor={`football-timing-${key}`}>
                       {label}
                     </label>
                     <input
                       className="form-control"
-                      id={`nfl-timing-${key}`}
+                      id={`football-timing-${key}`}
                       type="number"
                       step="any"
                       min={range?.[1]}
                       max={range?.[2]}
-                      value={nflRotation.timings[key] ?? ''}
+                      value={footballRotation.timings[key] ?? ''}
                       onChange={(e) =>
-                        numberEdit(nflRotationSave, e, {
-                          ...nflRotation,
-                          timings: { ...nflRotation.timings, [key]: Number(e.target.value) },
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          timings: { ...footballRotation.timings, [key]: Number(e.target.value) },
                         })
                       }
-                      onBlur={nflRotationSave.flush}
+                      onBlur={footballRotationSave.flush}
                     />
                   </div>
                 )
@@ -1853,7 +1853,7 @@ function App() {
         </div>
       )}
 
-      {scoreboard?.sport !== 'nfl' && (
+      {scoreboard?.sport !== 'football' && (
       <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Idle rotation</h2>
@@ -2692,9 +2692,9 @@ function App() {
       <AutosaveToast
         sections={[
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
-          { label: 'NFL teams', state: footballState, onUndo: footballSave.undo },
+          { label: 'Football teams', state: footballState, onUndo: footballSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
-          { label: 'NFL idle rotation', state: nflRotationState, onUndo: nflRotationSave.undo },
+          { label: 'Football idle rotation', state: footballRotationState, onUndo: footballRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
           { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },
           { label: 'Audio', state: audioState, onUndo: audioSave.undo },

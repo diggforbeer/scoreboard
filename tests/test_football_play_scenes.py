@@ -1,4 +1,4 @@
-"""NFL play scenes end to end (#377): the feed worker's plays, the director and the renderer.
+"""Football play scenes end to end (#377): the feed worker's plays, the director and the renderer.
 
 A fake ESPN client answers; everything else is the real thing: the worker thread's ``collect``
 (driven by ``poll_once``), the app's scene selection, the generic renderer, the animation
@@ -72,7 +72,7 @@ def rig(tmp_path):
     clock = Clock()
     settings = Settings()
     settings.status.enabled = False
-    settings.scoreboard.sport = "nfl"
+    settings.scoreboard.sport = "football"
     settings.football = FootballConfig(favourite_team="NYG")
     app = ScoreboardApp(
         settings,
@@ -82,7 +82,7 @@ def rig(tmp_path):
         monotonic=clock,
         ap_setup_state_path=tmp_path / "no-ap",
         hw_mapping_trial_path=tmp_path / "no-trial",
-        nfl_client_factory=lambda: espn,
+        football_client_factory=lambda: espn,
     )
     espn.slate = [game("WSH", "NYG", "in", 0, 0, situation=SIT, game_id=1)]
     return app, espn, clock
@@ -91,8 +91,8 @@ def rig(tmp_path):
 def land(app, espn, *plays):
     """A poll lands and the render loop sees it (the director takes its snapshot each frame)."""
     espn.site = list(plays)
-    app._nfl.worker.poll_once()
-    app._nfl.director.ingest(app._nfl.snapshot)
+    app._football.worker.poll_once()
+    app._football.director.ingest(app._football.snapshot)
 
 
 def kinds_until_rest(app, clock, limit=400):
@@ -121,7 +121,7 @@ def test_the_plays_of_a_watched_game_reach_the_snapshot_with_jersey_numbers(rig)
     play = rush(1)
     espn.core = [dataclasses.replace(play, participants=(Participant("rusher", 99),))]
     land(app, espn, play)
-    snap = app._nfl.snapshot
+    snap = app._football.snapshot
     assert [p.id for p in snap.plays[1]] == [play.id]
     assert snap.plays[1][0].participants[0].athlete_id == 99
     assert snap.players[1][99].jersey == "22"
@@ -180,7 +180,7 @@ def test_a_failed_play_fetch_keeps_the_last_plays_and_the_scores_still_publish(r
     espn.fail_plays = True
     espn.slate = [game("WSH", "NYG", "in", 7, 0, situation=SIT, game_id=1)]
     land(app, espn)
-    snap = app._nfl.snapshot
+    snap = app._football.snapshot
     assert snap.games[0].away.score == 7 and [p.id for p in snap.plays[1]] == [play.id]
 
 
@@ -191,7 +191,7 @@ def test_a_failed_core_fetch_does_not_lose_numbers_already_known(rig):
     land(app, espn, play)
     espn.fail_core = True
     land(app, espn, play, rush(2))
-    plays = {p.id: p for p in app._nfl.snapshot.plays[1]}
+    plays = {p.id: p for p in app._football.snapshot.plays[1]}
     assert plays[play.id].participants, "the earlier numbers survive a failed core fetch"
 
 
@@ -202,8 +202,8 @@ def test_a_failure_in_collecting_plays_never_blanks_the_scores(rig):
         raise RuntimeError("feed exploded")
 
     espn.plays = boom
-    app._nfl.worker.poll_once()
-    assert app._nfl.snapshot.games is not None and app.select_scene().kind == "fb_field"
+    app._football.worker.poll_once()
+    assert app._football.snapshot.games is not None and app.select_scene().kind == "fb_field"
 
 
 # -- a play through the real app ----------------------------------------------------------------

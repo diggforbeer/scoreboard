@@ -1,6 +1,6 @@
-"""The NFL half of the sport switch (#346): scene selection over the feed worker (#351, #352).
+"""The football half of the sport switch (#346): scene selection over the feed worker (#351, #352).
 
-The app builds a fresh ``NflMode`` each time the sport changes to ``nfl`` and drops it on the
+The app builds a fresh ``FootballMode`` each time the sport becomes ``football`` and drops it on the
 way back, so nothing a previous visit held can leak into the next one. Fetching happens on
 the mode's :class:`~.worker.FeedWorker` thread, never on the render loop; the scene methods
 only read its latest snapshot.
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from ..app import Scene
     from ..config import FootballConfig, ScoreboardConfig
 
-#: Every scene kind NFL mode draws.
+#: Every scene kind football mode draws.
 #: Documented in ``football_screen.md`` ("Base scenes"); a test keeps that list, this tuple and
 #: the renderer in step.
 FB_SCENE_KINDS = (
@@ -62,7 +62,7 @@ KICKOFF_WINDOW = timedelta(minutes=20)
 DEFAULT_ROTATE_SECONDS = 8.0
 
 
-class NflMode:
+class FootballMode:
     def __init__(
         self,
         scoreboard: Callable[[], ScoreboardConfig] | None = None,
@@ -78,9 +78,9 @@ class NflMode:
         settings (read at each poll and each frame, so an admin-page change applies without a
         restart); ``client_factory`` makes the feed client (a fake in tests)."""
         if client_factory is None:
-            from .api import NflClient
+            from .api import FootballClient
 
-            client_factory = NflClient
+            client_factory = FootballClient
         self._scoreboard = scoreboard
         self._football = football
         self._monotonic = monotonic

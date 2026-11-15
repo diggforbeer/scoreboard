@@ -1,6 +1,6 @@
 # ESPN football API: findings for the scoreboard app
 
-Checked 2026-11-12 against a live NFL game (WSH @ NYG, event 401873052) and a
+Checked 2026-11-12 against a live football game (WSH @ NYG, event 401873052) and a
 completed one (CIN vs ATL, event 401873038). Related: issue #341 (Football
 mode screen-flow design) and **`football_screen.md`**, the screen design and
 todo list that this file backs. Read and update the two together.
@@ -13,9 +13,9 @@ notice. Parse defensively and tolerate missing fields.
 | Purpose | URL |
 |---|---|
 | Scoreboard | `site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard` (also `?dates=YYYYMMDD`, `?week=N&seasontype=2`) |
-| Game detail and drives | `.../nfl/summary?event=<id>` |
-| Teams, colours, logos | `.../nfl/teams` (32 teams) |
-| Roster | `.../nfl/teams/{id}/roster` |
+| Game detail and drives | `.../football/summary?event=<id>` |
+| Teams, colours, logos | `.../football/teams` (32 teams) |
+| Roster | `.../football/teams/{id}/roster` |
 | Play-by-play with participants | `sports.core.api.espn.com/v2/sports/football/leagues/nfl/events/<id>/competitions/<id>/plays?limit=300` |
 | Live situation | core URL above ending in `/situation` |
 
@@ -185,8 +185,8 @@ payloads in `tests/fixtures/football/`.
   `STATUS_IN_PROGRESS`, `STATUS_FINAL`. **Not yet seen:** halftime, delayed, postponed,
   overtime (`Final/OT`) and suspended names. The client keeps any unknown state or name
   as sent and ranks it after the known ones.
-- **Team ids** map to the 32 NFL teams (`football/teams.py`); an id that is not one of
-  them (a Pro Bowl side) keeps ESPN's own abbreviation and is flagged `is_nfl = False`.
+- **Team ids** map to the 32 football teams (`football/teams.py`); an id that is not one of
+  them (a Pro Bowl side) keeps ESPN's own abbreviation and is flagged `is_football = False`.
 
 ## The play feed (#353, 13 finished games from 2026-11-08, 2,441 plays)
 
@@ -244,7 +244,7 @@ NE 38 for 6 yards`.
 
 ## Feed lag, one real observation (#355, 2026-11-13)
 
-Watching a live game with `nhl-scoreboard --watch-nfl 401873052` (polling every 10s), a new
+Watching a live game with `nhl-scoreboard --watch-football 401873052` (polling every 10s), a new
 play (a Q4 incompletion) was first shown **30.2s after its `wallclock`**: the feed, plus up to
 10s of polling, ran about half a minute behind the play. One play in one game, so a hint, not
 a measurement: the Pi 4 measurement todo is still what answers the deferred animation-pace
@@ -285,11 +285,11 @@ live behaviour gets learned.
 4. Keep the captures as fixtures under `tests/fixtures/football/` and add a test; if the rules
    in `reversals.py` do not match what is there, fix them from the evidence.
 
-`nhl-scoreboard --watch-nfl <id>` also runs the play queue against the live feed and logs.
+`nhl-scoreboard --watch-football <id>` also runs the play queue against the live feed and logs.
 
 ## Team logos (#349, 2026-11-13)
 
-- `.../nfl/teams` lists each team's logos under `logos[]`, each with a `rel`: `["full","default"]`
+- `.../football/teams` lists each team's logos under `logos[]`, each with a `rel`: `["full","default"]`
   (500px), `["full","dark"]` (500px, for dark backgrounds), the same two under `scoreboard`, a
   `grayscale`, and a family of 4096px `primary_logo_*` / `secondary_logo_*` variants
   (`..._on_black_color`, `..._white`, ...). The fetch script uses `dark` (and `default` as the
@@ -303,7 +303,7 @@ live behaviour gets learned.
 
 ## Jersey numbers, participants and the polling decision (#354, measured 2026-11-13)
 
-Built in `football/people.py`, `NflClient.core_plays()` and `NflClient.roster()`.
+Built in `football/people.py`, `FootballClient.core_plays()` and `FootballClient.roster()`.
 
 **Measured** (a finished game, 174 plays; one team roster):
 
@@ -324,7 +324,7 @@ request a minute (well under 1 KB/s) and 0.3s on the worker thread. The tail-pag
 (`page=ceil(n/25)`) would cut it to 5 KB but needs the play count first and handles a play that
 straddles a page boundary; it is not worth the complication at this size. `people.CoreSync`
 implements the rule. Rosters are fetched on first use and then **hourly** per team
-(`people.RosterCache`, kept by `NflMode`, so a sport switch starts empty); a failed fetch keeps the
+(`people.RosterCache`, kept by `FootballMode`, so a sport switch starts empty); a failed fetch keeps the
 old roster and is not retried for 60s.
 
 **What the core feed adds over the site feed**
@@ -403,7 +403,7 @@ gzipped whatever was asked for, so read the body through a client that decompres
   it still named that game. Prefer the schedule or the scoreboard.
 
 **Standings** are on a different base: **`https://site.api.espn.com/apis/v2/sports/football/
-nfl/standings`** (`/apis/v2/`, not `/apis/site/v2/`; ~158 KB, so fetch hourly at most).
+football/standings`** (`/apis/v2/`, not `/apis/site/v2/`; ~158 KB, so fetch hourly at most).
 - By default `children` is the **two conferences**, each with `standings.entries`.
   **`?level=3`** gives each conference's **four divisions** as `children`, each with its own
   `standings.entries` (`AFC East`: BUF, NE, NYJ, MIA), which is what a division page needs.

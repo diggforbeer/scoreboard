@@ -1,4 +1,4 @@
-"""NFL mode's base scenes: status screens and the plain scoreboard (#352).
+"""Football mode's base scenes: status screens and the plain scoreboard (#352).
 
 Three layers, like the NHL scenes: ASCII snapshots (``--update-snapshots`` after an
 intentional change), structural assertions that hold whatever the snapshot says (nothing
@@ -23,7 +23,7 @@ from nhl_scoreboard.display.ascii import AsciiCanvas
 from nhl_scoreboard.display.fonts import FontSet
 from nhl_scoreboard.display.matrix import Backend
 from nhl_scoreboard.display.renderer import SUBDUED, Renderer
-from nhl_scoreboard.football.mode import FB_SCENE_KINDS, NflMode
+from nhl_scoreboard.football.mode import FB_SCENE_KINDS, FootballMode
 from nhl_scoreboard.football.models import FbGame
 from nhl_scoreboard.football.teams import TEAMS, team_color
 from nhl_scoreboard.football.worker import STALE_AFTER_SECONDS
@@ -206,7 +206,7 @@ def test_a_team_that_is_not_one_of_the_32_is_drawn_plain():
     assert fs.side_color(GAMES["unknown_team"].away) not in {team_color(a) for a in TEAMS}
 
 
-def test_each_nfl_team_is_drawn_in_its_own_colour_not_the_nhl_one():
+def test_each_football_team_is_drawn_in_its_own_colour_not_the_nhl_one():
     c = draw("live")
     assert team_color("WSH") in c.colors(0, 0, 62, 14)  # Washington gold
     assert team_color("NYG") in c.colors(64, 0, 127, 14)  # the Giants' blue
@@ -263,9 +263,9 @@ def test_a_kickoff_on_a_64px_panel_drops_the_day_so_it_fits():
 @pytest.mark.parametrize(
     ("kind", "title", "subtitle"),
     [
-        ("fb_connecting", "NFL", "CONNECTING"),
-        ("fb_no_data", "NO DATA", "NFL CHECK NETWORK"),
-        ("fb_no_games", "NO GAMES", "NFL"),
+        ("fb_connecting", "FOOTBALL", "CONNECTING"),
+        ("fb_no_data", "NO DATA", "FOOTBALL CHECK NETWORK"),
+        ("fb_no_games", "NO GAMES", "FOOTBALL"),
     ],
 )
 def test_status_scenes(kind, title, subtitle, app, update_snapshots):
@@ -294,7 +294,7 @@ def games_for_selection():
 def mode(favourite="", follow=(), rotate=8.0):
     scoreboard = dataclasses.replace(ScoreboardConfig(), rotate_seconds=rotate)
     football = FootballConfig(favourite_team=favourite, also_follow=list(follow))
-    return NflMode(lambda: scoreboard, client_factory=lambda: None, football=lambda: football)
+    return FootballMode(lambda: scoreboard, client_factory=lambda: None, football=lambda: football)
 
 
 def test_the_favourites_game_holds_the_screen_alone_while_it_is_live():
@@ -341,7 +341,7 @@ def test_a_turn_lasts_rotate_seconds_and_wraps():
 
 
 def test_followed_teams_ignore_case_and_nhl_only_abbreviations_never_match():
-    m = mode("nyg", ["nsh"])  # NSH is not an NFL team: dropped by the config
+    m = mode("nyg", ["nsh"])  # NSH is not a football team: dropped by the config
     assert m.pick_game(games_for_selection(), 5.0).id == 1
 
 
@@ -373,7 +373,7 @@ class Feed:
 
 
 def feed_mode(feed, clock):
-    return NflMode(client_factory=lambda: feed, monotonic=clock)
+    return FootballMode(client_factory=lambda: feed, monotonic=clock)
 
 
 def test_connecting_then_scores_then_no_data_when_the_last_good_fetch_goes_stale():
@@ -410,16 +410,16 @@ def test_an_empty_slate_is_the_clock_or_no_games_not_no_data():
     m = feed_mode(Feed([]), clock)
     m.worker.poll_once()
     assert m.scene().kind == "clock", "the default idle rotation has a clock (#422)"
-    narrow = NflMode(client_factory=lambda: Feed([]), monotonic=clock, wide=lambda: False)
+    narrow = FootballMode(client_factory=lambda: Feed([]), monotonic=clock, wide=lambda: False)
     narrow.worker.poll_once()
     assert narrow.scene().kind == "clock"
     no_clock = FootballConfig(rotation=[{"screen": "fb_week", "seconds": 8}])
-    bare = NflMode(client_factory=lambda: Feed([]), monotonic=clock, football=lambda: no_clock)
+    bare = FootballMode(client_factory=lambda: Feed([]), monotonic=clock, football=lambda: no_clock)
     bare.worker.poll_once()
     assert bare.scene().kind == "fb_no_games"
 
 
-def test_every_nfl_scene_kind_is_known_and_documented():
+def test_every_football_scene_kind_is_known_and_documented():
     guide = (ROOT / "football_screen.md").read_text()
     assert set(FB_SCENE_KINDS) == {
         "fb_connecting",
@@ -437,14 +437,16 @@ def test_every_nfl_scene_kind_is_known_and_documented():
 
 
 @pytest.mark.parametrize("kind", FB_SCENE_KINDS)
-def test_the_app_draws_every_nfl_scene_kind(kind, app):
+def test_the_app_draws_every_football_scene_kind(kind, app):
     scene = Scene(kind, fb_game=GAMES["live"] if kind in ("fb_scores", "fb_field") else None)
     if kind == "fb_halftime":
         scene = Scene(kind, fb_game=game("WSH", "NYG", "in", 10, 17, name="STATUS_HALFTIME"))
     if kind in ("fb_play", "fb_playtext", "fb_event"):
-        from nhl_scoreboard.football.demo import nfl_demo_steps
+        from nhl_scoreboard.football.demo import football_demo_steps
 
-        scene = next(s.scene for s in nfl_demo_steps(datetime.now(UTC)) if s.scene.kind == kind)
+        scene = next(
+            s.scene for s in football_demo_steps(datetime.now(UTC)) if s.scene.kind == kind
+        )
     app.draw_scene(scene)
     assert app.matrix.shown.pixels, f"{kind} drew nothing"
     assert not app.matrix.shown.out_of_bounds
@@ -464,7 +466,7 @@ def app(tmp_path) -> ScoreboardApp:
     clock = Clock()
     settings = Settings()
     settings.status.enabled = False
-    settings.scoreboard.sport = "nfl"
+    settings.scoreboard.sport = "football"
     # Only the clock in the idle rotation: these tests are about the plain game-day scenes.
     settings.football = FootballConfig(
         favourite_team="NYG", rotation=[{"screen": "clock", "seconds": 6}]
@@ -478,7 +480,7 @@ def app(tmp_path) -> ScoreboardApp:
         monotonic=clock,
         ap_setup_state_path=tmp_path / "no-ap",
         hw_mapping_trial_path=tmp_path / "no-trial",
-        nfl_client_factory=lambda: feed,
+        football_client_factory=lambda: feed,
     )
     app.clock_box = clock  # type: ignore[attr-defined]
     app.feed = feed  # type: ignore[attr-defined]
@@ -499,7 +501,7 @@ def test_a_game_day_walks_from_connecting_through_pregame_live_and_final(app):
 
     def land(*games):
         feed.answers = [list(games)]
-        app._nfl.worker.poll_once()
+        app._football.worker.poll_once()
 
     land(game("WSH", "NYG", "pre", short="x", start="2026-11-15T18:00Z", name="STATUS_SCHEDULED"))
     scene = app.select_scene()
@@ -529,28 +531,28 @@ def _pixels(app, scene):
     return dict(app.matrix.shown.pixels)
 
 
-def test_the_status_box_reports_the_nfl_feed(app):
+def test_the_status_box_reports_the_football_feed(app):
     snap = app.status_snapshot()
     assert snap["scene"] == "fb_connecting" and snap["favourite team"] == "NYG"
     assert snap["last successful poll"] == "never" and snap["last error"] == "(none)"
     app.feed.answers = [None]
-    app._nfl.worker.poll_once()
+    app._football.worker.poll_once()
     snap = app.status_snapshot()
     assert snap["last error"] == "feed down" and snap["last error at"] != "(none)"
     app.feed.answers = [[GAMES["live"]]]
-    app._nfl.worker.poll_once()
+    app._football.worker.poll_once()
     snap = app.status_snapshot()
     assert snap["scene"] == "fb_field" and snap["last successful poll"] != "never"
     assert snap["last error"] == "(none)"
     assert snap["also following"] == "(none)"
 
 
-def test_april_fools_never_relabels_nfl_scenes(app):
+def test_april_fools_never_relabels_football_scenes(app):
     app.settings.scoreboard.favourite_team = "NSH"
     app.clock = lambda: datetime(2027, 4, 1, 19, 0, tzinfo=UTC)
     app.feed.answers = [[GAMES["live"]]]
-    app._nfl.worker.poll_once()
-    assert not app.april_fools_active() or app._nfl is not None
+    app._football.worker.poll_once()
+    assert not app.april_fools_active() or app._football is not None
     app.draw_scene(app.select_scene())  # must not raise or relabel
 
 

@@ -29,15 +29,15 @@ from .teams import team_secondary_color as nhl_team_secondary_color
 
 RGB = tuple[int, int, int]
 
-#: Whose team colours the decorations use (#430): NHL by default; NFL mode draws its overlay inside
-#: ``use_sport("nfl")``, so a team-coloured egg or tree ornament takes the NFL table instead of
-#: looking an NFL abbreviation up in the NHL one.
+#: Whose team colours the decorations use (#430): NHL by default; football mode draws its overlay in
+#: ``use_sport("football")``, so a team-coloured egg or ornament takes the football table instead of
+#: looking a football abbreviation up in the NHL one.
 _SPORT: ContextVar[str] = ContextVar("holiday_sport", default="nhl")
 
 
 @contextmanager
 def use_sport(sport: str) -> Iterator[None]:
-    """Draw the decorations in ``sport``'s team colours (``nhl`` or ``nfl``) inside the block."""
+    """Draw the decorations in ``sport``'s team colours (``nhl`` or ``football``) in the block."""
     token = _SPORT.set(sport)
     try:
         yield
@@ -46,24 +46,24 @@ def use_sport(sport: str) -> Iterator[None]:
 
 
 def team_color(abbrev: str) -> RGB:
-    if _SPORT.get() == "nfl":
-        from ..football.teams import team_color as nfl_color
+    if _SPORT.get() == "football":
+        from ..football.teams import team_color as football_color
 
-        return nfl_color(abbrev)
+        return football_color(abbrev)
     return nhl_team_color(abbrev)
 
 
 def team_secondary_color(abbrev: str) -> RGB:
-    if _SPORT.get() == "nfl":
-        from ..football.teams import team_secondary_color as nfl_secondary
+    if _SPORT.get() == "football":
+        from ..football.teams import team_secondary_color as football_secondary
 
-        return nfl_secondary(abbrev)
+        return football_secondary(abbrev)
     return nhl_team_secondary_color(abbrev)
 
 
 def team_codes() -> tuple[str, ...]:
     """Every team abbreviation of the current sport."""
-    if _SPORT.get() == "nfl":
+    if _SPORT.get() == "football":
         from ..football.teams import TEAMS
 
         return tuple(TEAMS)

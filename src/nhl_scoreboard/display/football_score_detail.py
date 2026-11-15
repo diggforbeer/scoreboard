@@ -129,7 +129,11 @@ def _bottom(r: Renderer, canvas: Any, left: int, right: int, pat: str, score: st
 
 
 def _logo(r: Renderer, canvas: Any, team: str, x: int, factor: float) -> None:
-    logo = r.nfl_logos.get(team, LOGO_SIZE) if r.nfl_logos is not None and is_team(team) else None
+    logo = (
+        r.football_logos.get(team, LOGO_SIZE)
+        if r.football_logos is not None and is_team(team)
+        else None
+    )
     if logo is not None:
         ox, oy = x - logo.width // 2, 16 - logo.height // 2
         for dx, dy, (red, green, blue) in logo.pixels:

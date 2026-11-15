@@ -190,7 +190,7 @@ def fake_backend() -> Backend:
     return Backend("fake", FakeMatrix, FakeOptions, FakeGraphics)
 
 
-class FakeNflClient:
+class FakeFootballClient:
     """Stands in for the ESPN client: an empty slate, instantly, no network."""
 
     last_error = ""
@@ -214,7 +214,7 @@ def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -
         clock=lambda: clock.now,
         monotonic=lambda: clock.mono,
         horn=horn or RecordingHorn(),
-        nfl_client_factory=FakeNflClient,
+        football_client_factory=FakeFootballClient,
     )
 
 
@@ -2224,13 +2224,13 @@ def test_sport_defaults_to_nhl_mode(day):
     assert not scene(app)[0].startswith("fb_")
 
 
-def test_switching_to_nfl_shows_connecting_then_no_games_and_back(day):
+def test_switching_to_football_shows_connecting_then_no_games_and_back(day):
     app, clock, _ = day
-    switch_sport(app, "nfl")
-    assert app.current_mode() == "nfl"
+    switch_sport(app, "football")
+    assert app.current_mode() == "football"
     assert app.select_scene().kind == "fb_connecting"
     # The feed lands on the worker's own thread in real life; here one fetch is run by hand.
-    app._nfl.worker.poll_once()
+    app._football.worker.poll_once()
     # the fake feed answers with an empty slate: the default idle rotation's clock (#422)
     assert app.select_scene().kind == "clock"
     app.draw()  # draws through the real renderer without error
@@ -2251,7 +2251,7 @@ def test_switching_sport_re_baselines_goals_and_stays_silent(day):
     assert app.horn.calls == [FAV]  # 0-0 -> 2-0 is a real goal
     app.horn.calls.clear()
 
-    switch_sport(app, "nfl")
+    switch_sport(app, "football")
     assert app._known_scores == {} and app.games == []
     switch_sport(app, "nhl")
     assert app._known_scores == {}
@@ -2273,10 +2273,10 @@ def test_rapid_sport_switching_leaks_nothing(day):
     app, clock, _ = day
     threads = threading.active_count()
     for i in range(200):
-        switch_sport(app, "nfl" if i % 2 == 0 else "nhl")
+        switch_sport(app, "football" if i % 2 == 0 else "nhl")
         clock.advance(seconds=1)
         app.refresh()
     assert threading.active_count() == threads
     assert app.current_mode() == "nhl"
-    assert app._nfl is None
+    assert app._football is None
     assert len(app._known_scores) <= 2

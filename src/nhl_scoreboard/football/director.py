@@ -1,8 +1,8 @@
-"""Decide what the NFL panel shows *now*, play by play (#377).
+"""Decide what the football panel shows *now*, play by play (#377).
 
 Everything the screens need already exists as data: the play queue (#355), the event detector
 (#356), the reversal detector (#357), jersey numbers (#354). This is the one place that wires
-them to the panel. It draws nothing; it hands :class:`~.mode.NflMode` a :class:`Stage` (what is
+them to the panel. It draws nothing; it hands :class:`~.mode.FootballMode` a :class:`Stage` (what is
 on screen, for how long, since when) and the renderer's registries draw it.
 
 One play becomes a short run of stages::

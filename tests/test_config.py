@@ -555,11 +555,11 @@ def test_followed_teams_without_a_favourite_is_just_also_follow():
     assert settings.scoreboard.followed_teams == ["TOR"]
 
 
-def test_sport_defaults_to_nhl_and_accepts_nfl(tmp_path):
+def test_sport_defaults_to_nhl_and_accepts_football(tmp_path):
     assert Settings.load(tmp_path / "missing.toml").scoreboard.sport == "nhl"
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nsport = "NFL"\n')
-    assert Settings.load(path).scoreboard.sport == "nfl"
+    path.write_text('[scoreboard]\nsport = "football"\n')
+    assert Settings.load(path).scoreboard.sport == "football"
 
 
 def test_invalid_sport_warns_once_and_falls_back_to_nhl(tmp_path, caplog):
