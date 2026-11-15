@@ -101,7 +101,8 @@ def draw_clock_icon(
     canvas: Any, cx: int, cy: int, color, angle: float, bright: float = 1.0
 ) -> None:
     """A round clock face with a fixed short hand and a long hand at ``angle``."""
-    ring = tuple(round(c * bright) for c in color)
+    # bright > 1 is the freeze flash; a 255 channel would overflow SetPixel's uint8
+    ring = tuple(min(255, round(c * bright)) for c in color)
     for deg in range(0, 360, 12):
         rad = math.radians(deg)
         canvas.SetPixel(

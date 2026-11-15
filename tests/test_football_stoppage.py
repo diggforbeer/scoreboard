@@ -175,3 +175,18 @@ def test_a_missing_clock_or_team_never_raises():
 )
 def test_snapshot(name, play, share, width, update_snapshots):
     check_snapshot(f"timeout_{name}", draw(play, share, width).render(), update_snapshots)
+
+
+def test_the_freeze_flash_never_emits_a_channel_above_255():
+    # The flash scales the ring up to 1.6x; a 255 channel (the warning's amber, a bright team
+    # colour) used to reach the real SetPixel as 408 and crash it (OverflowError: uint8_t).
+    class Rec:
+        def __init__(self):
+            self.px = []
+
+        def SetPixel(self, x, y, r, g, b):  # noqa: N802
+            self.px.append((r, g, b))
+
+    rec = Rec()
+    fs.draw_clock_icon(rec, 40, 15, (255, 176, 0), 0.0, 1.6)
+    assert rec.px and all(0 <= c <= 255 for px in rec.px for c in px)
