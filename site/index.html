@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scoreboard — a desk-sized NHL scoreboard kit</title>
-<meta name="description" content="A 128×32 LED matrix scoreboard that shows live hockey scores. Buy the parts as a kit, or pre-assembled.">
+<title>Scoreboard — a desk-sized NHL and NFL scoreboard kit</title>
+<meta name="description" content="A 128×32 LED matrix scoreboard that shows live hockey and football scores. Buy the parts as a kit, or pre-assembled.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="hero"><div class="wrap">
   <h1>Your team's score, always on.</h1>
-  <p class="lead">A 128×32 LED scoreboard for your desk or shelf. Live scores, goal horn, and a phone-friendly setup. Available as a parts kit or pre-assembled.</p>
+  <p class="lead">A 128×32 LED scoreboard for your desk or shelf. Live NHL and NFL scores, goal horn, and a phone-friendly setup. Available as a parts kit or pre-assembled.</p>
   <a class="btn" href="#kits">See the kits</a>
   <div class="panel" role="img" aria-label="Illustration of the LED panel showing a game score">NSH 3 &nbsp;·&nbsp; 2 CGY<br>2ND 07:41</div>
 </div></header>
@@ -37,12 +37,37 @@
 <section>
   <h2>Features</h2>
   <div class="grid">
-    <div class="card"><h3>Live scores</h3><p>Live games, finals, countdowns to the next puck drop, and standings.</p></div>
+    <div class="card"><h3>Live scores</h3><p>Live games, finals, countdowns to the next puck drop or kickoff, and standings.</p></div>
     <div class="card"><h3>Goal horn</h3><p>Plays when your team scores, with a goal screen on the panel.</p></div>
     <div class="card"><h3>Web admin page</h3><p>Change teams, rotation, brightness and more from your phone.</p></div>
     <div class="card"><h3>Night mode</h3><p>Dims on a schedule, but never during a game you care about.</p></div>
     <div class="card"><h3>Automatic updates</h3><p>Update the software from the admin page.</p></div>
     <div class="card"><h3>Printable case</h3><p>Open 3D-printable enclosure designs for Pi 4 and Pi 3B.</p></div>
+  </div>
+</section>
+
+<section id="football">
+  <h2>NFL mode</h2>
+  <p>Pick football in setup and the board follows your NFL team instead. Same hardware, same admin page.</p>
+  <div class="grid">
+    <div class="card"><h3>Live game screens</h3><p>Field view with down and distance, animated runs and passes, touchdown, field goal, turnover and halftime screens, and a coin toss at kickoff.</p></div>
+    <div class="card"><h3>Between games</h3><p>Kickoff countdown, game preview, final score with recap, bye week, division and conference standings, the week's scoreboard and your team's schedule.</p></div>
+    <div class="card"><h3>Yours to tune</h3><p>Choose and reorder the idle screens, how long each shows, and how long in-game screens stay up, all from the admin page.</p></div>
+    <div class="card"><h3>Holidays</h3><p>Thanksgiving and Christmas games get festive decoration in your team's colours.</p></div>
+  </div>
+  <div class="shots">
+    <figure><img src="img/nfl/fb_scores_live.png" alt="Live scores across the league" width="512" height="128" loading="lazy"><figcaption>Live scores across the league</figcaption></figure>
+    <figure><img src="img/nfl/fb_field.png" alt="Field view with down, distance and the ball" width="512" height="128" loading="lazy"><figcaption>Field view with down, distance and the ball</figcaption></figure>
+    <figure><img src="img/nfl/fb_pass.png" alt="Pass plays animated on the field" width="512" height="128" loading="lazy"><figcaption>Pass plays animated on the field</figcaption></figure>
+    <figure><img src="img/nfl/fb_score.png" alt="Touchdown screen" width="512" height="128" loading="lazy"><figcaption>Touchdown screen</figcaption></figure>
+    <figure><img src="img/nfl/fieldgoal_celebration.png" alt="Field goal celebration" width="512" height="128" loading="lazy"><figcaption>Field goal celebration</figcaption></figure>
+    <figure><img src="img/nfl/halftime.png" alt="Halftime summary" width="512" height="128" loading="lazy"><figcaption>Halftime summary</figcaption></figure>
+    <figure><img src="img/nfl/fb_preview.png" alt="Game preview with kickoff time" width="512" height="128" loading="lazy"><figcaption>Game preview with kickoff time</figcaption></figure>
+    <figure><img src="img/nfl/fb_countdown.png" alt="Countdown to kickoff" width="512" height="128" loading="lazy"><figcaption>Countdown to kickoff</figcaption></figure>
+    <figure><img src="img/nfl/fb_final.png" alt="Final score with recap" width="512" height="128" loading="lazy"><figcaption>Final score with recap</figcaption></figure>
+    <figure><img src="img/nfl/fb_standings_division.png" alt="Division standings" width="512" height="128" loading="lazy"><figcaption>Division standings</figcaption></figure>
+    <figure><img src="img/nfl/fb_week.png" alt="This week's games" width="512" height="128" loading="lazy"><figcaption>This week's games</figcaption></figure>
+    <figure><img src="img/nfl/fb_schedule.png" alt="Your team's schedule" width="512" height="128" loading="lazy"><figcaption>Your team's schedule</figcaption></figure>
   </div>
 </section>
 
@@ -64,8 +89,8 @@
 </main>
 
 <footer><div class="wrap">
-  Not affiliated with or endorsed by the National Hockey League or any NHL club.
-  NHL and team names and marks belong to their owners. Sold as hardware only.
+  Not affiliated with or endorsed by the National Hockey League, the National Football League, or any NHL or NFL club.
+  NHL, NFL and team names and marks belong to their owners. Sold as hardware only.
   · <a href="https://github.com/diggforbeer/scoreboard">Source</a>
 </div></footer>
 </body>
