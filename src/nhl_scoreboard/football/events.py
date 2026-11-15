@@ -198,6 +198,17 @@ class EventDetector:
         deltas = (play.away_score - before[0], play.home_score - before[1])
         scored = False
         for side, delta in zip((game.away, game.home), deltas, strict=True):
+            if delta > 0 and not play.scoring_play:
+                # The feed publishes a touchdown, then rewrites it with the extra point and the
+                # new total; the next play (the kickoff) already carries that total. The running
+                # score has just caught up with a score that was announced with its touchdown:
+                # not news, and celebrating it would be undone at once as a play that does not
+                # score (a "SCORE OVERTURNED" after every touchdown).
+                log.info(
+                    "[%s] score moved to %s-%s on %s, which is not a scoring play: not a score",
+                    game.id, play.away_score, play.home_score, play.id,
+                )  # fmt: skip
+                continue
             if delta > 0:
                 scored = True
                 event = self._score(game, play, side.abbrev, delta, before, cfg)

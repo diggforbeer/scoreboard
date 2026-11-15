@@ -70,6 +70,10 @@ def make_play(n, label, score=(0, 0), off="WSH", end=None, down=None, period=1, 
     return Play.from_api(raw)
 
 
+#: What the feed sets on every play that scores (a made-up ``rush`` that scores needs it too).
+SCORING = {"scoringPlay": True}
+
+
 def detector(favourite="NYG", follow=(), seeded=True, game=None):
     cfg = FootballConfig(favourite_team=favourite, also_follow=list(follow))
     det = EventDetector(lambda: cfg)
@@ -124,7 +128,15 @@ def test_a_pick_six_against_the_favourite_is_an_opponents_score_and_emits_nothin
 
 def test_a_safety_is_a_generic_score():
     det, game, _ = detector("NYG")
-    safety = make_play(1, "rush", score=(0, 2), off="WSH", ptype="Safety", text="Safety.")
+    safety = make_play(
+        1,
+        "rush",
+        score=(0, 2),
+        off="WSH",
+        ptype="Safety",
+        text="Safety.",
+        flags=SCORING,
+    )
     generic = one(run(det, game, safety))
     assert isinstance(generic, ev.GenericScore)
     assert (generic.team, generic.points, generic.scope, generic.sound) == (
@@ -155,7 +167,13 @@ def test_points_are_the_delta_so_a_two_point_conversion_is_counted():
 def test_both_sides_scoring_on_one_play_gives_each_its_own_event():
     det, game, _ = detector("NYG", follow=["WSH"])
     both = make_play(
-        1, "rush", score=(2, 6), off="NYG", ptype="Rushing Touchdown", text="TOUCHDOWN"
+        1,
+        "rush",
+        score=(2, 6),
+        off="NYG",
+        ptype="Rushing Touchdown",
+        text="TOUCHDOWN",
+        flags=SCORING,
     )
     teams = {e.team for e in run(det, game, both)}
     assert teams <= {"NYG", "WSH"} and "NYG" in teams
@@ -207,7 +225,11 @@ def test_the_sound_flag_is_only_for_the_favourites_touchdown_and_made_field_goal
     td = one(run(det, game, make_play(2, "rush_td_pat", score=(3, 7), off="NYG")))
     fg = one(run(det, game, make_play(3, "fg_good", score=(3, 10), off="NYG")))
     assert td.sound is True and fg.sound is True
-    safety = one(run(det, game, make_play(4, "rush", score=(3, 12), off="WSH", ptype="Safety")))
+    safety = one(
+        run(
+            det, game, make_play(4, "rush", score=(3, 12), off="WSH", ptype="Safety", flags=SCORING)
+        )
+    )
     assert safety.sound is False
 
 
@@ -494,3 +516,17 @@ def test_the_queue_remembers_its_baseline_play():
     plays = [make_play(1, "rush", score=(3, 0)), make_play(2, "rush", score=(3, 7))]
     queue.offer(plays)
     assert queue.baseline is plays[-1] and queue.baseline.home_score == 7
+
+
+def test_a_score_that_arrives_on_a_play_that_does_not_score_is_not_a_celebration():
+    """The feed rewrites a touchdown with its extra point, so the next play (the kickoff) carries
+    the total the touchdown play did not: the board caught up, nothing was scored on that play."""
+    det, game, _cfg = detector("NYG")
+    td = make_play(1, "rush_td_pat", score=(0, 6), off="NYG")
+    assert [type(e).__name__ for e in run(det, game, td)] == ["Touchdown"]
+    kickoff = make_play(2, "rush", score=(0, 7), off="NYG")  # a play that does not score
+    assert not kickoff.scoring_play
+    assert run(det, game, kickoff) == []
+    # The running score did catch up, so the next real score is measured from 7, not 6.
+    nxt = make_play(3, "rush_td_pat", score=(0, 14), off="NYG")
+    assert one(run(det, game, nxt)).points == 7
