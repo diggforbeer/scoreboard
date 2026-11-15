@@ -484,6 +484,9 @@ def app(tmp_path) -> ScoreboardApp:
     )
     app.clock_box = clock  # type: ignore[attr-defined]
     app.feed = feed  # type: ignore[attr-defined]
+    # The crests are git-ignored artwork: a machine that has them must draw the same snapshots as
+    # one that does not, so the abbreviations are always what these tests see.
+    app.renderer.football_logos = None
     return app
 
 
