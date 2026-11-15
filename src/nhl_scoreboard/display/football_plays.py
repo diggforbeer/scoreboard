@@ -81,6 +81,7 @@ SCREEN_MODULES = (
     "football_sack",
     "football_penalty",
     "football_stoppage",
+    "football_stats",
     "football_period",
     "football_cointoss",
     "football_touchdown",

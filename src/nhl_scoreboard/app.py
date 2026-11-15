@@ -294,6 +294,8 @@ class Scene:
     fb_people: tuple[Person, ...] = ()
     fb_event: FbEvent | None = None
     fb_stage: str = ""
+    #: Set only for the ``stats`` stage: the game's team stats (``football.stats.GameStats``).
+    fb_stats: Any = None
     #: What an idle screen draws (#419): the view its builder in ``football/idle_screens.py`` made.
     fb_idle: Any = None
     #: Which page of a several-page idle screen (the standings' division, then conference).

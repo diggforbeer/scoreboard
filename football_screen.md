@@ -1131,6 +1131,26 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Official](docs/football/timeout_official.png) | ![Two-minute warning](docs/football/timeout_two_minute.png) |
 | An official timeout: neutral, no team. | The two-minute warning: amber. |
 
+**Team stats over a TV timeout** (the `stats` stage of `fb_event`, shown after an official timeout or the
+two-minute warning in place of the play text):
+
+| | |
+|---|---|
+| ![Team stats, page one](docs/football/team_stats.png) | ![Team stats, page two](docs/football/team_stats_page2.png) |
+| Away on the left, home on the right: yards, passing, rushing, yards a play, first downs. | Third downs, turnovers, penalties, sacks allowed, possession. |
+
+Whoever is ahead on a row shows it in their team colour and the other side dims; a tie keeps both
+lit. The two pages take turns, `stats_seconds` each (6s, 3-20, "Team stats page (official timeout)" on the
+admin page's Display tab), with a pair of dots under each logo saying which is up. **The stage is held
+until the next play is waiting**, then the board goes back to the game (the feed lists the next play
+2-3 minutes after an official timeout; the board sees it a poll later, plus any broadcast delay), or
+after `HOLD_CAP_SECONDS` (4 minutes) if none comes. The feed often lists an official timeout twice with
+the same clock; the second is dropped. The numbers come from
+`boxscore.teams[].statistics` of the **same** site `summary` request the plays use, so showing them
+costs no request (`football/stats.py`, kept per game by `FootballMode`). 128px only. Team
+timeouts (about a minute) keep their 3s card and are not followed by the stats; like every stoppage the
+stage is dropped when the queue is behind.
+
 **The end of a quarter, the half and the game** (#388):
 
 | | |
@@ -1511,6 +1531,7 @@ added later.
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
 - [x] Incompletion (#384), sack (#385) and penalty (#386) animations, including a play wiped out by a penalty
 - [x] Timeout, official timeout, two-minute warning (#387), end-of-period, halftime and final cards (#388)
+- [x] Team stats over an official timeout or the two-minute warning (split table, two pages)
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-football` to see it run and lag logged per play)
 - [x] Play-text layout and scrolling (#379)

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +32,7 @@ from .idle import (
 )
 from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
+from .stats import GameStats
 from .teams import is_team, team
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
@@ -107,8 +108,16 @@ class FootballMode:
         #: Which play, celebration or reversal is on screen (#377). Render loop only.
         if timings is None and football is not None:
             timings = lambda: timings_from(football())  # noqa: E731 - the owner's [football] lengths
+        #: Each watched game's team stats (shown over an official timeout). The feed worker's
+        #: thread swaps in a new dict; the render loop only reads the reference.
+        self._stats: Mapping[int, GameStats] = {}
         self.director = Director(
-            football or _no_football, monotonic, delay_seconds, utc_now, timings
+            football or _no_football,
+            monotonic,
+            delay_seconds,
+            utc_now,
+            timings,
+            stats=self._stats_for,
         )
         self._core_sync = CoreSync()
         #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here so a
@@ -116,6 +125,10 @@ class FootballMode:
         #: owns it: it must not be used from the render loop.
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
+
+    def _stats_for(self, game_id: int) -> GameStats | None:
+        """A game's team stats, for the stats screen; 128px panels only (it is a split table)."""
+        return self._stats.get(game_id) if self._wide() else None
 
     def _interval(self, snap: FeedSnapshot) -> float:
         """Poll fast while a game is live, slowly otherwise, never faster than the feed caches."""
@@ -173,10 +186,18 @@ class FootballMode:
             elif game.id in prev.plays:
                 merged = _keep_participants(site, prev.plays[game.id])
             plays[game.id] = tuple(merged)
+            self._keep_stats(client, game.id)
             players[game.id] = self.rosters.players_for([game.home.espn_id, game.away.espn_id])
         keep = {g.id for g in games}
         self._core_sync.forget(lambda game_id: game_id in keep)
         return plays, players
+
+    def _keep_stats(self, client: Any, game_id: int) -> None:
+        """Take the team stats the plays request just carried; a failure keeps the last good."""
+        getter = getattr(client, "team_stats", None)
+        stats = getter(game_id) if callable(getter) else None
+        if stats is not None:
+            self._stats = {**self._stats, game_id: stats}
 
     def _collect_idle(
         self, client: Any, games: list[FbGame], scoreboard: Scoreboard | None, prev: IdleSnapshot
@@ -242,6 +263,7 @@ class FootballMode:
                 client.close()
         self.rosters.clear()
         self._idle_cache.clear()
+        self._stats = {}
 
     @property
     def snapshot(self) -> FeedSnapshot:
@@ -415,7 +437,7 @@ class FootballMode:
     def _play_scene(self, current: Any, base: Scene) -> Scene:
         """The scene for the stage on screen (#377), over the game's latest score."""
         from ..app import Scene
-        from .director import PLAY, PLAYTEXT
+        from .director import PLAY, PLAYTEXT, STATS
 
         stage = current.stage
         kind = {PLAY: "fb_play", PLAYTEXT: "fb_playtext"}.get(stage.stage, "fb_event")
@@ -426,6 +448,7 @@ class FootballMode:
             fb_play=stage.play,
             fb_people=stage.people,
             fb_event=stage.event,
+            fb_stats=self._stats_for(stage.game.id) if stage.stage == STATS else None,
             fb_stage=stage.stage,
             fb_elapsed=current.elapsed,
             fb_seconds=stage.seconds,

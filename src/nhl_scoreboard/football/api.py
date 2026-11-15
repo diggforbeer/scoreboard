@@ -27,6 +27,7 @@ from .idle import (
 )
 from .models import FbGame, Play
 from .people import RosterPlayer, roster_from_payload
+from .stats import GameStats, stats_from_summary
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +87,8 @@ class FootballClient:
         self.session = session or _build_session()
         #: The last failure, or ``""`` after a success. For the admin page's status.
         self.last_error = ""
+        #: Team stats by event id, kept from each ``plays()`` request (same payload).
+        self._stats: dict[str, GameStats | None] = {}
 
     def close(self) -> None:
         self.session.close()
@@ -160,7 +163,13 @@ class FootballClient:
         payload = self._get("/summary", {"event": str(event_id)})
         if payload is None:
             return None
+        # The same payload carries the team stats: keep them so showing them is no extra request.
+        self._stats[str(event_id)] = stats_from_summary(payload)
         return plays_from_summary(payload)
+
+    def team_stats(self, event_id: int | str) -> GameStats | None:
+        """The team stats from the last :meth:`plays` call for this game, or ``None``."""
+        return self._stats.get(str(event_id))
 
     def core_plays(self, event_id: int | str) -> list[Play] | None:
         """A game's plays from the **core** feed, each with its ``participants`` (#354).
