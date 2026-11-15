@@ -168,6 +168,7 @@ def test_update_card_lists_image_level_changes(admin_page):
         try:
             page = browser.new_page()
             page.goto(admin_page.url)
+            page.get_by_role("button", name="Setup", exact=True).click()
             differs = page.get_by_test_id("image-changes-differs")
             differs.wait_for(timeout=15000)
             assert "scripts/nhl-scoreboard-setup-ap" in differs.inner_text()
@@ -206,6 +207,7 @@ def test_typing_saves_once_after_a_pause(admin_page):
             page = browser.new_page()
             frames = _sent_saves(page)
             page.goto(admin_page.url)
+            page.get_by_role("button", name="Display", exact=True).click()
             field = page.locator("#sb-rotate_seconds")
             field.wait_for(timeout=15000)
 
@@ -229,6 +231,7 @@ def test_undo_reverts_the_last_save(admin_page):
         try:
             page = browser.new_page()
             page.goto(admin_page.url)
+            page.get_by_role("button", name="Display", exact=True).click()
             box = page.locator("#sb-scores_grid")
             box.wait_for(timeout=15000)
 
@@ -255,6 +258,7 @@ def test_a_cleared_number_box_is_never_saved(admin_page):
             page = browser.new_page()
             frames = _sent_saves(page)
             page.goto(admin_page.url)
+            page.get_by_role("button", name="Display", exact=True).click()
             field = page.locator("#sb-rotate_seconds")
             field.wait_for(timeout=15000)
 
@@ -269,6 +273,33 @@ def test_a_cleared_number_box_is_never_saved(admin_page):
             page.wait_for_selector("text=saved ✓", timeout=15000)
             assert len(frames) == 1, frames
             assert admin_page.config()["scoreboard"]["rotate_seconds"] == 9
+        finally:
+            browser.close()
+
+
+def test_brightness_on_display_saves_only_its_own_fields(admin_page):
+    """Brightness lives on the Display tab but is one slice of [panel]. Its
+    Save must not drag the restart-required Setup fields along (#449)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.get_by_role("button", name="Setup", exact=True).click()
+            rows = page.locator("#panel-rows")
+            rows.wait_for(timeout=15000)
+            rows.fill("16")  # an unsaved Setup edit that must not be sent
+
+            page.get_by_role("button", name="Display", exact=True).click()
+            page.locator("#panel-brightness").fill("40")
+            page.get_by_role("button", name="Save brightness").click()
+            page.wait_for_selector("text=Saved", timeout=15000)
+
+            panel = admin_page.config()["panel"]
+            assert panel["brightness"] == 40
+            assert "rows" not in panel, panel
         finally:
             browser.close()
 
@@ -447,11 +478,14 @@ def test_football_mode_has_its_own_idle_rotation_card(admin_page):
             page = browser.new_page()
             page.goto(admin_page.url)
             page.wait_for_selector("#sb-sport", timeout=15000)
-            assert page.get_by_role("heading", name="football idle rotation").count() == 0
+            page.get_by_role("button", name="Display", exact=True).click()
+            assert page.get_by_role("heading", name="Football idle rotation").count() == 0
             assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 1
 
+            page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#sb-sport", "football")
-            page.get_by_role("heading", name="football idle rotation").wait_for(timeout=15000)
+            page.get_by_role("button", name="Display", exact=True).click()
+            page.get_by_role("heading", name="Football idle rotation").wait_for(timeout=15000)
             assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 0
 
             page.get_by_role("button", name="Add row").click()
@@ -477,6 +511,7 @@ def test_football_mode_has_its_own_idle_rotation_card(admin_page):
             ]
 
             page.reload()
+            page.get_by_role("button", name="Display", exact=True).click()
             page.wait_for_selector("#football-final-hold", timeout=15000)
             assert page.input_value("#football-final-hold") == "45"
             assert page.input_value('[aria-label="football rotation screen 1"]') == "fb_week"

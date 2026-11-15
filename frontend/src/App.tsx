@@ -568,7 +568,7 @@ function App() {
   const [pageVisible, setPageVisible] = useState(!document.hidden)
 
   // Two pages don't justify a router (#193): plain view state.
-  const [page, setPage] = useState<'home' | 'audio' | 'holidays' | 'logs'>('home')
+  const [page, setPage] = useState<'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'logs'>('home')
   const [logLines, setLogLines] = useState<LogEntry[]>([])
   const [logError, setLogError] = useState<string | null>(null)
   const logBoxRef = useRef<HTMLPreElement | null>(null)
@@ -938,6 +938,30 @@ function App() {
     }
   }
 
+  // Brightness lives on the Display tab but is one slice of the Panel section.
+  // Send only those fields: the rest of Panel is restart-required and has its
+  // own Save, so a half-edited Setup form must not ride along.
+  function saveBrightness(event: React.FormEvent) {
+    event.preventDefault()
+    if (!panel) return
+    setPanelSaveStatus('saving')
+    setPanelSaveError(null)
+    const { brightness, auto_brightness, min_brightness, max_brightness, brightness_poll_seconds } =
+      panel
+    if (
+      !save('panel', {
+        brightness,
+        auto_brightness,
+        min_brightness,
+        max_brightness,
+        brightness_poll_seconds,
+      })
+    ) {
+      setPanelSaveStatus('error')
+      setPanelSaveError(NOT_CONNECTED_ERROR)
+    }
+  }
+
   function toggleHolidayTheme(name: string, ticked: boolean) {
     if (!holiday) return
     // Keep registry order, whatever order the boxes were ticked in.
@@ -1173,7 +1197,7 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'audio', 'holidays', 'logs'] as const).map((name) => (
+        {(['home', 'display', 'audio', 'holidays', 'setup', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
@@ -1181,7 +1205,14 @@ function App() {
               onClick={() => setPage(name)}
             >
               {
-                { home: 'Home', audio: 'Audio', holidays: 'Holiday Cheer', logs: 'Logs' }[name]
+                {
+                  home: 'Home',
+                  display: 'Display',
+                  audio: 'Audio',
+                  holidays: 'Holiday Cheer',
+                  setup: 'Setup',
+                  logs: 'Logs',
+                }[name]
               }
             </button>
           </li>
@@ -1253,7 +1284,7 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Scoreboard</h2>
+          <h2 className="card-title h5">Teams</h2>
           {scoreboard ? (
             <form onSubmit={flushOnSubmit(scoreboardSave)}>
               <div className="mb-3">
@@ -1292,64 +1323,32 @@ function App() {
                   followHelp="Their live games take turns on screen with your favourite's, and their goals jump to the goal screen. The horn only plays for your favourite."
                 />
               )}
-              <div className="mb-3">
-                <label className="form-label" htmlFor="sb-timezone">
-                  Timezone
-                </label>
-                <select
-                  className="form-select"
-                  style={{ width: 'auto' }}
-                  id="sb-timezone"
-                  value={scoreboard.timezone}
-                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, timezone: e.target.value })}
-                >
-                  {!US_TIMEZONES.some(([zone]) => zone === scoreboard.timezone) && (
-                    <option value={scoreboard.timezone}>{scoreboard.timezone}</option>
-                  )}
-                  {US_TIMEZONES.map(([zone, label]) => (
-                    <option key={zone} value={zone}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
 
-              <h3 className="h6 text-body-secondary mt-4">Timing</h3>
-              {(
-                [
-                  ['rotate_seconds', 'Seconds per game in rotation'],
-                  ['poll_seconds', 'Score poll interval (seconds)'],
-                  ['live_poll_seconds', 'Live score poll interval (seconds)'],
-                  ['shootout_poll_seconds', 'Shootout poll interval (seconds)'],
-                  ['countdown_hours', 'Countdown window before puck drop (hours)'],
-                  ['final_hold_minutes', 'Final score hold time (minutes)'],
-                  ['goal_flash_seconds', 'Goal celebration duration (seconds, 4–15)'],
-                  ['goal_detail_seconds', 'Goal detail duration (seconds)'],
-                  ['three_stars_seconds', 'Three stars duration (seconds)'],
-                  ['broadcast_delay_seconds', 'TV broadcast delay (seconds)'],
-                ] as const
-              ).map(([key, label]) => (
-                <div className="mb-3" key={key}>
-                  <label className="form-label" htmlFor={`sb-${key}`}>
-                    {label}
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '10rem' }}
-                    id={`sb-${key}`}
-                    type="number"
-                    step="any"
-                    {...(NUMBER_LIMITS[key] ?? {})}
-                    value={scoreboard[key]}
-                    onChange={(e) =>
-                      numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
-                    }
-                    onBlur={scoreboardSave.flush}
-                  />
-                </div>
-              ))}
 
-              <h3 className="h6 text-body-secondary mt-4">Display</h3>
+      </div>
+      <div className="col-lg-6">
+
+      </div>
+      </div>
+        </>
+      )}
+
+      {page === 'display' && (
+        <>
+      <div className="row g-4">
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Screens</h2>
+          {scoreboard ? (
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
               {(
                 [
                   ['show_clock_when_idle', 'Show clock when there are no games'],
@@ -1391,7 +1390,6 @@ function App() {
                   <option value="light">light</option>
                 </select>
               </div>
-
             </form>
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
@@ -1399,130 +1397,58 @@ function App() {
         </div>
       </div>
 
+
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Panel</h2>
+          <h2 className="card-title h5">Game timing</h2>
+          {scoreboard ? (
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
+              {(
+                [
+                  ['rotate_seconds', 'Seconds per game in rotation'],
+                  ['poll_seconds', 'Score poll interval (seconds)'],
+                  ['live_poll_seconds', 'Live score poll interval (seconds)'],
+                  ['shootout_poll_seconds', 'Shootout poll interval (seconds)'],
+                  ['countdown_hours', 'Countdown window before puck drop (hours)'],
+                  ['final_hold_minutes', 'Final score hold time (minutes)'],
+                  ['goal_flash_seconds', 'Goal celebration duration (seconds, 4–15)'],
+                  ['goal_detail_seconds', 'Goal detail duration (seconds)'],
+                  ['three_stars_seconds', 'Three stars duration (seconds)'],
+                  ['broadcast_delay_seconds', 'TV broadcast delay (seconds)'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`sb-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`sb-${key}`}
+                    type="number"
+                    step="any"
+                    {...(NUMBER_LIMITS[key] ?? {})}
+                    value={scoreboard[key]}
+                    onChange={(e) =>
+                      numberEdit(scoreboardSave, e, { ...scoreboard, [key]: Number(e.target.value) })
+                    }
+                    onBlur={scoreboardSave.flush}
+                  />
+                </div>
+              ))}
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Brightness</h2>
           {panel ? (
-            <form onSubmit={savePanel}>
-              <h3 className="h6 text-body-secondary mt-2">
-                Geometry <span className="badge text-bg-secondary fw-normal">restart required</span>
-              </h3>
-              {(
-                [
-                  ['rows', 'Rows per panel'],
-                  ['cols', 'Columns per panel'],
-                  ['chain_length', 'Chain length'],
-                  ['parallel', 'Parallel chains'],
-                ] as const
-              ).map(([key, label]) => (
-                <div className="mb-3" key={key}>
-                  <label className="form-label" htmlFor={`panel-${key}`}>
-                    {label}
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '10rem' }}
-                    id={`panel-${key}`}
-                    type="number"
-                    step="1"
-                    value={panel[key]}
-                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
-                  />
-                </div>
-              ))}
-
-              <h3 className="h6 text-body-secondary mt-4">
-                Driver / PWM <span className="badge text-bg-secondary fw-normal">restart required</span>
-              </h3>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="panel-hardware-mapping">
-                  Adapter board (hardware mapping)
-                </label>
-                <select
-                  className="form-select"
-                  style={{ width: 'auto' }}
-                  id="panel-hardware-mapping"
-                  value={panel.hardware_mapping}
-                  onChange={(e) => setPanel({ ...panel, hardware_mapping: e.target.value })}
-                >
-                  {/* Board names, not driver names (#172) -- same wording as
-                      config.py's PANEL_HARDWARE_MAPPING_LABELS on the setup page. */}
-                  <option value="regular">Standard HUB75 adapter (Seengreat, XICOOLEE, WatangTech)</option>
-                  <option value="adafruit-hat">Adafruit RGB Matrix Bonnet or HAT</option>
-                  <option value="adafruit-hat-pwm">
-                    Adafruit Bonnet or HAT with the GPIO4-GPIO18 solder mod
-                  </option>
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="panel-rgb-sequence">
-                  RGB sequence (colour wire order)
-                </label>
-                <select
-                  className="form-select"
-                  style={{ width: 'auto' }}
-                  id="panel-rgb-sequence"
-                  value={panel.rgb_sequence}
-                  onChange={(e) => setPanel({ ...panel, rgb_sequence: e.target.value })}
-                >
-                  {(['RGB', 'RBG', 'GRB', 'GBR', 'BRG', 'BGR'] as const).map((seq) => (
-                    <option key={seq} value={seq}>
-                      {seq}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {(
-                [
-                  ['gpio_slowdown', 'GPIO slowdown'],
-                  ['pwm_bits', 'PWM bits'],
-                  ['pwm_lsb_nanoseconds', 'PWM LSB nanoseconds'],
-                  ['limit_refresh_rate_hz', 'Refresh rate limit (Hz, 0 = unlimited)'],
-                ] as const
-              ).map(([key, label]) => (
-                <div className="mb-3" key={key}>
-                  <label className="form-label" htmlFor={`panel-${key}`}>
-                    {label}
-                  </label>
-                  <input
-                    className="form-control"
-                    style={{ maxWidth: '10rem' }}
-                    id={`panel-${key}`}
-                    type="number"
-                    step="1"
-                    value={panel[key]}
-                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
-                  />
-                </div>
-              ))}
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="panel-disable-hardware-pulsing"
-                  checked={panel.disable_hardware_pulsing}
-                  onChange={(e) =>
-                    setPanel({ ...panel, disable_hardware_pulsing: e.target.checked })
-                  }
-                />
-                <label className="form-check-label" htmlFor="panel-disable-hardware-pulsing">
-                  Disable hardware pulsing
-                </label>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="panel-pixel-mapper">
-                  Pixel mapper (blank for none)
-                </label>
-                <input
-                  className="form-control"
-                  id="panel-pixel-mapper"
-                  type="text"
-                  value={panel.pixel_mapper}
-                  onChange={(e) => setPanel({ ...panel, pixel_mapper: e.target.value })}
-                />
-              </div>
-
-              <h3 className="h6 text-body-secondary mt-4">Brightness</h3>
+            <form onSubmit={saveBrightness}>
               <div className="mb-3">
                 <label className="form-label" htmlFor="panel-brightness">
                   Brightness (1-100)
@@ -1590,14 +1516,9 @@ function App() {
                   }
                 />
               </div>
-
               <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={panelSaveStatus === 'saving'}
-                >
-                  Save Panel
+                <button type="submit" className="btn btn-primary" disabled={panelSaveStatus === 'saving'}>
+                  Save brightness
                 </button>
                 {saveFeedback(panelSaveStatus, panelSaveError)}
               </div>
@@ -1607,6 +1528,7 @@ function App() {
           )}
         </div>
       </div>
+
 
       </div>
       <div className="col-lg-6">
@@ -1945,108 +1867,6 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Status page</h2>
-          {status ? (
-            <form onSubmit={saveStatus}>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="status-enabled"
-                  checked={status.enabled}
-                  onChange={(e) => setStatus({ ...status, enabled: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="status-enabled">
-                  Status page enabled
-                </label>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="status-hostname">
-                  Board name
-                </label>
-                <div className="input-group" style={{ maxWidth: '24rem' }}>
-                  <input
-                    className="form-control"
-                    id="status-hostname"
-                    type="text"
-                    placeholder={status.board_name ?? 'scoreboard-xxxx'}
-                    value={status.hostname}
-                    onChange={(e) => setStatus({ ...status, hostname: e.target.value })}
-                  />
-                  <span className="input-group-text">.local</span>
-                </div>
-                <div className="form-text">
-                  {status.board_name ? (
-                    <>
-                      Open this page at{' '}
-                      <a href={`http://${status.board_name}.local`}>
-                        http://{status.board_name}.local
-                      </a>
-                      .{' '}
-                    </>
-                  ) : null}
-                  Letters, digits and hyphens only; leave empty to keep the default name.
-                </div>
-              </div>
-              <div className="form-check mb-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="status-local-alias"
-                  checked={status.local_alias}
-                  onChange={(e) => setStatus({ ...status, local_alias: e.target.checked })}
-                />
-                <label className="form-check-label" htmlFor="status-local-alias">
-                  Also answer to scoreboard.local (only if no other board already has it)
-                </label>
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="status-port">
-                  Status page port
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="status-port"
-                  type="number"
-                  step="1"
-                  value={status.port}
-                  onChange={(e) => setStatus({ ...status, port: Number(e.target.value) })}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label" htmlFor="status-alias-port">
-                  Second port (keeps old :8080 bookmarks working; 0 = off)
-                </label>
-                <input
-                  className="form-control"
-                  style={{ maxWidth: '10rem' }}
-                  id="status-alias-port"
-                  type="number"
-                  step="1"
-                  value={status.alias_port}
-                  onChange={(e) => setStatus({ ...status, alias_port: Number(e.target.value) })}
-                />
-              </div>
-              <div className="d-flex align-items-center gap-3">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={statusSaveStatus === 'saving'}
-                >
-                  Save Status page
-                </button>
-                {saveFeedback(statusSaveStatus, statusSaveError)}
-              </div>
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-body">
           <h2 className="card-title h5">Night mode</h2>
           {nightMode ? (
             <form onSubmit={flushOnSubmit(nightModeSave)}>
@@ -2161,6 +1981,295 @@ function App() {
                   }
                   onBlur={nightModeSave.flush}
                 />
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      </div>
+      </div>
+        </>
+      )}
+
+      {page === 'setup' && (
+        <>
+      <div className="row g-4">
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Panel</h2>
+          {panel ? (
+            <form onSubmit={savePanel}>
+              <h3 className="h6 text-body-secondary mt-2">
+                Geometry <span className="badge text-bg-secondary fw-normal">restart required</span>
+              </h3>
+              {(
+                [
+                  ['rows', 'Rows per panel'],
+                  ['cols', 'Columns per panel'],
+                  ['chain_length', 'Chain length'],
+                  ['parallel', 'Parallel chains'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`panel-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`panel-${key}`}
+                    type="number"
+                    step="1"
+                    value={panel[key]}
+                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+
+              <h3 className="h6 text-body-secondary mt-4">
+                Driver / PWM <span className="badge text-bg-secondary fw-normal">restart required</span>
+              </h3>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-hardware-mapping">
+                  Adapter board (hardware mapping)
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="panel-hardware-mapping"
+                  value={panel.hardware_mapping}
+                  onChange={(e) => setPanel({ ...panel, hardware_mapping: e.target.value })}
+                >
+                  {/* Board names, not driver names (#172) -- same wording as
+                      config.py's PANEL_HARDWARE_MAPPING_LABELS on the setup page. */}
+                  <option value="regular">Standard HUB75 adapter (Seengreat, XICOOLEE, WatangTech)</option>
+                  <option value="adafruit-hat">Adafruit RGB Matrix Bonnet or HAT</option>
+                  <option value="adafruit-hat-pwm">
+                    Adafruit Bonnet or HAT with the GPIO4-GPIO18 solder mod
+                  </option>
+                </select>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-rgb-sequence">
+                  RGB sequence (colour wire order)
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="panel-rgb-sequence"
+                  value={panel.rgb_sequence}
+                  onChange={(e) => setPanel({ ...panel, rgb_sequence: e.target.value })}
+                >
+                  {(['RGB', 'RBG', 'GRB', 'GBR', 'BRG', 'BGR'] as const).map((seq) => (
+                    <option key={seq} value={seq}>
+                      {seq}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(
+                [
+                  ['gpio_slowdown', 'GPIO slowdown'],
+                  ['pwm_bits', 'PWM bits'],
+                  ['pwm_lsb_nanoseconds', 'PWM LSB nanoseconds'],
+                  ['limit_refresh_rate_hz', 'Refresh rate limit (Hz, 0 = unlimited)'],
+                ] as const
+              ).map(([key, label]) => (
+                <div className="mb-3" key={key}>
+                  <label className="form-label" htmlFor={`panel-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ maxWidth: '10rem' }}
+                    id={`panel-${key}`}
+                    type="number"
+                    step="1"
+                    value={panel[key]}
+                    onChange={(e) => setPanel({ ...panel, [key]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="panel-disable-hardware-pulsing"
+                  checked={panel.disable_hardware_pulsing}
+                  onChange={(e) =>
+                    setPanel({ ...panel, disable_hardware_pulsing: e.target.checked })
+                  }
+                />
+                <label className="form-check-label" htmlFor="panel-disable-hardware-pulsing">
+                  Disable hardware pulsing
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="panel-pixel-mapper">
+                  Pixel mapper (blank for none)
+                </label>
+                <input
+                  className="form-control"
+                  id="panel-pixel-mapper"
+                  type="text"
+                  value={panel.pixel_mapper}
+                  onChange={(e) => setPanel({ ...panel, pixel_mapper: e.target.value })}
+                />
+              </div>
+
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={panelSaveStatus === 'saving'}
+                >
+                  Save Panel
+                </button>
+                {saveFeedback(panelSaveStatus, panelSaveError)}
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      </div>
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Time zone</h2>
+          {scoreboard ? (
+            <form onSubmit={flushOnSubmit(scoreboardSave)}>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="sb-timezone">
+                  Timezone
+                </label>
+                <select
+                  className="form-select"
+                  style={{ width: 'auto' }}
+                  id="sb-timezone"
+                  value={scoreboard.timezone}
+                  onChange={(e) => scoreboardSave.edit({ ...scoreboard, timezone: e.target.value })}
+                >
+                  {!US_TIMEZONES.some(([zone]) => zone === scoreboard.timezone) && (
+                    <option value={scoreboard.timezone}>{scoreboard.timezone}</option>
+                  )}
+                  {US_TIMEZONES.map(([zone, label]) => (
+                    <option key={zone} value={zone}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Status page</h2>
+          {status ? (
+            <form onSubmit={saveStatus}>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="status-enabled"
+                  checked={status.enabled}
+                  onChange={(e) => setStatus({ ...status, enabled: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="status-enabled">
+                  Status page enabled
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="status-hostname">
+                  Board name
+                </label>
+                <div className="input-group" style={{ maxWidth: '24rem' }}>
+                  <input
+                    className="form-control"
+                    id="status-hostname"
+                    type="text"
+                    placeholder={status.board_name ?? 'scoreboard-xxxx'}
+                    value={status.hostname}
+                    onChange={(e) => setStatus({ ...status, hostname: e.target.value })}
+                  />
+                  <span className="input-group-text">.local</span>
+                </div>
+                <div className="form-text">
+                  {status.board_name ? (
+                    <>
+                      Open this page at{' '}
+                      <a href={`http://${status.board_name}.local`}>
+                        http://{status.board_name}.local
+                      </a>
+                      .{' '}
+                    </>
+                  ) : null}
+                  Letters, digits and hyphens only; leave empty to keep the default name.
+                </div>
+              </div>
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="status-local-alias"
+                  checked={status.local_alias}
+                  onChange={(e) => setStatus({ ...status, local_alias: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="status-local-alias">
+                  Also answer to scoreboard.local (only if no other board already has it)
+                </label>
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="status-port">
+                  Status page port
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="status-port"
+                  type="number"
+                  step="1"
+                  value={status.port}
+                  onChange={(e) => setStatus({ ...status, port: Number(e.target.value) })}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="status-alias-port">
+                  Second port (keeps old :8080 bookmarks working; 0 = off)
+                </label>
+                <input
+                  className="form-control"
+                  style={{ maxWidth: '10rem' }}
+                  id="status-alias-port"
+                  type="number"
+                  step="1"
+                  value={status.alias_port}
+                  onChange={(e) => setStatus({ ...status, alias_port: Number(e.target.value) })}
+                />
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={statusSaveStatus === 'saving'}
+                >
+                  Save Status page
+                </button>
+                {saveFeedback(statusSaveStatus, statusSaveError)}
               </div>
             </form>
           ) : (
