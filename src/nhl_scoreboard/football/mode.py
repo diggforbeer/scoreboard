@@ -32,7 +32,7 @@ from .idle import (
 )
 from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
-from .stats import GameStats
+from .stats import PAGES, GameStats
 from .teams import is_team, team
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
@@ -61,6 +61,10 @@ KICKOFF_WINDOW = timedelta(minutes=20)
 
 #: Seconds each game stays up when more than one is on the rotation, if no settings are given.
 DEFAULT_ROTATE_SECONDS = 8.0
+#: The halftime rotation: how long its card is up each time round, and a page of the league's
+#: scores when ``[[football.rotation]] page_seconds`` is not set.
+HALFTIME_CARD_SECONDS = 8.0
+HALFTIME_PAGE_SECONDS = 6.0
 
 
 class FootballMode:
@@ -96,6 +100,9 @@ class FootballMode:
         #: pages shares its seconds between them, so the page is read off this. Render loop only.
         self._slot_fraction = 0.0
         self._final_since: dict[int, float] = {}
+        #: When each game's halftime was first seen (monotonic), so the halftime rotation starts on
+        #: its card and keeps its place. Render loop only.
+        self._halftime_since: dict[int, float] = {}
         #: The idle screens' data cache (#421): the feed worker's thread owns it.
         self._idle_cache = IdleCache(monotonic)
         self.worker = FeedWorker(
@@ -308,8 +315,73 @@ class FootballMode:
         self.director.ingest(snap)
         current = self.director.current(game.id)
         if current is None:
+            if resting == "fb_halftime":
+                return self._halftime_scene(game, games, snap, now, base)
+            self._halftime_since.pop(game.id, None)
             return base
         return self._play_scene(current, base)
+
+    # -- the halftime rotation -------------------------------------------------------
+
+    def _halftime_slots(
+        self, game: FbGame, games: Sequence[FbGame], snap: FeedSnapshot, now: float
+    ) -> list[tuple[str, float, Any]]:
+        """The halftime rotation as (kind, seconds, data): the card first, then the team stats
+        (both pages), then the scores around the league. A screen with nothing to show drops out."""
+        from .idle_screens import IdleContext
+        from .idle_views import WeekView, build_week, week_order
+
+        cfg = self._football() if self._football else _no_football()
+        slots: list[tuple[str, float, Any]] = [("fb_halftime", HALFTIME_CARD_SECONDS, None)]
+        if not self._wide():
+            return slots  # the stats and the grid are 128px screens
+        stats = self._stats_for(game.id)
+        if stats is not None:
+            slots.append(("stats", cfg.stats_seconds * len(PAGES), stats))
+        ctx = IdleContext(now, self._utc_now(), games, snap.idle, cfg)
+        week = build_week(ctx)
+        others = tuple(g for g in week.games if g.id != game.id) if week is not None else ()
+        if others:
+            view = WeekView(week_order(others))
+            slots.append(
+                ("fb_week", (cfg.page_seconds or HALFTIME_PAGE_SECONDS) * view.pages, view)
+            )
+        return slots
+
+    def _halftime_scene(
+        self, game: FbGame, games: Sequence[FbGame], snap: FeedSnapshot, now: float, base: Scene
+    ) -> Scene:
+        """Halftime is the longest dead air in the game: the card leads, then the team stats and
+        the league's scores take turns, round and round until play resumes."""
+        from ..app import Scene
+
+        since = self._halftime_since.setdefault(game.id, now)
+        slots = self._halftime_slots(game, games, snap, now)
+        if len(slots) == 1:
+            return base
+        total = sum(seconds for _, seconds, _ in slots)
+        at = (now - since) % total
+        for kind, seconds, data in slots:
+            if at >= seconds:
+                at -= seconds
+                continue
+            if kind == "fb_halftime":
+                return base
+            cfg = self._football() if self._football else _no_football()
+            if kind == "stats":
+                # Quantised to the page, so the scene only changes when the page does.
+                page_seconds = cfg.stats_seconds
+                return Scene(
+                    "fb_event",
+                    fb_game=game,
+                    fb_stage="stats",
+                    fb_stats=data,
+                    fb_elapsed=int(at // page_seconds) * page_seconds,
+                    fb_seconds=page_seconds,
+                )
+            page = min(int(at * data.pages / seconds), data.pages - 1)
+            return Scene("fb_week", fb_idle=data, fb_page=page)
+        return base
 
     # -- the idle selection (#422) -----------------------------------------------
 

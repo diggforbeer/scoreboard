@@ -1162,6 +1162,12 @@ stage is dropped when the queue is behind.
 | ![Halftime](docs/football/halftime.png) | |
 | `fb_halftime`: held from the end of the half until play resumes. | |
 
+**The halftime rotation.** Halftime is the longest dead air in a game, so the card does not sit alone. From the first frame of the half
+the board cycles until play resumes: the `HALFTIME` card (8s), then the team stats over both pages (`stats_seconds` each, the screen
+from the official timeout above), then the scores around the league (`fb_week`, the game at the half left out, `page_seconds` a page,
+6s if unset), then the card again. A screen with nothing to show (no stats from the feed yet, no other game on the slate) drops out of
+the cycle; on a 64px panel the card stays alone. The next play arriving ends the half's rotation like any other.
+
 **The coin toss** (#389; flipping, landed on the logo, the result):
 
 | | |
