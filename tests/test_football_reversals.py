@@ -16,7 +16,7 @@ from nhl_scoreboard.football import reversals as rv
 from nhl_scoreboard.football.events import EventDetector, Scope
 from nhl_scoreboard.football.queue import PlayWatcher
 from nhl_scoreboard.football.reversals import Reversal, ReversalDetector
-from test_football_events import detector, make_game, make_play, one
+from test_football_events import SCORING, detector, make_game, make_play, one
 from test_football_queue import Clock
 
 REVIEW_UPHELD = (
@@ -191,7 +191,7 @@ def test_a_made_field_goal_negated():
 
 
 def test_a_generic_score_is_reversible():
-    safety = make_play(1, "rush", score=(0, 2), off="WSH", ptype="Safety")
+    safety = make_play(1, "rush", score=(0, 2), off="WSH", ptype="Safety", flags=SCORING)
     _det, game, watcher, events = celebrate(safety)
     watcher.remember_all(events)
     reversal = one(watcher.on_poll(game, [make_play(1, "rush", score=(0, 0), off="WSH")]))
@@ -431,3 +431,20 @@ def test_the_event_and_the_reversal_are_immutable():
     with pytest.raises(dataclasses.FrozenInstanceError):
         reversal.reason = "x"  # type: ignore[misc]
     assert isinstance(_det, EventDetector)
+
+
+def test_a_touchdown_then_its_extra_point_total_on_the_kickoff_is_never_overturned(caplog):
+    """The 'SCORE OVERTURNED' after every touchdown: the touchdown is published at 6, rewritten
+    to 7 with the extra point, and the kickoff carries 7. Nothing here was reversed."""
+    det, game, _cfg = detector("NYG")
+    watcher = ReversalDetector(det)
+    td = make_play(1, "rush_td_pat", score=(0, 6), off="NYG")
+    events = det.on_plays(game, [td])
+    assert [type(e).__name__ for e in events] == ["Touchdown"]
+    watcher.remember_all(events)
+    kickoff = make_play(2, "rush", score=(0, 7), off="NYG")
+    rewritten = make_play(1, "rush_td_pat", score=(0, 7), off="NYG")
+    later = det.on_plays(game, [kickoff])
+    assert later == [], "the kickoff's catch-up is not a score"
+    assert watcher.remember_all(later) == []
+    assert watcher.on_poll(game, [rewritten, kickoff]) == []

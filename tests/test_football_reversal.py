@@ -39,7 +39,7 @@ PICK = reversed_play(
     make_play(1, "interception_return", off="WSH", end="NYG", flags={"isTurnover": False}),
 )
 SAFETY = reversed_play(
-    make_play(1, "rush", score=(0, 2), off="WSH", ptype="Safety"),
+    make_play(1, "rush", score=(0, 2), off="WSH", ptype="Safety", flags={"scoringPlay": True}),
     make_play(1, "rush", score=(0, 0), off="WSH"),
 )
 NO_TEXT = dataclasses.replace(TD, reason="PLAY CHANGED ON REVIEW", down_distance="")
