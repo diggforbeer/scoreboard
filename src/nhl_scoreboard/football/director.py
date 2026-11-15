@@ -30,6 +30,7 @@ its own story). The rules, from ``football_screen.md``:
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 from collections import deque
@@ -66,6 +67,10 @@ STATS_BREAKS = (PlayKind.OFFICIAL_TIMEOUT, PlayKind.TWO_MINUTE_WARNING)
 
 #: The stages a scene can be in (``Scene.fb_stage``).
 PLAY, PLAYTEXT, EVENT, DETAIL, REVERSAL = "play", "playtext", "event", "detail", "reversal"
+#: The longest a held stage stays up when no play follows (a stalled feed): an official timeout
+#: runs 2-3 minutes in real time.
+HOLD_CAP_SECONDS = 240.0
+
 #: The team stats shown over an official timeout or the two-minute warning.
 STATS = "stats"
 
@@ -85,7 +90,7 @@ class Timings:
     turnover: float = 4.0  #: ``fb_turnover_seconds``
     reversal: float = 5.0  #: ``fb_reversal_seconds``
     cointoss: float = 6.0  #: ``fb_cointoss_seconds``
-    stats: float = 12.0  #: ``fb_stats_seconds``: the split team stats over a TV timeout
+    stats: float = 6.0  #: ``fb_stats_seconds``: one page of the team stats over a TV timeout
 
     def clamped(self) -> Timings:
         def hold(value: float, low: float, high: float) -> float:
@@ -101,7 +106,7 @@ class Timings:
             turnover=hold(self.turnover, 2.0, 10.0),
             reversal=hold(self.reversal, 3.0, 15.0),
             cointoss=hold(self.cointoss, 4.0, 12.0),
-            stats=hold(self.stats, 4.0, 40.0),
+            stats=hold(self.stats, 3.0, 20.0),
         )
 
 
@@ -123,11 +128,14 @@ class Stage:
     people: tuple[Person, ...] = ()
     event: Event | None = None
     speed: float = 1.0
+    #: Stays up until the next play is waiting (``seconds`` is then one page's length), or
+    #: ``HOLD_CAP_SECONDS`` if the feed never delivers one.
+    hold: bool = False
 
     @property
     def duration(self) -> float:
         """Real seconds on screen."""
-        return self.seconds / self.speed
+        return HOLD_CAP_SECONDS if self.hold else self.seconds / self.speed
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +159,7 @@ class Director:
     ) -> None:
         #: ``stats(game_id)`` is the game's team stats, or None (none yet, or a panel too narrow).
         self._stats = stats
+        self._last_break: dict[int, tuple] = {}
         self._monotonic = monotonic
         self._timings = timings or Timings
         self.detector = EventDetector(football)
@@ -204,13 +213,20 @@ class Director:
         self.watcher.tick()
         if self._reversed:
             self._start_reversal(self._reversed.popleft(), now)
-        if self._active is not None and now - self._since >= self._active.duration:
+        if self._active is not None and (
+            now - self._since >= self._active.duration
+            or (self._active.hold and self._play_waiting())
+        ):
             self._active = None
         if self._active is None:
             self._start_next(preferred, now)
         if self._active is None:
             return None
         return Current(self._active, (now - self._since) * self._active.speed)
+
+    def _play_waiting(self) -> bool:
+        """A play has come in behind the one on screen, so a held stage gives way to it."""
+        return any(self.watcher.queue(g).depth > 0 for g in self._games)
 
     @property
     def busy(self) -> bool:
@@ -253,6 +269,12 @@ class Director:
     def _build(self, game: FbGame, shown: Shown) -> list[Stage]:
         timings = self._timings().clamped()
         play = shown.play
+        if play.kind in STATS_BREAKS:
+            # The feed often lists the same stoppage twice (same clock): show it once.
+            key = (play.kind, play.period, play.clock)
+            if self._last_break.get(game.id) == key:
+                return []
+            self._last_break[game.id] = key
         events = self.detector.on_shown(game, shown)
         already = self.reversals.remember_all(events)
         undone = {r.original.play.id for r in already}
@@ -291,7 +313,7 @@ class Director:
         if play.kind in STATS_BREAKS and self._stats(game.id) is not None:
             # A TV timeout: the split team stats take the screen instead of the sentence, which
             # only repeats the card just shown ("Official Timeout at 11:12.").
-            out.append(stage(STATS, timings.stats))
+            out.append(dataclasses.replace(stage(STATS, timings.stats), speed=1.0, hold=True))
             return out
         # Long sentences scroll, so they stay up longer than the 5s minimum (#379).
         out.append(stage(PLAYTEXT, playtext_seconds(play.text, timings.playtext)))

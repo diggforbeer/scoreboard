@@ -471,6 +471,11 @@ Checked live 2026-11-15 (JAX at TEN, second quarter). The site `summary` payload
 plays has `boxscore.teams[]`, one entry per side with `homeAway` and `statistics[]` of
 `{name, label, displayValue}` (strings). Keys the team stats screen reads: `totalYards`,
 `netPassingYards`, `rushingYards`, `yardsPerPlay`, `firstDowns`, `thirdDownEff` (`"4-5"`),
-`turnovers`, `totalPenaltiesYards` (`"1-0"`, count then yards), `totalOffensivePlays`,
+`turnovers`, `totalPenaltiesYards` (`"1-0"`, count then yards), `sacksYardsLost` (sacks the team
+took, then yards),
 `possessionTime` (padded: `" 6:51"`). `interceptions` is listed twice. Totals match the TV
 figures for the game in progress; how far they lag a play is not measured.
+
+**Timeouts in the plays feed** (4 games, 2026-11-15): from an `Official Timeout` play's `wallclock` to the
+next play is 2m15s-3m (the next play is a rush, pass or kickoff); from a team `Timeout` about 55s-1m15s.
+About a third of official timeouts are listed **twice** with the same `wallclock` and clock, as two plays.

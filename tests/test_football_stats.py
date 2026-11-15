@@ -143,6 +143,13 @@ def test_a_failed_plays_request_keeps_the_last_stats():
 # -- the director adds the stage -------------------------------------------------------------
 
 
+def run_to_next_play(rig, *plays):
+    """Poll ``plays`` (the break last) with the next play already behind it, and return what was
+    shown: the held stats stage gives way to that play at once."""
+    rig.poll(*plays, make_play(9, "rush", off="WSH"))
+    return rig.run()
+
+
 def rig_with(stats, *first):
     rig = started(*first)
     rig.director._stats = lambda _game_id: stats
@@ -152,18 +159,17 @@ def rig_with(stats, *first):
 @pytest.mark.parametrize("play", [OFFICIAL, WARNING])
 def test_a_tv_timeout_ends_on_the_team_stats_instead_of_the_sentence(play):
     rig = rig_with(DEMO_STATS, make_play(0, "rush", off="WSH"))
-    rig.poll(make_play(0, "rush", off="WSH"), play)
-    names = rig.names()
-    assert names == [dr.PLAY, dr.STATS]
+    names = [s.stage for s in run_to_next_play(rig, make_play(0, "rush", off="WSH"), play)]
+    assert names[:2] == [dr.PLAY, dr.STATS]
 
 
-def test_the_stats_stage_lasts_the_owners_length_and_is_clamped():
+def test_the_stats_page_length_is_the_owners_and_is_clamped():
     rig = rig_with(DEMO_STATS, make_play(0, "rush", off="WSH"))
-    rig.director._timings = lambda: dr.Timings(stats=20.0)
-    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL)
-    assert [s.seconds for s in rig.run() if s.stage == dr.STATS] == [20.0]
-    assert dr.Timings(stats=1.0).clamped().stats == 4.0
-    assert dr.Timings(stats=99.0).clamped().stats == 40.0
+    rig.director._timings = lambda: dr.Timings(stats=9.0)
+    stages = run_to_next_play(rig, make_play(0, "rush", off="WSH"), OFFICIAL)
+    assert [s.seconds for s in stages if s.stage == dr.STATS] == [9.0]
+    assert dr.Timings(stats=1.0).clamped().stats == 3.0
+    assert dr.Timings(stats=99.0).clamped().stats == 20.0
 
 
 def test_without_stats_the_play_text_still_follows_as_before():
@@ -184,9 +190,9 @@ def test_a_late_stats_fetch_is_read_when_the_play_is_built_not_when_it_arrives()
     holder = {}
     rig = started(make_play(0, "rush", off="WSH"))
     rig.director._stats = lambda game_id: holder.get(game_id)
-    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL)
     holder[rig.game.id] = DEMO_STATS
-    assert dr.STATS in [s.stage for s in rig.run()]
+    stages = run_to_next_play(rig, make_play(0, "rush", off="WSH"), OFFICIAL)
+    assert dr.STATS in [s.stage for s in stages]
 
 
 # -- the screen -----------------------------------------------------------------------------
@@ -195,7 +201,7 @@ def test_a_late_stats_fetch_is_read_when_the_play_is_built_not_when_it_arrives()
 def scene(share=0.0, stats=DEMO_STATS, game=None):
     return Scene(
         "fb_event", fb_game=game or make_game(), fb_play=OFFICIAL, fb_stage="stats",
-        fb_stats=stats, fb_elapsed=share * 12.0, fb_seconds=12.0, animating=True,
+        fb_stats=stats, fb_elapsed=share, fb_seconds=6.0, animating=True,
     )  # fmt: skip
 
 
@@ -214,31 +220,32 @@ def synthetic_logos(tmp_path):
     return LogoSet("football", "dark", libs)
 
 
-@pytest.mark.parametrize(("name", "share"), [("first", 0.1), ("second", 0.9)])
+@pytest.mark.parametrize(("name", "share"), [("first", 1.0), ("second", 7.0)])
 def test_each_page_snapshot(name, share, update_snapshots):
     check_snapshot(f"fb_stats_{name}", draw(share).render(), update_snapshots)
 
 
-def test_the_pages_share_the_stage_evenly_and_the_last_holds_the_remainder():
-    assert [fs.page_of(scene(s), 2) for s in (0.0, 0.49, 0.5, 0.99, 1.0, 3.0)] == [0, 0, 1, 1, 1, 1]
-    assert fs.page_of(Scene("fb_event", fb_seconds=0.0), 2) == 1  # no length: settled
+def test_pages_take_turns_for_as_long_as_the_stage_is_held():
+    seconds = [0.0, 5.9, 6.0, 11.9, 12.0, 100.0]
+    assert [fs.page_of(scene(s), 2) for s in seconds] == [0, 0, 1, 1, 0, 0]
+    assert fs.page_of(Scene("fb_event", fb_seconds=0.0), 2) == 0
 
 
 def test_the_leader_is_lit_in_team_colour_and_the_trailing_side_dims():
     # Page one: WSH ahead on every yardage row, tied on first downs (both stay lit).
-    canvas = draw(0.1)
+    canvas = draw(1.0)
     away, home = team_color("WSH"), team_color("NYG")
     assert canvas.colors(fs.LEFT_X, 0, fs.LEFT_X + 20, 31) == {away}
     assert canvas.colors(fs.RIGHT_X - 20, 0, fs.RIGHT_X, 31) == {fs.TRAILING, home}
     # Page two: NYG is behind on the third-down rate, and WSH has fewer penalties.
-    second = draw(0.9)
+    second = draw(7.0)
     assert fs.TRAILING in second.colors(fs.RIGHT_X - 20, 0, fs.RIGHT_X, 31)
     row = second.colors(fs.LEFT_X, 1, fs.LEFT_X + 20, 5)  # the 3rd-down row, WSH 4/5 vs NYG 1/5
     assert row == {away}
 
 
 def test_the_second_page_marks_its_dot_and_shows_the_other_rows():
-    first, second = draw(0.1), draw(0.9)
+    first, second = draw(1.0), draw(7.0)
     assert first.render() != second.render()
     lit = lambda c, x: c.pixels.get((x, 28)) == fs.LIT_DOT  # noqa: E731
     assert lit(first, 6) and not lit(first, 10)
@@ -246,18 +253,18 @@ def test_the_second_page_marks_its_dot_and_shows_the_other_rows():
 
 
 def test_everything_fits_and_the_text_stays_between_the_logos():
-    box = draw(0.1).bbox(16, 0, 111, 31)
+    box = draw(1.0).bbox(16, 0, 111, 31)
     assert box.x0 >= fs.LEFT_X and box.x1 <= fs.RIGHT_X
 
 
 def test_logos_sit_at_the_edges_when_there_are_some(tmp_path):
-    canvas = draw(0.1, logos=synthetic_logos(tmp_path))
+    canvas = draw(1.0, logos=synthetic_logos(tmp_path))
     assert canvas.lit(0, 8, 15, 23) and canvas.lit(112, 8, 127, 23)
     assert not canvas.lit(0, 0, 15, 7)
 
 
 def test_missing_stats_draw_nothing_rather_than_raise():
-    assert draw(0.1, stats=None).lit() == {}
+    assert draw(1.0, stats=None).lit() == {}
 
 
 def test_pages_are_five_rows_so_they_fit_the_panel():
@@ -302,3 +309,63 @@ def test_the_worker_side_keeps_the_stats_and_a_failed_read_keeps_the_last_good()
     assert mode._stats is before
     mode.stop()
     assert mode._stats == {}
+
+
+# -- held until play resumes ------------------------------------------------------------------
+
+
+def on_stats(rig, limit=2000):
+    """Advance until the stats are on screen; return the current stage."""
+    for _ in range(limit):
+        cur = rig.director.current(rig.game.id)
+        if cur is not None and cur.stage.stage == dr.STATS:
+            return cur
+        rig.clock.advance(0.25)
+    raise AssertionError("the stats never came up")
+
+
+def test_the_stats_stay_up_across_pages_until_the_next_play_arrives():
+    rig = rig_with(DEMO_STATS, make_play(0, "rush", off="WSH"))
+    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL)
+    on_stats(rig)
+    for _ in range(120):  # two minutes with no new play: still up
+        rig.clock.advance(1.0)
+        cur = rig.director.current(rig.game.id)
+        assert cur is not None and cur.stage.stage == dr.STATS
+    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL, make_play(2, "rush", off="WSH"))
+    rig.clock.advance(0.25)
+    cur = rig.director.current(rig.game.id)
+    assert cur is not None and cur.stage.stage == dr.PLAY  # the next play took the screen
+
+
+def test_a_feed_that_never_delivers_the_next_play_does_not_hold_the_stats_forever():
+    rig = rig_with(DEMO_STATS, make_play(0, "rush", off="WSH"))
+    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL)
+    on_stats(rig)
+    rig.clock.advance(dr.HOLD_CAP_SECONDS + 1)
+    assert rig.director.current(rig.game.id) is None
+
+
+def test_the_same_stoppage_listed_twice_is_shown_once():
+    twin = make_play(2, "official_timeout", off="NYG")
+    rig = rig_with(DEMO_STATS, make_play(0, "rush", off="WSH"))
+    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL, twin)
+    on_stats(rig)
+    rig.clock.advance(1.0)
+    rig.poll(make_play(0, "rush", off="WSH"), OFFICIAL, twin, make_play(3, "rush", off="WSH"))
+    seen = []
+    for _ in range(200):
+        cur = rig.director.current(rig.game.id)
+        if cur is None:
+            break
+        if not seen or seen[-1] is not cur.stage:
+            seen.append(cur.stage)
+        rig.clock.advance(0.25)
+    assert [s.stage for s in seen].count(dr.STATS) == 0  # no second stats screen for the twin
+
+
+def test_sacks_allowed_replaced_total_plays_and_fewer_is_ahead():
+    labels = [row.label for page in PAGES for row in page]
+    assert "SACKS ALLOWED" in labels and "TOTAL PLAYS" not in labels
+    row = next(r for page in PAGES for r in page if r.key == "sacksYardsLost")
+    assert stats("sacksYardsLost", "0-0", "2-14").leader(row) == "away"

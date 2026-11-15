@@ -1137,15 +1137,19 @@ two-minute warning in place of the play text):
 | | |
 |---|---|
 | ![Team stats, page one](docs/football/team_stats.png) | ![Team stats, page two](docs/football/team_stats_page2.png) |
-| Away on the left, home on the right: yards, passing, rushing, yards a play, first downs. | Third downs, turnovers, penalties, total plays, possession. |
+| Away on the left, home on the right: yards, passing, rushing, yards a play, first downs. | Third downs, turnovers, penalties, sacks allowed, possession. |
 
 Whoever is ahead on a row shows it in their team colour and the other side dims; a tie keeps both
-lit. The two pages share `stats_seconds` (12s, 4-40, "Team stats (official timeout)" on the admin
-page's Display tab) and a pair of dots under each logo says which is up. The numbers come from
+lit. The two pages take turns, `stats_seconds` each (6s, 3-20, "Team stats page (official timeout)" on the
+admin page's Display tab), with a pair of dots under each logo saying which is up. **The stage is held
+until the next play is waiting**, then the board goes back to the game (the feed lists the next play
+2-3 minutes after an official timeout; the board sees it a poll later, plus any broadcast delay), or
+after `HOLD_CAP_SECONDS` (4 minutes) if none comes. The feed often lists an official timeout twice with
+the same clock; the second is dropped. The numbers come from
 `boxscore.teams[].statistics` of the **same** site `summary` request the plays use, so showing them
-costs no request (`football/stats.py`, kept per game by `FootballMode`). 128px panels only. Team
-timeouts keep their 3s card and are not followed by the stats; like every stoppage the stage is
-dropped when the queue is behind.
+costs no request (`football/stats.py`, kept per game by `FootballMode`). 128px only. Team
+timeouts (about a minute) keep their 3s card and are not followed by the stats; like every stoppage the
+stage is dropped when the queue is behind.
 
 **The end of a quarter, the half and the game** (#388):
 

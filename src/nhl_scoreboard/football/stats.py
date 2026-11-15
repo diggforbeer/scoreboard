@@ -43,7 +43,7 @@ PAGES: tuple[tuple[StatRow, ...], ...] = (
         StatRow("thirdDownEff", "3RD DOWN", RATIO),
         StatRow("turnovers", "TURNOVERS", LOWER),
         StatRow("totalPenaltiesYards", "PENALTIES", LOWER),
-        StatRow("totalOffensivePlays", "TOTAL PLAYS"),
+        StatRow("sacksYardsLost", "SACKS ALLOWED", LOWER),
         StatRow("possessionTime", "POSSESSION"),
     ),
 )

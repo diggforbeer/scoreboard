@@ -35,9 +35,11 @@ LIT_DOT, UNLIT_DOT = WHITE, (45, 45, 45)
 
 
 def page_of(scene: Scene, pages: int) -> int:
-    """Which page is up: the stage's seconds shared evenly, the last page holding any remainder."""
-    share = 1.0 if scene.fb_seconds <= 0 else max(0.0, scene.fb_elapsed / scene.fb_seconds)
-    return min(int(share * pages), pages - 1)
+    """Which page is up: the stage's seconds are one page's length, and the pages keep taking
+    turns for as long as the stage is held."""
+    if scene.fb_seconds <= 0:
+        return 0
+    return int(max(0.0, scene.fb_elapsed) // scene.fb_seconds) % pages
 
 
 def _color(abbrev: str) -> tuple[int, int, int]:
