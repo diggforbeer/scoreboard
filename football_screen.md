@@ -1140,7 +1140,7 @@ two-minute warning in place of the play text):
 | Away on the left, home on the right: yards, passing, rushing, yards a play, first downs. | Third downs, turnovers, penalties, sacks allowed, possession. |
 
 Whoever is ahead on a row shows it in their team colour and the other side dims; a tie keeps both
-lit. The two pages take turns, `stats_seconds` each (6s, 3-20, "Team stats page (official timeout)" on the
+lit. The two pages take turns, `stats_seconds` each (12s, 3-40, "Team stats page (official timeout)" on the
 admin page's Display tab), with a pair of dots under each logo saying which is up. **The stage is held
 until the next play is waiting**, then the board goes back to the game (the feed lists the next play
 2-3 minutes after an official timeout; the board sees it a poll later, plus any broadcast delay), or
