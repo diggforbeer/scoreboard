@@ -628,6 +628,7 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "show_countdown": cfg.show_countdown,
             "show_bye": cfg.show_bye,
             "show_final": cfg.show_final,
+            "show_redzone": cfg.show_redzone,
         },
         "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_FOOTBALL_ROTATION],
         "screens": list(FOOTBALL_ROTATION_SCREENS),
@@ -1391,7 +1392,7 @@ _FOOTBALL_MINUTES = {"final_hold_minutes": (1.0, 720.0), "countdown_minutes": (1
 
 
 #: The screens football mode adds by itself, each switchable (#443).
-_FOOTBALL_TOGGLES = ("show_countdown", "show_bye", "show_final")
+_FOOTBALL_TOGGLES = ("show_countdown", "show_bye", "show_final", "show_redzone")
 
 
 def _coerce_football_rotation(data: object) -> dict[str, object]:

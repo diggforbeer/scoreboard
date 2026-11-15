@@ -356,3 +356,49 @@ def draw_fb_schedule(r: Renderer, canvas: Any, view: Any, now: datetime) -> None
         _marker(r, canvas, row.opponent, 78, y)
         r.text(canvas, font, 84, y, _team_ink(row.opponent, 1.0), row.opponent)
         r.text_right(canvas, font, r.width - 3, y, WHITE, schedule_time(row, r))
+
+
+# -- the red zone alert -------------------------------------------------------------------------
+
+#: How long one pulse of ``RED ZONE`` lasts (bright then dim), in seconds.
+RED_ZONE_PULSE = 1.0
+
+
+def redzone_side(game: FbGame) -> str:
+    """Which side has the ball in the red zone: ``away`` or ``home`` (``home`` if the feed does
+    not say, which only happens on a game the alert would not have been made for)."""
+    sit = game.situation
+    if sit is not None and sit.possession_team_id == game.away.espn_id:
+        return "away"
+    return "home"
+
+
+def draw_fb_redzone(r: Renderer, canvas: Any, game: FbGame, seconds: float) -> None:
+    """A team has driven inside the 20: both crests at the edges (the attacking team's bright, the
+    other's dimmed) with their scores beneath, ``RED ZONE`` pulsing over the down and distance in
+    the large face, and where the ball is under that. Drawn over the idle screens, 128px only.
+    """
+    canvas.Clear()
+    cx = r.width // 2
+    away, home = game.away, game.home
+    attacking = redzone_side(game)
+    for side, x, name in ((away, LEFT_X, "away"), (home, r.width - RIGHT_DX, "home")):
+        draw_side_logo(r, canvas, side.abbrev, x, dim=1.0 if name == attacking else 0.4)
+        r.text_center(
+            canvas, r.fonts.tiny, x, 31, WHITE if name == attacking else DIM, str(side.score)
+        )
+    pulse = (seconds % RED_ZONE_PULSE) < RED_ZONE_PULSE / 2
+    r.text_center(
+        canvas, r.fonts.tiny, cx, 7, RED_ZONE if pulse else _dimmed(RED_ZONE, 0.45), "RED ZONE"
+    )
+    sit = game.situation
+    down = sit.short_down_distance_text if sit is not None else ""
+    r.text_center(canvas, r.fonts.large, cx, 21, WHITE, down.upper() or "RED ZONE")
+    spot = (
+        f"{(away if attacking == 'away' else home).abbrev} BALL ON {sit.possession_text}"
+        if sit and sit.possession_text
+        else ""
+    )
+    spot = r._fit_text(r.fonts.tiny, spot.upper(), r.width - 58)
+    if spot:
+        r.text_center(canvas, r.fonts.tiny, cx, 31, _dimmed(WHITE, 0.62), spot)
