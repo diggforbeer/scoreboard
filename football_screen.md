@@ -1131,6 +1131,22 @@ test does the same. Nothing here touches `docs/screens/`.
 | ![Official](docs/football/timeout_official.png) | ![Two-minute warning](docs/football/timeout_two_minute.png) |
 | An official timeout: neutral, no team. | The two-minute warning: amber. |
 
+**Team stats over a TV timeout** (the `stats` stage of `fb_event`, shown after an official timeout or the
+two-minute warning in place of the play text):
+
+| | |
+|---|---|
+| ![Team stats, page one](docs/football/team_stats.png) | ![Team stats, page two](docs/football/team_stats_page2.png) |
+| Away on the left, home on the right: yards, passing, rushing, yards a play, first downs. | Third downs, turnovers, penalties, total plays, possession. |
+
+Whoever is ahead on a row shows it in their team colour and the other side dims; a tie keeps both
+lit. The two pages share `stats_seconds` (12s, 4-40, "Team stats (official timeout)" on the admin
+page's Display tab) and a pair of dots under each logo says which is up. The numbers come from
+`boxscore.teams[].statistics` of the **same** site `summary` request the plays use, so showing them
+costs no request (`football/stats.py`, kept per game by `FootballMode`). 128px panels only. Team
+timeouts keep their 3s card and are not followed by the stats; like every stoppage the stage is
+dropped when the queue is behind.
+
 **The end of a quarter, the half and the game** (#388):
 
 | | |
@@ -1511,6 +1527,7 @@ added later.
 - [x] Kickoff (#382) and punt (#383) animations (arc, return, fair catch, out of bounds, touchback)
 - [x] Incompletion (#384), sack (#385) and penalty (#386) animations, including a play wiped out by a penalty
 - [x] Timeout, official timeout, two-minute warning (#387), end-of-period, halftime and final cards (#388)
+- [x] Team stats over an official timeout or the two-minute warning (split table, two pages)
 - [x] Animation queue: ordering, double-speed catch-up, dropping stoppages first (#355;
       `football/queue.py`, with `--watch-football` to see it run and lag logged per play)
 - [x] Play-text layout and scrolling (#379)

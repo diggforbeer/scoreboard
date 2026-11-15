@@ -1743,6 +1743,7 @@ function App() {
                   ['turnover', 'Turnover'],
                   ['reversal', 'Reversal'],
                   ['cointoss', 'Coin toss'],
+                  ['stats', 'Team stats (official timeout)'],
                 ] as const
               ).map(([key, label]) => {
                 const range = footballTimingRanges[key]

@@ -464,3 +464,13 @@ off-season view: it returned the current regular-season week.
 **What this means.** A recap reads the three leaders of a final and colours each by `team.id`; round
 names come from the calendar; a `TBD` game is skipped until its teams are real; an empty day in
 January is a gap in a round, not the end of the season (the calendar says where in the year it is).
+
+## Team stats (`summary` -> `boxscore.teams[].statistics`)
+
+Checked live 2026-11-15 (JAX at TEN, second quarter). The site `summary` payload that already carries the
+plays has `boxscore.teams[]`, one entry per side with `homeAway` and `statistics[]` of
+`{name, label, displayValue}` (strings). Keys the team stats screen reads: `totalYards`,
+`netPassingYards`, `rushingYards`, `yardsPerPlay`, `firstDowns`, `thirdDownEff` (`"4-5"`),
+`turnovers`, `totalPenaltiesYards` (`"1-0"`, count then yards), `totalOffensivePlays`,
+`possessionTime` (padded: `" 6:51"`). `interceptions` is listed twice. Totals match the TV
+figures for the game in progress; how far they lag a play is not measured.

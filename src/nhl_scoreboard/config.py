@@ -365,6 +365,7 @@ FOOTBALL_TIMING_RANGES: dict[str, tuple[float, float, float]] = {
     "turnover": (4.0, 2.0, 10.0),
     "reversal": (5.0, 3.0, 15.0),
     "cointoss": (6.0, 4.0, 12.0),
+    "stats": (12.0, 4.0, 40.0),
 }
 #: What football mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
 DEFAULT_FOOTBALL_ROTATION: tuple[tuple[str, float], ...] = (
@@ -575,6 +576,7 @@ class FootballConfig:
     turnover_seconds: float = 4.0
     reversal_seconds: float = 5.0
     cointoss_seconds: float = 6.0
+    stats_seconds: float = 12.0
     show_countdown: bool = True
     show_bye: bool = True
     show_final: bool = True
