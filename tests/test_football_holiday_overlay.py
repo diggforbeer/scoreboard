@@ -198,10 +198,22 @@ def test_nhl_mode_colours_are_untouched():
     assert holiday.team_secondary_color("NSH") == holiday.nhl_team_secondary_color("NSH")
 
 
-def test_snapshots_of_each_overlay_over_an_football_screen(app, update_snapshots):  # noqa: F811
+def test_snapshots_of_each_overlay_over_an_football_screen(
+    app,  # noqa: F811
+    update_snapshots,
+    tmp_path,
+):
+    from football_logos import write_synthetic_football_logos
     from nhl_scoreboard.display.ascii import AsciiCanvas
+    from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
     from test_football_scenes import check_snapshot
 
+    # Hermetic: without this the preview draws whatever crests happen to be fetched into the
+    # git-ignored assets/logos/football (the abbreviations when there are none, as in CI), so a
+    # snapshot made on a machine with the art failed everywhere else.
+    base = write_synthetic_football_logos(tmp_path) / "football"
+    libs = {size: LogoLibrary([base / str(size) / "dark"], size) for size in (12, 16)}
+    app.renderer.football_logos = LogoSet("football", "dark", libs)
     with_holiday(app)
     cases = {
         "fb_holiday_thanksgiving_preview": Scene(
