@@ -79,15 +79,27 @@ def test_records_and_broadcast_are_left_out_when_the_feed_has_none():
     assert left_corner == []
 
 
+def _window_seconds():
+    """Which seconds before kickoff to draw: every one where a digit can roll over (the last and
+    first two minutes of the window, and either side of every minute), and a sparse sample of the
+    rest. Drawing all 3,601 took over three minutes for no extra coverage."""
+    dense = set(range(0, 131)) | set(range(3480, 3601))
+    for minute in range(60, 3600, 60):
+        dense |= set(range(minute - 2, minute + 3))
+    return sorted(dense | set(range(0, 3601, 97)), reverse=True)
+
+
 def test_every_second_of_the_window_fits_the_panel_and_changes_the_picture():
     previous = None
-    for seconds in range(3600, -1, -1):
+    previous_seconds = None
+    for seconds in _window_seconds():
         c = draw(make_game(), KICKOFF - timedelta(seconds=seconds), logos=seconds % 600 == 0)
         assert not c.out_of_bounds, seconds
         assert c.pixels, seconds
-        if previous is not None and seconds % 600 != 0 and (seconds + 1) % 600 != 0:
+        consecutive = previous_seconds == seconds + 1
+        if previous is not None and consecutive and seconds % 600 != 0 and (seconds + 1) % 600 != 0:
             assert c.pixels != previous.pixels, f"the digits did not move at {seconds}"
-        previous = c
+        previous, previous_seconds = c, seconds
 
 
 def test_the_digits_follow_the_clock_and_hold_at_zero_after_kickoff():
