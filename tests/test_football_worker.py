@@ -11,6 +11,7 @@ import json
 import logging
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -344,7 +345,11 @@ def settings_with(poll=60.0, live=15.0):
 
 def test_mode_polls_fast_while_live_and_slow_otherwise_never_below_the_feed_cache():
     cfg = [settings_with(poll=60, live=15)]
-    mode = FootballMode(lambda: cfg[0], client_factory=lambda: ScriptedClient(GAMES))
+    # A fixed clock well before the fixtures' kickoff: the real one makes today's games imminent.
+    long_before = lambda: datetime(2026, 10, 1, tzinfo=UTC)  # noqa: E731
+    mode = FootballMode(
+        lambda: cfg[0], client_factory=lambda: ScriptedClient(GAMES), utc_now=long_before
+    )
     live_snap = FeedSnapshot(games=tuple(GAMES))
     quiet_snap = FeedSnapshot(games=tuple(UPCOMING))
     assert mode._interval(live_snap) == 15.0

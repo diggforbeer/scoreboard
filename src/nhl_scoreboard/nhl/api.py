@@ -22,6 +22,7 @@ from .models import (
     ClubStats,
     Game,
     GoalEvent,
+    Penalty,
     PlayerSeasonDetail,
     SeasonSeriesRecord,
     Shootout,
@@ -29,6 +30,7 @@ from .models import (
     StandingsRow,
     Star,
     goal_events_from_landing,
+    penalties_from_landing,
     player_details_from_api,
     series_meetings_from_api,
     shootout_from_landing,
@@ -121,6 +123,18 @@ class NHLClient:
             return goal_events_from_landing(payload)
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             log.warning("Skipping malformed scoring for game %s: %s", game_id, exc)
+            return ()
+
+    def penalties(self, game_id: int) -> tuple[Penalty, ...]:
+        """Every penalty called so far in ``game_id`` (#340), fights collapsed.
+
+        A fourth reader of the shared landing payload (``_landing``, #263).
+        """
+        payload = self._landing(game_id)
+        try:
+            return penalties_from_landing(payload)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Skipping malformed penalties for game %s: %s", game_id, exc)
             return ()
 
     def team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
