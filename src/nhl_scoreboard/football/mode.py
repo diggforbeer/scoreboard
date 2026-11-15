@@ -297,7 +297,18 @@ class FootballMode:
         games = snap.games or ()
         idle_kind = self._idle_kind(games, snap, now)
         if idle_kind is not None:
-            return self._idle_scene(idle_kind, games, snap, now)
+            scene = self._idle_scene(idle_kind, games, snap, now)
+            if idle_kind in ("fb_countdown", "fb_final"):
+                # The favourite's countdown or final outranks a followed team's live game, but a
+                # followed team's score or turnover still breaks in over it.
+                mine = self._favourite_game(games)
+                self.director.ingest(snap)
+                current = self.director.current(mine.id if mine else None, hold=mine is not None)
+                if current is not None:
+                    return self._play_scene(
+                        current, Scene(resting_kind(current.stage.game), fb_game=current.stage.game)
+                    )
+            return scene
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
@@ -306,19 +317,32 @@ class FootballMode:
         resting = resting_kind(game)
         base = Scene(resting, fb_game=game)
         self.director.ingest(snap)
-        current = self.director.current(game.id)
+        # The favourite's live game holds the screen: a followed team's plays are not animated
+        # over it, only its scores and turnovers come through (``Director.current``). At the half
+        # there is nothing to hold, so the other games' plays are shown in full.
+        hold = self._is_favourite(game) and game.is_live and not game.is_halftime
+        current = self.director.current(game.id, hold=hold)
         if current is None:
             return base
         return self._play_scene(current, base)
+
+    def _favourite_game(self, games: Sequence[FbGame]) -> FbGame | None:
+        favourite = self._football().favourite_team if self._football else ""
+        return next((g for g in games if favourite and g.involves(favourite)), None)
+
+    def _is_favourite(self, game: FbGame) -> bool:
+        favourite = self._football().favourite_team if self._football else ""
+        return bool(favourite) and game.involves(favourite)
 
     # -- the idle selection (#422) -----------------------------------------------
 
     def _idle_kind(self, games: Sequence[FbGame], snap: FeedSnapshot, now: float) -> str | None:
         """The idle screen to show, or None to fall through to the game scenes.
 
-        In order: a live game (followed, or any when nobody is followed) always wins; the
-        favourite's game inside the kickoff window shows ``fb_countdown``; its final, within the
-        hold, ``fb_final``; then, with a favourite set, the idle rotation; an empty slate shows the
+        In order: the favourite's own live game always wins; its kickoff window shows
+        ``fb_countdown`` and its final, within the hold, ``fb_final``, even while a followed
+        team's game is live; then a live game of a followed team (or of anyone when nobody is
+        followed); then, with a favourite set, the idle rotation; an empty slate shows the
         rotation's clock (or ``fb_no_games``). 128px panels only: on 64px this returns None except
         for the empty slate's clock.
         """
@@ -333,14 +357,19 @@ class FootballMode:
             elif game.is_final and game.id in self._seen_live:
                 self._final_since.setdefault(game.id, now)
         playing = [g for g in games if g.is_live]
-        if any(any(g.involves(t) for t in followed) for g in playing) or (playing and not followed):
-            return None
+        favourite = cfg.favourite_team
+        mine = next((g for g in games if favourite and g.involves(favourite)), None)
+        if mine is not None and mine.is_live:
+            return None  # the favourite's own game always wins
+        # A followed team's (or, with nobody followed, any) live game takes the screen, but only
+        # after the favourite's countdown and final below: those keep their place.
+        others_live = any(any(g.involves(t) for t in followed) for g in playing) or (
+            bool(playing) and not followed
+        )
         wide = self._wide()
         if not wide:
-            return "clock" if not games and _has_clock(cfg) else None
-        favourite = cfg.favourite_team
+            return None if others_live else ("clock" if not games and _has_clock(cfg) else None)
         ctx = self._idle_context(games, snap, now, cfg)
-        mine = next((g for g in games if favourite and g.involves(favourite)), None)
         if (
             mine is not None
             and cfg.show_countdown
@@ -356,6 +385,8 @@ class FootballMode:
             and now - self._final_since.get(mine.id, -1e18) < cfg.final_hold_minutes * 60
         ):
             return "fb_final"
+        if others_live:
+            return None
         if favourite:
             slots = self._rotation(cfg, ctx, favourite)
             if slots:

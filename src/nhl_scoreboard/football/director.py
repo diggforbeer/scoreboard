@@ -172,6 +172,10 @@ class Director:
         self._stages: deque[Stage] = deque()
         self._active: Stage | None = None
         self._since = 0.0
+        #: Set by every ``current`` call: the game on screen, and whether it holds the screen
+        #: (the favourite's: see ``current``). Read by ``_build`` and ``_play_waiting``.
+        self._preferred: int | None = None
+        self._hold = False
 
     # -- input -----------------------------------------------------------------
 
@@ -204,12 +208,23 @@ class Director:
 
     # -- what is on screen -----------------------------------------------------------
 
-    def current(self, preferred: int | None = None) -> Current | None:
+    def current(self, preferred: int | None = None, hold: bool = False) -> Current | None:
         """The stage to draw now, advancing to the next when one ends; ``None`` when at rest.
 
         ``preferred`` is the game on screen: its plays go first, then any other watched game's.
+
+        ``hold`` says that game is the favourite's and outranks everything else (it is live, or
+        its countdown or final is up). Then:
+
+        * another game's plays are not animated; only its celebrations, turnover alerts and
+          reversals come through (a followed team's touchdown is never lost, but the favourite's
+          field is not taken over play by play);
+        * the favourite's waiting play goes ahead of another game's stages, which are kept and
+          shown after it; and
+        * a held stage (the team stats) gives way only to the favourite's own next play.
         """
         now = self._monotonic()
+        self._preferred, self._hold = preferred, hold
         self.watcher.tick()
         if self._reversed:
             self._start_reversal(self._reversed.popleft(), now)
@@ -218,6 +233,8 @@ class Director:
             or (self._active.hold and self._play_waiting())
         ):
             self._active = None
+        if hold and preferred is not None:
+            self._favourite_first(preferred)
         if self._active is None:
             self._start_next(preferred, now)
         if self._active is None:
@@ -225,8 +242,29 @@ class Director:
         return Current(self._active, (now - self._since) * self._active.speed)
 
     def _play_waiting(self) -> bool:
-        """A play has come in behind the one on screen, so a held stage gives way to it."""
+        """A play has come in behind the one on screen, so a held stage gives way to it. While
+        the favourite holds the screen only its own plays count: another game's would be mostly
+        dropped, and must not cut the favourite's held stage short."""
+        if self._hold and self._preferred in self._games:
+            return self.watcher.queue(self._preferred).depth > 0
         return any(self.watcher.queue(g).depth > 0 for g in self._games)
+
+    def _favourite_first(self, preferred: int) -> None:
+        """The favourite's play is waiting while another game's stages are up or queued: show the
+        favourite's first and keep the others for after it (a followed team's touchdown is late,
+        not lost). A reversal is never cut off."""
+        pending = ([self._active] if self._active is not None else []) + list(self._stages)
+        if not pending or pending[0].game.id == preferred or pending[0].stage == REVERSAL:
+            return
+        game = self._games.get(preferred)
+        if game is None or self.watcher.queue(preferred).depth == 0:
+            return
+        shown = self.watcher.next(preferred)
+        if shown is None:
+            return
+        self._active = None
+        self._stages = deque(self._build(game, shown))
+        self._stages.extend(pending)
 
     @property
     def busy(self) -> bool:
@@ -259,14 +297,38 @@ class Director:
         if game is None:
             return
         timings = self._timings().clamped()
-        self._stages.clear()
-        self._active = Stage(REVERSAL, timings.reversal, game, reversal.play, event=reversal)
-        self._since = now
+        stage = Stage(REVERSAL, timings.reversal, game, reversal.play, event=reversal)
+        # What the reversal undoes is its own game's: only that game's queued stages go. Another
+        # game's celebrations, queued behind them, are still owed to the board.
+        kept = [s for s in self._stages if s.game.id != reversal.game_id]
+        active = self._active
+        mine = active is None or active.game.id == reversal.game_id
+        # It preempts what is on screen, as ever, unless that is another game's and the reversal
+        # is not the favourite's: then it waits its turn instead of cutting a celebration off.
+        favourite_first = self._hold and reversal.game_id == self._preferred
+        if mine or favourite_first:
+            displaced = [] if mine else [active]
+            self._stages = deque([*displaced, *kept])
+            self._active, self._since = stage, now
+        else:
+            self._stages = deque([*kept, stage])  # after what is already queued: one chain
         log.info("[%s] reversal shown: %s (%s)", game.id, reversal.title, reversal.rule)
 
     # -- one play into stages ---------------------------------------------------------
 
     def _build(self, game: FbGame, shown: Shown) -> list[Stage]:
+        """The stages for a play; while the favourite holds the screen, another game's play is
+        reduced to what is news (its celebrations, turnover alerts and reversals)."""
+        stages = self._build_all(game, shown)
+        if self._hold and game.id != self._preferred:
+            stages = [
+                s
+                for s in stages
+                if s.stage in (EVENT, REVERSAL) and not isinstance(s.event, CoinToss)
+            ]
+        return stages
+
+    def _build_all(self, game: FbGame, shown: Shown) -> list[Stage]:
         timings = self._timings().clamped()
         play = shown.play
         if play.kind in STATS_BREAKS:
