@@ -77,7 +77,7 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   ```bash
   python3 -m venv .venv && source .venv/bin/activate   # skip if .venv already exists
   pip install -e '.[dev]'
-  pytest --cov --cov-report=term-missing   # plain `pytest` (no --cov) is fine too, just less CI-faithful
+  pytest -n auto --cov --cov-report=term-missing   # plain `pytest` (no --cov, no -n) is fine too, just less CI-faithful; `-n 4` runs the whole suite in under two minutes
   ruff check .
   ruff format --check .
   ```
