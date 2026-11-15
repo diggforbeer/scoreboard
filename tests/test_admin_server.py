@@ -21,6 +21,7 @@ from websockets.asyncio.server import serve
 from websockets.sync.client import connect as sync_connect
 
 from nhl_scoreboard import admin_server, updater
+from nhl_scoreboard.config import Settings
 
 
 @pytest.fixture
@@ -94,9 +95,9 @@ async def _serve_and_get(path):
         return await asyncio.to_thread(_get)
 
 
-async def _skip_initial(client, n=12):
+async def _skip_initial(client, n=14):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update/horn_list/snapshot/holiday messages every connection
+    rotation/update/horn_list/snapshot/holiday/football/football_rotation messages every connection
     opens with."""
     for _ in range(n):
         await client.recv()
@@ -623,6 +624,7 @@ def test_watcher_broadcasts_to_every_connected_client(
 
 
 _DEFAULT_SCOREBOARD_DATA = {
+    "sport": "nhl",
     "favourite_team": "NSH",
     "also_follow": [],
     "timezone": "America/Chicago",
@@ -756,6 +758,31 @@ def test_scoreboard_save_rejects_an_invalid_logo_variant(app_dir, config_path):
     message = json.loads(received)
     assert message["type"] == "error"
     assert "logo_variant" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_scoreboard_save_writes_the_sport(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "sport": "football"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] != "error"
+    assert 'sport = "football"' in config_path.read_text()
+
+
+def test_scoreboard_save_rejects_an_invalid_sport(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        data = {**_SCOREBOARD_SAVE_DATA, "sport": "cricket"}
+        await client.send(json.dumps({"type": "save", "section": "scoreboard", "data": data}))
+        return await client.recv()
+
+    message = json.loads(asyncio.run(_serve_and_run(scenario)))
+    assert message["type"] == "error"
+    assert "sport" in message["message"]
     assert config_path.read_text() == ""
 
 
@@ -1287,6 +1314,8 @@ def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch
                     await _skip_initial(client, n=10)  # up to but not including the first snapshot
                     first = json.loads(await client.recv())
                     await client.recv()  # holiday, sent after the snapshot
+                    await client.recv()  # football, sent after holiday
+                    await client.recv()  # football_rotation, sent after football
                     state["scene"] = "game"
                     second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
                     return first, second
@@ -1720,7 +1749,9 @@ def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
         await _skip_initial(client, n=9)  # up to but not including horn_list
         before = json.loads(await client.recv())  # horn_list
         await client.recv()  # snapshot
-        await client.recv()  # holiday, the 12th and last initial message
+        await client.recv()  # holiday
+        await client.recv()  # football, the 13th initial message
+        await client.recv()  # football_rotation, the 14th and last
         await client.send(json.dumps({"type": "upload_horn", "team": "NSH", "data": _wav_b64()}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1923,7 +1954,9 @@ def test_delete_horn_removes_the_file_and_broadcasts_the_updated_list(
         await _skip_initial(client, n=9)  # up to but not including horn_list
         before = json.loads(await client.recv())  # horn_list
         await client.recv()  # snapshot
-        await client.recv()  # holiday, the 12th and last initial message
+        await client.recv()  # holiday
+        await client.recv()  # football, the 13th initial message
+        await client.recv()  # football_rotation, the 14th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "NSH"}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1949,7 +1982,9 @@ def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_pat
         await _skip_initial(client, n=9)  # up to but not including horn_list
         await client.recv()  # the list with the override still present
         await client.recv()  # snapshot
-        await client.recv()  # holiday, the 12th and last initial message
+        await client.recv()  # holiday
+        await client.recv()  # football, the 13th initial message
+        await client.recv()  # football_rotation, the 14th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "default"}))
         return await client.recv()
 
@@ -2349,3 +2384,262 @@ def test_save_update_branch_rejects_a_path_like_name(app_dir, config_path):
     assert message["type"] == "error"
     assert "branch" in message["message"]
     assert config_path.read_text() == ""
+
+
+# -- [football]: Football favourite and followed teams (#348) ----------------------------
+
+
+async def _next(client, timeout=5):
+    """The next message, or a failure after ``timeout`` seconds instead of waiting forever."""
+    return json.loads(await asyncio.wait_for(client.recv(), timeout))
+
+
+async def _save_football(client, data):
+    await client.send(json.dumps({"type": "save", "section": "football", "data": data}))
+    return await _next(client)
+
+
+def test_sends_the_football_config_with_all_32_teams(app_dir, config_path):
+    config_path.write_text('[football]\nfavourite_team = "KC"\nalso_follow = ["NYG"]\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=12)  # everything before the last initial message
+        return await _next(client)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "config" and message["section"] == "football"
+    assert message["data"] == {"favourite_team": "KC", "also_follow": ["NYG"]}
+    available = message["available"]
+    assert len(available) == 32
+    assert {"abbrev": "NYG", "name": "New York Giants"} in available
+    assert {"abbrev": "KC", "name": "Kansas City Chiefs"} in available
+    names = [a["name"] for a in available]
+    assert names == sorted(names), "sorted for the dropdown"
+
+
+def test_saving_the_football_favourite_and_followed_teams_writes_the_football_section(
+    app_dir, config_path
+):
+    async def scenario(client):
+        await _skip_initial(client)
+        saved = await _save_football(
+            client, {"favourite_team": "kc", "also_follow": ["NYG", "WSH"]}
+        )
+        config = await _next(client)
+        return saved, config
+
+    saved, config = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "football"}
+    assert config["data"] == {"favourite_team": "KC", "also_follow": ["NYG", "WSH"]}
+    text = config_path.read_text()
+    assert "[football]" in text
+    reloaded = Settings.load(config_path)
+    assert reloaded.football.favourite_team == "KC"
+    assert reloaded.football.also_follow == ["NYG", "WSH"]
+
+
+def test_an_nhl_abbreviation_is_rejected_for_the_football_favourite_and_nothing_is_written(
+    app_dir, config_path
+):
+    async def scenario(client):
+        await _skip_initial(client)
+        return await _save_football(client, {"favourite_team": "NSH"})
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and message["section"] == "football"
+    assert "favourite_team" in message["message"] and "football" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_an_nhl_abbreviation_in_the_football_followed_list_is_rejected(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        return await _save_football(client, {"also_follow": ["KC", "TOR"]})
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and "also_follow" in message["message"]
+    assert config_path.read_text() == ""
+
+
+def test_an_empty_football_favourite_is_allowed_and_means_none(app_dir, config_path):
+    config_path.write_text('[football]\nfavourite_team = "KC"\n')
+
+    async def scenario(client):
+        await _skip_initial(client)
+        saved = await _save_football(client, {"favourite_team": ""})
+        return saved, await _next(client)
+
+    saved, config = asyncio.run(_serve_and_run(scenario))
+    assert saved["type"] == "saved" and config["data"]["favourite_team"] == ""
+
+
+def test_unknown_and_mistyped_football_fields_are_rejected(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client)
+        unknown = await _save_football(client, {"bogus": 1})
+        wrong = await _save_football(client, {"favourite_team": 7})
+        not_list = await _save_football(client, {"also_follow": "KC"})
+        return unknown, wrong, not_list
+
+    unknown, wrong, not_list = asyncio.run(_serve_and_run(scenario))
+    assert all(m["type"] == "error" for m in (unknown, wrong, not_list))
+    assert "bogus" in unknown["message"]
+    assert config_path.read_text() == ""
+
+
+def test_the_football_and_nhl_favourites_are_saved_independently(app_dir, config_path):
+    """BUF means Buffalo in both leagues but they are two different teams."""
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(
+            json.dumps({"type": "save", "section": "scoreboard", "data": {"favourite_team": "BUF"}})
+        )
+        await _next(client)
+        await _next(client)
+        await _save_football(client, {"favourite_team": "KC"})
+        await _next(client)
+
+    asyncio.run(_serve_and_run(scenario))
+    settings = Settings.load(config_path)
+    assert settings.scoreboard.favourite_team == "BUF" and settings.football.favourite_team == "KC"
+
+
+# -- [[football.rotation]]: Football idle rotation (#422) ---------------------------------
+
+
+async def _save_football_rotation(client, data):
+    message = {"type": "save", "section": "football_rotation", "data": data}
+    await client.send(json.dumps(message))
+    return await _next(client)
+
+
+def test_sends_the_football_rotation_last_with_the_defaults_and_screens(app_dir, config_path):
+    config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=13)
+        return await _next(client)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["section"] == "football_rotation"
+    assert message["data"] == {
+        "rotation": [],
+        "final_hold_minutes": 30.0,
+        "countdown_minutes": 60.0,
+        "page_seconds": 0.0,
+        "timings": {
+            "play": 3.0,
+            "playtext": 5.0,
+            "score": 6.0,
+            "score_detail": 8.0,
+            "quick": 4.0,
+            "fg_miss": 3.0,
+            "turnover": 4.0,
+            "reversal": 5.0,
+            "cointoss": 6.0,
+            "stats": 6.0,
+        },
+        "show_countdown": True,
+        "show_bye": True,
+        "show_final": True,
+    }
+    assert [d["screen"] for d in message["defaults"]] == [
+        "fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock",
+    ]  # fmt: skip
+    assert message["screens"] == ["fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock"]
+
+
+def test_saving_the_football_rotation_writes_football_rotation_tables(app_dir, config_path):
+    config_path.write_text('[football]\nfavourite_team = "NYG"\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        saved = await _save_football_rotation(
+            client,
+            {
+                "rotation": [
+                    {"screen": "fb_week", "seconds": 12},
+                    {"screen": "clock", "seconds": 4},
+                ],
+                "final_hold_minutes": 45,
+            },
+        )
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "football_rotation"}
+    assert echo["data"]["rotation"] == [
+        {"screen": "fb_week", "seconds": 12.0}, {"screen": "clock", "seconds": 4.0},
+    ]  # fmt: skip
+    assert "[[football.rotation]]" in config_path.read_text()
+    football = Settings.load(config_path).football
+    assert football.favourite_team == "NYG" and football.final_hold_minutes == 45.0
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"rotation": "fb_week"},
+        {"rotation": [{"screen": "scores_grid", "seconds": 5}]},
+        {"rotation": [{"screen": "fb_week", "seconds": 0}]},
+        {"rotation": [{"screen": "fb_week", "seconds": True}]},
+        {"rotation": [{"screen": "fb_week", "seconds": 5}] * 9},
+        {"final_hold_minutes": 0},
+        {"countdown_minutes": 99999},
+        {"final_hold_minutes": "soon"},
+        {"timings": {"play": 0.5}},
+        {"timings": {"score": 99}},
+        {"timings": {"bogus": 3}},
+        {"timings": {"play": "fast"}},
+        {"timings": [3]},
+        {"page_seconds": -1},
+        {"page_seconds": 61},
+        {"page_seconds": "slow"},
+        {"show_bye": "yes"},
+        {"show_final": 1},
+        "nope",
+    ],
+)
+def test_a_bad_football_rotation_save_is_rejected_and_writes_nothing(app_dir, config_path, data):
+    config_path.write_text("[football]\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        return await _save_football_rotation(client, data)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and message["section"] == "football_rotation"
+    assert "rotation" not in config_path.read_text()
+    assert Settings.load(config_path).football.final_hold_minutes == 60.0
+
+
+def test_the_football_screen_toggles_save_and_reload(app_dir, config_path):
+    config_path.write_text("[football]\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        saved = await _save_football_rotation(client, {"show_bye": False, "show_countdown": False})
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved["type"] == "saved"
+    assert echo["data"]["show_bye"] is False and echo["data"]["show_final"] is True
+    football = Settings.load(config_path).football
+    assert (football.show_bye, football.show_countdown, football.show_final) == (False, False, True)
+
+
+def test_the_football_screen_lengths_save_to_the_football_section(app_dir, config_path):
+    config_path.write_text("[football]\n")
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        saved = await _save_football_rotation(client, {"timings": {"score": 10, "play": 2.5}})
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved["type"] == "saved"
+    assert echo["data"]["timings"]["score"] == 10.0 and echo["data"]["timings"]["play"] == 2.5
+    assert echo["timing_ranges"]["score"] == [6.0, 4.0, 15.0]
+    football = Settings.load(config_path).football
+    assert (football.score_seconds, football.play_seconds) == (10.0, 2.5)

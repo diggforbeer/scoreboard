@@ -140,6 +140,7 @@ nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
 # ~4s each, until Ctrl-C -- also works on the real panel with no network
 nhl-scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
+# (with sport = "football" in the config it loops the football screens instead; never any sound)
 
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team NSH
@@ -432,6 +433,11 @@ Logos come from `assets.nhle.com`, the same source the NHL's score API links
 per team. `scripts/fetch-logos.py` downloads the SVGs and rasterises them to
 32×32 PNGs; CI runs it before every image build. The PNGs are git-ignored, so
 this repository never redistributes the artwork.
+
+Football mode (the `football` branch) has its own logos, fetched the same way from ESPN's team list:
+`scripts/fetch-logos.py --sport football` writes 12px (for the end zones) and 16px PNGs under
+`assets/logos/football/`, also git-ignored. They are kept apart from the NHL art because abbreviations
+such as `BUF`, `CAR`, `DAL`, `DET` and `MIN` are different teams in each league.
 
 ## Licence
 

@@ -17,3 +17,7 @@ section{padding:2.5rem 0;border-top:1px solid #1d2230}
 img{max-width:100%;height:auto;border-radius:.5rem}
 ol,ul{padding-left:1.25rem}
 footer{padding:2rem 0;color:var(--mute);font-size:.9rem;border-top:1px solid #1d2230}
+.shots{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));margin-top:1.5rem}
+figure{margin:0}
+figcaption{color:var(--mute);font-size:.9rem;margin-top:.3rem}
+.shots img{width:100%;image-rendering:pixelated}
