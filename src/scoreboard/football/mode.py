@@ -120,9 +120,9 @@ class FootballMode:
         self._core_sync = CoreSync()
         #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
         self.redzone = RedZoneWatcher(monotonic)
-        #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here so a
-        #: sport switch, which builds a fresh mode, starts with none. The feed worker's thread
-        #: owns it: it must not be used from the render loop.
+        #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here, so
+        #: it lives as long as the mode and survives the board switching sport back and forth. The
+        #: feed worker's thread owns it: it must not be used from the render loop.
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
 
