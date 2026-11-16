@@ -52,7 +52,7 @@ concurrency:
 env:
   # Pinned so image builds stay reproducible; bump deliberately.
   RPI_IMAGE_GEN_REF: 85e55c8059cc170f4a96cd0290ecf473520cbfec
-  IMAGE_NAME: scoreboard
+  IMAGE_NAME: hockey-scoreboard
 
 jobs:
   # Only gates whether `build` runs *for a pull_request event*; every other
@@ -82,7 +82,7 @@ jobs:
           fi
 
   build:
-    name: scoreboard.img
+    name: hockey-scoreboard.img
     needs: [changes]
     # needs: on a job that's conditionally skipped (github.event_name !=
     # 'pull_request', so `changes` never ran) would by default skip this
@@ -151,7 +151,7 @@ jobs:
           path: scoreboard/assets/logos/32
           key: >-
             logos-32-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
-            'scoreboard/src/scoreboard/display/teams.py') }}
+            'scoreboard/src/hockey_scoreboard/display/teams.py') }}
 
       - name: Rasterise team logos
         if: steps.logo-cache.outputs.cache-hit != 'true'
@@ -175,7 +175,7 @@ jobs:
             scoreboard/assets/logos/football/16
           key: >-
             logos-football-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
-            'scoreboard/src/scoreboard/football/teams.py') }}
+            'scoreboard/src/hockey_scoreboard/football/teams.py') }}
 
       - name: Rasterise football logos
         id: football-logos
@@ -195,7 +195,7 @@ jobs:
             scoreboard/assets/logos/football/16
           key: >-
             logos-football-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
-            'scoreboard/src/scoreboard/football/teams.py') }}
+            'scoreboard/src/hockey_scoreboard/football/teams.py') }}
 
       - name: Warn that the football logos could not be fetched
         if: steps.football-logos.outcome == 'failure'
@@ -222,7 +222,7 @@ jobs:
         working-directory: rpi-image-gen
         run: |
           ./rpi-image-gen metadata --lint \
-            "${GITHUB_WORKSPACE}/scoreboard/image/layer/scoreboard.yaml"
+            "${GITHUB_WORKSPACE}/scoreboard/image/layer/hockey-scoreboard.yaml"
 
       - name: Show discovered layers
         working-directory: rpi-image-gen
@@ -301,7 +301,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          # Match the release tag exactly (e.g. scoreboard-v2026.09.26.9.img)
+          # Match the release tag exactly (e.g. hockey-scoreboard-v2026.09.26.9.img)
           # when this run was triggered from one, so the filename and the
           # release it's attached to are trivially comparable at a glance --
           # no cross-referencing a commit SHA against the release notes.
@@ -332,7 +332,7 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-      # Feeds the on-device auto-updater (#32): scoreboard.updater's
+      # Feeds the on-device auto-updater (#32): hockey_scoreboard.updater's
       # check() looks for exactly these two asset names on the latest
       # release (BUNDLE_ASSET/MANIFEST_ASSET) and shows "This release has
       # no app bundle (reflash to update)" on the admin page when they're
@@ -351,7 +351,7 @@ jobs:
         with:
           files: |
             deploy/*.xz
-            scoreboard/dist/scoreboard-app.tar.gz
+            scoreboard/dist/hockey-scoreboard-app.tar.gz
             scoreboard/dist/manifest.json
             deploy/*.sha256
           # append_body, not body-replaces-body: release.yml's `gh release
