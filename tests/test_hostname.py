@@ -29,20 +29,22 @@ def test_normalise_lowercases_and_drops_dot_local():
 def test_apply_hostname_writes_files_and_restarts_avahi(tmp_path):
     hostname, hosts, state = tmp_path / "hostname", tmp_path / "hosts", tmp_path / "s" / "chosen"
     hosts.write_text("127.0.0.1\tlocalhost\n127.0.1.1\told\n")
-    calls = []
+    calls, live = [], []
     ok = apply_hostname(
         "kitchen",
         hostname_file=hostname,
         hosts_file=hosts,
         state_file=state,
         run=lambda cmd, **kw: calls.append(cmd),
+        set_hostname=live.append,
     )
     assert ok
+    assert live == ["kitchen"], "the kernel's name is set by syscall"
+    assert calls == [["systemctl", "restart", "avahi-daemon.service"]], "no command takes the name"
     assert hostname.read_text() == "kitchen\n"
     assert "127.0.1.1\tkitchen" in hosts.read_text()
     assert "old" not in hosts.read_text()
     assert state.read_text() == "kitchen\n"
-    assert ["systemctl", "restart", "avahi-daemon.service"] in calls
 
 
 def test_apply_hostname_failure_is_not_fatal(tmp_path):
@@ -52,8 +54,51 @@ def test_apply_hostname_failure_is_not_fatal(tmp_path):
         hosts_file=tmp_path / "hosts",
         state_file=tmp_path / "state",
         run=lambda cmd, **kw: None,
+        set_hostname=lambda name: None,
     )
     assert not ok
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", "-h", "--version", "a b", "kitchen\n127.0.0.1\tevil", "a\tb", "x" * 64, "a;reboot", "a.b"],
+)
+def test_apply_hostname_refuses_anything_but_a_single_label(tmp_path, name):
+    """The name goes into /etc/hostname and /etc/hosts, so a bad one must touch nothing."""
+    hostname, hosts, state = tmp_path / "hostname", tmp_path / "hosts", tmp_path / "state"
+    hosts.write_text("127.0.0.1\tlocalhost\n")
+    calls, live = [], []
+    ok = apply_hostname(
+        name,
+        hostname_file=hostname,
+        hosts_file=hosts,
+        state_file=state,
+        run=lambda cmd, **kw: calls.append(cmd),
+        set_hostname=live.append,
+    )
+    assert not ok
+    assert calls == [] and live == []
+    assert not hostname.exists() and not state.exists()
+    assert hosts.read_text() == "127.0.0.1\tlocalhost\n"
+
+
+def test_a_failed_live_rename_still_announces_the_name(tmp_path):
+    """Setting the kernel name needs root; without it the files and avahi still update."""
+
+    def denied(name):
+        raise PermissionError("not root")
+
+    calls = []
+    ok = apply_hostname(
+        "kitchen",
+        hostname_file=tmp_path / "hostname",
+        hosts_file=tmp_path / "hosts",
+        state_file=tmp_path / "state",
+        run=lambda cmd, **kw: calls.append(cmd),
+        set_hostname=denied,
+    )
+    assert ok
+    assert calls == [["systemctl", "restart", "avahi-daemon.service"]]
 
 
 class FakeProc:

@@ -181,3 +181,39 @@ def test_demo_goes_through_the_matrix_backend_path_and_runs_the_demo_loop(monkey
     assert cli.main(argv) == 0
 
     assert calls == [("init", "backend:RGBMatrixEmulator"), "signals", "run_demo"]
+
+
+def test_a_real_run_fetches_on_a_worker_thread_but_the_demo_does_not(monkeypatch, tmp_path):
+    # #267: only the real entry point installs the threaded fetcher; the demo
+    # fetches nothing, and every test keeps the synchronous default.
+    from scoreboard.fetcher import ThreadedFetcher
+
+    made = []
+
+    class FakeApp:
+        def __init__(self, settings, backend=None, **kwargs):
+            made.append(kwargs)
+
+        def install_signal_handlers(self):
+            pass
+
+        def run_demo(self):
+            pass
+
+        def run(self):
+            pass
+
+    fake_app = types.ModuleType("scoreboard.app")
+    fake_app.ScoreboardApp = FakeApp
+    fake_matrix = types.ModuleType("scoreboard.display.matrix")
+    fake_matrix.load_backend = lambda name=None: f"backend:{name}"
+    monkeypatch.setitem(sys.modules, "scoreboard.app", fake_app)
+    monkeypatch.setitem(sys.modules, "scoreboard.display.matrix", fake_matrix)
+
+    config = ["-c", str(tmp_path / "absent.toml")]
+    assert cli.main(config) == 0
+    assert cli.main(["--demo", *config]) == 0
+
+    real, demo = made
+    assert isinstance(real["fetcher"], ThreadedFetcher)
+    assert "fetcher" not in demo

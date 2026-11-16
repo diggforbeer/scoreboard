@@ -81,9 +81,16 @@ def main(argv: list[str] | None = None) -> int:
     # Imported lazily so --dump works on a machine with no matrix backend.
     from .app import ScoreboardApp
     from .display.matrix import load_backend
+    from .fetcher import ThreadedFetcher
     from .hostname import AliasPublisher
 
-    app = ScoreboardApp(settings, backend=load_backend(args.backend))
+    # The real board fetches on a worker thread so a slow API never freezes the
+    # panel (#267); the demo fetches nothing, and tests keep the inline default.
+    backend = load_backend(args.backend)
+    if args.demo:
+        app = ScoreboardApp(settings, backend=backend)
+    else:
+        app = ScoreboardApp(settings, backend=backend, fetcher=ThreadedFetcher())
     if not args.demo:
         app.alias_publisher = AliasPublisher()
     app.install_signal_handlers()

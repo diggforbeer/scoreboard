@@ -52,6 +52,7 @@ from .display.logos import LogoLibrary, LogoSet
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
+from .fetcher import SLOW_FETCH_SECONDS, InlineFetcher, ThreadedFetcher
 from .football.events import Event as FbEvent
 from .football.mode import FootballMode
 from .football.models import FbGame, Play
@@ -60,6 +61,7 @@ from .hockey.api import HockeyApiError, HockeyClient
 from .hockey.models import (
     DIVISION_SPOTS,
     WILDCARD_SPOTS,
+    ClubStats,
     Game,
     GoalEvent,
     MeetingResult,
@@ -333,8 +335,13 @@ class ScoreboardApp:
         hostname_lookup: Callable[[], str] | None = None,
         alias_publisher: AliasPublisher | None = None,
         football_client_factory: Callable[[], Any] | None = None,
+        fetcher: InlineFetcher | ThreadedFetcher | None = None,
     ) -> None:
         self.settings = settings
+        #: Where hockey requests run (#267). Inline by default, so tests and the demo
+        #: fetch and apply in one call; the real entry point passes a ThreadedFetcher
+        #: so a slow API never stops the render loop.
+        self.fetcher = fetcher or InlineFetcher()
         self._hostname_lookup = hostname_lookup or current_hostname
         #: None = never publish ``scoreboard.local`` (tests, the demo); the
         #: real entry point passes one (#292).
@@ -645,6 +652,7 @@ class ScoreboardApp:
             now = self.monotonic()
             self.reload_config_if_changed()
             self.handle_button()
+            self.fetcher.drain()
             if self._poll_asap:
                 self._poll_asap = False
                 next_poll = 0.0
@@ -853,6 +861,7 @@ class ScoreboardApp:
                 self.button.close()
             self.matrix.Clear()
         finally:
+            self.fetcher.close()
             self.client.close()
         log.info("Scoreboard stopped")
 
@@ -949,11 +958,13 @@ class ScoreboardApp:
         if self._football is not None:
             self._football.refresh()
             return
-        try:
-            games = self.client.scores()
-        except HockeyApiError as exc:
-            log.warning("Score refresh failed: %s", exc)
-            self._record_error(f"score refresh: {exc}", from_scores=True)
+        self.fetcher.submit("scores", self.client.scores, self._on_scores)
+
+    def _on_scores(self, games: list[Game] | None, error: Exception | None) -> None:
+        """A score fetch finished (on the render thread): apply it, or record the failure."""
+        if error is not None or games is None:
+            log.warning("Score refresh failed: %s", error)
+            self._record_error(f"score refresh: {error}", from_scores=True)
             return
         self._latest_games = self.order(games)
         self.last_success = self.monotonic()
@@ -1480,15 +1491,54 @@ class ScoreboardApp:
         if game.in_intermission:
             self._goal_events[game.id] = (now, events)
             return
-        try:
-            all_events = self.client.goal_scoring(game.id)
-        except HockeyApiError as exc:
-            log.debug("Goal scoring fetch for %s failed: %s", game.id, exc)
-            all_events = events
+        self.fetcher.submit(
+            ("goal_detail", game.id),
+            lambda i=game.id, t=tuple(teams): self._fetch_goal_events(i, t),
+            lambda r, e, i=game.id, t=now, tm=tuple(teams): self._on_goal_events(i, t, tm, r, e),
+        )
+
+    def _fetch_goal_events(
+        self, game_id: int, teams: tuple[str, ...]
+    ) -> tuple[tuple[GoalEvent, ...], dict[str, dict[int, PlayerSeasonDetail]]]:
+        """Worker thread: the scoring array, plus the roster a new goal will need (#124).
+
+        The roster is fetched here, not when the scorer screen builds, so that
+        screen never waits on the network. Still lazy, as before: only when a
+        goal beyond the ones already shown has appeared, and only if that
+        team's cached roster is missing or stale. Reads the app's caches
+        without writing them; ``_on_goal_events`` stores the result.
+        """
+        all_events = self.client.goal_scoring(game_id)
         team_events = tuple(e for e in all_events if e.team_abbrev in teams)
-        self._goal_events[game.id] = (now, team_events)
+        rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
+        shown = self._shown_goal_events.get(game_id)
+        if shown is not None:
+            for event in team_events[shown : shown + 1]:
+                if not self._roster_fresh(event.team_abbrev):
+                    try:
+                        rosters[event.team_abbrev] = self.client.team_roster(event.team_abbrev)
+                    except HockeyApiError as exc:
+                        log.debug("Roster fetch for %s failed: %s", event.team_abbrev, exc)
+        return team_events, rosters
+
+    def _on_goal_events(
+        self,
+        game_id: int,
+        fetched_at: float,
+        teams: tuple[str, ...],
+        result: tuple[tuple[GoalEvent, ...], dict[str, dict[int, PlayerSeasonDetail]]] | None,
+        error: Exception | None,
+    ) -> None:
+        if error is not None or result is None:
+            log.debug("Goal scoring fetch for %s failed: %s", game_id, error)
+            team_events = self._goal_events.get(game_id, (None, ()))[1]
+        else:
+            team_events, rosters = result
+            for team, roster in rosters.items():
+                self._team_rosters[team] = (fetched_at, roster)
+        self._goal_events[game_id] = (fetched_at, team_events)
         self._submit(
-            ("goal_detail", game.id), lambda: self._detect_goal_detail(game.id, team_events)
+            ("goal_detail", game_id), lambda: self._detect_goal_detail(game_id, team_events)
         )
 
     def _detect_goal_detail(self, game_id: int, events: tuple[GoalEvent, ...]) -> None:
@@ -1513,26 +1563,20 @@ class ScoreboardApp:
                 self._enrich_goal_detail(events[previous]),
             )
 
-    def _team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
-        """Jersey number + season points for ``team``, cached (#124).
+    def _roster_fresh(self, team: str) -> bool:
+        fetched_at = self._team_rosters.get(team, (None, {}))[0]
+        return fetched_at is not None and self.monotonic() - fetched_at < ROSTER_TTL_SECONDS
 
-        Fetched lazily -- only once a goal-detail screen for that team is
-        actually about to show, not proactively for every team on the
-        schedule. A failed fetch keeps whatever was cached before (possibly
-        still nothing) rather than clearing it, same precedent as
-        ``next_favourite_game``/``conference_standings``.
+    def _team_roster(self, team: str) -> dict[int, PlayerSeasonDetail]:
+        """Jersey number + season points for ``team``, from the cache only (#124).
+
+        Never fetches: ``_fetch_goal_events`` fetches the roster on the worker,
+        lazily -- only once a new goal for that team has appeared, not
+        proactively for every team on the schedule -- and a failed fetch
+        leaves whatever was cached before (possibly still nothing), same
+        precedent as ``next_favourite_game``/``conference_standings``.
         """
-        now = self.monotonic()
-        fetched_at, roster = self._team_rosters.get(team, (None, {}))
-        if fetched_at is not None and now - fetched_at < ROSTER_TTL_SECONDS:
-            return roster
-        try:
-            roster = self.client.team_roster(team)
-        except HockeyApiError as exc:
-            log.debug("Roster fetch for %s failed: %s", team, exc)
-            return roster
-        self._team_rosters[team] = (now, roster)
-        return roster
+        return self._team_rosters.get(team, (None, {}))[1]
 
     def _enrich_goal_detail(self, event: GoalEvent) -> GoalEvent:
         """Fill in scorer_sweater_number/scorer_points, if the roster fetch works out.
@@ -1572,14 +1616,19 @@ class ScoreboardApp:
             self._penalty_fetched[game.id] = now
             if game.in_intermission or game.in_shootout:
                 continue
-            try:
-                penalties = self.client.penalties(game.id)
-            except HockeyApiError as exc:
-                log.debug("Penalty fetch for %s failed: %s", game.id, exc)
-                continue
-            self._submit(
-                ("penalty", game.id), lambda g=game.id, p=penalties: self._detect_penalties(g, p)
+            self.fetcher.submit(
+                ("penalty", game.id),
+                lambda i=game.id: self.client.penalties(i),
+                lambda p, e, i=game.id: self._on_penalties(i, p, e),
             )
+
+    def _on_penalties(
+        self, game_id: int, penalties: tuple[Penalty, ...] | None, error: Exception | None
+    ) -> None:
+        if error is not None or penalties is None:
+            log.debug("Penalty fetch for %s failed: %s", game_id, error)
+            return
+        self._submit(("penalty", game_id), lambda: self._detect_penalties(game_id, penalties))
 
     def _detect_penalties(self, game_id: int, penalties: tuple[Penalty, ...]) -> None:
         """Announce the newest penalty not seen before, once.
@@ -1652,16 +1701,25 @@ class ScoreboardApp:
             if tried_at is not None and now - tried_at < interval:
                 continue
             self._three_stars_pending[game_id] = now
-            try:
-                stars = self.client.three_stars(game_id)
-            except HockeyApiError as exc:
-                log.debug("Three stars fetch for %s failed: %s", game_id, exc)
-                continue
-            if not stars:
-                continue
-            del self._three_stars_pending[game_id]
-            self._three_stars_shown.add(game_id)
-            self._three_stars = (game_id, now + self._blowout_remaining(), stars)
+            self.fetcher.submit(
+                ("three_stars", game_id),
+                lambda i=game_id: self.client.three_stars(i),
+                lambda s, e, i=game_id: self._on_three_stars(i, s, e),
+            )
+
+    def _on_three_stars(
+        self, game_id: int, stars: tuple[Star, ...] | None, error: Exception | None
+    ) -> None:
+        if error is not None:
+            log.debug("Three stars fetch for %s failed: %s", game_id, error)
+            return
+        if not stars or game_id in self._three_stars_shown:
+            return  # not named yet (retried next interval), or already shown
+        if game_id not in self._three_stars_pending:
+            return  # pruned or timed out while this was in flight
+        del self._three_stars_pending[game_id]
+        self._three_stars_shown.add(game_id)
+        self._three_stars = (game_id, self.monotonic() + self._blowout_remaining(), stars)
 
     def _note_blowout(self, game: Game, *, watched: bool) -> None:
         """Arm the blowout flash (#326) when a game we watched ends as one."""
@@ -1719,12 +1777,11 @@ class ScoreboardApp:
         now_mono = self.monotonic()
         stale = self._schedule is None or now_mono - self._schedule[0] > SCHEDULE_TTL_SECONDS
         if allow_fetch and stale and now_mono >= self._schedule_retry_after:
-            try:
-                self._schedule = (now_mono, self.client.schedule(favourite))
-            except HockeyApiError as exc:
-                log.warning("Schedule fetch failed: %s", exc)
-                self._record_error(f"schedule fetch: {exc}")
-                self._schedule_retry_after = now_mono + SCHEDULE_TTL_SECONDS
+            self.fetcher.submit(
+                ("schedule", favourite),
+                lambda: self.client.schedule(favourite),
+                lambda s, e: self._on_schedule(favourite, now_mono, s, e),
+            )
         if self._schedule is None:
             return None
         now = self.clock()
@@ -1736,6 +1793,18 @@ class ScoreboardApp:
                 return game
         return None
 
+    def _on_schedule(
+        self, team: str, fetched_at: float, games: list[Game] | None, error: Exception | None
+    ) -> None:
+        if team != self.settings.scoreboard.favourite_team:
+            return  # the favourite changed while this was in flight: it is the old team's
+        if error is not None or games is None:
+            log.warning("Schedule fetch failed: %s", error)
+            self._record_error(f"schedule fetch: {error}")
+            self._schedule_retry_after = fetched_at + SCHEDULE_TTL_SECONDS
+            return
+        self._schedule = (fetched_at, games)
+
     def _refresh_standings(self, *, allow_fetch: bool = True) -> list[StandingsRow] | None:
         """League standings, cached for ``STANDINGS_TTL_SECONDS`` like the schedule.
 
@@ -1745,15 +1814,24 @@ class ScoreboardApp:
         now_mono = self.monotonic()
         stale = self._standings is None or now_mono - self._standings[0] > STANDINGS_TTL_SECONDS
         if allow_fetch and stale and now_mono >= self._standings_retry_after:
-            try:
-                self._standings = (now_mono, self.client.standings())
-            except HockeyApiError as exc:
-                log.warning("Standings fetch failed: %s", exc)
-                self._record_error(f"standings fetch: {exc}")
-                self._standings_retry_after = now_mono + STANDINGS_TTL_SECONDS
+            self.fetcher.submit(
+                "standings",
+                self.client.standings,
+                lambda r, e: self._on_standings(now_mono, r, e),
+            )
         if self._standings is None:
             return None
         return self._standings[1]
+
+    def _on_standings(
+        self, fetched_at: float, rows: list[StandingsRow] | None, error: Exception | None
+    ) -> None:
+        if error is not None or rows is None:
+            log.warning("Standings fetch failed: %s", error)
+            self._record_error(f"standings fetch: {error}")
+            self._standings_retry_after = fetched_at + STANDINGS_TTL_SECONDS
+            return
+        self._standings = (fetched_at, rows)
 
     def _standings_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's conference neighbourhood, or None if there's nothing to show.
@@ -1874,18 +1952,32 @@ class ScoreboardApp:
         entry = self._season_series.get(game_id)
         stale = entry is None or now_mono - entry[0] > SEASON_SERIES_TTL_SECONDS
         retry_after = self._season_series_retry_after.get(game_id, 0.0)
-        if allow_fetch and stale and now_mono >= retry_after:
+        key = ("season_series", game_id)
+        if allow_fetch and stale and now_mono >= retry_after and not self.fetcher.pending(key):
             # Only ever the one upcoming matchup worth remembering.
             self._season_series = {k: v for k, v in self._season_series.items() if k == game_id}
             self._season_series_retry_after = {}
-            try:
-                entry = (now_mono, self.client.season_series(game_id))
-                self._season_series[game_id] = entry
-            except HockeyApiError as exc:
-                log.warning("Season series fetch for %s failed: %s", game_id, exc)
-                self._record_error(f"season series fetch: {exc}")
-                self._season_series_retry_after[game_id] = now_mono + SEASON_SERIES_TTL_SECONDS
+            self.fetcher.submit(
+                key,
+                lambda: self.client.season_series(game_id),
+                lambda r, e: self._on_season_series(game_id, now_mono, r, e),
+            )
+            entry = self._season_series.get(game_id)
         return entry[1] if entry is not None else None
+
+    def _on_season_series(
+        self,
+        game_id: int,
+        fetched_at: float,
+        record: SeasonSeriesRecord | None,
+        error: Exception | None,
+    ) -> None:
+        if error is not None:
+            log.warning("Season series fetch for %s failed: %s", game_id, error)
+            self._record_error(f"season series fetch: {error}")
+            self._season_series_retry_after[game_id] = fetched_at + SEASON_SERIES_TTL_SECONDS
+            return
+        self._season_series[game_id] = (fetched_at, record)
 
     def _matchup_scene(self, upcoming: Game | None, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's head-to-head record against their next opponent (#157).
@@ -1966,14 +2058,27 @@ class ScoreboardApp:
             entry = self._leaders = None
         stale = entry is None or now_mono - entry[1] > LEADERS_TTL_SECONDS
         if allow_fetch and stale and now_mono >= self._leaders_retry_after:
-            try:
-                picked = team_leaders(self.client.club_stats(team), self._rng)
-                entry = self._leaders = (team, now_mono, picked)
-            except HockeyApiError as exc:
-                log.warning("Club stats fetch failed: %s", exc)
-                self._record_error(f"club stats fetch: {exc}")
-                self._leaders_retry_after = now_mono + LEADERS_TTL_SECONDS
+            self.fetcher.submit(
+                ("club_stats", team),
+                lambda: self.client.club_stats(team),
+                lambda r, e: self._on_club_stats(team, now_mono, r, e),
+            )
+            entry = self._leaders
+            if entry is not None and entry[0] != team:
+                entry = None
         return entry[2] if entry is not None else None
+
+    def _on_club_stats(
+        self, team: str, fetched_at: float, stats: ClubStats | None, error: Exception | None
+    ) -> None:
+        if team != self.settings.scoreboard.favourite_team:
+            return  # the favourite changed while this was in flight
+        if error is not None or stats is None:
+            log.warning("Club stats fetch failed: %s", error)
+            self._record_error(f"club stats fetch: {error}")
+            self._leaders_retry_after = fetched_at + LEADERS_TTL_SECONDS
+            return
+        self._leaders = (team, fetched_at, team_leaders(stats, self._rng))
 
     def _leaders_scene(self, *, allow_fetch: bool = True) -> Scene | None:
         """The favourite's top players (#201), or None (skipped, never blank).
@@ -2679,15 +2784,22 @@ class ScoreboardApp:
                     ("situation", game_id), lambda i=game_id: self._show_situation(i, None)
                 )
                 continue
-            try:
-                situation = self.client.situation(game_id)
-            except HockeyApiError as exc:
-                log.debug("Situation fetch for %s failed: %s", game_id, exc)
-                situation = self.situations.get(game_id, (None, None))[1]
-            self.situations[game_id] = (now, situation)
-            self._submit(
-                ("situation", game_id), lambda i=game_id, s=situation: self._show_situation(i, s)
+            self.fetcher.submit(
+                ("situation", game_id),
+                lambda i=game_id: self.client.situation(i),
+                lambda s, e, i=game_id, t=now: self._on_situation(i, t, s, e),
             )
+
+    def _on_situation(
+        self, game_id: int, fetched_at: float, situation: Situation | None, error: Exception | None
+    ) -> None:
+        if error is not None:
+            log.debug("Situation fetch for %s failed: %s", game_id, error)
+            situation = self.situations.get(game_id, (None, None))[1]
+        self.situations[game_id] = (fetched_at, situation)
+        self._submit(
+            ("situation", game_id), lambda i=game_id, s=situation: self._show_situation(i, s)
+        )
 
     def _show_situation(self, game_id: int, situation: Situation | None) -> None:
         self._shown_situations[game_id] = situation
@@ -2733,16 +2845,29 @@ class ScoreboardApp:
             previous = self.shootouts.get(game.id, (None, None, False))
             if previous[0] is not None and now - previous[0] < interval:
                 continue
-            try:
-                shootout = self.client.shootout(game.id)
-            except HockeyApiError as exc:
-                log.debug("Shootout fetch for %s failed: %s", game.id, exc)
-                self.shootouts[game.id] = (now, previous[1], previous[2])
-                continue
-            self.shootouts[game.id] = (now, shootout, game.is_final)
-            self._submit(
-                ("shootout", game.id), lambda i=game.id, s=shootout: self._show_shootout(i, s)
+            self.fetcher.submit(
+                ("shootout", game.id),
+                lambda i=game.id: self.client.shootout(i),
+                lambda s, e, i=game.id, t=now, final=game.is_final: self._on_shootout(
+                    i, t, final, s, e
+                ),
             )
+
+    def _on_shootout(
+        self,
+        game_id: int,
+        fetched_at: float,
+        is_final: bool,
+        shootout: Shootout | None,
+        error: Exception | None,
+    ) -> None:
+        if error is not None:
+            log.debug("Shootout fetch for %s failed: %s", game_id, error)
+            previous = self.shootouts.get(game_id, (None, None, False))
+            self.shootouts[game_id] = (fetched_at, previous[1], previous[2])
+            return
+        self.shootouts[game_id] = (fetched_at, shootout, is_final)
+        self._submit(("shootout", game_id), lambda i=game_id, s=shootout: self._show_shootout(i, s))
 
     def _show_shootout(self, game_id: int, shootout: Shootout | None) -> None:
         self._shown_shootouts[game_id] = shootout
@@ -2863,6 +2988,30 @@ class ScoreboardApp:
             "last successful poll": self._format_time(self.last_success_at),
             "last error": self.last_error or "(none)",
             "last error at": self._error_time_label(),
+            **self._fetch_status(),
+        }
+
+    def _fetch_status(self) -> dict[str, str]:
+        """The fetch worker's health (#267): a slow or hung API shows up here."""
+        stats = self.fetcher.stats()
+        if not stats.threaded:
+            return {"hockey fetch worker": "inline (no worker)"}
+        if stats.in_flight and stats.oldest_age is not None:
+            worker = f"busy: {stats.in_flight} in flight, oldest {stats.oldest_age:.0f}s"
+        else:
+            worker = "idle"
+        if stats.last_seconds is None:
+            last = "(none yet)"
+        else:
+            outcome = "ok" if stats.last_ok else "failed"
+            last = f"{stats.last_label}, {stats.last_seconds:.1f}s, {outcome}"
+        return {
+            "hockey fetch worker": worker,
+            "last hockey fetch": last,
+            "hockey fetch totals": (
+                f"{stats.completed} done, {stats.failed} failed, "
+                f"{stats.slow} slow (over {SLOW_FETCH_SECONDS:.0f}s)"
+            ),
         }
 
     def _football_status(self, scene: Scene) -> dict[str, str]:

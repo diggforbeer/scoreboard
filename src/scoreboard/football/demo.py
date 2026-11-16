@@ -412,7 +412,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
     def stats_scene(play: Play, at: float) -> Scene:
         return Scene(
             "fb_event", fb_game=game, fb_play=play, fb_stage="stats", fb_stats=DEMO_STATS,
-            fb_elapsed=at, fb_seconds=6.0, animating=True,
+            fb_elapsed=at, fb_seconds=12.0, animating=True,
         )  # fmt: skip
 
     def run(play: Play, at: float, *who: Person | None) -> Scene:
@@ -439,7 +439,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         DemoStep(run(official, 2.0), name="timeout_official"),
         DemoStep(run(warning, 2.0), name="timeout_two_minute"),
         DemoStep(stats_scene(official, 1.0), name="team_stats"),
-        DemoStep(stats_scene(official, 7.0), name="team_stats_page2"),
+        DemoStep(stats_scene(official, 13.0), name="team_stats_page2"),
         DemoStep(run(holding, 0.6, jones), name="penalty_after_run"),
         DemoStep(run(false_start, 1.6, jones), name="penalty_flag"),
         DemoStep(run(false_start, 2.6, jones), name="penalty"),
