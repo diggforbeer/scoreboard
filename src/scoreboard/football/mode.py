@@ -96,6 +96,9 @@ class FootballMode:
         #: How far through its slot the chosen rotation screen is (0 to 1): a screen of several
         #: pages shares its seconds between them, so the page is read off this. Render loop only.
         self._slot_fraction = 0.0
+        #: When this mode's idle rotation began (monotonic seconds): the app sets it so a rotation
+        #: starts at the top of the turn the sports alternate in (epic #470), 0 otherwise.
+        self.idle_origin = 0.0
         self._final_since: dict[int, float] = {}
         #: The idle screens' data cache (#421): the feed worker's thread owns it.
         self._idle_cache = IdleCache(monotonic)
@@ -443,7 +446,7 @@ class FootballMode:
         if favourite:
             slots = self._rotation(cfg, ctx, favourite)
             if slots:
-                screen, self._slot_fraction = _slot_at(slots, now)
+                screen, self._slot_fraction = _slot_at(slots, now - self.idle_origin)
                 return screen
         if not games:
             return "clock" if _has_clock(cfg) else None

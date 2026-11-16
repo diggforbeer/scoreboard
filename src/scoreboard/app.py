@@ -618,6 +618,9 @@ class ScoreboardApp:
         self._hockey_lite: list[Game] = []
         #: The priority layer's current owner (the favourite of the moment), set each loop.
         self._owner: Moment | None = None
+        #: When the idle rotation began (monotonic): under a ranked list the sports alternate, and
+        #: this puts the sport that has the turn at the top of its rotation. 0 without a list.
+        self._idle_origin = 0.0
         self._priority_cache: tuple[tuple[TeamEntry, ...], Priority] | None = None
         #: The hockey favourite the caches were fetched for, to notice the owner changing it.
         self._hockey_favourite = self._hockey_cfg().favourite_team if settings.teams else ""
@@ -972,7 +975,7 @@ class ScoreboardApp:
         sports take turns (a later story). Only called with a ranked list.
         """
         football_games = list(self._football.snapshot.games or ()) if self._football else []
-        hockey_games = self.games if self._sport == "hockey" else self._hockey_lite
+        hockey_games = self._hockey_priority_games()
         now = self.clock()
         ages = {("hockey", gid): now - ended for gid, ended in self.ended_at.items()}
         if self._football is not None:
@@ -991,7 +994,46 @@ class ScoreboardApp:
             ages,
         )
         self._owner = owner
-        return owner.sport if owner is not None else priority.sports()[0]
+        if owner is not None:
+            return owner.sport
+        return self._idle_sport(priority)
+
+    def _hockey_priority_games(self) -> list[Game]:
+        """Today's hockey games for the priority layer: the full machinery's while hockey has the
+        board, else the light poll's. Right after a switch to hockey ``games`` is still empty until
+        the next poll, so the light poll's last answer covers that gap."""
+        return (self.games if self._sport == "hockey" else None) or self._hockey_lite
+
+    def _idle_turns(self) -> dict[str, float | None]:
+        """How long each sport's idle rotation is, or ``None`` for a sport with nothing to show
+        (no games on its slate: the offseason, or its feed is down). A rotation's length is its
+        configured entries' seconds; an entry skipped for lack of data only shortens it."""
+        hockey_games = self._hockey_priority_games()
+        football_games = self._football.snapshot.games if self._football is not None else None
+        return {
+            "hockey": sum(e.seconds for e in self._effective_rotation()) if hockey_games else None,
+            "football": (
+                sum(e.seconds for e in self.settings.football.idle_rotation)
+                if football_games
+                else None
+            ),
+        }
+
+    def _idle_sport(self, priority: Priority) -> str:
+        """With nothing ranked on, the sports take turns, each showing its rotation for its lead
+        team (epic #470). Falls back to the top-ranked team's sport when no sport has anything."""
+        turns = self._idle_turns()
+        now = self.monotonic()
+        slot = priority.idle_sport(now, turns)
+        if slot is None:
+            self._idle_origin = 0.0
+            return priority.sports()[0]
+        sport, fraction = slot
+        # The turn began ``fraction`` of its length ago: both sports time their rotation from there.
+        self._idle_origin = now - fraction * (turns[sport] or 0.0)
+        if self._football is not None:
+            self._football.idle_origin = self._idle_origin
+        return sport
 
     def _apply_teams_change(self, new_settings: Settings) -> None:
         """The ranked list was edited. A first team starts football's feed beside hockey's; the
@@ -1033,6 +1075,8 @@ class ScoreboardApp:
         owner's, not the sport's, so it survives.
         """
         log.info("Switching sport %s -> %s", self._sport, sport)
+        if self._sport == "hockey" and self.games:
+            self._hockey_lite = list(self.games)  # the priority layer keeps seeing hockey's slate
         if self.settings.teams:
             # A ranked list keeps both feeds running: football's mode stays up and only starts its
             # screens afresh when it takes the board.
@@ -2349,11 +2393,12 @@ class ScoreboardApp:
         ]
         if not slots:
             return None
+        clock = self.monotonic() - self._idle_origin
         if len(slots) == 1:
             scene, seconds = slots[0]
-            return self._split_slot(scene, self.monotonic() % seconds, seconds)
+            return self._split_slot(scene, clock % seconds, seconds)
         total = sum(seconds for _, seconds in slots)
-        position = self.monotonic() % total
+        position = clock % total
         start = 0.0
         for scene, seconds in slots:
             if position < start + seconds:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 import pytest
 
@@ -215,7 +216,7 @@ def test_a_final_is_held_across_a_sport_change(backend):
     assert rig.sport == "football", "NSH's game is over; the TEN final is still inside its hold"
 
 
-def test_when_the_hold_ends_and_nothing_is_on_the_board_goes_to_the_top_teams_sport(backend):
+def test_when_the_hold_ends_and_the_other_sport_has_nothing_the_board_goes_back_to_hockey(backend):
     rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
     rig.football.games, rig.hockey.today = [ten_live()], [nsh_far()]
     rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
@@ -224,7 +225,9 @@ def test_when_the_hold_ends_and_nothing_is_on_the_board_goes_to_the_top_teams_sp
     rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
     assert rig.sport == "football", "the final is held"
     rig.poll(61 * 60)  # past football's 60 minute hold
-    assert rig.sport == "hockey", "nothing is on: rank 1 (hockey) has the idle screens"
+    rig.football.games = []  # and football's slate is empty: the offseason
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "hockey", "nothing is on and only hockey has anything to show"
 
 
 # -- no flicker ----------------------------------------------------------------------------------
@@ -452,3 +455,101 @@ def test_the_caches_are_kept_while_the_favourite_stays_the_same(backend):
     rig.app._schedule = (1.0, [nsh_far()])
     rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
     assert rig.app._schedule is not None
+
+
+# -- the idle screens alternate between sports (#477) ---------------------------------------------
+
+
+def idle_runs(rig, seconds=420, step=5.0):
+    """Which sport had the board as time passes with nothing on: ``[(sport, length)]``."""
+    runs, seen = [], []
+    for _ in range(int(seconds / step)):
+        rig.poll(step)
+        seen.append(rig.sport)
+    for sport in seen:
+        if runs and runs[-1][0] == sport:
+            runs[-1][1] += step
+        else:
+            runs.append([sport, step])
+    return [(s, n) for s, n in runs]
+
+
+def test_with_nothing_on_the_sports_take_turns_each_for_its_rotation(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.poll(1)
+    hockey_turn = sum(e.seconds for e in rig.app._effective_rotation())
+    football_turn = sum(e.seconds for e in rig.settings.football.idle_rotation)
+    runs = idle_runs(rig, seconds=3 * (hockey_turn + football_turn))
+    sports = [s for s, _ in runs]
+    assert set(sports) == {"hockey", "football"} and all(a != b for a, b in pairwise(sports))
+    inner = runs[1:-1]  # the first and last runs are cut by the window
+    for sport, length in inner:
+        expected = hockey_turn if sport == "hockey" else football_turn
+        assert abs(length - expected) <= 5.0 + 5.0, (sport, length, expected)
+
+
+def test_a_sport_with_no_games_never_takes_a_turn(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], []
+    assert {s for s, _ in idle_runs(rig, seconds=300)} == {"hockey"}
+
+
+def test_when_neither_sport_has_games_the_top_teams_sport_keeps_the_board(backend):
+    rig = Rig(backend, [("football", TEN), ("hockey", NSH)])
+    rig.hockey.today, rig.football.games = [], []
+    assert {s for s, _ in idle_runs(rig, seconds=300)} == {"football"}
+    assert rig.app._idle_origin == 0.0
+
+
+def test_a_sport_s_rotation_starts_at_the_top_of_its_turn(backend):
+    """The turn began ``fraction`` of its length ago, so a sport's rotation clock reads that."""
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    for _ in range(60):
+        rig.poll(7)
+        turns = rig.app._idle_turns()
+        slot = rig.app._priority().idle_sport(rig.app.monotonic(), turns)
+        sport, fraction = slot
+        position = rig.app.monotonic() - rig.app._idle_origin
+        assert abs(position - fraction * turns[sport]) < 1e-6
+    assert rig.app._football.idle_origin == rig.app._idle_origin
+
+
+def test_an_owner_interrupts_the_alternation_and_hands_back(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.poll(1)
+    rig.hockey.today = [nsh_live()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    for _ in range(6):
+        rig.poll(10)
+        assert rig.sport == "hockey", "a live ranked game ends the alternation"
+    rig.hockey.today = [nsh_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert {s for s, _ in idle_runs(rig, seconds=200)} == {"hockey", "football"}
+
+
+def test_without_a_list_the_idle_rotation_is_untouched(backend):
+    rig = Rig(backend, [])
+    rig.hockey.today = [nsh_far()]
+    rig.poll(60)
+    assert rig.app._idle_origin == 0.0 and rig.app._football is None
+
+
+def test_hockey_s_rotation_starts_at_the_idle_origin(backend):
+    from scoreboard.config import RotationEntry
+
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.settings.rotation = [RotationEntry("clock", 10.0), RotationEntry("countdown_preview", 10.0)]
+    upcoming = nsh_far()
+
+    def scene_at(origin):
+        rig.app._idle_origin = origin
+        return rig.app._rotate_idle_scenes(upcoming, None, allow_fetch=False).kind
+
+    mono = rig.app.monotonic()
+    assert scene_at(mono) == "clock", "position 0 of the rotation"
+    assert scene_at(mono - 10.0) in ("preview", "countdown"), "ten seconds in: the second entry"
+    assert scene_at(mono - 20.0) == "clock", "and round again"
+    assert scene_at(0.0) == rig.app._rotate_idle_scenes(upcoming, None, allow_fetch=False).kind
