@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from hockey_scoreboard.display import teams as hockey_teams
-from hockey_scoreboard.football import teams
+from scoreboard.display import teams as hockey_teams
+from scoreboard.football import teams
 
 #: ESPN's ids for the 32 teams, as returned by .../football/nfl/teams on
 #: 2026-11-13. Pinned here so a typo in the table fails a test.

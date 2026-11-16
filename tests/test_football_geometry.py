@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from hockey_scoreboard.football import geometry as g
-from hockey_scoreboard.football.geometry import AWAY, HOME, FieldLayout
+from scoreboard.football import geometry as g
+from scoreboard.football.geometry import AWAY, HOME, FieldLayout
 from test_football_events import make_game
 
 WIDE = FieldLayout.for_panel(128)

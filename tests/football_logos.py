@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from hockey_scoreboard.football.teams import TEAMS
+from scoreboard.football.teams import TEAMS
 
 
 def write_synthetic_football_logos(root: Path, sizes=(12, 16), variant: str = "dark") -> Path:

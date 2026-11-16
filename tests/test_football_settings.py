@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from hockey_scoreboard.config import FootballConfig, ScoreboardConfig, Settings
+from scoreboard.config import FootballConfig, ScoreboardConfig, Settings
 
 
 def test_there_is_no_default_favourite_and_nobody_is_followed():

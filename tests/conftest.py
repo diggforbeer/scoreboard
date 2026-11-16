@@ -65,7 +65,7 @@ def _restore_idle_screens():
     must never outlive it, or a later test on the same worker draws a fake view (a bool) instead
     of the real screen. This keeps that true for every test file, not just the one that owns the
     helper."""
-    from hockey_scoreboard.football.idle_screens import IDLE_SCREENS
+    from scoreboard.football.idle_screens import IDLE_SCREENS
 
     saved = dict(IDLE_SCREENS)
     yield

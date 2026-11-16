@@ -4,11 +4,11 @@ things it applies on every boot (#78) -- timezone and hex-encoded SSIDs.
 Same approach as test_grow_rootfs.py: the actual script, invoked as a
 subprocess, with every external tool it shells out to (iw, iwctl, systemctl)
 faked on a prepended PATH so this runs without root or real Wi-Fi hardware.
-IWD_DIR is redirected to a tmp directory via HOCKEY_SCOREBOARD_IWD_DIR (the same
-override convention hockey-scoreboard-grow-rootfs uses for its own state dir);
+IWD_DIR is redirected to a tmp directory via SCOREBOARD_IWD_DIR (the same
+override convention scoreboard-grow-rootfs uses for its own state dir);
 apply_timezone()'s ZONEINFO/LOCALTIME/TIMEZONE_FILE are redirected the same
-way via HOCKEY_SCOREBOARD_ZONEINFO_DIR/HOCKEY_SCOREBOARD_LOCALTIME/
-HOCKEY_SCOREBOARD_TIMEZONE_FILE so these tests never touch the real system's
+way via SCOREBOARD_ZONEINFO_DIR/SCOREBOARD_LOCALTIME/
+SCOREBOARD_TIMEZONE_FILE so these tests never touch the real system's
 /etc/localtime or /etc/timezone.
 
 What this does NOT verify: that iwd actually reconnects to a known profile
@@ -117,17 +117,17 @@ class Rig:
         env = {
             "PATH": f"{self.bindir}:{os.environ['PATH']}",
             "FAKE_CALL_LOG": str(self.call_log),
-            "HOCKEY_SCOREBOARD_IWD_DIR": str(self.iwd_dir),
-            "HOCKEY_SCOREBOARD_ZONEINFO_DIR": str(self.zoneinfo_dir),
-            "HOCKEY_SCOREBOARD_LOCALTIME": str(self.localtime_path),
-            "HOCKEY_SCOREBOARD_TIMEZONE_FILE": str(self.timezone_file),
-            "HOCKEY_SCOREBOARD_NET_DIR": str(self.net_dir),
-            "HOCKEY_SCOREBOARD_HOSTNAME_FILE": str(self.hostname_file),
-            "HOCKEY_SCOREBOARD_HOSTS_FILE": str(self.hosts_file),
-            "HOCKEY_SCOREBOARD_HOSTNAME_STATE": str(self.hostname_state),
-            "HOCKEY_SCOREBOARD_AVAHI_SERVICE": str(self.avahi_service),
-            "HOCKEY_SCOREBOARD_WIFI_TIMEOUT": "1",
-            "HOCKEY_SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
+            "SCOREBOARD_IWD_DIR": str(self.iwd_dir),
+            "SCOREBOARD_ZONEINFO_DIR": str(self.zoneinfo_dir),
+            "SCOREBOARD_LOCALTIME": str(self.localtime_path),
+            "SCOREBOARD_TIMEZONE_FILE": str(self.timezone_file),
+            "SCOREBOARD_NET_DIR": str(self.net_dir),
+            "SCOREBOARD_HOSTNAME_FILE": str(self.hostname_file),
+            "SCOREBOARD_HOSTS_FILE": str(self.hosts_file),
+            "SCOREBOARD_HOSTNAME_STATE": str(self.hostname_state),
+            "SCOREBOARD_AVAHI_SERVICE": str(self.avahi_service),
+            "SCOREBOARD_WIFI_TIMEOUT": "1",
+            "SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
             "PYTHONPATH": repo_src,
             **(env_extra or {}),
         }

@@ -7,8 +7,8 @@ import logging
 
 import pytest
 
-from hockey_scoreboard.display.renderer import LIVE, LOSS, SUBDUED
-from hockey_scoreboard.hockey.models import Game, Shootout, ShootoutAttempt, shootout_from_landing
+from scoreboard.display.renderer import LIVE, LOSS, SUBDUED
+from scoreboard.hockey.models import Game, Shootout, ShootoutAttempt, shootout_from_landing
 from test_flow import FAV, PUCK_DROP, Clock, FlowClient, game, make_app
 from test_flow import fake_backend as fake_backend  # fixture, re-exported for this module
 from test_render import H, W, canvas, check_snapshot, make_renderer, show

@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 from websockets.sync.client import connect
 
-from hockey_scoreboard import updater
-from hockey_scoreboard.app import (
+from scoreboard import updater
+from scoreboard.app import (
     ANIMATION_FRAME_INTERVAL,
     DEMO_SCENE_SECONDS,
     FRAME_INTERVAL,
@@ -28,12 +28,12 @@ from hockey_scoreboard.app import (
     Scene,
     ScoreboardApp,
 )
-from hockey_scoreboard.button import Button
-from hockey_scoreboard.config import Settings
-from hockey_scoreboard.demo import demo_steps
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.hockey.api import HockeyApiError
-from hockey_scoreboard.hockey.models import (
+from scoreboard.button import Button
+from scoreboard.config import Settings
+from scoreboard.demo import demo_steps
+from scoreboard.display.matrix import Backend
+from scoreboard.hockey.api import HockeyApiError
+from scoreboard.hockey.models import (
     Game,
     GoalEvent,
     PlayerSeasonDetail,
@@ -42,7 +42,7 @@ from hockey_scoreboard.hockey.models import (
     StandingsRow,
     Star,
 )
-from hockey_scoreboard.wifi_join import WifiJoinAttempt
+from scoreboard.wifi_join import WifiJoinAttempt
 
 
 class FakeCanvas:
@@ -1097,7 +1097,7 @@ def test_night_window_wraps_midnight(fake_backend, games, hour, minute, inside):
     [(12, 59, False), (13, 0, True), (14, 30, True), (15, 0, False), (23, 0, False)],
 )
 def test_night_window_same_day(fake_backend, games, hour, minute, inside):
-    from hockey_scoreboard.config import NightModeConfig
+    from scoreboard.config import NightModeConfig
 
     app = night_app(fake_backend, [], now=at_local(hour, minute))
     app.settings.night_mode = NightModeConfig(enabled=True, start_time="13:00", end_time="15:00")
@@ -1948,7 +1948,7 @@ def test_a_followed_teams_goal_stays_the_quick_static_screen(fake_backend, games
 
 
 # --------------------------------------------------------------------------
-# AP setup scene (#131 follow-up): hockey-scoreboard-setup-ap's state file
+# AP setup scene (#131 follow-up): scoreboard-setup-ap's state file
 # --------------------------------------------------------------------------
 
 
@@ -1968,7 +1968,7 @@ def test_ap_state_file_overrides_even_a_live_game(fake_backend, games, tmp_path)
     own docstring: nobody can see a live game if the only way to reach the
     board at all is the AP the state file describes."""
     state_path = tmp_path / "state.json"
-    state_path.write_text(json.dumps({"ssid": "Hockey-Scoreboard-Setup", "password": "scoreboard"}))
+    state_path.write_text(json.dumps({"ssid": "Scoreboard-Setup", "password": "scoreboard"}))
     app = ScoreboardApp(
         Settings(), client=FakeClient(games), backend=fake_backend, ap_setup_state_path=state_path
     )
@@ -1977,7 +1977,7 @@ def test_ap_state_file_overrides_even_a_live_game(fake_backend, games, tmp_path)
 
     scene = app.select_scene()
     assert scene.kind == "ap_setup"
-    assert scene.ap_ssid == "Hockey-Scoreboard-Setup"
+    assert scene.ap_ssid == "Scoreboard-Setup"
     assert scene.ap_password == "scoreboard"
     assert scene.ap_qr_matrix is not None
 
@@ -2330,7 +2330,7 @@ def test_on_panel_next_puts_the_marker_back_if_the_save_fails(
 
 
 def test_restart_scoreboard_service_runs_systemctl_off_thread(monkeypatch):
-    from hockey_scoreboard import app as app_module
+    from scoreboard import app as app_module
 
     calls = []
     monkeypatch.setattr(app_module.subprocess, "run", lambda args, **kw: calls.append(args))
@@ -2338,11 +2338,11 @@ def test_restart_scoreboard_service_runs_systemctl_off_thread(monkeypatch):
     for thread in threading.enumerate():
         if thread.name == "hw-mapping-restart":
             thread.join(timeout=5)
-    assert calls == [["systemctl", "restart", "hockey-scoreboard.service"]]
+    assert calls == [["systemctl", "restart", "scoreboard.service"]]
 
 
 def test_restart_scoreboard_service_logs_instead_of_raising(monkeypatch, caplog):
-    from hockey_scoreboard import app as app_module
+    from scoreboard import app as app_module
 
     def boom(args, **kw):
         raise OSError("no systemctl")
@@ -2353,7 +2353,7 @@ def test_restart_scoreboard_service_logs_instead_of_raising(monkeypatch, caplog)
         for thread in threading.enumerate():
             if thread.name == "hw-mapping-restart":
                 thread.join(timeout=5)
-    assert "Could not restart hockey-scoreboard.service" in caplog.text
+    assert "Could not restart scoreboard.service" in caplog.text
 
 
 def test_on_panel_next_can_jump_straight_to_a_chosen_board(fake_backend, games, tmp_path):
@@ -2421,7 +2421,7 @@ def test_sync_setup_server_clears_a_stale_trial_marker_once_the_ap_goes_away(
 
 
 def test_qr_escape_backslash_escapes_wifi_qr_special_characters():
-    from hockey_scoreboard.app import _qr_escape
+    from scoreboard.app import _qr_escape
 
     assert _qr_escape('a;b,c:d"e\\f') == 'a\\;b\\,c\\:d\\"e\\\\f'
     assert _qr_escape("plain") == "plain"
@@ -2470,9 +2470,7 @@ def test_wifi_join_outcome_wins_over_ap_setup_scene(fake_backend, games, tmp_pat
     join = _wifi_join(tmp_path)
     join.outcome_path.write_text(json.dumps({"status": "failed", "ssid": "HomeNet"}))
     ap_setup_path = tmp_path / "ap-setup.json"
-    ap_setup_path.write_text(
-        json.dumps({"ssid": "Hockey-Scoreboard-Setup", "password": "scoreboard"})
-    )
+    ap_setup_path.write_text(json.dumps({"ssid": "Scoreboard-Setup", "password": "scoreboard"}))
     app = ScoreboardApp(
         Settings(),
         client=FakeClient(games),
@@ -2629,7 +2627,7 @@ def test_admin_stays_off_the_setup_port_when_they_differ(fake_backend, games, tm
 
 
 def test_demo_in_football_mode_loops_the_football_steps_and_stays_silent(fake_backend, games):
-    from hockey_scoreboard.football.demo import football_demo_steps
+    from scoreboard.football.demo import football_demo_steps
 
     app, src = demo_app(fake_backend, games)
     app._sport = "football"

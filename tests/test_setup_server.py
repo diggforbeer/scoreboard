@@ -6,7 +6,7 @@ import http.client
 import urllib.error
 import urllib.request
 
-from hockey_scoreboard.setup_server import SetupServer
+from scoreboard.setup_server import SetupServer
 
 
 def _post(url: str, data: str) -> tuple[int, str]:
@@ -338,7 +338,7 @@ def test_panel_confirm_calls_the_callback_and_redirects_home():
 
 
 def test_panel_card_after_a_full_lap_points_at_the_wiring():
-    from hockey_scoreboard.setup_server import _render_page
+    from scoreboard.setup_server import _render_page
 
     page = _render_page(
         [], panel_mapping="adafruit-hat-pwm", panel_in_trial=True, panel_tried_all=True
@@ -349,7 +349,7 @@ def test_panel_card_after_a_full_lap_points_at_the_wiring():
 
 
 def test_panel_card_mid_lap_does_not_blame_the_wiring():
-    from hockey_scoreboard.setup_server import _render_page
+    from scoreboard.setup_server import _render_page
 
     page = _render_page([], panel_mapping="adafruit-hat", panel_in_trial=True).decode()
     assert "ribbon cable" not in page
@@ -378,8 +378,8 @@ def test_picking_a_board_passes_it_to_the_callback():
 
 
 def test_page_names_boards_not_driver_settings():
-    from hockey_scoreboard.config import PANEL_HARDWARE_MAPPING_CHOICES
-    from hockey_scoreboard.setup_server import _render_page
+    from scoreboard.config import PANEL_HARDWARE_MAPPING_CHOICES
+    from scoreboard.setup_server import _render_page
 
     page = _render_page([], panel_mapping="adafruit-hat").decode()
     assert "Display type is set to <b>Adafruit RGB Matrix Bonnet or HAT</b>" in page
@@ -389,7 +389,7 @@ def test_page_names_boards_not_driver_settings():
 
 
 def test_a_hand_edited_mapping_still_shows_as_is():
-    from hockey_scoreboard.setup_server import _render_page
+    from scoreboard.setup_server import _render_page
 
     page = _render_page([], panel_mapping="compute-module").decode()
     assert "<b>compute-module</b>" in page

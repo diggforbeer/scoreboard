@@ -10,12 +10,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from hockey_scoreboard.config import FootballConfig
-from hockey_scoreboard.football import idle
-from hockey_scoreboard.football.api import STANDINGS_URL, FootballClient
-from hockey_scoreboard.football.mode import FootballMode
-from hockey_scoreboard.football.models import FbGame
-from hockey_scoreboard.football.teams import TEAMS
+from scoreboard.config import FootballConfig
+from scoreboard.football import idle
+from scoreboard.football.api import STANDINGS_URL, FootballClient
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.models import FbGame
+from scoreboard.football.teams import TEAMS
 from test_football_plays import FakeResponse, FakeSession
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"

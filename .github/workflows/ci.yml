@@ -132,8 +132,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck scripts/*.sh image/files/scripts/hockey-scoreboard-grow-rootfs \
-            image/files/scripts/hockey-scoreboard-setup-ap
+          shellcheck scripts/*.sh image/files/scripts/scoreboard-grow-rootfs \
+            image/files/scripts/scoreboard-setup-ap
 
   layer-lint:
     name: Validate image definitions

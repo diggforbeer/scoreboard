@@ -15,9 +15,9 @@ from zoneinfo import ZoneInfo
 import pytest
 import requests
 
-from hockey_scoreboard import __main__ as cli
-from hockey_scoreboard.football import api
-from hockey_scoreboard.football.models import FbGame, FbSituation, FbTeam
+from scoreboard import __main__ as cli
+from scoreboard.football import api
+from scoreboard.football.models import FbGame, FbSituation, FbTeam
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
 CENTRAL = ZoneInfo("America/Chicago")
@@ -307,7 +307,7 @@ def test_polling_floor_respects_the_feeds_cache_header():
 
 def test_default_session_retries_and_identifies_itself():
     session = api._build_session()
-    assert "hockey-scoreboard" in session.headers["User-Agent"]
+    assert "scoreboard" in session.headers["User-Agent"]
     assert session.adapters["https://"].max_retries.total == 3
     session.close()
 

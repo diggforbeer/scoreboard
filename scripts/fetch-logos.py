@@ -31,12 +31,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from hockey_scoreboard.display.teams import TEAM_COLORS  # noqa: E402
-from hockey_scoreboard.football.teams import ABBREVIATIONS as FOOTBALL_ABBREVIATIONS  # noqa: E402
+from scoreboard.display.teams import TEAM_COLORS  # noqa: E402
+from scoreboard.football.teams import ABBREVIATIONS as FOOTBALL_ABBREVIATIONS  # noqa: E402
 
 LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_{variant}.svg"
 ESPN_TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams"
-USER_AGENT = "hockey-scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
+USER_AGENT = "scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
 #: The sizes fetched for the football by default (see the module docstring).
 FOOTBALL_SIZES = (12, 16)
 #: Which of ESPN's logo entries each variant name means.

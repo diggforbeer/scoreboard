@@ -244,12 +244,12 @@ NE 38 for 6 yards`.
 
 ## Feed lag, one real observation (#355, 2026-11-13)
 
-Watching a live game with `hockey-scoreboard --watch-football 401873052` (polling every 10s), a new
+Watching a live game with `scoreboard --watch-football 401873052` (polling every 10s), a new
 play (a Q4 incompletion) was first shown **30.2s after its `wallclock`**: the feed, plus up to
 10s of polling, ran about half a minute behind the play. One play in one game, so a hint, not
 a measurement: the Pi 4 measurement todo is still what answers the deferred animation-pace
 question. The queue logs `lag=` for every play it shows, so a full game's worth can be read
-from the journal (`journalctl -u hockey-scoreboard | grep "play shown"`).
+from the journal (`journalctl -u scoreboard | grep "play shown"`).
 
 ## Turnovers and possession (#356, the same 13 games)
 
@@ -285,7 +285,7 @@ live behaviour gets learned.
 4. Keep the captures as fixtures under `tests/fixtures/football/` and add a test; if the rules
    in `reversals.py` do not match what is there, fix them from the evidence.
 
-`hockey-scoreboard --watch-football <id>` also runs the play queue against the live feed and logs.
+`scoreboard --watch-football <id>` also runs the play queue against the live feed and logs.
 
 ## Team logos (#349, 2026-11-13)
 

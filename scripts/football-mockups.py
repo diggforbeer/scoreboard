@@ -27,9 +27,9 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from RGBMatrixEmulator import graphics  # noqa: E402
 
-from hockey_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
-from hockey_scoreboard.display.fonts import font_path  # noqa: E402
-from hockey_scoreboard.display.mirror import Frame  # noqa: E402
+from scoreboard.display.ascii import AsciiCanvas  # noqa: E402
+from scoreboard.display.fonts import font_path  # noqa: E402
+from scoreboard.display.mirror import Frame  # noqa: E402
 
 OUT = REPO_ROOT / "docs" / "football"
 
@@ -351,7 +351,7 @@ def real_screens() -> set[str]:
     """Screens the real renderer now draws (``football.demo``): their images come from
     ``render-screens.py --sport football``, so a mockup of the same name is retired,
     not rewritten."""
-    from hockey_scoreboard.football.demo import football_demo_steps
+    from scoreboard.football.demo import football_demo_steps
 
     return {step.name for step in football_demo_steps(render_screens.NOW)}
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render every demo screen to a PNG of round LED dots, for screens.md (#324).
 
-Walks ``demo_steps()`` -- the same synthetic scenes ``hockey-scoreboard --demo``
+Walks ``demo_steps()`` -- the same synthetic scenes ``scoreboard --demo``
 loops -- through the real app's ``draw_scene()``, records each frame with the
 live view's mirror (``display/mirror.py``), and saves it as ``<step name>.png``.
 So the guide's pictures come from the code that draws the panel and can't
@@ -42,14 +42,14 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from PIL import Image, ImageDraw  # noqa: E402
 
-from hockey_scoreboard.app import ScoreboardApp  # noqa: E402
-from hockey_scoreboard.config import Settings  # noqa: E402
-from hockey_scoreboard.demo import demo_steps  # noqa: E402
-from hockey_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
-from hockey_scoreboard.display.logos import LogoLibrary  # noqa: E402
-from hockey_scoreboard.display.matrix import Backend  # noqa: E402
-from hockey_scoreboard.display.mirror import Frame  # noqa: E402
-from hockey_scoreboard.display.teams import TEAM_COLORS, team_color  # noqa: E402
+from scoreboard.app import ScoreboardApp  # noqa: E402
+from scoreboard.config import Settings  # noqa: E402
+from scoreboard.demo import demo_steps  # noqa: E402
+from scoreboard.display.ascii import AsciiCanvas  # noqa: E402
+from scoreboard.display.logos import LogoLibrary  # noqa: E402
+from scoreboard.display.matrix import Backend  # noqa: E402
+from scoreboard.display.mirror import Frame  # noqa: E402
+from scoreboard.display.teams import TEAM_COLORS, team_color  # noqa: E402
 
 DEFAULT_OUT = REPO_ROOT / "docs" / "screens"
 FOOTBALL_OUT = REPO_ROOT / "docs" / "football"
@@ -206,8 +206,8 @@ def _render(real_logos: bool, sport: str) -> dict[str, Image.Image]:
         logos = LogoLibrary.default() if real_logos else synthetic_logos(root)
         app = make_app(logos)
         if sport == "football":
-            from hockey_scoreboard.display.logos import LogoSet
-            from hockey_scoreboard.football.demo import football_demo_steps
+            from scoreboard.display.logos import LogoSet
+            from scoreboard.football.demo import football_demo_steps
 
             sys.path.insert(0, str(REPO_ROOT / "tests"))
             from football_logos import write_synthetic_football_logos

@@ -10,8 +10,8 @@ import pytest
 
 pytest.importorskip("RGBMatrixEmulator")
 
-from hockey_scoreboard.football.demo import football_demo_steps
-from hockey_scoreboard.football.mode import FB_SCENE_KINDS
+from scoreboard.football.demo import football_demo_steps
+from scoreboard.football.mode import FB_SCENE_KINDS
 from test_screens_doc import _render_script
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -7,8 +7,8 @@ import pytest
 import requests
 import responses
 
-from hockey_scoreboard.hockey.api import BASE_URL, HockeyApiError, HockeyClient
-from hockey_scoreboard.hockey.models import (
+from scoreboard.hockey.api import BASE_URL, HockeyApiError, HockeyClient
+from scoreboard.hockey.models import (
     ClubStats,
     GoalieLine,
     SeasonSeriesRecord,
@@ -638,7 +638,7 @@ def test_a_stalled_server_gets_one_retry_not_three():
 
 
 def test_default_timeout_is_short_enough_for_the_render_loop():
-    from hockey_scoreboard.hockey.api import TIMEOUT
+    from scoreboard.hockey.api import TIMEOUT
 
     connect, read = TIMEOUT
     assert read <= 5.0 and connect <= 5.0

@@ -9,13 +9,13 @@ from typing import ClassVar
 
 import pytest
 
-from hockey_scoreboard.config import FootballConfig
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.football import idle
-from hockey_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from hockey_scoreboard.football.idle_views import PreviewView, build_preview, game_tag, week_label
-from hockey_scoreboard.football.models import FbGame
-from hockey_scoreboard.football.teams import TEAMS
+from scoreboard.config import FootballConfig
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.football import idle
+from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from scoreboard.football.idle_views import PreviewView, build_preview, game_tag, week_label
+from scoreboard.football.models import FbGame
+from scoreboard.football.teams import TEAMS
 from test_football_scenes import H, check_snapshot, raw_game, renderer
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
@@ -248,7 +248,7 @@ def test_away_is_on_the_left_and_home_on_the_right():
 
 def test_the_tag_is_amber_and_the_week_is_dim_and_both_are_dropped_to_fit():
     r = renderer()
-    from hockey_scoreboard.display.football_idle import preview_top_line
+    from scoreboard.display.football_idle import preview_top_line
 
     assert preview_top_line(r, NIGHT, 80) == "THU NIGHT  WEEK 13"
     assert preview_top_line(r, TURKEY, 80) == "THANKSGIVING"  # the week no longer fits
@@ -272,7 +272,7 @@ def test_without_crests_the_abbreviations_stand_in():
 def test_the_time_is_in_the_boards_own_zone():
     c = draw(PLAIN)  # 18:00Z is noon in Chicago
     assert c.pixels
-    from hockey_scoreboard.display.football_idle import draw_fb_preview  # noqa: F401
+    from scoreboard.display.football_idle import draw_fb_preview  # noqa: F401
 
 
 from test_football_scenes import _pixels, app  # noqa: E402,F401  (the real-app fixture)

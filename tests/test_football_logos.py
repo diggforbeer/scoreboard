@@ -11,9 +11,9 @@ import pytest
 from PIL import Image
 
 from football_logos import write_synthetic_football_logos
-from hockey_scoreboard.display import logos as logos_mod
-from hockey_scoreboard.display.logos import LogoLibrary, LogoSet, default_directories
-from hockey_scoreboard.football.teams import ABBREVIATIONS
+from scoreboard.display import logos as logos_mod
+from scoreboard.display.logos import LogoLibrary, LogoSet, default_directories
+from scoreboard.football.teams import ABBREVIATIONS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,14 +53,14 @@ def solid(path: Path, color, size=12) -> None:
 def test_hockey_directories_keep_their_original_layout():
     dirs = default_directories(32, "dark")
     assert dirs[-1] == REPO_ROOT / "assets" / "logos" / "32" / "dark"
-    assert dirs[-2] == Path("/usr/share/hockey-scoreboard/logos/32/dark")
+    assert dirs[-2] == Path("/usr/share/scoreboard/logos/32/dark")
     assert not any("football" in str(d) for d in dirs)
 
 
 def test_football_directories_sit_beside_them_under_football_with_the_same_override_slot():
     dirs = default_directories(12, "dark", "football")
     assets = REPO_ROOT / "assets" / "logos" / "football"
-    system = Path("/usr/share/hockey-scoreboard/logos/football")
+    system = Path("/usr/share/scoreboard/logos/football")
     assert dirs == [
         system / "overrides" / "12" / "dark",
         assets / "overrides" / "12" / "dark",
@@ -70,11 +70,11 @@ def test_football_directories_sit_beside_them_under_football_with_the_same_overr
 
 
 def test_each_sport_has_its_own_environment_variable(monkeypatch, tmp_path):
-    monkeypatch.setenv("HOCKEY_SCOREBOARD_LOGO_DIR", str(tmp_path / "hockey"))
-    monkeypatch.setenv("HOCKEY_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
+    monkeypatch.setenv("SCOREBOARD_LOGO_DIR", str(tmp_path / "hockey"))
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
     assert default_directories(32, "dark", "hockey")[0] == tmp_path / "hockey"
     assert default_directories(12, "dark", "football")[0] == tmp_path / "football"
-    monkeypatch.delenv("HOCKEY_SCOREBOARD_FOOTBALL_LOGO_DIR")
+    monkeypatch.delenv("SCOREBOARD_FOOTBALL_LOGO_DIR")
     assert tmp_path / "hockey" not in default_directories(12, "dark", "football")
 
 
@@ -87,8 +87,8 @@ def test_buf_is_different_art_in_each_league(monkeypatch, tmp_path):
     """``BUF`` is Buffalo in both, but the Sabres and the Bills are different logos."""
     solid(tmp_path / "hockey" / "BUF.png", (250, 20, 20), 32)
     solid(tmp_path / "football" / "BUF.png", (20, 20, 250), 12)
-    monkeypatch.setenv("HOCKEY_SCOREBOARD_LOGO_DIR", str(tmp_path / "hockey"))
-    monkeypatch.setenv("HOCKEY_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
+    monkeypatch.setenv("SCOREBOARD_LOGO_DIR", str(tmp_path / "hockey"))
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
     hockey = LogoLibrary.default(32, "dark", "hockey").get("BUF")
     football = LogoLibrary.default(12, "dark", "football").get("BUF")
     assert hockey.pixels[0][2] == (250, 20, 20) and football.pixels[0][2] == (20, 20, 250)
@@ -104,9 +104,7 @@ def test_the_default_library_is_still_the_hockey_one():
 
 def test_a_logo_set_hands_out_a_library_per_size_and_remembers_it(monkeypatch, tmp_path):
     write_synthetic_football_logos(tmp_path)
-    monkeypatch.setenv(
-        "HOCKEY_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark")
-    )
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark"))
     logos = LogoSet("football", "dark")
     small = logos.get("KC", 12)
     assert small is not None and (small.width, small.height) == (12, 12)
@@ -152,8 +150,8 @@ def test_a_pre_built_library_can_be_injected():
 @pytest.fixture
 def make_app(fake_backend_factory):
     def make(show_logos=True, variant="dark"):
-        from hockey_scoreboard.app import ScoreboardApp
-        from hockey_scoreboard.config import Settings
+        from scoreboard.app import ScoreboardApp
+        from scoreboard.config import Settings
 
         settings = Settings()
         settings.status.enabled = False
@@ -174,7 +172,7 @@ class _Stub:
 
 @pytest.fixture
 def fake_backend_factory():
-    from hockey_scoreboard.display.matrix import Backend
+    from scoreboard.display.matrix import Backend
     from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
     return lambda: Backend("fake", FakeMatrix, FakeOptions, FakeGraphics)

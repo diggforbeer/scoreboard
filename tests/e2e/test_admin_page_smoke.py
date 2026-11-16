@@ -65,7 +65,7 @@ def admin_page(tmp_path):
     frontend/dist, and hand back its URL and the config file it writes. A subprocess,
     not an in-process thread (the way AdminServer itself runs inside
     ScoreboardApp) -- this test wants the real `python -m
-    hockey_scoreboard.admin_server` entry point too, the same thing systemd
+    scoreboard.admin_server` entry point too, the same thing systemd
     actually execs on the device.
     """
     if not (DIST_DIR / "index.html").is_file():
@@ -75,14 +75,14 @@ def admin_page(tmp_path):
     config_path.write_text("")
 
     env = os.environ.copy()
-    env["HOCKEY_SCOREBOARD_CONFIG"] = str(config_path)
-    env["HOCKEY_SCOREBOARD_ADMIN_DIR"] = str(DIST_DIR)
-    env["HOCKEY_SCOREBOARD_UPDATE_STATE"] = str(tmp_path / "update-state.json")
-    env["HOCKEY_SCOREBOARD_ADMIN_HOST"] = HOST
-    env["HOCKEY_SCOREBOARD_ADMIN_PORT"] = str(PORT)
+    env["SCOREBOARD_CONFIG"] = str(config_path)
+    env["SCOREBOARD_ADMIN_DIR"] = str(DIST_DIR)
+    env["SCOREBOARD_UPDATE_STATE"] = str(tmp_path / "update-state.json")
+    env["SCOREBOARD_ADMIN_HOST"] = HOST
+    env["SCOREBOARD_ADMIN_PORT"] = str(PORT)
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "hockey_scoreboard.admin_server"],
+        [sys.executable, "-m", "scoreboard.admin_server"],
         env=env,
         cwd=REPO_ROOT,
         stdout=subprocess.PIPE,
@@ -158,7 +158,7 @@ def test_update_card_lists_image_level_changes(admin_page):
     write(
         {
             "status": "differs",
-            "files": ["scripts/hockey-scoreboard-setup-ap"],
+            "files": ["scripts/scoreboard-setup-ap"],
             "packages": ["mpg123"],
             "command": "sudo apt-get install -y mpg123",
         }
@@ -171,7 +171,7 @@ def test_update_card_lists_image_level_changes(admin_page):
             page.get_by_role("button", name="Setup", exact=True).click()
             differs = page.get_by_test_id("image-changes-differs")
             differs.wait_for(timeout=15000)
-            assert "scripts/hockey-scoreboard-setup-ap" in differs.inner_text()
+            assert "scripts/scoreboard-setup-ap" in differs.inner_text()
             assert "sudo apt-get install -y mpg123" in differs.inner_text()
             assert page.get_by_role("button", name="Install v2026.09.02").is_visible()
 
@@ -310,15 +310,15 @@ def live_admin_page(tmp_path, monkeypatch):
     own thread, with a panel Mirror (#268) -- plus a stand-in render loop
     that publishes a snapshot whenever one is asked for, each a different
     colour in the top-left LED. The standalone `python -m
-    hockey_scoreboard.admin_server` above has no panel to mirror, so it can't
+    scoreboard.admin_server` above has no panel to mirror, so it can't
     exercise the live view."""
     if not (DIST_DIR / "index.html").is_file():
         pytest.skip(f"{DIST_DIR}/index.html missing -- run `npm run build` in frontend/ first")
     import threading
     from datetime import UTC, datetime
 
-    from hockey_scoreboard import admin_server
-    from hockey_scoreboard.display.mirror import Mirror
+    from scoreboard import admin_server
+    from scoreboard.display.mirror import Mirror
 
     monkeypatch.setattr(admin_server, "ADMIN_DIR", DIST_DIR)
     config_path = tmp_path / "scoreboard.toml"

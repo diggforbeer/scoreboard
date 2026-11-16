@@ -6,20 +6,20 @@ from datetime import timedelta
 
 import pytest
 
-from hockey_scoreboard.config import FootballConfig
-from hockey_scoreboard.display import football_idle
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.football import idle
-from hockey_scoreboard.football.idle import ScheduleGame, TeamSchedule
-from hockey_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from hockey_scoreboard.football.idle_views import (
+from scoreboard.config import FootballConfig
+from scoreboard.display import football_idle
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.football import idle
+from scoreboard.football.idle import ScheduleGame, TeamSchedule
+from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from scoreboard.football.idle_views import (
     SCHEDULE_ROWS,
     ScheduleRow,
     ScheduleView,
     build_schedule,
 )
-from hockey_scoreboard.football.mode import FootballMode
-from hockey_scoreboard.football.teams import TEAMS
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.teams import TEAMS
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import NYG, SCHEDULE, utc
 from test_football_scenes import H, check_snapshot, game, renderer

@@ -16,17 +16,17 @@ from zoneinfo import ZoneInfo
 import pytest
 from RGBMatrixEmulator import graphics
 
-from hockey_scoreboard.app import Scene, ScoreboardApp
-from hockey_scoreboard.config import FootballConfig, ScoreboardConfig, Settings
-from hockey_scoreboard.display import football_scenes as fs
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.fonts import FontSet
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.display.renderer import SUBDUED, Renderer
-from hockey_scoreboard.football.mode import FB_SCENE_KINDS, FootballMode
-from hockey_scoreboard.football.models import FbGame
-from hockey_scoreboard.football.teams import TEAMS, team_color
-from hockey_scoreboard.football.worker import STALE_AFTER_SECONDS
+from scoreboard.app import Scene, ScoreboardApp
+from scoreboard.config import FootballConfig, ScoreboardConfig, Settings
+from scoreboard.display import football_scenes as fs
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.fonts import FontSet
+from scoreboard.display.matrix import Backend
+from scoreboard.display.renderer import SUBDUED, Renderer
+from scoreboard.football.mode import FB_SCENE_KINDS, FootballMode
+from scoreboard.football.models import FbGame
+from scoreboard.football.teams import TEAMS, team_color
+from scoreboard.football.worker import STALE_AFTER_SECONDS
 from test_app import FakeOptions
 from test_mirror import AsciiMatrix, as_pixels
 
@@ -442,7 +442,7 @@ def test_the_app_draws_every_football_scene_kind(kind, app):
     if kind == "fb_halftime":
         scene = Scene(kind, fb_game=game("WSH", "NYG", "in", 10, 17, name="STATUS_HALFTIME"))
     if kind in ("fb_play", "fb_playtext", "fb_event"):
-        from hockey_scoreboard.football.demo import football_demo_steps
+        from scoreboard.football.demo import football_demo_steps
 
         scene = next(
             s.scene for s in football_demo_steps(datetime.now(UTC)) if s.scene.kind == kind

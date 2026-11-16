@@ -13,17 +13,17 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard.app import (
+from scoreboard.app import (
     LEADERS_TTL_SECONDS,
     SCHEDULE_TTL_SECONDS,
     SEASON_SERIES_TTL_SECONDS,
     STANDINGS_TTL_SECONDS,
     ScoreboardApp,
 )
-from hockey_scoreboard.config import RotationEntry, Settings
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.hockey.api import HockeyApiError
-from hockey_scoreboard.hockey.models import (
+from scoreboard.config import RotationEntry, Settings
+from scoreboard.display.matrix import Backend
+from scoreboard.hockey.api import HockeyApiError
+from scoreboard.hockey.models import (
     PLAYOFF_LINE_MIN_GAMES,
     ClubStats,
     Game,
@@ -538,7 +538,7 @@ def test_goal_override_does_not_leak_onto_a_different_game(day):
     tick(app, clock, seconds=1)
     assert app.last_goal is not None and app.last_goal[0] == 1
 
-    from hockey_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     unrelated = Scene("game", client.today[0])  # SEA @ CGY, unrelated game
     assert app._apply_goal_override(unrelated) is unrelated
@@ -552,7 +552,7 @@ def test_goal_does_not_override_countdown_or_preview(day):
     client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
     tick(app, clock, seconds=1)
 
-    from hockey_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     preview = Scene("preview", client.season[2])
     assert app._apply_goal_override(preview) is preview
@@ -713,7 +713,7 @@ def test_goal_detail_override_does_not_leak_onto_a_different_game(day):
     app.refresh_goal_details()
     assert app._goal_detail is not None and app._goal_detail[0] == 1
 
-    from hockey_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     unrelated = Scene("game", client.today[0])  # SEA @ CGY, unrelated game
     assert app._apply_goal_override(unrelated) is unrelated
@@ -730,7 +730,7 @@ def test_goal_detail_does_not_override_countdown_or_preview(day):
     client.goal_events[1] = (goal_event(),)
     app.refresh_goal_details()
 
-    from hockey_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     preview = Scene("preview", client.season[2])
     assert app._apply_goal_override(preview) is preview
@@ -931,7 +931,7 @@ def test_three_stars_does_not_override_a_different_game(day):
     client.stars[1] = STARS
     app.refresh_three_stars()
 
-    from hockey_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     unrelated = Scene("game", client.today[0])
     assert app._apply_goal_override(unrelated) is unrelated
@@ -1073,7 +1073,7 @@ def test_clock_between_games_never_interrupts_a_live_or_final_held_game(day):
 
 def test_explicit_rotation_overrides_derived_default_with_per_entry_seconds(day):
     """An explicit [[rotation]] (#150) replaces the show_*/rotate_seconds-derived list entirely."""
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, clock, _client = day
     app.settings.rotation = [RotationEntry("clock", 3), RotationEntry("countdown_preview", 7)]
@@ -1093,7 +1093,7 @@ def test_explicit_rotation_skips_unavailable_entries_and_falls_back(day):
     standings itself ineligible (no rows), nothing in the rotation can be
     shown at all and the board falls back to cycling today's games by index.
     """
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     client.standings_rows = []
@@ -1680,7 +1680,7 @@ def test_a_followed_teams_goal_detail_interrupts_the_other_game(followed):
     assert app._goal_detail is not None and app._goal_detail[0] == 9
     assert app._goal_detail[2].team_abbrev == "SEA", "only the followed team's goal"
 
-    from hockey_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     assert app._apply_goal_override(Scene("game", client.today[1])).kind == "goal_detail"
 
@@ -1840,7 +1840,7 @@ def test_a_live_followed_game_takes_the_screen_over_the_grid(fake_backend):
 
 
 def test_division_screen_shows_only_the_favourites_division(day):
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("division", 8)]
@@ -1858,7 +1858,7 @@ def test_division_screen_shows_only_the_favourites_division(day):
 
 
 def test_division_screen_waits_until_the_favourite_has_played(day):
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("division", 8)]
@@ -1891,7 +1891,7 @@ def late_season(rows, games=PLAYOFF_LINE_MIN_GAMES):
 @pytest.mark.parametrize("screen", ["standings", "top_west", "division", "wildcard"])
 def test_playoff_line_waits_until_enough_games_are_played(day, screen):
     """Too early in the season the order is noise, so no screen draws a line (#298)."""
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry(screen, 8)]
@@ -1907,7 +1907,7 @@ def test_playoff_line_waits_until_enough_games_are_played(day, screen):
 
 
 def test_wildcard_screen_lists_the_race_with_the_line_after_second(day):
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("wildcard", 8)]
@@ -1921,7 +1921,7 @@ def test_wildcard_screen_lists_the_race_with_the_line_after_second(day):
 
 
 def test_wildcard_screen_waits_until_the_favourite_has_played(day):
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("wildcard", 8)]
@@ -1931,7 +1931,7 @@ def test_wildcard_screen_waits_until_the_favourite_has_played(day):
 
 
 def test_standings_screens_carry_the_real_playoff_cut(day):
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("top_west", 8)]
@@ -1946,7 +1946,7 @@ def test_standings_screens_carry_the_real_playoff_cut(day):
 
 def test_top_west_scrolls_the_whole_conference_over_its_dwell(day):
     """top_west/top_east (#200) list every team and scroll them down the slot."""
-    from hockey_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("top_west", 20)]

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard.audio import (
+from scoreboard.audio import (
     DEFAULT_NAME,
     VOLUME_CONTROLS,
     GoalHornPlayer,
@@ -124,8 +124,8 @@ def test_uploaded_horns_beat_the_shipped_default_but_not_a_team_file(monkeypatch
     upload, shipped = tmp_path / "up", tmp_path / "shipped"
     upload.mkdir()
     shipped.mkdir()
-    monkeypatch.setenv("HOCKEY_SCOREBOARD_UPLOAD_HORN_DIR", str(upload))
-    monkeypatch.delenv("HOCKEY_SCOREBOARD_HORN_DIR", raising=False)
+    monkeypatch.setenv("SCOREBOARD_UPLOAD_HORN_DIR", str(upload))
+    monkeypatch.delenv("SCOREBOARD_HORN_DIR", raising=False)
     touch(upload / DEFAULT_NAME)
     touch(shipped / DEFAULT_NAME)
     touch(shipped / "NSH.wav")
@@ -135,14 +135,14 @@ def test_uploaded_horns_beat_the_shipped_default_but_not_a_team_file(monkeypatch
 
 
 def test_default_directories_respects_override_and_env(monkeypatch, tmp_path):
-    monkeypatch.delenv("HOCKEY_SCOREBOARD_HORN_DIR", raising=False)
+    monkeypatch.delenv("SCOREBOARD_HORN_DIR", raising=False)
     dirs = default_directories()
     assert str(tmp_path) not in [str(d) for d in dirs]
 
     dirs = default_directories(str(tmp_path))
     assert dirs[0] == tmp_path
 
-    monkeypatch.setenv("HOCKEY_SCOREBOARD_HORN_DIR", str(tmp_path))
+    monkeypatch.setenv("SCOREBOARD_HORN_DIR", str(tmp_path))
     dirs = default_directories()
     assert tmp_path in dirs
 
@@ -216,7 +216,7 @@ def test_missing_player_is_explained_and_logged_once(tmp_path, caplog):
         raise FileNotFoundError(2, "No such file or directory", cmd[0])
 
     player = GoalHornPlayer([tmp_path], runner=missing)
-    with caplog.at_level("WARNING", logger="hockey_scoreboard.audio"):
+    with caplog.at_level("WARNING", logger="scoreboard.audio"):
         assert player.play("NSH") is False
         assert player.play("NSH") is False
     assert "apt-get install mpg123" in player.last_error

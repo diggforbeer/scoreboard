@@ -9,15 +9,15 @@ import dataclasses
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from hockey_scoreboard.app import Scene
-from hockey_scoreboard.display import football_plays as fp
-from hockey_scoreboard.display import football_score_detail as fsd
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.logos import LogoLibrary, LogoSet
-from hockey_scoreboard.football import events as ev
-from hockey_scoreboard.football.director import DETAIL
-from hockey_scoreboard.football.people import Person
-from hockey_scoreboard.football.teams import team_color
+from scoreboard.app import Scene
+from scoreboard.display import football_plays as fp
+from scoreboard.display import football_score_detail as fsd
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import events as ev
+from scoreboard.football.director import DETAIL
+from scoreboard.football.people import Person
+from scoreboard.football.teams import team_color
 from test_football_events import detector, make_game, make_play
 from test_football_scenes import check_snapshot, renderer
 

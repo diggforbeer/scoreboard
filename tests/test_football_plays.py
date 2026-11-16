@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 import requests
 
-from hockey_scoreboard import __main__ as cli
-from hockey_scoreboard.football import api
-from hockey_scoreboard.football.models import FieldPos, Play, PlayKind, classify
-from hockey_scoreboard.football.playtext import parse_text
+from scoreboard import __main__ as cli
+from scoreboard.football import api
+from scoreboard.football.models import FieldPos, Play, PlayKind, classify
+from scoreboard.football.playtext import parse_text
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
 K = PlayKind

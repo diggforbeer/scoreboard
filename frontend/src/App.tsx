@@ -4,10 +4,10 @@ import { TYPING_DELAY_MS, useAutosave } from './autosave'
 import { LiveView, type PanelFrame } from './LiveView'
 import { AutosaveToast } from './AutosaveToast'
 
-// Python admin server (hockey_scoreboard.admin_server) -- one port serves both
+// Python admin server (scoreboard.admin_server) -- one port serves both
 // this page's own production build and its WebSocket (#178 story 10); in
 // local dev, run it separately alongside the Vite dev server:
-// `python -m hockey_scoreboard.admin_server`. See its own docstring for the
+// `python -m scoreboard.admin_server`. See its own docstring for the
 // message protocol and what's been ported over so far.
 //
 // A real, shipped bug (found live against the actual board, not caught by
@@ -1152,7 +1152,7 @@ function App() {
   return (
     <div className="container py-4" style={{ maxWidth: '75rem' }}>
       <header className="mb-4">
-        <h1 className="h3 mb-0">Hockey Scoreboard</h1>
+        <h1 className="h3 mb-0">Scoreboard</h1>
       </header>
 
       <div className="row g-3 mb-4">
@@ -2778,7 +2778,7 @@ function App() {
           <div className="card-body">
             <h2 className="card-title h5">Logs</h2>
             <p className="text-body-secondary small">
-              Live output of hockey-scoreboard.service (last {LOG_MAX_LINES} lines kept).
+              Live output of scoreboard.service (last {LOG_MAX_LINES} lines kept).
             </p>
             {logError && <p className="text-danger">{logError}</p>}
             <pre

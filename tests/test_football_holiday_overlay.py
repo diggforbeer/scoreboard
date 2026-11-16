@@ -7,12 +7,12 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from hockey_scoreboard.app import FOOTBALL_GAME_SCENES, Scene
-from hockey_scoreboard.display import holiday
-from hockey_scoreboard.display.holiday import HOLIDAYS, egg_teams, use_sport
-from hockey_scoreboard.display.teams import TEAM_COLORS
-from hockey_scoreboard.football import teams as football_teams
-from hockey_scoreboard.football.idle_views import PreviewView, game_holiday, is_thanksgiving
+from scoreboard.app import FOOTBALL_GAME_SCENES, Scene
+from scoreboard.display import holiday
+from scoreboard.display.holiday import HOLIDAYS, egg_teams, use_sport
+from scoreboard.display.teams import TEAM_COLORS
+from scoreboard.football import teams as football_teams
+from scoreboard.football.idle_views import PreviewView, game_holiday, is_thanksgiving
 from test_football_idle_preview import utc
 from test_football_scenes import _pixels, app, game  # noqa: F401  (the real-app fixture)
 
@@ -199,7 +199,7 @@ def test_hockey_mode_colours_are_untouched():
 
 
 def test_snapshots_of_each_overlay_over_an_football_screen(app, update_snapshots):  # noqa: F811
-    from hockey_scoreboard.display.ascii import AsciiCanvas
+    from scoreboard.display.ascii import AsciiCanvas
     from test_football_scenes import check_snapshot
 
     with_holiday(app)

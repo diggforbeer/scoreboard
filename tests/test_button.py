@@ -13,7 +13,7 @@ from __future__ import annotations
 import builtins
 import time
 
-from hockey_scoreboard.button import Button
+from scoreboard.button import Button
 
 PIN = 26
 #: Short enough to keep the suite fast; the wrapper takes whatever it's

@@ -7,7 +7,7 @@ panel moves through them on a game day, see the game-flow page on the wiki
 and "What it shows" in the [README](README.md#what-it-shows).
 
 **About the pictures.** Every panel image below is generated, not drawn by
-hand: `scripts/render-screens.py` pushes each scene of `hockey-scoreboard
+hand: `scripts/render-screens.py` pushes each scene of `scoreboard
 --demo` through the real renderer and saves it as round LED dots to
 `docs/screens/`. The teams are made up (your favourite plays the home side)
 and logos are plain circles in team colours, because the real crests are hockey

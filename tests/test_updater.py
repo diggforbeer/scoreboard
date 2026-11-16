@@ -11,15 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard import updater
-from hockey_scoreboard.config import Settings
+from scoreboard import updater
+from scoreboard.config import Settings
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    app = tmp_path / "opt" / "hockey-scoreboard"
-    (app / "hockey_scoreboard").mkdir(parents=True)
-    (app / "hockey_scoreboard" / "__init__.py").write_text("OLD")
+    app = tmp_path / "opt" / "scoreboard"
+    (app / "scoreboard").mkdir(parents=True)
+    (app / "scoreboard" / "__init__.py").write_text("OLD")
     (app / "VERSION").write_text("v2026.09.01\n")
     monkeypatch.setattr(updater, "APP_DIR", app)
     monkeypatch.setattr(updater, "STATE_FILE", tmp_path / "state" / "update-state.json")
@@ -133,20 +133,20 @@ def _prepared(env, monkeypatch, bundle: bytes, *, healthy: bool):
     monkeypatch.setattr(
         updater,
         "_service_active",
-        lambda: healthy or (env / "hockey_scoreboard" / "__init__.py").read_text() == "OLD",
+        lambda: healthy or (env / "scoreboard" / "__init__.py").read_text() == "OLD",
     )
     return calls
 
 
-GOOD = {"hockey_scoreboard/__init__.py": "NEW"}
+GOOD = {"scoreboard/__init__.py": "NEW"}
 
 
 def test_apply_swaps_in_new_tree_when_service_comes_up(env, monkeypatch):
     calls = _prepared(env, monkeypatch, _bundle(GOOD), healthy=True)
     assert updater.apply() is True
-    assert (env / "hockey_scoreboard" / "__init__.py").read_text() == "NEW"
+    assert (env / "scoreboard" / "__init__.py").read_text() == "NEW"
     assert updater.installed_version() == "v2026.09.29"
-    assert not env.with_name("hockey-scoreboard.prev").exists()
+    assert not env.with_name("scoreboard.prev").exists()
     assert calls == [("restart", updater.SERVICE)]
     state = updater.read_state()
     assert state["last_apply"]["outcome"] == "success"
@@ -159,22 +159,22 @@ def test_apply_rolls_back_when_service_does_not_come_up(env, monkeypatch):
     monkeypatch.setattr(
         updater,
         "_service_active",
-        lambda: (env / "hockey_scoreboard" / "__init__.py").read_text() == "OLD",
+        lambda: (env / "scoreboard" / "__init__.py").read_text() == "OLD",
     )
     assert updater.apply() is False
-    assert (env / "hockey_scoreboard" / "__init__.py").read_text() == "OLD"
+    assert (env / "scoreboard" / "__init__.py").read_text() == "OLD"
     assert updater.installed_version() == "v2026.09.01"
     assert calls == [("restart", updater.SERVICE)] * 2  # once on new, once on restore
     assert updater.read_state()["last_apply"]["outcome"] == "rolled_back"
-    assert not env.with_name("hockey-scoreboard.prev").exists()
-    assert not env.with_name("hockey-scoreboard.failed").exists()
+    assert not env.with_name("scoreboard.prev").exists()
+    assert not env.with_name("scoreboard.failed").exists()
 
 
 def test_apply_rolls_back_when_restart_command_fails(env, monkeypatch):
     _prepared(env, monkeypatch, _bundle(GOOD), healthy=True)
     monkeypatch.setattr(updater, "_systemctl", lambda *a: False)
     assert updater.apply() is False
-    assert (env / "hockey_scoreboard" / "__init__.py").read_text() == "OLD"
+    assert (env / "scoreboard" / "__init__.py").read_text() == "OLD"
 
 
 def test_apply_rejects_checksum_mismatch_without_touching_live_tree(env, monkeypatch):
@@ -183,7 +183,7 @@ def test_apply_rejects_checksum_mismatch_without_touching_live_tree(env, monkeyp
     state["sha256"] = "0" * 64
     updater._write_state(state)
     assert updater.apply() is False
-    assert (env / "hockey_scoreboard" / "__init__.py").read_text() == "OLD"
+    assert (env / "scoreboard" / "__init__.py").read_text() == "OLD"
     assert calls == []
     assert updater.read_state()["last_apply"]["outcome"] == "failed"
 
@@ -245,7 +245,7 @@ def test_build_app_bundle_matches_what_the_updater_expects(tmp_path):
     assert manifest["driver_commit"]
     dest = tmp_path / "out"
     updater._extract(bundle, dest)
-    assert (dest / "hockey_scoreboard" / "updater.py").is_file()
+    assert (dest / "scoreboard" / "updater.py").is_file()
     assert not list(dest.rglob("__pycache__"))
 
 
@@ -294,7 +294,7 @@ def test_apply_rolls_back_admin_frontend_with_the_backend(env, admin, monkeypatc
     monkeypatch.setattr(
         updater,
         "_service_active",
-        lambda: (env / "hockey_scoreboard" / "__init__.py").read_text() == "OLD",
+        lambda: (env / "scoreboard" / "__init__.py").read_text() == "OLD",
     )
     assert updater.apply() is False
     assert (admin / "index.html").read_text() == "OLD-UI"
@@ -396,7 +396,7 @@ def _fake_repo(root, *, script="a", unit="u", packages=("python3",)):
     (root / "image/files/scripts/tool").write_text(script)
     (root / "image/files/systemd/x.service").write_text(unit)
     listing = "".join(f"    - {p}  # why\n" for p in packages)
-    (root / "image/layer/hockey-scoreboard.yaml").write_text(
+    (root / "image/layer/scoreboard.yaml").write_text(
         f"  packages:\n{listing}\n  customize-hooks:\n    - x\n"
     )
 
@@ -418,8 +418,8 @@ def test_image_manifest_lists_the_real_layer_packages():
     module = _load_script("image_manifest.py")
     manifest = module.build()
     assert "mpg123" in manifest["packages"]
-    assert "scripts/hockey-scoreboard-setup-ap" in manifest["files"]
-    assert "systemd/hockey-scoreboard.service" in manifest["files"]
+    assert "scripts/scoreboard-setup-ap" in manifest["files"]
+    assert "systemd/scoreboard.service" in manifest["files"]
 
 
 def test_build_app_bundle_manifest_carries_the_image_fingerprint(tmp_path):
@@ -539,7 +539,7 @@ def test_configured_branch_reads_the_update_section(tmp_path):
 
 
 def test_invalid_branch_name_falls_back_to_main(tmp_path):
-    from hockey_scoreboard.config import Settings
+    from scoreboard.config import Settings
 
     cfg = tmp_path / "scoreboard.toml"
     cfg.write_text('[update]\nbranch = "../etc"\n')

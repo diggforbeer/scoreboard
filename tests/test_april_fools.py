@@ -11,13 +11,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from hockey_scoreboard import april_fools
-from hockey_scoreboard.app import Scene, ScoreboardApp
-from hockey_scoreboard.config import Settings
-from hockey_scoreboard.display.logos import LogoLibrary, default_directories
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.display.teams import GUEST_COLORS, TEAM_COLORS, team_color
-from hockey_scoreboard.hockey.models import Game, GoalEvent, StandingsRow, Star
+from scoreboard import april_fools
+from scoreboard.app import Scene, ScoreboardApp
+from scoreboard.config import Settings
+from scoreboard.display.logos import LogoLibrary, default_directories
+from scoreboard.display.matrix import Backend
+from scoreboard.display.teams import GUEST_COLORS, TEAM_COLORS, team_color
+from scoreboard.hockey.models import Game, GoalEvent, StandingsRow, Star
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
 
 # 10:00 CDT on April 1 2027 -- inside the window for the default timezone.

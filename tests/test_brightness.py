@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hockey_scoreboard.brightness import REFERENCE_LUX, lux_to_brightness
+from scoreboard.brightness import REFERENCE_LUX, lux_to_brightness
 
 
 def test_darkness_maps_to_min_brightness():

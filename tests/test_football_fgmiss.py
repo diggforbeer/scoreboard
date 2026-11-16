@@ -8,15 +8,15 @@ from itertools import pairwise
 
 import pytest
 
-from hockey_scoreboard.app import Scene
-from hockey_scoreboard.display import football_fgmiss as fm
-from hockey_scoreboard.display import football_plays as fp
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.football import events as ev
-from hockey_scoreboard.football import pacing
-from hockey_scoreboard.football.demo import _play
-from hockey_scoreboard.football.geometry import FIELD_BOTTOM, FieldLayout
-from hockey_scoreboard.football.models import PlayKind
+from scoreboard.app import Scene
+from scoreboard.display import football_fgmiss as fm
+from scoreboard.display import football_plays as fp
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.football import events as ev
+from scoreboard.football import pacing
+from scoreboard.football.demo import _play
+from scoreboard.football.geometry import FIELD_BOTTOM, FieldLayout
+from scoreboard.football.models import PlayKind
 from test_football_director import started
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, renderer

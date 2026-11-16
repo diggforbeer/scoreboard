@@ -13,13 +13,13 @@ from datetime import UTC, datetime
 import pytest
 from RGBMatrixEmulator import graphics
 
-from hockey_scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, ScoreboardApp
-from hockey_scoreboard.config import FootballConfig, Settings
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.football.models import Participant
-from hockey_scoreboard.football.people import RosterPlayer
-from hockey_scoreboard.football.teams import TEAMS
+from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, ScoreboardApp
+from scoreboard.config import FootballConfig, Settings
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.matrix import Backend
+from scoreboard.football.models import Participant
+from scoreboard.football.people import RosterPlayer
+from scoreboard.football.teams import TEAMS
 from test_app import FakeOptions
 from test_football_events import make_game, make_play
 from test_football_scenes import SIT, _Hockey, game, renderer
@@ -328,8 +328,8 @@ def test_an_unknown_play_kind_draws_the_generic_animation():
 
 
 def test_a_registered_screen_replaces_the_generic_one_and_only_for_its_kind():
-    from hockey_scoreboard.display import football_plays as fp
-    from hockey_scoreboard.football.models import PlayKind
+    from scoreboard.display import football_plays as fp
+    from scoreboard.football.models import PlayKind
 
     calls = []
     real = fp.PLAY_SCREENS.get(PlayKind.SACK)
@@ -352,10 +352,10 @@ def test_a_registered_screen_replaces_the_generic_one_and_only_for_its_kind():
 
 @pytest.mark.parametrize("width", [128, 64])
 def test_every_event_draws_a_card_inside_the_panel(width):
-    from hockey_scoreboard.config import FootballConfig
-    from hockey_scoreboard.football import events as ev
-    from hockey_scoreboard.football.events import EventDetector
-    from hockey_scoreboard.football.reversals import ReversalDetector
+    from scoreboard.config import FootballConfig
+    from scoreboard.football import events as ev
+    from scoreboard.football.events import EventDetector
+    from scoreboard.football.reversals import ReversalDetector
 
     cfg = FootballConfig(favourite_team="NYG")
     det, g = EventDetector(lambda: cfg), make_game()

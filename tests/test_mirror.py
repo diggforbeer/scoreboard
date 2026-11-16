@@ -7,19 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard.app import DEMO_SCENE_SECONDS, Scene, ScoreboardApp
-from hockey_scoreboard.config import Settings
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.logos import LogoLibrary
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.display.mirror import (
+from scoreboard.app import DEMO_SCENE_SECONDS, Scene, ScoreboardApp
+from scoreboard.config import Settings
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary
+from scoreboard.display.matrix import Backend
+from scoreboard.display.mirror import (
     Mirror,
     MirrorCanvas,
     MirrorGraphics,
     _line,
     parse_bdf,
 )
-from hockey_scoreboard.display.teams import TEAM_COLORS, team_color
+from scoreboard.display.teams import TEAM_COLORS, team_color
 from test_app import FakeClient, FakeOptions
 
 emulator = pytest.importorskip("RGBMatrixEmulator")
@@ -112,7 +112,7 @@ def test_the_goal_light_is_mirrored_once_it_has_landed(app, tmp_path):
     """Held back while it builds (a half-dropped GOAL isn't worth a still),
     then snapshotted, and identical to what the panel got (the beams and
     glow are additive, so this is the frame most likely to drift)."""
-    from hockey_scoreboard.demo import demo_steps
+    from scoreboard.demo import demo_steps
 
     step = next(
         s for s in demo_steps("NSH", datetime(2026, 10, 14, 23, tzinfo=UTC)) if s.animate_goal

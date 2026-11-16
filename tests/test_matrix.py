@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from hockey_scoreboard.config import PanelConfig
-from hockey_scoreboard.display.matrix import Backend, build_options, load_backend
+from scoreboard.config import PanelConfig
+from scoreboard.display.matrix import Backend, build_options, load_backend
 
 
 class FakeOptions:

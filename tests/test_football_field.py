@@ -9,10 +9,10 @@ from __future__ import annotations
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from hockey_scoreboard.display import football_field as ff
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.logos import LogoSet
-from hockey_scoreboard.football.geometry import (
+from scoreboard.display import football_field as ff
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoSet
+from scoreboard.football.geometry import (
     AWAY,
     FIELD_BOTTOM,
     FIELD_TOP,
@@ -20,7 +20,7 @@ from hockey_scoreboard.football.geometry import (
     FieldLayout,
     first_down_line,
 )
-from hockey_scoreboard.football.teams import team_color
+from scoreboard.football.teams import team_color
 from test_football_events import make_game
 from test_football_scenes import check_snapshot, renderer
 
@@ -33,9 +33,7 @@ NARROW = FieldLayout.for_panel(64)
 def logos(tmp_path, monkeypatch):
     """Synthetic football logos at 12px, found through the environment variable."""
     write_synthetic_football_logos(tmp_path)
-    monkeypatch.setenv(
-        "HOCKEY_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark")
-    )
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark"))
     return LogoSet("football", "dark")
 
 

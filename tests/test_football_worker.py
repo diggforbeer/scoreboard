@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard.display.matrix import Backend
-from hockey_scoreboard.football import worker as worker_mod
-from hockey_scoreboard.football.api import MIN_POLL_SECONDS
-from hockey_scoreboard.football.mode import FootballMode
-from hockey_scoreboard.football.models import FbGame
-from hockey_scoreboard.football.worker import (
+from scoreboard.display.matrix import Backend
+from scoreboard.football import worker as worker_mod
+from scoreboard.football.api import MIN_POLL_SECONDS
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.models import FbGame
+from scoreboard.football.worker import (
     STALE_AFTER_SECONDS,
     FeedSnapshot,
     FeedWorker,
@@ -181,13 +181,13 @@ def test_a_slow_fetch_is_logged_with_its_duration(caplog):
             return super().scores(date)
 
     w = make_worker(Slow(GAMES), clock=clock)
-    with caplog.at_level(logging.DEBUG, logger="hockey_scoreboard.football.worker"):
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.football.worker"):
         w.poll_once()
     assert w.snapshot().fetch_seconds == 5.0
     assert any("slow" in r.message and "5.0s" in r.message for r in caplog.records)
     caplog.clear()
     w2 = make_worker(ScriptedClient(GAMES), clock=Clock())
-    with caplog.at_level(logging.DEBUG, logger="hockey_scoreboard.football.worker"):
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.football.worker"):
         w2.poll_once()
     assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
@@ -209,7 +209,7 @@ def test_before_the_first_success_it_is_connecting_not_stale():
 
 
 def test_the_stale_window_matches_the_hockey_side():
-    from hockey_scoreboard import app as hockey_app
+    from scoreboard import app as hockey_app
 
     assert STALE_AFTER_SECONDS == hockey_app.STALE_AFTER_SECONDS == 15 * 60
 
@@ -338,7 +338,7 @@ def test_a_result_that_lands_after_stop_is_never_published():
 
 
 def settings_with(poll=60.0, live=15.0):
-    from hockey_scoreboard.config import ScoreboardConfig
+    from scoreboard.config import ScoreboardConfig
 
     return dataclasses.replace(ScoreboardConfig(), poll_seconds=poll, live_poll_seconds=live)
 
@@ -392,8 +392,8 @@ def fake_backend() -> Backend:
 
 @pytest.fixture
 def app_factory(fake_backend):
-    from hockey_scoreboard.app import ScoreboardApp
-    from hockey_scoreboard.config import Settings
+    from scoreboard.app import ScoreboardApp
+    from scoreboard.config import Settings
 
     made = []
 

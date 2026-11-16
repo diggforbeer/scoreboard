@@ -6,7 +6,7 @@
     "display_adapter": "browser",
     "allow_adapter_fallback": true,
     "icon_path": null,
-    "emulator_title": "Hockey Scoreboard 128x32",
+    "emulator_title": "Scoreboard 128x32",
     "suppress_font_warnings": true,
     "browser": {
         "_comment": "For use with the browser adapter only.",

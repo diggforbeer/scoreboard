@@ -1,6 +1,6 @@
 """Parity between pyproject.toml's runtime deps and the image's apt packages (#77).
 
-The image installs Python deps from apt (`image/layer/hockey-scoreboard.yaml`),
+The image installs Python deps from apt (`image/layer/scoreboard.yaml`),
 not pip -- the app ships as a plain source tree on PYTHONPATH, never
 `pip install`ed on the board. That list is kept in sync with
 pyproject.toml's `[project] dependencies` entirely by hand: nothing else
@@ -12,7 +12,7 @@ nothing in the image build imports the new module either, so the gap ships
 silently and only shows up as an ImportError on first boot -- the same
 failure class as #21's libpython3.13 (see CLAUDE.md). This test is the
 cheap, always-runs half of the fix; the image build's own post-purge
-import check (image/layer/hockey-scoreboard.yaml) is the other half and
+import check (image/layer/scoreboard.yaml) is the other half and
 catches anything this name map gets wrong.
 
 Deliberately regex-based rather than a YAML parse: the packages list is a
@@ -28,10 +28,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-IMAGE_LAYER = REPO_ROOT / "image" / "layer" / "hockey-scoreboard.yaml"
+IMAGE_LAYER = REPO_ROOT / "image" / "layer" / "scoreboard.yaml"
 
 # Runtime (PyPI distribution name) -> apt package providing the same import
-# in image/layer/hockey-scoreboard.yaml. Update this alongside any change to
+# in image/layer/scoreboard.yaml. Update this alongside any change to
 # pyproject.toml's [project] dependencies or the image layer's apt list.
 DEP_TO_APT_PACKAGE = {
     "requests": "python3-requests",

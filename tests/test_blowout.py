@@ -17,12 +17,12 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from hockey_scoreboard import blowout
-from hockey_scoreboard.app import Scene
-from hockey_scoreboard.demo import demo_steps
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.fonts import FontSet
-from hockey_scoreboard.display.renderer import Renderer
+from scoreboard import blowout
+from scoreboard.app import Scene
+from scoreboard.demo import demo_steps
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.fonts import FontSet
+from scoreboard.display.renderer import Renderer
 from test_flow import FAV, NEXT_DROP, PUCK_DROP, game, score
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,7 +85,7 @@ def test_demo_mode_never_shows_it():
     assert "blowout" not in {s.scene.kind for s in steps}
 
 
-@pytest.mark.parametrize("path", ["README.md", "screens.md", "src/hockey_scoreboard/demo.py"])
+@pytest.mark.parametrize("path", ["README.md", "screens.md", "src/scoreboard/demo.py"])
 def test_it_is_kept_out_of_the_guide_readme_and_demo(path):
     text = (ROOT / path).read_text().lower()
     assert "blowout" not in text and "toilet" not in text

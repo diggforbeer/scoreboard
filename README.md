@@ -1,6 +1,6 @@
 # scoreboard
 
-A hockey scoreboard for a HUB75 LED matrix, delivered as a ready-to-flash
+A scoreboard for a HUB75 LED matrix, delivered as a ready-to-flash
 Raspberry Pi image.
 
 Flash the image with the official [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
@@ -18,7 +18,7 @@ it a couple of minutes on the very first power-up.
 
 If the board has no ethernet connection and no `[wifi]` details in
 `scoreboard.toml` yet, it broadcasts its own WiFi network
-(`Hockey-Scoreboard-Setup` by default) and shows the network name, password,
+(`Scoreboard-Setup` by default) and shows the network name, password,
 and a join QR code right on the panel — scan it, or join that network
 manually from your phone's WiFi settings.
 
@@ -131,15 +131,15 @@ renders to a browser window.
 source .venv/bin/activate
 
 # Print today's scores; needs no display at all
-hockey-scoreboard --dump
+scoreboard --dump
 
 # Run the board in the emulator, then open http://localhost:8888
 # (edit scoreboard.local.toml first for favourite_team etc.)
-hockey-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
+scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
 # ~4s each, until Ctrl-C -- also works on the real panel with no network
-hockey-scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
+scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
 # (with sport = "football" in the config it loops the football screens instead; never any sound)
 
 # Print frames as ASCII art - fastest way to iterate on layout
@@ -346,7 +346,7 @@ before this stay as they were; upload them again to normalize them.
 ## Status page
 
 The board is headless by design, so diagnosing "why is it stuck" would
-otherwise mean SSH-ing in and reading `journalctl -u hockey-scoreboard`. On by
+otherwise mean SSH-ing in and reading `journalctl -u scoreboard`. On by
 default, the board instead serves a small HTML page at
 `http://<name>.local/` (or the board's IP; `:8080` still works) showing the current scene, the last successful
 API poll, the last error (if any) and the favourite team -- enough to check

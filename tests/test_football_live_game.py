@@ -9,8 +9,8 @@ so a layout error anywhere in the game shows up as a pixel off the panel.
 
 from __future__ import annotations
 
-from hockey_scoreboard.football import events as ev
-from hockey_scoreboard.football.director import PLAY, PLAYTEXT
+from scoreboard.football import events as ev
+from scoreboard.football.director import PLAY, PLAYTEXT
 from test_football_events import make_play
 from test_football_play_scenes import land, rig  # noqa: F401  (the real-app fixture)
 from test_football_scenes import SIT, game

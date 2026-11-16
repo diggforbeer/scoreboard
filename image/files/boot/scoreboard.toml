@@ -1,5 +1,5 @@
 # ============================================================
-#  Hockey Scoreboard settings
+#  Scoreboard settings
 # ============================================================
 #
 #  Edit this file on the SD card's boot partition (it shows up as a small
@@ -224,7 +224,7 @@ enabled = true
 
 [wifi_setup]
 # The setup page served while the board's own first-boot WiFi access point
-# (see hockey-scoreboard-setup-ap) is up -- lets a phone connected to that AP
+# (see scoreboard-setup-ap) is up -- lets a phone connected to that AP
 # pick a network from a scan taken just before the AP came up, or type one
 # in by hand, and submit a password. On by default: while the AP is up,
 # this is the only way to actually choose a network (the AP itself just
@@ -350,7 +350,7 @@ pixel_mapper = ""
 #   "adafruit-hat-pwm" Adafruit board with the GPIO4-GPIO18 solder mod.
 #
 # IMPORTANT if the panel stays completely dark after setup: a wrong value
-# here does NOT show up as an error anywhere. hockey-scoreboard.service
+# here does NOT show up as an error anywhere. scoreboard.service
 # starts fine, keeps running, keeps polling the hockey API -- it's just
 # driving the wrong physical pins for your actual adapter, so nothing
 # ever lights up. Verified on real hardware: an Adafruit RGB Matrix

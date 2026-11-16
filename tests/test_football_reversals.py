@@ -11,11 +11,11 @@ import logging
 
 import pytest
 
-from hockey_scoreboard.football import events as ev
-from hockey_scoreboard.football import reversals as rv
-from hockey_scoreboard.football.events import EventDetector, Scope
-from hockey_scoreboard.football.queue import PlayWatcher
-from hockey_scoreboard.football.reversals import Reversal, ReversalDetector
+from scoreboard.football import events as ev
+from scoreboard.football import reversals as rv
+from scoreboard.football.events import EventDetector, Scope
+from scoreboard.football.queue import PlayWatcher
+from scoreboard.football.reversals import Reversal, ReversalDetector
 from test_football_events import SCORING, detector, make_game, make_play, one
 from test_football_queue import Clock
 
@@ -365,7 +365,7 @@ def test_every_match_is_logged_with_the_play_and_the_rules_that_fired(caplog):
     _det, game, watcher, events = celebrate(make_play(1, "pass_td_pat", score=(7, 0), off="WSH"),
                                            favourite="WSH")  # fmt: skip
     watcher.remember_all(events)
-    with caplog.at_level(logging.INFO, logger="hockey_scoreboard.football.reversals"):
+    with caplog.at_level(logging.INFO, logger="scoreboard.football.reversals"):
         watcher.on_poll(game, [make_play(1, "review_reversed_touchdown", score=(0, 0), off="WSH")])
     line = next(r.getMessage() for r in caplog.records if "reversal detected" in r.getMessage())
     assert "play=p0001" in line and "kind=touchdown" in line and "review=yes" in line
@@ -381,7 +381,7 @@ def test_a_play_that_was_reviewed_but_stands_is_logged_quietly(caplog):
     upheld = make_play(
         1, "rush_td_pat", score=(0, 7), off="NYG", text=celebrated.text + REVIEW_UPHELD
     )
-    with caplog.at_level(logging.DEBUG, logger="hockey_scoreboard.football.reversals"):
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.football.reversals"):
         watcher.on_poll(game, [upheld])
     assert not [r for r in caplog.records if r.levelno >= logging.INFO]
     assert any("stands" in r.getMessage() for r in caplog.records)

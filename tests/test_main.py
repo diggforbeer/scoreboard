@@ -1,4 +1,4 @@
-"""Tests for the ``hockey-scoreboard`` command line entry point.
+"""Tests for the ``scoreboard`` command line entry point.
 
 ``--dump`` is exercised end to end through ``main()`` with the hockey client
 stubbed out; nothing here touches the network or a matrix backend.
@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard import __main__ as cli
-from hockey_scoreboard.config import Settings
-from hockey_scoreboard.hockey.api import HockeyApiError
-from hockey_scoreboard.hockey.models import Game
+from scoreboard import __main__ as cli
+from scoreboard.config import Settings
+from scoreboard.hockey.api import HockeyApiError
+from scoreboard.hockey.models import Game
 
 
 @pytest.fixture
@@ -89,8 +89,8 @@ def test_dump_never_imports_a_matrix_backend(monkeypatch, tmp_path, games):
     # Another test may already have imported these; clear them for this call
     # (monkeypatch restores the originals afterwards).
     watched = (
-        "hockey_scoreboard.app",
-        "hockey_scoreboard.display.matrix",
+        "scoreboard.app",
+        "scoreboard.display.matrix",
         "rgbmatrix",
         "RGBMatrixEmulator",
     )
@@ -170,12 +170,12 @@ def test_demo_goes_through_the_matrix_backend_path_and_runs_the_demo_loop(monkey
         def run(self):
             calls.append("run")
 
-    fake_app = types.ModuleType("hockey_scoreboard.app")
+    fake_app = types.ModuleType("scoreboard.app")
     fake_app.ScoreboardApp = FakeApp
-    fake_matrix = types.ModuleType("hockey_scoreboard.display.matrix")
+    fake_matrix = types.ModuleType("scoreboard.display.matrix")
     fake_matrix.load_backend = lambda name=None: f"backend:{name}"
-    monkeypatch.setitem(sys.modules, "hockey_scoreboard.app", fake_app)
-    monkeypatch.setitem(sys.modules, "hockey_scoreboard.display.matrix", fake_matrix)
+    monkeypatch.setitem(sys.modules, "scoreboard.app", fake_app)
+    monkeypatch.setitem(sys.modules, "scoreboard.display.matrix", fake_matrix)
 
     argv = ["--demo", "--backend", "RGBMatrixEmulator", "-c", str(tmp_path / "absent.toml")]
     assert cli.main(argv) == 0

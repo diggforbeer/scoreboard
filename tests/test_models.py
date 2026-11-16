@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from hockey_scoreboard.hockey.models import Game
+from scoreboard.hockey.models import Game
 
 TZ = ZoneInfo("America/Chicago")
 
@@ -134,7 +134,7 @@ def test_malformed_start_time_falls_back_instead_of_raising():
 
 # -- special teams -----------------------------------------------------------
 
-from hockey_scoreboard.hockey.models import Situation  # noqa: E402
+from scoreboard.hockey.models import Situation  # noqa: E402
 
 
 def situation(away_strength, home_strength, away=(), home=(), time="1:23"):
@@ -214,7 +214,7 @@ def test_estimated_end_by_how_the_game_finished(games):
 
 # -- standings ----------------------------------------------------------
 
-from hockey_scoreboard.hockey.models import (  # noqa: E402
+from scoreboard.hockey.models import (  # noqa: E402
     StandingsRow,
     conference_standings,
     standings_window,
@@ -323,7 +323,7 @@ def test_standings_window_missing_team_is_empty():
 
 # -- goal detail (#122) -------------------------------------------------------
 
-from hockey_scoreboard.hockey.models import (  # noqa: E402
+from scoreboard.hockey.models import (  # noqa: E402
     AssistDetail,
     GoalEvent,
     goal_events_from_landing,
@@ -436,7 +436,7 @@ def test_player_details_skips_a_malformed_entry_without_losing_the_rest():
 
 # -- three stars (#156) -------------------------------------------------------
 
-from hockey_scoreboard.hockey.models import Star, three_stars_from_landing  # noqa: E402
+from scoreboard.hockey.models import Star, three_stars_from_landing  # noqa: E402
 
 
 def _star_raw(star=1, team="CAR", name="F. Unger Sorum", goals=1, assists=0, points=1):
@@ -497,7 +497,7 @@ def test_three_stars_from_landing_skips_a_malformed_entry_without_losing_the_res
 
 import random  # noqa: E402
 
-from hockey_scoreboard.hockey.models import (  # noqa: E402
+from scoreboard.hockey.models import (  # noqa: E402
     ClubStats,
     GoalieLine,
     SkaterLine,
@@ -564,7 +564,7 @@ def test_goalie_save_pct_label():
 
 from datetime import date  # noqa: E402
 
-from hockey_scoreboard.hockey.models import MeetingResult, SeriesMeeting  # noqa: E402
+from scoreboard.hockey.models import MeetingResult, SeriesMeeting  # noqa: E402
 
 MEETING = SeriesMeeting(1, date(2026, 1, 10), "MIN", "NSH", 2, 3, "OT")
 
@@ -654,7 +654,7 @@ def _seq_row(abbrev: str, division_sequence: int, wildcard_sequence: int = 0, co
 
 
 def test_wildcard_standings_ranks_teams_outside_the_division_top_three():
-    from hockey_scoreboard.hockey.models import wildcard_standings
+    from scoreboard.hockey.models import wildcard_standings
 
     rows = [
         _seq_row("A", 1),
@@ -667,7 +667,7 @@ def test_wildcard_standings_ranks_teams_outside_the_division_top_three():
 
 
 def test_playoff_cut_is_the_count_of_leading_teams_in():
-    from hockey_scoreboard.hockey.models import playoff_cut
+    from scoreboard.hockey.models import playoff_cut
 
     rows = [_seq_row("A", 1), _seq_row("B", 2), _seq_row("C", 3), _seq_row("D", 4)]
     assert playoff_cut(rows) == 3
@@ -682,7 +682,7 @@ def test_playoff_cut_is_the_count_of_leading_teams_in():
     ],
 )
 def test_playoff_cut_is_none_without_a_clean_line(sequences):
-    from hockey_scoreboard.hockey.models import playoff_cut
+    from scoreboard.hockey.models import playoff_cut
 
     rows = [_seq_row(f"T{i}", s) for i, s in enumerate(sequences)]
     assert playoff_cut(rows) is None

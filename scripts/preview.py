@@ -20,19 +20,19 @@ from zoneinfo import ZoneInfo
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from hockey_scoreboard.config import Settings  # noqa: E402
-from hockey_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
-from hockey_scoreboard.display.fonts import FontSet  # noqa: E402
-from hockey_scoreboard.display.logos import LogoLibrary  # noqa: E402
-from hockey_scoreboard.display.renderer import Renderer  # noqa: E402
-from hockey_scoreboard.hockey.models import Game  # noqa: E402
+from scoreboard.config import Settings  # noqa: E402
+from scoreboard.display.ascii import AsciiCanvas  # noqa: E402
+from scoreboard.display.fonts import FontSet  # noqa: E402
+from scoreboard.display.logos import LogoLibrary  # noqa: E402
+from scoreboard.display.renderer import Renderer  # noqa: E402
+from scoreboard.hockey.models import Game  # noqa: E402
 
 
 def load_games(use_fixture: bool) -> list[Game]:
     if use_fixture:
         path = REPO_ROOT / "tests" / "fixtures" / "score.json"
         return [Game.from_api(raw) for raw in json.loads(path.read_text())["games"]]
-    from hockey_scoreboard.hockey.api import HockeyClient
+    from scoreboard.hockey.api import HockeyClient
 
     with HockeyClient() as client:
         return client.scores()

@@ -1062,7 +1062,7 @@ celebrated. It compares **outcomes**, and reports the rules that fired: `play_go
 
 Screens the board actually draws are rendered from the code, not by hand:
 `python scripts/render-screens.py --sport football` walks `football.demo.football_demo_steps()` (the
-same steps `hockey-scoreboard --demo` loops when `sport = "football"`) through the real app and writes
+same steps `scoreboard --demo` loops when `sport = "football"`) through the real app and writes
 `docs/football/<step name>.png` with synthetic team-coloured circles for logos and a fixed clock,
 so they are reproducible. `--sport football --check` fails when a committed image is stale, and a
 test does the same. Nothing here touches `docs/screens/`.

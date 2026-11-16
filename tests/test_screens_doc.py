@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from hockey_scoreboard.app import Scene
-from hockey_scoreboard.demo import demo_steps
+from scoreboard.app import Scene
+from scoreboard.demo import demo_steps
 
 pytest.importorskip("RGBMatrixEmulator")
 

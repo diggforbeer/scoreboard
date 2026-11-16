@@ -5,7 +5,7 @@ was not enough (#see PR that added this test).
 
 Two things this test pins down so a future edit can't silently regress them:
 
-1. image/layer/hockey-scoreboard.yaml must strip the base image's own
+1. image/layer/scoreboard.yaml must strip the base image's own
    'dtparam=audio=on' line, not just append an 'off' override after it --
    leaving both in config.txt caused the firmware to emit conflicting
    snd_bcm2835.enable_headphones=/enable_hdmi= pairs on the kernel cmdline,
@@ -27,7 +27,7 @@ from __future__ import annotations
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-IMAGE_LAYER = REPO_ROOT / "image" / "layer" / "hockey-scoreboard.yaml"
+IMAGE_LAYER = REPO_ROOT / "image" / "layer" / "scoreboard.yaml"
 
 
 def _layer_text() -> str:

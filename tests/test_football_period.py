@@ -6,16 +6,16 @@ from __future__ import annotations
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from hockey_scoreboard.app import Scene
-from hockey_scoreboard.display import football_period as fper
-from hockey_scoreboard.display import football_plays as fp
-from hockey_scoreboard.display import football_scenes as fsc
-from hockey_scoreboard.display.ascii import AsciiCanvas
-from hockey_scoreboard.display.logos import LogoLibrary, LogoSet
-from hockey_scoreboard.football import pacing
-from hockey_scoreboard.football.demo import _play
-from hockey_scoreboard.football.mode import FB_SCENE_KINDS, resting_kind
-from hockey_scoreboard.football.models import PlayKind
+from scoreboard.app import Scene
+from scoreboard.display import football_period as fper
+from scoreboard.display import football_plays as fp
+from scoreboard.display import football_scenes as fsc
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import pacing
+from scoreboard.football.demo import _play
+from scoreboard.football.mode import FB_SCENE_KINDS, resting_kind
+from scoreboard.football.models import PlayKind
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, game, renderer
 

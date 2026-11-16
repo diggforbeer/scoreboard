@@ -7,7 +7,7 @@ hardware or need the library installed.
 
 from __future__ import annotations
 
-from hockey_scoreboard.light_sensor import DEFAULT_ADDRESS, LightSensor
+from scoreboard.light_sensor import DEFAULT_ADDRESS, LightSensor
 
 
 class FakeBus:
