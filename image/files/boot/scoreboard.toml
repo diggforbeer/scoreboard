@@ -21,6 +21,19 @@ country = "CA"
 # waiting and let you retry.
 connect_timeout_seconds = 90
 
+# Your teams, in priority order (epic #470): hockey and football together, best first, up to 12.
+# One list replaces the favourite and the followed teams of each sport; the admin page edits it.
+# NOTE: while the epic is being built the board still reads the favourite_team / also_follow
+# settings below; this list is read and saved but does not change the screens yet.
+#
+# [[teams]]
+# sport = "hockey"       # "hockey" or "football"
+# team = "NSH"           # the sport's own three-letter abbreviation
+#
+# [[teams]]
+# sport = "football"
+# team = "TEN"
+
 [scoreboard]
 # Which sport the board runs: "hockey" (default) or "football". Anything else is
 # treated as "hockey".

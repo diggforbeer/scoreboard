@@ -842,11 +842,76 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
         return default, datetime.strptime(default, "%H:%M").time()
 
 
+#: The sports a ranked team can belong to (epic #470). The abbreviations overlap (``BUF``,
+#: ``DAL``...), so a team is always a (sport, abbreviation) pair.
+TEAM_SPORTS = ("hockey", "football")
+#: How many teams the ranked list holds.
+TEAMS_MAX = 12
+
+
+@dataclass(frozen=True, slots=True)
+class TeamEntry:
+    """One row of the ranked ``[[teams]]`` list: a team of one sport. Rank is its position."""
+
+    sport: str
+    team: str
+
+
+def _team_exists(sport: str, team: str) -> bool:
+    return team in TEAM_COLORS if sport == "hockey" else football_team_exists(team)
+
+
+def _parse_teams(raw: Any) -> list[TeamEntry]:
+    """The ranked list from ``[[teams]]``: validated per sport, in file order (rank 1 first).
+
+    A bad entry (not a table, an unknown sport, a team the sport does not have) is dropped with a
+    warning rather than refusing to start; a repeat of a (sport, team) keeps its first, highest,
+    place; anything past ``TEAMS_MAX`` is dropped.
+    """
+    if raw in (None, []):
+        return []
+    if not isinstance(raw, list):
+        log.warning("teams must be a list of [[teams]] tables, got %r; ignoring it", raw)
+        return []
+    teams: list[TeamEntry] = []
+    for index, row in enumerate(raw, start=1):
+        if not isinstance(row, dict):
+            log.warning("Ignoring teams entry %d: not a table", index)
+            continue
+        sport = str(row.get("sport", "")).strip().lower()
+        team = str(row.get("team", "")).strip().upper()
+        if sport not in TEAM_SPORTS:
+            log.warning(
+                "Ignoring teams entry %d: sport %r is not one of %s", index, sport, TEAM_SPORTS
+            )
+            continue
+        if not _team_exists(sport, team):
+            log.warning("Ignoring teams entry %d: %r is not a %s team", index, team, sport)
+            continue
+        entry = TeamEntry(sport, team)
+        if entry in teams:
+            log.warning(
+                "Ignoring teams entry %d: %s %s is already ranked higher", index, sport, team
+            )
+            continue
+        if len(teams) >= TEAMS_MAX:
+            log.warning(
+                "Ignoring teams entry %d: only the first %d teams are kept", index, TEAMS_MAX
+            )
+            continue
+        teams.append(entry)
+    return teams
+
+
 @dataclass(slots=True)
 class Settings:
     panel: PanelConfig = field(default_factory=PanelConfig)
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     football: FootballConfig = field(default_factory=FootballConfig)
+    #: The ranked list of teams, hockey and football mixed, rank 1 first (epic #470). Empty when
+    #: absent from the file. For now it sits beside the per-sport favourite settings, which the
+    #: later stories of the epic retire.
+    teams: list[TeamEntry] = field(default_factory=list)
     #: The idle rotation (#150), explicit ``[[rotation]]`` entries in file
     #: order. Empty when absent from the file -- app.py derives the old
     #: implicit default list (countdown/preview, standings, clock) from
@@ -889,6 +954,7 @@ class Settings:
             panel=_build(PanelConfig, raw.get("panel", {})),
             scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
             football=_build(FootballConfig, raw.get("football", {}), "football"),
+            teams=_parse_teams(raw.get("teams", [])),
             rotation=_parse_rotation(raw.get("rotation", [])),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
@@ -899,6 +965,17 @@ class Settings:
             button=_build(ButtonConfig, raw.get("button", {})),
             holiday=_build(HolidayConfig, raw.get("holiday", {}), "holiday"),
         )
+
+    def teams_for(self, sport: str) -> list[str]:
+        """The ranked teams of one sport, best first."""
+        return [entry.team for entry in self.teams if entry.sport == sport]
+
+    def rank_of(self, sport: str, team: str) -> int | None:
+        """A team's rank in the whole list (1 is the top), or ``None`` if it is not ranked."""
+        for rank, entry in enumerate(self.teams, start=1):
+            if entry.sport == sport and entry.team == team:
+                return rank
+        return None
 
     def save(self, updates: Mapping[str, Any]) -> None:
         """Write ``updates`` into the source file, in place, keeping everything else.
@@ -931,6 +1008,21 @@ class Settings:
             raise ConfigWriteError(f"could not read {self.source_path}: {exc}") from exc
 
         for section, values in updates.items():
+            if section == "teams":
+                # ``[[teams]]`` is the whole new ranked list, replaced like ``[[rotation]]``; an
+                # empty list removes the key so no empty array is left behind.
+                if not values:
+                    if "teams" in doc:
+                        del doc["teams"]
+                    continue
+                aot = tomlkit.aot()
+                for entry in values:
+                    row = tomlkit.table()
+                    row["sport"] = entry["sport"]
+                    row["team"] = entry["team"]
+                    aot.append(row)
+                doc["teams"] = aot
+                continue
             if section == "rotation":
                 aot = tomlkit.aot()
                 for entry in values:
@@ -971,6 +1063,7 @@ class Settings:
         self.panel = reloaded.panel
         self.scoreboard = reloaded.scoreboard
         self.football = reloaded.football
+        self.teams = reloaded.teams
         self.rotation = reloaded.rotation
         self.audio = reloaded.audio
         self.status = reloaded.status
