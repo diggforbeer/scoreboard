@@ -77,7 +77,7 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   ```bash
   python3 -m venv .venv && source .venv/bin/activate   # skip if .venv already exists
   pip install -e '.[dev]'
-  pytest -n auto --cov --cov-report=term-missing   # plain `pytest` (no --cov, no -n) is fine too, just less CI-faithful; `-n 4` runs the whole suite in under two minutes
+  COVERAGE_CORE=sysmon pytest -n auto --cov --cov-report=term-missing   # what CI runs: line coverage, ~1.4x the plain run; plain `pytest` (no --cov, no -n) is fine too, just less CI-faithful
   ruff check .
   ruff format --check .
   ```
