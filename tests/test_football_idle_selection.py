@@ -155,6 +155,17 @@ def test_rotation_slots_follow_the_clock_and_the_clock_counts_with_company():
     ]  # fmt: skip
 
 
+def test_the_rotation_starts_at_the_idle_origin_the_app_sets():
+    """Under a ranked list the sports take turns (epic #470); the app sets the origin so football's
+    rotation starts at the top of its turn, not wherever the clock happens to be."""
+    register("fb_preview", "fb_week")
+    mode, clock = build([pregame()], rotation=[("fb_preview", 8), ("fb_week", 10), ("clock", 6)])
+    mode.idle_origin = 8.0  # the turn began 8 seconds before the clock's zero
+    assert kinds(mode, clock, [8, 15.9, 16, 25.9, 26, 31.9, 32]) == [
+        "fb_preview", "fb_preview", "fb_week", "fb_week", "clock", "clock", "fb_preview",
+    ]  # fmt: skip
+
+
 def test_screens_without_data_drop_out_and_a_lone_clock_is_not_a_rotation():
     register("fb_week")
     IDLE_SCREENS["fb_preview"] = lambda ctx: False
