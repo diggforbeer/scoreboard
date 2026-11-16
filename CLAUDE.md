@@ -127,7 +127,7 @@ pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
 ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (RUF100)
 
-scoreboard --demo                                            # loop every scene with made-up games; with sport = "football", the football steps (silent)
+scoreboard --demo                                            # loop every scene with made-up games; with `--sport football`, the football steps (silent)
 scoreboard --dump                                            # today's scores as text; no display
 scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live board at http://localhost:8888
 python scripts/preview.py --fixture                              # frames as ASCII, offline
@@ -238,6 +238,32 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   crest itself is just "too detailed" -- verify like this one was, don't
   assume the auto-fetched SVG is right by default.
 
+
+## Ranked teams (epic #470)
+
+One ranked `[[teams]]` list (hockey and football mixed, up to 12, rank 1 first) replaced the old
+`sport`, `favourite_team` and `also_follow` settings (retired keys are ignored with one warning and
+dropped on the next save; there is no migration). The admin page's "My teams" card edits it.
+
+- **The favourite is the owner**: the highest-ranked team that is live, else inside its countdown
+  window, else in a held final (`scoreboard/priority.py`, `Priority.owner`); the better rank wins
+  across sports and the most recent final wins among finals. The other ranked teams of a sport are
+  *followed* (quick banners, the ding). With nobody on, the sport's **lead** team (its highest-ranked)
+  is the favourite for the idle screens.
+- **Both feeds run** when a team of each sport is ranked (or none is); the app runs one sport's
+  machinery at a time (`ScoreboardApp._choose_sport`, never twice within 15 s) and polls the other
+  lightly. With nothing on the sports **alternate**, each showing its idle rotation for its lead team
+  (`Priority.idle_sport`, a pure function of the clock; rotations start at the top of their turn).
+- **The screens read the favourite through `priority.TeamView`**: `ScoreboardApp._hockey_cfg()` and
+  `_football_cfg()` wrap `[scoreboard]` / `[football]` and supply `favourite_team`, `followed_teams`
+  and `horn_team`. Prose below that says "the favourite" or "followed teams" means those.
+- **The horn is the lead team's of each sport** (the highest-ranked hockey team, the highest-ranked
+  football team), whoever owns the board; another followed team's goal gets the ding.
+- **Colours** (the clock, the Christmas tree, the holiday overlay) follow the overall rank 1.
+- **No team ranked**: every live game takes a turn (hockey before football), else hockey's
+  no-favourite flow (every game, or the clock).
+- The tests build favourites with `tests/teamcfg.py` (`fcfg`, `hcfg`, `set_favourite`, ...).
+
 ## App flow
 
 `_select_base_scene` always tries the favourite first (`_favourite_scene`,
@@ -247,7 +273,7 @@ saw it final -- exact if we watched it finish, estimated from the start
 time otherwise; see `Game.estimated_end`) → today's game if pregame else
 next from the season schedule → countdown inside `countdown_hours`,
 preview beyond. `_favourite_scene` returns `None` immediately with no
-`favourite_team` configured, or falls through to the idle rotation (below)
+a favourite (the owner of the ranked `[[teams]]` list, below), or falls through to the idle rotation (below)
 having nothing to show -- either way the board then cycles every game
 today by index, `rotate_seconds` each (#150 removed the old two-value
 `rotation` ("favourite"/"all") setting that used to gate this: a future
@@ -255,7 +281,7 @@ multi-favourite "red-zone" feature needs "which game(s) currently preempt
 the rotation" to be a richer question than that toggle could express, so
 it was deleted rather than built on top of).
 
-**Followed teams (#260).** `[scoreboard] also_follow` lists extra teams
+**Followed teams (#260).** The other ranked hockey teams in `[[teams]]` are followed: extra teams
 beside the favourite (`ScoreboardConfig.followed_teams` is favourite
 first, then these; unknown abbreviations and the favourite itself are
 dropped at load). By the owner's decisions in #260, `_followed_turns()`
@@ -271,11 +297,11 @@ turns (intermissions included -- skipping them was considered and not
 chosen); if the favourite's game today hasn't started, its countdown/preview
 joins as a `FAVOURITE_QUICK_TURN` so a live followed team can't hide it
 for the whole pregame (#331). Timed by monotonic time, not `self.index`. An
-`also_follow` team's final is not held; the favourite's three stars
+a followed team's final is not held; the favourite's three stars
 interrupt a followed game's turn like a goal does (below), so the turns
 can't swallow them. Everything else stays
 favourite-only: standings, leaders, matchup, three stars, the countdown/
-preview, holiday team colours. With only `also_follow` and no favourite,
+preview, holiday team colours. With only followed teams and no favourite,
 the turns still run, then today's-games rotation as before.
 
 **Broadcast delay (#301).** `scoreboard.broadcast_delay_seconds` (default 0,
@@ -304,7 +330,7 @@ game *and* team since two followed teams can meet) -- never their
 opponent's, never an unfollowed game's. In the favourite's own game only
 the favourite counts (`_celebrated_teams`), by the owner's call: a
 followed team scoring *on* the favourite is an opponent there, so it gets
-no goal screen and no scorer screen; two `also_follow` teams meeting each
+no goal screen and no scorer screen; two followed teams meeting each
 other both count; same scoping precedent as the
 power-play indicator above, deliberate, don't widen without asking. It
 drives two independent things off one detection: `GoalHornPlayer.play()`
@@ -363,7 +389,7 @@ favourite's live game announces itself on a full-panel screen (hazard-tape
 border, whistle and ripples, then `PENALTY  NSH` / `#9 FORSBERG` / `SLASHING
 2:00`), a pure function of age like the goal light. Owner's call was "do this"
 on the issue's recommended options, so: **both teams** in the favourite's own
-game only (not `also_follow` games), every penalty type, full animation every
+game only (not followed teams' games), every penalty type, full animation every
 time, silent, no config switch. Source is `summary.penalties` in the shared
 `landing` payload (`HockeyClient.penalties()`, a fourth reader, no new request),
 polled by `refresh_penalties()` at `live_poll_seconds`, skipped in
@@ -649,7 +675,7 @@ was last fetched for, invalidated purely by `SCHEDULE_TTL_SECONDS`
 elapsing -- nothing in that check knows *which* team the cached games
 belong to. `_apply_reloaded_settings` (`app.py`) now explicitly resets
 `self._schedule`/`self._schedule_retry_after` whenever
-`scoreboard.favourite_team` changes, forcing a fresh fetch on the very
+the favourite changes (the owner of the ranked list changes, or the list is edited), forcing a fresh fetch on the very
 next call rather than waiting out the stale TTL. Only ever mattered for
 the season-schedule fallback -- `favourite_game_today()` reads
 `self.games` (today's full slate, already fetched for every team, not
@@ -696,7 +722,7 @@ ignores the `wah_wah` setting so it can be tested while off). Not verified on
 USB audio hardware (#4).
 
 The followed-team "ding" (#311, `[audio] ding`, default **on**: it does
-nothing without `also_follow`) is the third sound off the same detection.
+nothing without followed teams) is the third sound off the same detection.
 `_on_goal` plays `GoalHornPlayer.play_ding()` when a non-favourite followed
 team scores in a live, non-shootout game, whether or not the favourite is
 playing (owner's call: one rule, no favourite-is-live condition). A followed
@@ -740,10 +766,10 @@ window bright forever -- that's the whole argument of #92. Outside the
 window the sensor behaves exactly as before; with no sensor,
 `panel.brightness` is re-applied each poll, which is what restores the
 panel once the window ends. `suppress_scope` is `tracked` (followed
-teams' games: the favourite plus `also_follow`, #260) or `all` (any live game) -- same favourite-vs-all scoping
+teams' games: the favourite plus the followed teams, #260) or `all` (any live game) -- same favourite-vs-all scoping
 precedent as the power-play indicator, goal detection and standings.
 `tracked` with no team followed at all silently behaves as `all`; that's a
-valid combination (no `favourite_team` configured, with night mode on),
+valid combination (no team ranked, with night mode on),
 not a misconfiguration, so no warning. `dim_brightness = 0` is zero-power
 blanking: `draw()` clears and swaps the canvas and skips scene selection
 and rendering entirely, rather than trusting brightness 0 alone to be dark
@@ -1572,7 +1598,7 @@ when it was written; that history is left as-is rather than rewritten.
   added to `status_server.py`'s own HTML form -- a real, small gap in
   the page this is replacing, fixed in passing rather than carried
   forward. Verified with a real headless-browser interaction: edited
-  `favourite_team`, unchecked `show_logos`, changed `logo_variant`,
+  the team list, unchecked `show_logos`, changed `logo_variant`,
   edited a timing field, saved, and confirmed both the re-rendered form
   (read back from the live DOM, not just component state) and the file
   on disk matched exactly.
@@ -2050,7 +2076,7 @@ so a stale one prints the wrong case. So:
   never rendered on the panel.
 - Defaults are the Predators, `regular` mapping, 128×32, Central time
   (America/Chicago). Anything can be overridden in the toml.
-- With no `favourite_team` configured, the board falls through to cycling
+- With no team ranked, the board falls through to cycling
   every game today by index -- there is no longer a separate `rotation`
   setting to degrade (removed by #150).
 

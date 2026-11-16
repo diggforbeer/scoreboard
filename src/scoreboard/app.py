@@ -33,6 +33,7 @@ from .config import (
     ConfigWriteError,
     RotationEntry,
     Settings,
+    TeamEntry,
     next_hardware_mapping,
     resolve_timezone,
 )
@@ -84,6 +85,7 @@ from .hockey.models import (
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
+from .priority import Moment, Priority, Windows
 from .setup_server import SetupServer
 from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
@@ -204,6 +206,10 @@ def _restart_scoreboard_service() -> None:
             log.warning("Could not restart scoreboard.service: %s", exc)
 
     threading.Thread(target=_run, daemon=True, name="hw-mapping-restart").start()
+
+
+#: The least time the board stays on one sport before the ranked list may switch it again.
+SPORT_MIN_DWELL_SECONDS = 15.0
 
 
 #: The football scenes that are a game's own screens (#430): a holiday decorates these only on a
@@ -598,11 +604,28 @@ class ScoreboardApp:
         #: The sport the board is running right now (#346). Only
         #: ``_switch_sport`` changes it, so ``current_mode()`` is the one
         #: place that decides which sport's code runs.
-        self._sport = settings.scoreboard.sport
+        #: The ranked ``[[teams]]`` list (epic #470) picks it through the priority layer.
+        self._sport = self._initial_sport(settings)
         self._football_client_factory = football_client_factory
+        #: Football's mode exists whenever football may take the board (a football team is ranked,
+        #: or nothing is and every live game counts): both feeds then run all the time and the
+        #: priority layer picks between them.
         self._football: FootballMode | None = (
-            self._new_football() if self._sport == "football" else None
+            self._new_football() if self._wants("football", settings) else None
         )
+        #: Today's hockey games as the lite poll saw them while football has the screen (the full
+        #: hockey machinery only runs for the sport on screen); the priority layer reads these.
+        self._hockey_lite: list[Game] = []
+        #: The priority layer's current owner (the favourite of the moment), set each loop.
+        self._owner: Moment | None = None
+        #: When the idle rotation began (monotonic): the sports alternate, and this puts the sport
+        #: that has the turn at the top of its rotation.
+        self._idle_origin = 0.0
+        self._priority_cache: tuple[tuple[TeamEntry, ...], Priority] | None = None
+        #: The hockey favourite the caches were fetched for, to notice the owner changing it.
+        self._hockey_favourite = self._hockey_cfg().favourite_team
+        #: When the sport on screen last changed, for the minimum dwell between switches.
+        self._sport_since = self.monotonic()
         #: Set by a sport switch so run() fetches on its next pass rather than
         #: leaving the new sport on ``connecting`` for a whole poll interval.
         self._poll_asap = False
@@ -671,6 +694,7 @@ class ScoreboardApp:
                 self.refresh_goal_details()
                 self.refresh_penalties()
                 self.refresh_three_stars()
+            self._choose_sport()
             self._sync_setup_server()
             self._track_address()
             self._sync_alias()
@@ -745,7 +769,8 @@ class ScoreboardApp:
             return football_demo_steps(self.clock())
         from .demo import demo_steps
 
-        return demo_steps(self.settings.scoreboard.favourite_team, self.clock())
+        # A demo has to show a favourite's screens: Nashville when no hockey team is ranked.
+        return demo_steps(self._hockey_cfg().favourite_team or "NSH", self.clock())
 
     def _start_demo_holiday(self, step: DemoStep) -> None:
         """Force a step's holiday on, with a fly-by starting right now.
@@ -786,7 +811,7 @@ class ScoreboardApp:
         and a goal scene with no goal behind it (a direct draw) has no age."""
         if scene.kind != "goal":
             return None
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if april_fools.active(favourite, self.clock().astimezone(self.tz)):
             favourite = april_fools.PRANK_AS
         if not favourite or (scene.goal_team or favourite) != favourite:
@@ -876,13 +901,13 @@ class ScoreboardApp:
         return LogoSet("football", settings.scoreboard.logo_variant)
 
     def _new_football(self) -> FootballMode:
-        """A fresh football mode over the live settings. Its feed thread is not started here:
-        ``run()`` starts it, and a live sport switch starts it once the loop is running."""
+        """A football mode over the live settings. Its feed thread is not started here: ``run()``
+        starts it, and a later edit of the ranked list starts it once the loop is running."""
         return FootballMode(
             lambda: self.settings.scoreboard,
             client_factory=self._football_client_factory,
             monotonic=self.monotonic,
-            football=lambda: self.settings.football,
+            football=self._football_cfg,
             delay_seconds=self._delay_seconds,
             utc_now=self.clock,
             wide=lambda: self.renderer.width >= 128,
@@ -891,6 +916,190 @@ class ScoreboardApp:
     def current_mode(self) -> str:
         """``hockey`` or ``football``: the one place that says which sport is running (#346)."""
         return self._sport
+
+    @staticmethod
+    def _initial_sport(settings: Settings) -> str:
+        """The sport to start on: the top-ranked team's, else hockey."""
+        return settings.teams[0].sport if settings.teams else "hockey"
+
+    @staticmethod
+    def _wants(sport: str, settings: Settings) -> bool:
+        """Whether ``sport``'s feed is needed: a team of it is ranked, or none is (every live game
+        of either sport counts then). A hockey-only list never polls football's feed."""
+        return not settings.teams or any(entry.sport == sport for entry in settings.teams)
+
+    def _reset_favourite_caches(self) -> None:
+        """Forget what was fetched for the previous favourite.
+
+        ``next_favourite_game()``'s ``_schedule`` cache is one season schedule for whichever team
+        it was last fetched for, kept fresh purely by ``SCHEDULE_TTL_SECONDS`` elapsing: nothing in
+        that check knows *which* team the cached games belong to. Left alone, a change of
+        favourite keeps showing the *previous* team's next game (a different matchup entirely) for
+        up to an hour, which is exactly why the matchup screen (#157) once kept showing the old
+        opponent. Only the countdown/preview/matchup fallback to the season schedule is affected
+        (today's game is read fresh from ``self.games``). The team leaders are one team's too.
+
+        Called when the ranked list is edited and when the owner (the favourite of the moment)
+        changes."""
+        self._schedule = None
+        self._schedule_retry_after = 0.0
+        self._leaders = None
+        self._leaders_retry_after = 0.0
+
+    def _colour_scheme(self, favourite: str, *, clock: bool = False) -> tuple[str, str]:
+        """The (sport, team) the clock, tree and holiday overlay take their colours from.
+
+        It is the overall rank 1, whichever sport is on screen, so the colours do not change as
+        games start and end (epic #470). With no team ranked they are plain, as the clock always was
+        in football mode (``favourite`` is only what a game screen is about, not a colour choice).
+        """
+        if favourite == april_fools.PRANK_AS:
+            return "hockey", favourite  # the April Fools prank recolours everything, as ever
+        if self.settings.teams:
+            first = self.settings.teams[0]
+            return first.sport, first.team
+        return "hockey", ""
+
+    def _priority(self) -> Priority:
+        """The priority layer over the current ranked list (rebuilt only when the list changes)."""
+        teams = tuple(self.settings.teams)
+        if self._priority_cache is None or self._priority_cache[0] != teams:
+            self._priority_cache = (teams, Priority(teams))
+        return self._priority_cache[1]
+
+    def _football_cfg(self) -> Any:
+        """Football's settings as its screens read them: ``[football]`` seen through
+        the priority layer (the owner is the favourite, the other ranked football teams are
+        followed, the lead team has the horn; with no team ranked, nobody is)."""
+        return self._priority().view("football", self.settings.football, self._owner)
+
+    def _hockey_cfg(self) -> Any:
+        """Hockey's settings as its screens read them: ``[scoreboard]`` seen through
+        the priority layer (the owner is the favourite, the other ranked hockey teams are followed,
+        the lead team has the horn; with no team ranked, nobody is)."""
+        return self._priority().view("hockey", self.settings.scoreboard, self._owner)
+
+    def _priority_windows(self) -> dict[str, Windows]:
+        hockey, football = self.settings.scoreboard, self.settings.football
+        return {
+            "hockey": Windows(
+                countdown=timedelta(hours=hockey.countdown_hours),
+                final_hold=timedelta(minutes=hockey.final_hold_minutes),
+            ),
+            "football": Windows(
+                countdown=timedelta(minutes=football.countdown_minutes),
+                final_hold=timedelta(minutes=football.final_hold_minutes),
+            ),
+        }
+
+    def _desired_sport(self) -> str:
+        """The sport the ranked list wants on screen now (epic #470).
+
+        The owner (the highest-ranked team that is live, else in its countdown, else in a held
+        final) decides; with nobody on, the sports take turns showing their idle rotations. With no
+        team ranked at all, a live game of either sport takes the board (hockey first), and
+        otherwise hockey keeps it (its no-favourite flow shows every game, or the clock).
+        """
+        football_games = list(self._football.snapshot.games or ()) if self._football else []
+        hockey_games = self._hockey_priority_games()
+        now = self.clock()
+        ages = {("hockey", gid): now - ended for gid, ended in self.ended_at.items()}
+        if self._football is not None:
+            self._football.track()
+            ages.update(
+                {
+                    ("football", gid): timedelta(seconds=s)
+                    for gid, s in self._football.final_ages().items()
+                }
+            )
+        priority = self._priority()
+        owner = priority.owner(
+            {"hockey": hockey_games, "football": football_games},
+            now,
+            self._priority_windows(),
+            ages,
+        )
+        self._owner = owner
+        if owner is not None:
+            return owner.sport
+        if priority.empty:
+            self._idle_origin = 0.0
+            games = {"hockey": hockey_games, "football": football_games}
+            return priority.empty_list_sport(games) or "hockey"
+        return self._idle_sport(priority)
+
+    def _hockey_priority_games(self) -> list[Game]:
+        """Today's hockey games for the priority layer: the full machinery's while hockey has the
+        board, else the light poll's. Right after a switch to hockey ``games`` is still empty until
+        the next poll, so the light poll's last answer covers that gap."""
+        return (self.games if self._sport == "hockey" else None) or self._hockey_lite
+
+    def _idle_turns(self) -> dict[str, float | None]:
+        """How long each sport's idle rotation is, or ``None`` for a sport with nothing to show
+        (no games on its slate: the offseason, or its feed is down). A rotation's length is its
+        configured entries' seconds; an entry skipped for lack of data only shortens it."""
+        hockey_games = self._hockey_priority_games()
+        football_games = self._football.snapshot.games if self._football is not None else None
+        return {
+            "hockey": sum(e.seconds for e in self._effective_rotation()) if hockey_games else None,
+            "football": (
+                sum(e.seconds for e in self.settings.football.idle_rotation)
+                if football_games
+                else None
+            ),
+        }
+
+    def _idle_sport(self, priority: Priority) -> str:
+        """With nothing ranked on, the sports take turns, each showing its rotation for its lead
+        team (epic #470). Falls back to the top-ranked team's sport when no sport has anything."""
+        turns = self._idle_turns()
+        now = self.monotonic()
+        slot = priority.idle_sport(now, turns)
+        if slot is None:
+            self._idle_origin = 0.0
+            return priority.sports()[0]
+        sport, fraction = slot
+        # The turn began ``fraction`` of its length ago: both sports time their rotation from there.
+        self._idle_origin = now - fraction * (turns[sport] or 0.0)
+        if self._football is not None:
+            self._football.idle_origin = self._idle_origin
+        return sport
+
+    def _apply_teams_change(self, new_settings: Settings) -> None:
+        """The ranked list was edited: start or stop football's feed as it is wanted, forget what
+        belonged to the old favourite and followed teams, and let the next ``_choose_sport`` pick
+        from the new order."""
+        wants_football = self._wants("football", new_settings)
+        if wants_football and self._football is None:
+            self._football = self._new_football()
+        if wants_football and self._running:
+            self._football.start()  # idempotent
+        elif not wants_football and self._football is not None:
+            self._football.stop()  # its feed thread must not outlive the mode
+            self._football = None
+            if self._sport == "football":
+                self._switch_sport("hockey")
+        self._reset_favourite_caches()
+        # _goal_events counts only followed teams' goals, so a team added mid-game would read as its
+        # whole tally scoring at once. Forget them; the next poll re-baselines without firing.
+        self._goal_events.clear()
+        self._shown_goal_events.clear()
+        self._seen_penalties.clear()
+        self._penalty_fetched.clear()
+        self._choose_sport(force=True)  # an edit takes effect now, not after the minimum dwell
+
+    def _choose_sport(self, *, force: bool = False) -> None:
+        """Switch the sport on screen when the ranked list wants another, but not twice within
+        ``SPORT_MIN_DWELL_SECONDS``: a game starting is taken at once after a quiet spell, yet two
+        borderline moments cannot make the board flip back and forth."""
+        wanted = self._desired_sport()
+        favourite = self._hockey_cfg().favourite_team
+        if favourite != self._hockey_favourite:
+            self._hockey_favourite = favourite
+            self._reset_favourite_caches()
+        dwelt = self.monotonic() - self._sport_since >= SPORT_MIN_DWELL_SECONDS
+        if wanted != self._sport and (force or dwelt):
+            self._switch_sport(wanted)
 
     def _switch_sport(self, sport: str) -> None:
         """Swap the running sport live, from a clean slate (#346).
@@ -902,12 +1111,21 @@ class ScoreboardApp:
         owner's, not the sport's, so it survives.
         """
         log.info("Switching sport %s -> %s", self._sport, sport)
-        if self._football is not None:
-            self._football.stop()  # its feed thread must not outlive the mode
+        if self._sport == "hockey" and self.games:
+            self._hockey_lite = list(self.games)  # the priority layer keeps seeing hockey's slate
+        # Both feeds keep running: football's mode stays up and only starts its screens afresh when
+        # it takes the board.
+        if self._football is None:
+            # Normally only when a football team is ranked (or none is); a demo on a hockey-only
+            # board asks for football explicitly, and football's mode must exist to show it.
+            if sport == "football" or self._wants("football", self.settings):
+                self._football = self._new_football()
+                if self._running:
+                    self._football.start()
+        elif sport == "football":
+            self._football.reset_screens()
         self._sport = sport
-        self._football = self._new_football() if sport == "football" else None
-        if self._football is not None and self._running:
-            self._football.start()
+        self._sport_since = self.monotonic()
         self._poll_asap = True
         self.games = []
         self.index = 0
@@ -955,10 +1173,21 @@ class ScoreboardApp:
         self.mirror.requested = True
 
     def refresh(self) -> None:
-        if self._football is not None:
+        if self._sport == "football" and self._football is not None:
             self._football.refresh()
+            if self._wants("hockey", self.settings):
+                # Hockey keeps being polled, lightly, so the priority layer can see it start.
+                self.fetcher.submit("scores_lite", self.client.scores, self._on_scores_lite)
             return
         self.fetcher.submit("scores", self.client.scores, self._on_scores)
+
+    def _on_scores_lite(self, games: list[Game] | None, error: Exception | None) -> None:
+        """The hockey poll made while football has the screen: remember the games for the priority
+        layer and nothing else (no goal detection, no horn, no status errors)."""
+        if error is not None or games is None:
+            log.debug("Hockey lite poll failed: %s", error)
+            return
+        self._hockey_lite = list(games)
 
     def _on_scores(self, games: list[Game] | None, error: Exception | None) -> None:
         """A score fetch finished (on the render thread): apply it, or record the failure."""
@@ -1127,12 +1356,12 @@ class ScoreboardApp:
         setting (self._schedule/_standings/_season_series-shaped, or a
         rebuilt object like self.horn/renderer.logos) can be added without
         anyone remembering to hook its invalidation in here -- exactly how
-        favourite_team_changed's _schedule fix below was missing until a
+        the favourite's _schedule fix (``_reset_favourite_caches``) was missing until a
         live bug (#178's admin-page work) surfaced it. When adding a new
         cache or rebuilt-from-settings object anywhere in this class,
         check here first: does a relevant field change need to reset or
         rebuild it, the same way audio_changed/logos_changed/
-        favourite_team_changed/etc. do below?
+        teams_changed/etc. do below?
         """
         old = self.settings
         audio_changed = dataclasses.astuple(old.audio) != dataclasses.astuple(new_settings.audio)
@@ -1141,11 +1370,7 @@ class ScoreboardApp:
             or old.scoreboard.logo_variant != new_settings.scoreboard.logo_variant
         )
         timezone_changed = old.scoreboard.timezone != new_settings.scoreboard.timezone
-        favourite_team_changed = (
-            old.scoreboard.favourite_team != new_settings.scoreboard.favourite_team
-        )
-        sport_changed = old.scoreboard.sport != new_settings.scoreboard.sport
-        followed_changed = old.scoreboard.followed_teams != new_settings.scoreboard.followed_teams
+        teams_changed = old.teams != new_settings.teams
         auto_brightness_changed = old.panel.auto_brightness != new_settings.panel.auto_brightness
         status_changed = (
             old.status.enabled,
@@ -1161,45 +1386,14 @@ class ScoreboardApp:
 
         self.settings = new_settings
 
-        if sport_changed:
-            self._switch_sport(new_settings.scoreboard.sport)
+        if teams_changed:
+            # The favourite's cached season schedule and team leaders belong to one team, and the
+            # followed teams' goal tallies to the old set (see ``_reset_favourite_caches``).
+            self._apply_teams_change(new_settings)
 
         if timezone_changed:
             self.tz = resolve_timezone(new_settings.scoreboard.timezone, fallback=self.tz)
             self.renderer.tz = self.tz
-
-        if favourite_team_changed:
-            # next_favourite_game()'s _schedule cache is a single season
-            # schedule for whichever team it was last fetched for, kept
-            # "fresh" purely by SCHEDULE_TTL_SECONDS elapsing -- nothing
-            # about that staleness check knows *which* team the cached
-            # games belong to. Left alone, a favourite-team switch keeps
-            # showing the *previous* team's next game (not a stale version
-            # of the new one -- a different matchup entirely) for up to an
-            # hour, until the TTL happens to expire on its own. Confirmed
-            # live (#178's admin-page work): this is exactly why the
-            # matchup/season-series screen (#157) kept showing the old
-            # opponent after a favourite switch -- it's fed straight from
-            # next_favourite_game()'s return value. Only relevant when
-            # today's game doesn't already answer it: favourite_game_
-            # today() reads self.games (today's full slate, already
-            # fetched for every team) fresh on every call, so an immediate
-            # favourite with a game today was never affected by this --
-            # only the countdown/preview/matchup fallback to the season
-            # schedule was.
-            self._schedule = None
-            self._schedule_retry_after = 0.0
-            self._leaders = None
-            self._leaders_retry_after = 0.0
-
-        if followed_changed:
-            # _goal_events counts only followed teams' goals, so a team
-            # added mid-game would read as its whole tally scoring at once.
-            # Forget both, and the next poll re-baselines without firing.
-            self._goal_events.clear()
-            self._shown_goal_events.clear()
-            self._seen_penalties.clear()
-            self._penalty_fetched.clear()
 
         if audio_changed:
             # volume is carried on the rebuilt object but deliberately not
@@ -1329,7 +1523,7 @@ class ScoreboardApp:
         warning.
         """
         cfg = self.settings.night_mode
-        if cfg.suppress_scope == "all" or not self.settings.scoreboard.followed_teams:
+        if cfg.suppress_scope == "all" or not self._hockey_cfg().followed_teams:
             candidates = self.games
         else:
             candidates = [g for g in self.games if self._is_followed(g)]
@@ -1352,7 +1546,7 @@ class ScoreboardApp:
 
     def _is_followed(self, game: Game) -> bool:
         """Does ``game`` involve the favourite or an ``also_follow`` team (#260)?"""
-        return any(game.involves(team) for team in self.settings.scoreboard.followed_teams)
+        return any(game.involves(team) for team in self._hockey_cfg().followed_teams)
 
     def _celebrated_teams(self, game: Game) -> list[str]:
         """The teams in ``game`` whose goals get the goal screen (#260).
@@ -1360,10 +1554,10 @@ class ScoreboardApp:
         In the favourite's own game that's only the favourite, even against a
         followed team: a goal against the favourite is never celebrated.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if favourite and game.involves(favourite):
             return [favourite]
-        return [t for t in self.settings.scoreboard.also_follow if game.involves(t)]
+        return [t for t in self._hockey_cfg().also_follow if game.involves(t)]
 
     def _detect_goals(self, games: list[Game]) -> None:
         """A followed team's goal: their own score increased since we last saw it.
@@ -1393,7 +1587,7 @@ class ScoreboardApp:
         favourite's game, where only the favourite is celebrated). Skipped
         in a shootout, where the headline score only moves when it's decided.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite or not game.involves(favourite):
             return
         opponent = game.away if game.home.abbrev == favourite else game.home
@@ -1410,8 +1604,11 @@ class ScoreboardApp:
         self.horn.play_wah_wah()
 
     def _on_goal(self, game: Game, team: str | None = None) -> None:
-        """Show the goal scene; the horn is the favourite's, a followed team gets the ding."""
-        favourite = self.settings.scoreboard.favourite_team
+        """Show the goal scene; the horn is the lead team's (the favourite's, without a ranked
+        list), another followed team gets the ding."""
+        cfg = self._hockey_cfg()
+        favourite = cfg.favourite_team
+        horn_team = getattr(cfg, "horn_team", favourite)
         team = team or favourite
         log.info(
             "GOAL: %s %s %d-%d %s",
@@ -1422,7 +1619,7 @@ class ScoreboardApp:
             game.home.abbrev,
         )
         self.last_goal = (game.id, self.monotonic(), team)
-        if team != favourite:
+        if team != horn_team:
             # #311: live goals only; a shootout's headline score moves when decided.
             if game.is_live and not game.in_shootout:
                 if self._horn_muted():
@@ -1433,7 +1630,7 @@ class ScoreboardApp:
         if self._horn_muted():
             log.info("Goal horn muted by button press; not playing")
             return
-        self.horn.play(favourite)
+        self.horn.play(team)
 
     def _horn_muted(self) -> bool:
         return self._horn_muted_until is not None and self.monotonic() < self._horn_muted_until
@@ -1602,7 +1799,7 @@ class ScoreboardApp:
         Scoped to the favourite's own game only; an opponent's penalty is
         news too, so both teams count there.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite:
             return
         now = self.monotonic()
@@ -1670,7 +1867,7 @@ class ScoreboardApp:
         doesn't show the screen a second time. Favourite-only, same scoping
         as goal detection and the PP indicator.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not watched or not favourite or not game.involves(favourite):
             return
         if game.id not in self._three_stars_shown:
@@ -1723,7 +1920,7 @@ class ScoreboardApp:
 
     def _note_blowout(self, game: Game, *, watched: bool) -> None:
         """Arm the blowout flash (#326) when a game we watched ends as one."""
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if (
             watched
             and game.id not in self._blowout_shown
@@ -1757,7 +1954,7 @@ class ScoreboardApp:
     # -- favourite mode --------------------------------------------------
 
     def favourite_game_today(self) -> Game | None:
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite:
             return None
         return next((g for g in self.games if g.involves(favourite)), None)
@@ -1771,7 +1968,7 @@ class ScoreboardApp:
         already cached -- the status thread must never race the main loop
         into the same fetch or block on it.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite:
             return None
         now_mono = self.monotonic()
@@ -1796,7 +1993,7 @@ class ScoreboardApp:
     def _on_schedule(
         self, team: str, fetched_at: float, games: list[Game] | None, error: Exception | None
     ) -> None:
-        if team != self.settings.scoreboard.favourite_team:
+        if team != self._hockey_cfg().favourite_team:
             return  # the favourite changed while this was in flight: it is the old team's
         if error is not None or games is None:
             log.warning("Schedule fetch failed: %s", error)
@@ -1852,7 +2049,7 @@ class ScoreboardApp:
         which contradicts #150/#151's whole point of the rotation list
         being the authoritative, admin-editable source of truth.
         """
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         favourite = cfg.favourite_team
         if not favourite:
             return None
@@ -1904,7 +2101,7 @@ class ScoreboardApp:
         Gated on the favourite having played, like ``standings``: the API
         serves last season's final table all through the off-season.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite:
             return None
         rows = self._refresh_standings(allow_fetch=allow_fetch)
@@ -1924,7 +2121,7 @@ class ScoreboardApp:
 
         Gated on the favourite having played, like ``standings``/``division``.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite:
             return None
         rows = self._refresh_standings(allow_fetch=allow_fetch)
@@ -1992,7 +2189,7 @@ class ScoreboardApp:
         record = self._refresh_season_series(upcoming.id, allow_fetch=allow_fetch)
         if record is None:
             return None
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         meetings = tuple(
             result for m in record.meetings if (result := m.result_for(favourite)) is not None
         )
@@ -2071,7 +2268,7 @@ class ScoreboardApp:
     def _on_club_stats(
         self, team: str, fetched_at: float, stats: ClubStats | None, error: Exception | None
     ) -> None:
-        if team != self.settings.scoreboard.favourite_team:
+        if team != self._hockey_cfg().favourite_team:
             return  # the favourite changed while this was in flight
         if error is not None or stats is None:
             log.warning("Club stats fetch failed: %s", error)
@@ -2088,7 +2285,7 @@ class ScoreboardApp:
         games-played floor: early on everyone sits at zero and a random
         leader is shown rather than hiding the screen.
         """
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not favourite:
             return None
         leaders = self._refresh_leaders(favourite, allow_fetch=allow_fetch)
@@ -2097,7 +2294,7 @@ class ScoreboardApp:
         return Scene("leaders", leaders=leaders)
 
     def _countdown_or_preview(self, upcoming: Game) -> Scene:
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         if upcoming.seconds_until_start(self.clock()) <= cfg.countdown_hours * 3600:
             return Scene("countdown", upcoming)
         return Scene("preview", upcoming)
@@ -2110,7 +2307,7 @@ class ScoreboardApp:
         opts into an explicit list. ``matchup`` (#157) is deliberately never
         here: it only appears when someone lists it in ``[[rotation]]``.
         """
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         entries = [RotationEntry("countdown_preview", cfg.rotate_seconds)]
         if cfg.show_standings:
             entries.append(RotationEntry("standings", cfg.rotate_seconds))
@@ -2193,11 +2390,12 @@ class ScoreboardApp:
         ]
         if not slots:
             return None
+        clock = self.monotonic() - self._idle_origin
         if len(slots) == 1:
             scene, seconds = slots[0]
-            return self._split_slot(scene, self.monotonic() % seconds, seconds)
+            return self._split_slot(scene, clock % seconds, seconds)
         total = sum(seconds for _, seconds in slots)
-        position = self.monotonic() % total
+        position = clock % total
         start = 0.0
         for scene, seconds in slots:
             if position < start + seconds:
@@ -2236,7 +2434,7 @@ class ScoreboardApp:
             address_scene = self._address_scene()
             if address_scene is not None:
                 return address_scene
-        if self._football is not None:
+        if self._sport == "football" and self._football is not None:
             return self._football.scene()
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
@@ -2676,13 +2874,13 @@ class ScoreboardApp:
         if self.last_goal is None:
             return None
         goal_game_id, goal_time, goal_team = self.last_goal
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if goal_game_id != game_id or not favourite or goal_team != favourite:
             return None
         return goal_time + self.settings.scoreboard.goal_flash_seconds
 
     def _favourite_scene(self, *, allow_fetch: bool = True) -> Scene | None:
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         turns = self._followed_turns()
         if turns:
             position = self.monotonic() % sum(seconds for _, seconds in turns)
@@ -2721,7 +2919,7 @@ class ScoreboardApp:
         equal turns. An ``also_follow`` team's game leaves the cycle the
         moment it ends; only the favourite's final is held.
         """
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         today = self.favourite_game_today()
         favourite_game = None
         if today is not None and today.is_live:
@@ -2918,7 +3116,7 @@ class ScoreboardApp:
         display order is a property of the app, not of whoever fetched.
         """
         games = sorted(games, key=Game.sort_key)
-        favourite = self.settings.scoreboard.favourite_team
+        favourite = self._hockey_cfg().favourite_team
         if not (favourite and self.settings.scoreboard.prefer_favourite):
             return games
         pinned = [g for g in games if g.involves(favourite)]
@@ -2927,7 +3125,7 @@ class ScoreboardApp:
 
     def poll_interval(self) -> float:
         """Poll harder while a game is actually in progress."""
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         games = self._api_games()
         if any(g.is_live and g.in_shootout for g in games):
             return min(cfg.shootout_poll_seconds, cfg.live_poll_seconds)
@@ -2974,9 +3172,9 @@ class ScoreboardApp:
         the two threads must not race into duplicate fetches.
         """
         scene = self.select_scene(allow_fetch=False)
-        if self._football is not None:
+        if self._sport == "football" and self._football is not None:
             return self._football_status(scene)
-        cfg = self.settings.scoreboard
+        cfg = self._hockey_cfg()
         return {
             "version": installed_version() or "unknown (factory image)",
             "address": self._board_name() or "(unknown)",
@@ -3020,7 +3218,7 @@ class ScoreboardApp:
         The snapshot's times are monotonic, so they are turned into wall-clock times here.
         """
         snap = self._football.snapshot if self._football is not None else None
-        cfg = self.settings.football
+        cfg = self._football_cfg()
 
         def wall(mono: float | None) -> datetime | None:
             if mono is None:
@@ -3126,7 +3324,7 @@ class ScoreboardApp:
     def april_fools_active(self) -> bool:
         """April 1 on a Preds board (#248) -- see april_fools.py."""
         local = self.clock().astimezone(self.tz)
-        return april_fools.active(self.settings.scoreboard.favourite_team, local)
+        return april_fools.active(self._hockey_cfg().favourite_team, local)
 
     @staticmethod
     def _april_fools_scene(scene: Scene) -> Scene:
@@ -3163,12 +3361,13 @@ class ScoreboardApp:
         self._penalty_building = (
             penalty_age is not None and penalty_age < penalty_screen.ENTRANCE_SECONDS
         )
+        football_on = self._sport == "football" and self._football is not None
         favourite = (
-            self.settings.football.favourite_team
-            if self._football is not None
-            else self.settings.scoreboard.favourite_team
+            self._football_cfg().favourite_team
+            if football_on
+            else self._hockey_cfg().favourite_team
         )
-        if self._football is None and self.april_fools_active():
+        if not football_on and self.april_fools_active():
             favourite = april_fools.PRANK_AS
             scene = self._april_fools_scene(scene)
         if scene.kind == "game":
@@ -3255,10 +3454,13 @@ class ScoreboardApp:
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
         elif scene.kind == "clock":
-            # The clock's colours are keyed on hockey abbreviations; a football one is no key.
-            r.draw_clock(self.canvas, self.clock(), "" if self._sport == "football" else favourite)
+            sport, abbrev = self._colour_scheme(favourite, clock=True)
+            with use_sport(sport):
+                r.draw_clock(self.canvas, self.clock(), abbrev)
         elif scene.kind == "christmas_tree":
-            r.draw_christmas_tree(self.canvas, self.clock(), favourite)
+            sport, abbrev = self._colour_scheme(favourite)
+            with use_sport(sport):
+                r.draw_christmas_tree(self.canvas, self.clock(), abbrev)
         elif scene.kind == "address":
             r.draw_address(
                 self.canvas,
@@ -3320,10 +3522,12 @@ class ScoreboardApp:
 
     def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
-        if self._football is not None and not self._demo_drawing:
+        football_on = self._sport == "football" and self._football is not None
+        if football_on and not self._demo_drawing:
             holiday = self._football_game_holiday(scene, holiday)
         min_gap, max_gap = self.settings.holiday.flyby_gap_minutes
-        with use_sport("football" if self._football is not None else "hockey"):
+        sport, favourite = self._colour_scheme(favourite)
+        with use_sport(sport):
             self._overlay_animating = self.holiday_overlay.draw(
                 self.canvas,
                 scene_kind=scene.kind,

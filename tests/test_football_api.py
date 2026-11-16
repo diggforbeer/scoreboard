@@ -342,9 +342,9 @@ def test_dump_reports_an_unreachable_feed_and_exits_nonzero(monkeypatch, capsys)
     assert "no route" in capsys.readouterr().err
 
 
-def test_dump_follows_the_configured_sport_when_not_told(monkeypatch, capsys, tmp_path):
+def test_dump_follows_the_top_ranked_teams_sport_when_not_told(monkeypatch, capsys, tmp_path):
     cfg = tmp_path / "scoreboard.toml"
-    cfg.write_text('[scoreboard]\nsport = "football"\n')
+    cfg.write_text('[[teams]]\nsport = "football"\nteam = "TEN"\n')
     monkeypatch.setattr(api, "_build_session", lambda: FakeSession(FakeResponse({"events": []})))
     assert cli.main(["--dump", "-c", str(cfg)]) == 0
     assert "No games today." in capsys.readouterr().out

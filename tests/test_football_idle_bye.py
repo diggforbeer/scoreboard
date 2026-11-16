@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 
-from scoreboard.config import FootballConfig
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.display.football_idle import next_game_line
 from scoreboard.football import idle
 from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
 from scoreboard.football.idle_views import ByeView, PreviewView, build_bye
 from scoreboard.football.models import FbGame
+from teamcfg import fcfg
 from test_football_idle_preview import FIXTURES, NYG, SCHEDULE, Logos, utc
 from test_football_scenes import H, check_snapshot, renderer
 
@@ -22,7 +22,7 @@ def ctx(favourite="NYG", board=BOARD, schedule=SCHEDULE, now=utc(2026, 11, 3, 12
     snap = idle.IdleSnapshot(
         scoreboard=board, schedules={NYG: idle.Cached(schedule, 0.0)} if schedule else {}
     )
-    return IdleContext(0.0, now, [], snap, FootballConfig(favourite_team=favourite))
+    return IdleContext(0.0, now, [], snap, fcfg(favourite_team=favourite))
 
 
 def test_the_fixtures_two_sources_agree_on_the_bye():
@@ -125,7 +125,7 @@ def test_a_favourite_on_a_bye_gets_the_bye_in_the_real_rotation_and_the_app_draw
 
     other = game("DAL", "PHI", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)
     clock, feed = Clock(960.0), Feed([other])  # the IdleFeed's scoreboard lists CHI on a bye
-    cfg = FootballConfig(favourite_team="CHI")
+    cfg = fcfg(favourite_team="CHI")
     mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     seen = {}

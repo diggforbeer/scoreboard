@@ -16,8 +16,9 @@ Rules, from ``football_screen.md``:
   (``PLAIN`` for a team that is not followed). Turnovers and the coin toss are about the
   game rather than a team: ``FULL`` in the favourite's game, ``QUICK`` in a followed game.
 * **Nothing fires for the score the board started with.** A game's score is seeded from the
-  play queue's baseline, and a fresh detector (a new mode after a sport switch) starts
-  empty; an unseeded game treats its first play as the baseline rather than guess.
+  play queue's baseline, and a fresh detector (the director is rebuilt when football takes the
+  board back from another sport) starts empty; an unseeded game treats its first play as the
+  baseline rather than guess.
 * **Skipped plays still count.** The queue may skip plays to catch up; a touchdown among
   them must still celebrate, so the detector reads every skipped play as well as the one
   shown, in order.
@@ -398,4 +399,14 @@ def _game_scope(game: FbGame, cfg: FootballConfig) -> Scope | None:
 
 
 def _favourite_sound(team: str, scope: Scope, cfg: FootballConfig) -> bool:
+    """Whether a celebration carries the sound (a flag; the sound itself is not wired yet).
+
+    With the plain settings it is the favourite's full celebration, as ever. Under a ranked list
+    (``horn_team``, epic #470) the horn belongs to the sport's lead team alone: its score carries
+    it whether the screen is the full celebration or the quick banner (another team owns the
+    board), and nobody else's does.
+    """
+    horn = getattr(cfg, "horn_team", None)
+    if horn is not None:
+        return scope in (Scope.FULL, Scope.QUICK) and bool(horn) and team == horn
     return scope == Scope.FULL and bool(cfg.favourite_team) and team == cfg.favourite_team

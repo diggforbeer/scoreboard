@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from scoreboard.config import FootballConfig
 from scoreboard.display import football_idle
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.football import idle
@@ -20,6 +19,7 @@ from scoreboard.football.idle_views import (
 from scoreboard.football.mode import FootballMode
 from scoreboard.football.models import FbGame
 from scoreboard.football.teams import TEAMS, team_color
+from teamcfg import fcfg
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, Art, utc
 from test_football_scenes import H, check_snapshot, game, raw_game, renderer
@@ -67,7 +67,7 @@ class Logos:
 
 def ctx(games, favourite="NYG"):
     return IdleContext(0.0, utc(2026, 11, 15, 22), list(games), idle.IdleSnapshot(),
-                       FootballConfig(favourite_team=favourite))  # fmt: skip
+                       fcfg(favourite_team=favourite))  # fmt: skip
 
 
 # -- surnames, yards and the margin -----------------------------------------------------------
@@ -231,7 +231,7 @@ def test_the_hold_is_sixty_minutes_from_the_end_we_watched_and_never_replays_aft
     done = final_game(leaders=LINES)
     object.__setattr__(done, "id", live.id) if False else None
     feed = Feed([live])
-    cfg = FootballConfig(favourite_team="NYG", rotation=[{"screen": "clock", "seconds": 5}])
+    cfg = fcfg(favourite_team="NYG", rotation=[{"screen": "clock", "seconds": 5}])
     mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     mode.scene()  # watched live
@@ -257,7 +257,7 @@ def test_the_hold_is_sixty_minutes_from_the_end_we_watched_and_never_replays_aft
 def test_the_hold_length_is_the_settings():
     clock = Clock(1000.0)
     feed = Feed([game("WSH", "NYG", "in", 10, 7, game_id=3)])
-    cfg = FootballConfig(favourite_team="NYG", final_hold_minutes=5)
+    cfg = fcfg(favourite_team="NYG", final_hold_minutes=5)
     mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
     mode.worker.poll_once()
     mode.scene()

@@ -14,6 +14,7 @@ from scoreboard.football.mode import FootballMode
 from scoreboard.football.models import FbGame, FbSituation
 from scoreboard.football.redzone import RedZoneWatcher, attacking_team
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 from test_football_idle import Clock
 from test_football_idle_selection import (
     BASE,
@@ -188,7 +189,7 @@ def build(games, *, show=True, wide=True, follow=(), rotation=("fb_preview",)):
     from scoreboard.config import RotationEntry  # noqa: F401
 
     clock = Clock(BASE)
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG", also_follow=list(follow),
         rotation=[{"screen": s, "seconds": 8} for s in rotation], show_redzone=show,
     )  # fmt: skip
@@ -256,7 +257,7 @@ def test_no_alert_while_a_game_scene_is_up():
 def test_the_length_is_the_settings():
     register("fb_preview")
     clock = Clock(BASE)
-    cfg = FootballConfig(favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 8}],
+    cfg = fcfg(favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 8}],
                          redzone_seconds=11.0)  # fmt: skip
     feed = IdleFeed([nyg_game("pre"), elsewhere()])
     mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg,

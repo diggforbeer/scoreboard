@@ -424,8 +424,11 @@ class _HockeyStub:
 
 
 def switch_sport(app, sport):
-    new = dataclasses.replace(app.settings.scoreboard, sport=sport)
-    app._apply_reloaded_settings(dataclasses.replace(app.settings, scoreboard=new))
+    """What an admin edit of the ranked list does: a football team on top, or a hockey one."""
+    from scoreboard.config import TeamEntry
+
+    team = {"football": "NYG", "hockey": "NSH"}[sport]
+    app._apply_reloaded_settings(dataclasses.replace(app.settings, teams=[TeamEntry(sport, team)]))
 
 
 def test_the_render_loop_keeps_drawing_while_a_fetch_is_in_flight(app_factory):

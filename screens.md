@@ -41,7 +41,7 @@ Highest priority first:
 2. `ap_setup`: while the board has no network and is broadcasting its own setup network.
 3. Night-mode blanking, if `dim_brightness = 0`: nothing is drawn at all.
 4. Goal override: `goal`, then `goal_detail`; then `penalty`, or `three_stars` after a final.
-5. Followed teams' live games (the favourite, plus `also_follow`).
+5. Followed teams' live games (the favourite, plus the other ranked teams).
 6. The favourite's own screen: live, then the held final, then a game today, then the next game from the schedule.
 7. With nothing live or upcoming, the **idle rotation**: a list of screens, each for its own number of seconds, set by `[[rotation]]` entries in `scoreboard.toml` or the admin page's Idle rotation card. A screen with nothing to show right now is skipped, never shown blank.
 8. With no favourite set, or nothing left in the rotation: every game today, one at a time (or as the `scores` grid if `scores_grid` is on).
@@ -103,7 +103,7 @@ goal is detected, whatever is on screen.
 
 ![Goal, followed team](docs/screens/goal_followed.png)
 
-A followed team's goal (`also_follow`, #260) is a quick update, so it keeps
+A followed team's goal (a lower-ranked team, #260) is a quick update, so it keeps
 the plain screen: "GOAL" and the scoring team's city name in its colours
 between the two logos, the score below in white. The text layout (no logos)
 is the same screen across the whole panel.

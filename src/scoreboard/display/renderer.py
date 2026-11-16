@@ -30,7 +30,7 @@ from . import goal_light
 from . import penalty as penalty_screen
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary, LogoSet
-from .teams import team_color, team_name, team_secondary_color
+from .teams import team_color, team_name
 
 log = logging.getLogger(__name__)
 
@@ -1135,10 +1135,15 @@ class Renderer:
         hierarchy that SUBDUED gave it -- a straight colour swap would have
         both lines competing for attention instead.
         """
+        from .holiday import team_color as sport_color
+        from .holiday import team_secondary_color as sport_secondary
+
         canvas.Clear()
         local = now.astimezone(self.tz)
-        time_color = team_color(favourite) if favourite else WHITE
-        date_color = self._dim(team_secondary_color(favourite)) if favourite else SUBDUED
+        # The colour lookups follow the sport the caller set (``holiday.use_sport``): a football
+        # team's colours under a ranked list whose first team is a football team (epic #470).
+        time_color = sport_color(favourite) if favourite else WHITE
+        date_color = self._dim(sport_secondary(favourite)) if favourite else SUBDUED
         self.text_center(
             canvas, self.fonts.large, self.width // 2, 15, time_color, local.strftime("%-I:%M %p")
         )

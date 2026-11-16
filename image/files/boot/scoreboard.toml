@@ -21,30 +21,26 @@ country = "CA"
 # waiting and let you retry.
 connect_timeout_seconds = 90
 
+# Your teams, in priority order: hockey and football together, best first, up to 12. The admin
+# page's "My teams" card edits this list. Rank 1 is "the favourite" whenever it has something on:
+# the board follows its day (preview, countdown, live, final) and its game holds the screen; the
+# other teams are followed: their live games take turns on screen and their goals jump in. The horn
+# plays for the highest-ranked team of each sport. With no team listed, every live game takes a turn.
+# (This replaces the old sport, favourite_team and also_follow settings, which are ignored.)
+[[teams]]
+sport = "hockey"       # "hockey" or "football"
+team = "NSH"           # the sport's own three-letter abbreviation (NSH, TOR, MTL, ... or TEN, NYG)
+
+# [[teams]]
+# sport = "football"
+# team = "TEN"
+
 [scoreboard]
-# Which sport the board runs: "hockey" (default) or "football". Anything else is
-# treated as "hockey".
-sport = "hockey"
-# Three-letter team abbreviation, followed as your team's day: a preview of
-# the next game, a countdown as puck drop approaches, the live score, the
-# final for a while, then the preview of the game after that. Set to "" for
-# no preference, which instead rotates through every game in the league
-# today. Examples: NSH, TOR, MTL, EDM, VAN, CGY, WPG, OTT, BOS, NYR.
-favourite_team = "NSH"
-
-# More teams to follow. While favourite_team is live and in play its game
-# holds the screen; during its intermissions (or with it not playing) the
-# followed teams' live games take turns, rotate_seconds each. A goal by any
-# of them jumps straight to that game's GOAL screen -- except against
-# favourite_team, whose own game only celebrates its own goals. The horn
-# only plays for favourite_team. Example: also_follow = ["DAL", "TOR"]
-also_follow = []
-
 # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 timezone = "America/Chicago"
 
 # Seconds each game stays on screen when rotating through every game in the
-# league (no favourite_team, or nothing to show for your favourite right
+# league (no team ranked, or nothing to show for your favourite right
 # now); also the default dwell time for each idle screen below, unless an
 # explicit [[rotation]] list overrides it (see the bottom of this section).
 rotate_seconds = 8
@@ -98,7 +94,7 @@ broadcast_delay_seconds = 0
 # screen itself, so it has no effect once an explicit [[rotation]] is
 # present. Not on the admin page for the same reason: once you're editing
 # [[rotation]] there, add or remove a "standings" row directly instead of
-# toggling this. Only appears once favourite_team has actually played a
+# toggling this. Only appears once your favourite has actually played a
 # game this season either way.
 show_standings = true
 
@@ -151,17 +147,9 @@ scores_grid = false
 # seconds = 8
 
 [football]
-# Used only when [scoreboard] sport = "football". The football favourite and followed teams are
-# kept apart from the hockey ones above, because abbreviations like BUF, CAR, DAL, DET
-# and MIN are different teams in each league; switching sport and back keeps both.
-# Also editable on the admin page (Scoreboard card, once Sport is football).
-#
-# ESPN's abbreviation for your team: KC, NYG, WSH, GB, SF, ... There is no default:
-# with none set, the board shows every game. A hockey-only abbreviation (NSH, TOR) is
-# ignored with a warning.
-favourite_team = ""
-# More football teams to follow. Example: also_follow = ["NYG", "DAL"]
-also_follow = []
+# Football's own settings: the idle rotation, the screen lengths and the toggles (all also on the
+# admin page). Which football teams you follow is the [[teams]] list at the top.
+# (The old favourite_team and also_follow keys here are ignored.)
 
 [audio]
 # Plays a horn through a USB speaker or USB audio adapter when your team
@@ -188,9 +176,9 @@ horn_dir = ""
 # (or the admin page's upload folder) to replace it.
 wah_wah = false
 
-# Play a short synthesized "ding" when a team you follow (also_follow) scores
+# Play a short synthesized "ding" when a lower-ranked team of yours scores
 # in a live game, whether or not your favourite is playing. On by default; it
-# does nothing unless also_follow is set. Follows the broadcast delay, the
+# does nothing unless a second team is ranked. Follows the broadcast delay, the
 # volume and the button mute. Drop a _ding.wav into the horn directory (or
 # the admin page's upload folder) to replace it.
 ding = true
@@ -253,7 +241,7 @@ end_time = "07:00"
 dim_brightness = 0
 
 # Which games hold off dimming.
-#   "tracked"  Only followed teams' games: favourite_team and also_follow
+#   "tracked"  Only your ranked teams' games
 #              (with no team followed at all, this behaves like "all").
 #   "all"      Any live game in the league today.
 suppress_scope = "tracked"

@@ -6,7 +6,6 @@ from datetime import timedelta
 
 import pytest
 
-from scoreboard.config import FootballConfig
 from scoreboard.display import football_idle
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.football import idle
@@ -20,6 +19,7 @@ from scoreboard.football.idle_views import (
 )
 from scoreboard.football.mode import FootballMode
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import NYG, SCHEDULE, utc
 from test_football_scenes import H, check_snapshot, game, renderer
@@ -52,7 +52,7 @@ FULL = sched(
 
 def ctx(schedule=FULL, favourite="NYG", now=utc(2026, 11, 20)):
     snap = idle.IdleSnapshot(schedules={NYG: idle.Cached(schedule, 0.0)} if schedule else {})
-    return IdleContext(0.0, now, [], snap, FootballConfig(favourite_team=favourite))
+    return IdleContext(0.0, now, [], snap, fcfg(favourite_team=favourite))
 
 
 # -- the builder ------------------------------------------------------------------------------
@@ -189,7 +189,7 @@ class Feed(IdleFeed):
 def test_the_schedule_takes_its_slot_in_the_real_rotation():
     clock = Clock(960.0)
     feed = Feed([game("DAL", "PHI", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)])
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG",
         rotation=[{"screen": "fb_schedule", "seconds": 8}, {"screen": "clock", "seconds": 4}],
     )

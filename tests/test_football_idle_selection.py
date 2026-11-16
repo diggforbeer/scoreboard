@@ -13,6 +13,7 @@ from scoreboard.config import FootballConfig, RotationEntry, Settings
 from scoreboard.football import idle
 from scoreboard.football.idle_screens import IDLE_SCREENS
 from scoreboard.football.mode import FootballMode
+from teamcfg import fcfg
 from test_football_idle import Clock, pregame
 from test_football_idle import IdleFeed as _IdleFeed
 from test_football_scenes import game
@@ -55,7 +56,7 @@ def build(
     games, *, favourite="NYG", follow=(), rotation=(), wide=True, utc=None, clock=None, **cfg
 ):
     clock = clock or Clock(BASE)
-    config = FootballConfig(
+    config = fcfg(
         favourite_team=favourite,
         also_follow=list(follow),
         rotation=[{"screen": s, "seconds": sec} for s, sec in rotation],
@@ -124,7 +125,7 @@ def test_a_game_seen_live_then_final_holds_for_the_hold_then_rotates():
     register("fb_final", "fb_preview")
     clock = Clock(BASE)
     feed = IdleFeed([nyg_game("in")])
-    config = FootballConfig(favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 5}])
+    config = fcfg(favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 5}])
     mode = FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: config)
     mode.worker.poll_once()
     mode.scene()  # seen live
@@ -151,6 +152,17 @@ def test_rotation_slots_follow_the_clock_and_the_clock_counts_with_company():
     register("fb_preview", "fb_week")
     mode, clock = build([pregame()], rotation=[("fb_preview", 8), ("fb_week", 10), ("clock", 6)])
     assert kinds(mode, clock, [0, 7.9, 8, 17.9, 18, 23.9, 24]) == [
+        "fb_preview", "fb_preview", "fb_week", "fb_week", "clock", "clock", "fb_preview",
+    ]  # fmt: skip
+
+
+def test_the_rotation_starts_at_the_idle_origin_the_app_sets():
+    """Under a ranked list the sports take turns (epic #470); the app sets the origin so football's
+    rotation starts at the top of its turn, not wherever the clock happens to be."""
+    register("fb_preview", "fb_week")
+    mode, clock = build([pregame()], rotation=[("fb_preview", 8), ("fb_week", 10), ("clock", 6)])
+    mode.idle_origin = 8.0  # the turn began 8 seconds before the clock's zero
+    assert kinds(mode, clock, [8, 15.9, 16, 25.9, 26, 31.9, 32]) == [
         "fb_preview", "fb_preview", "fb_week", "fb_week", "clock", "clock", "fb_preview",
     ]  # fmt: skip
 
@@ -211,13 +223,13 @@ def test_a_live_game_nobody_follows_does_not_stop_the_idle_rotation():
 
 def test_the_football_rotation_round_trips_through_the_config_file(tmp_path):
     path = tmp_path / "c.toml"
-    path.write_text("[football]\nfavourite_team = 'NYG'\n")
+    path.write_text("[football]\nshow_bye = false\n")
     Settings.load(path).save(
         {"football": {"rotation": [{"screen": "fb_week", "seconds": 5}], "final_hold_minutes": 30}}
     )
     cfg = Settings.load(path).football
     assert cfg.rotation == [RotationEntry("fb_week", 5.0)]
-    assert (cfg.final_hold_minutes, cfg.favourite_team) == (30.0, "NYG")
+    assert (cfg.final_hold_minutes, cfg.show_bye) == (30.0, False)
     assert "[[football.rotation]]" in path.read_text()
 
 
@@ -251,7 +263,7 @@ def test_the_final_hold_can_be_turned_off():
         feed = IdleFeed([nyg_game("in")])
         feed.plays = lambda game_id: []
         feed.core_plays = lambda game_id: None
-        cfg = FootballConfig(
+        cfg = fcfg(
             favourite_team="NYG", rotation=[{"screen": "fb_preview", "seconds": 5}], show_final=show
         )
         mode = FootballMode(

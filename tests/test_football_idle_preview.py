@@ -9,13 +9,13 @@ from typing import ClassVar
 
 import pytest
 
-from scoreboard.config import FootballConfig
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.football import idle
 from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
 from scoreboard.football.idle_views import PreviewView, build_preview, game_tag, week_label
 from scoreboard.football.models import FbGame
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 from test_football_scenes import H, check_snapshot, raw_game, renderer
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
@@ -104,7 +104,7 @@ def ctx(games=(), now=utc(2026, 11, 9, 12), favourite="NYG", schedule=SCHEDULE, 
         schedules={NYG: idle.Cached(schedule, 0.0)} if schedule else {},
         week_cached=idle.Cached(week, 0.0) if week else None,
     )
-    return IdleContext(0.0, now, list(games), snap, FootballConfig(favourite_team=favourite))
+    return IdleContext(0.0, now, list(games), snap, fcfg(favourite_team=favourite))
 
 
 def event(away, home, start, state="pre", away_rec="4-5", home_rec="5-3-1", season=2, week=11):
@@ -282,7 +282,7 @@ def test_through_the_real_app_the_preview_takes_its_slot_between_games_and_the_c
     app,  # noqa: F811
 ):
     feed, clock = app.feed, app.clock_box
-    app.settings.football = FootballConfig(
+    app.settings.football = fcfg(
         favourite_team="NYG",
         rotation=[{"screen": "fb_preview", "seconds": 8}, {"screen": "clock", "seconds": 6}],
     )

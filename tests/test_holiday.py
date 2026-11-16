@@ -406,7 +406,7 @@ def test_a_holiday_save_drops_the_old_flyby_minute_keys(tmp_path):
         "flyby_max_minutes = 20\n"
         "\n"
         "[scoreboard]\n"
-        'favourite_team = "TOR"\n'
+        "rotate_seconds = 12\n"
     )
     Settings.load(path).save({"holiday": {"flyby_frequency": "rare"}})
     text = path.read_text()
@@ -415,7 +415,7 @@ def test_a_holiday_save_drops_the_old_flyby_minute_keys(tmp_path):
     reloaded = Settings.load(path)
     assert reloaded.holiday.enabled
     assert reloaded.holiday.flyby_frequency == "rare"
-    assert reloaded.scoreboard.favourite_team == "TOR"
+    assert reloaded.scoreboard.rotate_seconds == 12
 
 
 def test_saving_another_section_leaves_retired_holiday_keys_alone(tmp_path):
