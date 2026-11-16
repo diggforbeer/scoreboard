@@ -177,8 +177,7 @@ def test_saving_other_sections_leaves_the_list_alone(tmp_path):
 
 
 def test_a_hand_edited_bad_row_is_dropped_on_load_not_fatal(tmp_path):
-    text = (
-        TEMPLATE
-        + '\n[[teams]]\nsport = "hockey"\nteam = "XXX"\n\n[[teams]]\nsport = "football"\nteam = "TEN"\n'
-    )
+    bad = '\n[[teams]]\nsport = "hockey"\nteam = "XXX"\n'
+    good = '\n[[teams]]\nsport = "football"\nteam = "TEN"\n'
+    text = TEMPLATE + bad + good
     assert write(tmp_path, text).teams == [TeamEntry("hockey", "NSH"), TeamEntry("football", "TEN")]
