@@ -80,6 +80,34 @@ class Moment:
     age: timedelta = timedelta(0)
 
 
+class TeamView:
+    """A sport's settings as its screens should see them under a ranked list.
+
+    The screens read ``favourite_team`` and ``followed_teams`` from their sport's settings object.
+    Under a ranked list those are not settings but the priority layer's answers, so this wraps the
+    real settings and supplies them: the **favourite** is the current owner (when it is this
+    sport's) or else the sport's lead team, the followed teams are the sport's other ranked teams,
+    and ``horn_team`` is the sport's lead team, the only one whose scores carry the horn. Every
+    other attribute is the real settings object's own.
+    """
+
+    def __init__(
+        self, base: Any, favourite: str, also_follow: Sequence[str], horn_team: str
+    ) -> None:
+        self._base = base
+        self.favourite_team = favourite
+        self.also_follow = list(also_follow)
+        self.horn_team = horn_team
+
+    @property
+    def followed_teams(self) -> list[str]:
+        """The favourite (if any) first, then the others: as the settings objects spell it."""
+        return [self.favourite_team, *self.also_follow] if self.favourite_team else self.also_follow
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._base, name)
+
+
 class Priority:
     def __init__(self, teams: Sequence[TeamEntry]) -> None:
         self.teams: tuple[TeamEntry, ...] = tuple(teams)
@@ -100,6 +128,21 @@ class Priority:
     def lead(self, sport: str) -> str | None:
         """The highest-ranked team of ``sport``: the one with the horn and the idle screens."""
         return next((e.team for e in self.teams if e.sport == sport), None)
+
+    def teams_for(self, sport: str) -> list[str]:
+        """The ranked teams of ``sport``, best first."""
+        return [e.team for e in self.teams if e.sport == sport]
+
+    def view(self, sport: str, base: Any, owner: Moment | None) -> TeamView:
+        """``sport``'s settings (``base``) with the favourite, followed teams and horn team the
+        ranked list gives: the favourite is the owner when it is this sport's, else the lead
+        team."""
+        teams = self.teams_for(sport)
+        favourite = owner.team if owner is not None and owner.sport == sport else ""
+        favourite = favourite or (teams[0] if teams else "")
+        return TeamView(
+            base, favourite, [t for t in teams if t != favourite], teams[0] if teams else ""
+        )
 
     def sports(self) -> list[str]:
         """The sports that have a ranked team, ordered by their lead team's rank."""

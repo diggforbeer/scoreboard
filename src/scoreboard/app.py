@@ -33,6 +33,7 @@ from .config import (
     ConfigWriteError,
     RotationEntry,
     Settings,
+    TeamEntry,
     next_hardware_mapping,
     resolve_timezone,
 )
@@ -84,7 +85,7 @@ from .hockey.models import (
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
-from .priority import Priority, Windows
+from .priority import Moment, Priority, Windows
 from .setup_server import SetupServer
 from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
@@ -615,6 +616,9 @@ class ScoreboardApp:
         #: Today's hockey games as the lite poll saw them while football has the screen (the full
         #: hockey machinery only runs for the sport on screen); the priority layer reads these.
         self._hockey_lite: list[Game] = []
+        #: The priority layer's current owner (the favourite of the moment), set each loop.
+        self._owner: Moment | None = None
+        self._priority_cache: tuple[tuple[TeamEntry, ...], Priority] | None = None
         #: When the sport on screen last changed, for the minimum dwell between switches.
         self._sport_since = self.monotonic()
         #: Set by a sport switch so run() fetches on its next pass rather than
@@ -897,7 +901,7 @@ class ScoreboardApp:
             lambda: self.settings.scoreboard,
             client_factory=self._football_client_factory,
             monotonic=self.monotonic,
-            football=lambda: self.settings.football,
+            football=self._football_cfg,
             delay_seconds=self._delay_seconds,
             utc_now=self.clock,
             wide=lambda: self.renderer.width >= 128,
@@ -911,6 +915,21 @@ class ScoreboardApp:
     def _initial_sport(settings: Settings) -> str:
         """The sport to start on: the top-ranked team's, else the old ``sport`` setting."""
         return settings.teams[0].sport if settings.teams else settings.scoreboard.sport
+
+    def _priority(self) -> Priority:
+        """The priority layer over the current ranked list (rebuilt only when the list changes)."""
+        teams = tuple(self.settings.teams)
+        if self._priority_cache is None or self._priority_cache[0] != teams:
+            self._priority_cache = (teams, Priority(teams))
+        return self._priority_cache[1]
+
+    def _football_cfg(self) -> Any:
+        """Football's settings as its screens read them: the real ``[football]`` section, or with a
+        ranked list that section seen through the priority layer (the owner is the favourite, the
+        other ranked football teams are followed, the lead team has the horn)."""
+        if not self.settings.teams:
+            return self.settings.football
+        return self._priority().view("football", self.settings.football, self._owner)
 
     def _priority_windows(self) -> dict[str, Windows]:
         hockey, football = self.settings.scoreboard, self.settings.football
@@ -944,13 +963,14 @@ class ScoreboardApp:
                     for gid, s in self._football.final_ages().items()
                 }
             )
-        priority = Priority(self.settings.teams)
+        priority = self._priority()
         owner = priority.owner(
             {"hockey": hockey_games, "football": football_games},
             now,
             self._priority_windows(),
             ages,
         )
+        self._owner = owner
         return owner.sport if owner is not None else priority.sports()[0]
 
     def _apply_teams_change(self, new_settings: Settings) -> None:

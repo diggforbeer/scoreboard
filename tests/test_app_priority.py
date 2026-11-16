@@ -306,3 +306,62 @@ def _adopt(app, new):
     """What ``_apply_reloaded_settings`` does before calling the handler."""
     app.settings = new
     return new
+
+
+# -- football reads its favourite and horn from the list (#475) ------------------------------------
+
+FOOTBALL_LIST = [("football", TEN), ("football", NYG), ("hockey", NSH)]
+
+
+def nyg_live():
+    return football_game("DAL", NYG, "in", 3, 7, game_id=30)
+
+
+def test_without_a_list_football_reads_the_real_settings_object(backend):
+    rig = Rig(backend, [], legacy_sport="football")
+    assert rig.app._football_cfg() is rig.settings.football
+
+
+def test_the_owner_is_football_s_favourite_and_the_other_ranked_teams_are_followed(backend):
+    rig = Rig(backend, FOOTBALL_LIST)
+    rig.football.games, rig.hockey.today = [ten_far(), nyg_live()], [nsh_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    cfg = rig.app._football_cfg()
+    assert cfg.favourite_team == NYG, "NYG is the highest-ranked football team that is playing"
+    assert cfg.also_follow == [TEN] and cfg.followed_teams == [NYG, TEN]
+    assert cfg.horn_team == TEN, "the horn stays with the lead team, which is not playing"
+
+
+def test_the_lead_team_is_the_favourite_again_when_it_plays_too(backend):
+    rig = Rig(backend, FOOTBALL_LIST)
+    rig.football.games, rig.hockey.today = [ten_live(), nyg_live()], [nsh_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    cfg = rig.app._football_cfg()
+    assert (cfg.favourite_team, cfg.horn_team, cfg.also_follow) == (TEN, TEN, [NYG])
+
+
+def test_with_nobody_on_the_lead_team_is_the_favourite_for_the_idle_screens(backend):
+    rig = Rig(backend, FOOTBALL_LIST)
+    rig.football.games, rig.hockey.today = [ten_far(), football_game("DAL", NYG, "pre", game_id=30,
+        start="2026-11-23T20:00:00Z", short="x")], [nsh_far()]  # fmt: skip
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.app._football_cfg().favourite_team == TEN
+
+
+def test_the_football_mode_picks_the_owners_game_and_idle_screens_follow_it(backend):
+    rig = Rig(backend, FOOTBALL_LIST)
+    rig.football.games, rig.hockey.today = [ten_far(), nyg_live()], [nsh_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    mode = rig.app._football
+    games = list(mode.snapshot.games)
+    assert mode._favourite_game(games).involves(NYG) and mode._is_favourite(nyg_live())
+    assert not mode._is_favourite(ten_far())
+    assert rig.app.select_scene().fb_game.involves(NYG), "the board shows the owner's game"
+
+
+def test_a_hockey_owner_leaves_football_with_its_lead_team_as_favourite(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN), ("football", NYG)])
+    rig.football.games, rig.hockey.today = [nyg_live(), ten_far()], [nsh_live()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "hockey"
+    assert rig.app._football_cfg().favourite_team == TEN

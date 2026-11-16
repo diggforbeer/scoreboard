@@ -293,3 +293,54 @@ def test_it_also_works_on_the_real_game_models():
                 model,
                 name,
             )
+
+
+# -- the view the screens read (epic #470, #475) ---------------------------------------------------
+
+
+def test_the_view_makes_the_owner_the_favourite_and_the_other_ranked_teams_followed():
+    from scoreboard.config import FootballConfig
+
+    priority = board(
+        ("hockey", "NSH"), ("football", "TEN"), ("football", "NYG"), ("football", "DAL")
+    )
+    base = FootballConfig(final_hold_minutes=33.0, show_bye=False)
+    owner = priority.owner({"football": [live(2, "NYG", "JAX")]}, NOW, WINDOWS)
+    view = priority.view("football", base, owner)
+    assert view.favourite_team == "NYG", "the owner is the favourite of the moment"
+    assert view.also_follow == ["TEN", "DAL"] and view.followed_teams == ["NYG", "TEN", "DAL"]
+    assert view.horn_team == "TEN", "the horn stays with the sport's lead team"
+    assert view.final_hold_minutes == 33.0 and view.show_bye is False, (
+        "everything else is the real settings"
+    )
+
+
+def test_the_view_without_a_football_owner_favours_the_lead_team():
+    from scoreboard.config import FootballConfig
+
+    priority = board(("hockey", "NSH"), ("football", "TEN"), ("football", "NYG"))
+    for owner in (None, priority.owner({"hockey": [live(1, "NSH", "CHI")]}, NOW, WINDOWS)):
+        view = priority.view("football", FootballConfig(), owner)
+        assert (view.favourite_team, view.also_follow, view.horn_team) == ("TEN", ["NYG"], "TEN")
+
+
+def test_the_view_of_a_sport_with_no_ranked_team_has_no_favourite():
+    from scoreboard.config import FootballConfig
+
+    view = board(("hockey", "NSH")).view("football", FootballConfig(), None)
+    assert (view.favourite_team, view.also_follow, view.followed_teams, view.horn_team) == (
+        "",
+        [],
+        [],
+        "",
+    )
+
+
+def test_the_view_is_read_through_so_it_follows_the_real_settings_live():
+    from scoreboard.config import FootballConfig
+
+    base = FootballConfig()
+    view = board(("football", "TEN")).view("football", base, None)
+    base.final_hold_minutes = 7.0
+    assert view.final_hold_minutes == 7.0
+    assert view.idle_rotation == base.idle_rotation
