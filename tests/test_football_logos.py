@@ -11,9 +11,9 @@ import pytest
 from PIL import Image
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.display import logos as logos_mod
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet, default_directories
-from nhl_scoreboard.football.teams import ABBREVIATIONS
+from scoreboard.display import logos as logos_mod
+from scoreboard.display.logos import LogoLibrary, LogoSet, default_directories
+from scoreboard.football.teams import ABBREVIATIONS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,17 +50,17 @@ def solid(path: Path, color, size=12) -> None:
 # -- where to look -------------------------------------------------------------------------------
 
 
-def test_nhl_directories_keep_their_original_layout():
+def test_hockey_directories_keep_their_original_layout():
     dirs = default_directories(32, "dark")
     assert dirs[-1] == REPO_ROOT / "assets" / "logos" / "32" / "dark"
-    assert dirs[-2] == Path("/usr/share/nhl-scoreboard/logos/32/dark")
+    assert dirs[-2] == Path("/usr/share/scoreboard/logos/32/dark")
     assert not any("football" in str(d) for d in dirs)
 
 
 def test_football_directories_sit_beside_them_under_football_with_the_same_override_slot():
     dirs = default_directories(12, "dark", "football")
     assets = REPO_ROOT / "assets" / "logos" / "football"
-    system = Path("/usr/share/nhl-scoreboard/logos/football")
+    system = Path("/usr/share/scoreboard/logos/football")
     assert dirs == [
         system / "overrides" / "12" / "dark",
         assets / "overrides" / "12" / "dark",
@@ -70,12 +70,12 @@ def test_football_directories_sit_beside_them_under_football_with_the_same_overr
 
 
 def test_each_sport_has_its_own_environment_variable(monkeypatch, tmp_path):
-    monkeypatch.setenv("NHL_SCOREBOARD_LOGO_DIR", str(tmp_path / "nhl"))
-    monkeypatch.setenv("NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
-    assert default_directories(32, "dark", "nhl")[0] == tmp_path / "nhl"
+    monkeypatch.setenv("SCOREBOARD_LOGO_DIR", str(tmp_path / "hockey"))
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
+    assert default_directories(32, "dark", "hockey")[0] == tmp_path / "hockey"
     assert default_directories(12, "dark", "football")[0] == tmp_path / "football"
-    monkeypatch.delenv("NHL_SCOREBOARD_FOOTBALL_LOGO_DIR")
-    assert tmp_path / "nhl" not in default_directories(12, "dark", "football")
+    monkeypatch.delenv("SCOREBOARD_FOOTBALL_LOGO_DIR")
+    assert tmp_path / "hockey" not in default_directories(12, "dark", "football")
 
 
 def test_an_unknown_sport_is_refused():
@@ -85,17 +85,17 @@ def test_an_unknown_sport_is_refused():
 
 def test_buf_is_different_art_in_each_league(monkeypatch, tmp_path):
     """``BUF`` is Buffalo in both, but the Sabres and the Bills are different logos."""
-    solid(tmp_path / "nhl" / "BUF.png", (250, 20, 20), 32)
+    solid(tmp_path / "hockey" / "BUF.png", (250, 20, 20), 32)
     solid(tmp_path / "football" / "BUF.png", (20, 20, 250), 12)
-    monkeypatch.setenv("NHL_SCOREBOARD_LOGO_DIR", str(tmp_path / "nhl"))
-    monkeypatch.setenv("NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
-    nhl = LogoLibrary.default(32, "dark", "nhl").get("BUF")
+    monkeypatch.setenv("SCOREBOARD_LOGO_DIR", str(tmp_path / "hockey"))
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football"))
+    hockey = LogoLibrary.default(32, "dark", "hockey").get("BUF")
     football = LogoLibrary.default(12, "dark", "football").get("BUF")
-    assert nhl.pixels[0][2] == (250, 20, 20) and football.pixels[0][2] == (20, 20, 250)
-    assert (nhl.width, football.width) == (32, 12)
+    assert hockey.pixels[0][2] == (250, 20, 20) and football.pixels[0][2] == (20, 20, 250)
+    assert (hockey.width, football.width) == (32, 12)
 
 
-def test_the_default_library_is_still_the_nhl_one():
+def test_the_default_library_is_still_the_hockey_one():
     assert LogoLibrary.default().directories == default_directories(32, "dark")
 
 
@@ -104,9 +104,7 @@ def test_the_default_library_is_still_the_nhl_one():
 
 def test_a_logo_set_hands_out_a_library_per_size_and_remembers_it(monkeypatch, tmp_path):
     write_synthetic_football_logos(tmp_path)
-    monkeypatch.setenv(
-        "NHL_SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark")
-    )
+    monkeypatch.setenv("SCOREBOARD_FOOTBALL_LOGO_DIR", str(tmp_path / "football" / "12" / "dark"))
     logos = LogoSet("football", "dark")
     small = logos.get("KC", 12)
     assert small is not None and (small.width, small.height) == (12, 12)
@@ -120,7 +118,7 @@ def test_both_sizes_resolve_when_both_were_fetched(monkeypatch, tmp_path):
     monkeypatch.setattr(
         logos_mod,
         "default_directories",
-        lambda size, variant, sport="nhl": [tmp_path / sport / str(size) / variant],
+        lambda size, variant, sport="hockey": [tmp_path / sport / str(size) / variant],
     )
     logos = LogoSet("football")
     for abbrev in ABBREVIATIONS:
@@ -132,13 +130,13 @@ def test_a_missing_logo_or_size_is_none_so_the_screen_can_fall_back_to_text(tmp_
     monkeypatch.setattr(
         logos_mod,
         "default_directories",
-        lambda size, variant, sport="nhl": [tmp_path / sport / str(size) / variant],
+        lambda size, variant, sport="hockey": [tmp_path / sport / str(size) / variant],
     )
     logos = LogoSet("football")
     assert logos.get("KC", 12) is not None
     assert logos.get("KC", 16) is None, "16px was never fetched"
     assert logos.get("ZZZ", 12) is None
-    assert not logos.for_size(12).has("NSH"), "an NHL-only abbreviation has no football logo"
+    assert not logos.for_size(12).has("NSH"), "a hockey-only abbreviation has no football logo"
 
 
 def test_a_pre_built_library_can_be_injected():
@@ -152,8 +150,8 @@ def test_a_pre_built_library_can_be_injected():
 @pytest.fixture
 def make_app(fake_backend_factory):
     def make(show_logos=True, variant="dark"):
-        from nhl_scoreboard.app import ScoreboardApp
-        from nhl_scoreboard.config import Settings
+        from scoreboard.app import ScoreboardApp
+        from scoreboard.config import Settings
 
         settings = Settings()
         settings.status.enabled = False
@@ -174,7 +172,7 @@ class _Stub:
 
 @pytest.fixture
 def fake_backend_factory():
-    from nhl_scoreboard.display.matrix import Backend
+    from scoreboard.display.matrix import Backend
     from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
     return lambda: Backend("fake", FakeMatrix, FakeOptions, FakeGraphics)
@@ -323,7 +321,7 @@ def test_a_team_that_is_not_in_the_football_is_refused_before_anything_is_fetche
     assert net.fetched == []
 
 
-def test_nhl_art_never_lands_in_the_football_tree(monkeypatch, tmp_path):
+def test_hockey_art_never_lands_in_the_football_tree(monkeypatch, tmp_path):
     monkeypatch.setattr(
         script,
         "fetch",
@@ -436,4 +434,4 @@ def test_fetched_football_art_is_git_ignored_but_the_override_slot_is_not():
         "assets/logos/football/16/light/KC.png"
     )
     assert not ignored("assets/logos/football/overrides/12/dark/KC.png")
-    assert ignored("assets/logos/32/dark/NSH.png"), "the NHL rule is unchanged"
+    assert ignored("assets/logos/32/dark/NSH.png"), "the hockey rule is unchanged"

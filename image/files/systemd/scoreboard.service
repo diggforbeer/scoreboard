@@ -1,0 +1,23 @@
+[Unit]
+Description=Scoreboard on HUB75 LED matrix
+Documentation=https://github.com/diggforbeer/scoreboard
+After=network-online.target scoreboard-provision.service
+Wants=network-online.target
+After=systemd-time-wait-sync.service
+
+[Service]
+Type=simple
+# The rgbmatrix driver needs direct GPIO and hard realtime scheduling,
+# so it runs as root and keeps its privileges (drop_privileges=False).
+User=root
+Environment=PYTHONPATH=/opt/scoreboard
+Environment=PYTHONUNBUFFERED=1
+Environment=SCOREBOARD_FONT_DIR=/usr/share/scoreboard/fonts
+ExecStart=/usr/bin/python3 -m scoreboard --config /boot/firmware/scoreboard.toml
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

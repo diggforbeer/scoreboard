@@ -14,12 +14,12 @@ from pathlib import Path
 
 import requests
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.football import api, people
-from nhl_scoreboard.football.events import CoinToss, EventDetector, Scope
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.models import Participant, Play, PlayKind, normalise_ref, ref_id
-from nhl_scoreboard.football.people import (
+from scoreboard.config import FootballConfig
+from scoreboard.football import api, people
+from scoreboard.football.events import CoinToss, EventDetector, Scope
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.models import Participant, Play, PlayKind, normalise_ref, ref_id
+from scoreboard.football.people import (
     CoreSync,
     RosterCache,
     RosterPlayer,

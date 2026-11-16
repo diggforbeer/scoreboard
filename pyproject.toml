@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nhl-scoreboard"
+name = "scoreboard"
 version = "0.1.0"
-description = "NHL scoreboard for a HUB75 LED matrix driven by a Raspberry Pi"
+description = "Scoreboard for a HUB75 LED matrix driven by a Raspberry Pi"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ dependencies = [
     # admin_server.py's page + WebSocket (#178), deployed to the real
     # device as of story 10 -- python3-websockets is a real apt package on
     # this image's Debian release (confirmed live, trixie ships 15.0.1-1),
-    # added to image/layer/nhl-scoreboard.yaml's package list alongside
+    # added to image/layer/scoreboard.yaml's package list alongside
     # this. Was dev-extras-only through story 9, before deployment.
     "websockets>=13",
 ]
@@ -52,13 +52,13 @@ dev = [
 e2e = ["playwright>=1.40"]
 
 [project.scripts]
-nhl-scoreboard = "nhl_scoreboard.__main__:main"
+scoreboard = "scoreboard.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-nhl_scoreboard = ["py.typed"]
+scoreboard = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
@@ -80,8 +80,10 @@ addopts = "-q -m 'not e2e'"
 markers = ["e2e: real end-to-end test against a live browser and subprocess, not hermetic"]
 
 [tool.coverage.run]
-branch = true
-source = ["src/nhl_scoreboard"]
+# Line coverage only: CI measures with COVERAGE_CORE=sysmon (see ci.yml), which is ~2.5x faster
+# than the default tracer but cannot do branch coverage before Python 3.14.
+branch = false
+source = ["src/scoreboard"]
 # Required by py-cov-action/python-coverage-comment-action: it matches
 # .coverage's recorded paths against the PR's changed files, which only
 # works with paths relative to the repo root, not absolute runner paths.
@@ -89,7 +91,7 @@ relative_files = true
 
 [tool.coverage.report]
 show_missing = true
-# The measured baseline when coverage reporting was added (#82), not an
-# aspirational number -- raise this as coverage gaps get filled (#75, #76,
-# #77, #78, #79, #81), never lower it to make a drop pass quietly.
-fail_under = 88
+# Line coverage, measured at 97% when CI moved to the sysmon core (it was 88% as a branch +
+# line figure, from #82); a little headroom, and raise it as gaps fill rather than lowering it
+# to make a drop pass quietly.
+fail_under = 95

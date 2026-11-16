@@ -1,6 +1,6 @@
 # scoreboard
 
-An NHL scoreboard for a HUB75 LED matrix, delivered as a ready-to-flash
+A scoreboard for a HUB75 LED matrix, delivered as a ready-to-flash
 Raspberry Pi image.
 
 Flash the image with the official [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
@@ -18,7 +18,7 @@ it a couple of minutes on the very first power-up.
 
 If the board has no ethernet connection and no `[wifi]` details in
 `scoreboard.toml` yet, it broadcasts its own WiFi network
-(`NHL-Scoreboard-Setup` by default) and shows the network name, password,
+(`Scoreboard-Setup` by default) and shows the network name, password,
 and a join QR code right on the panel — scan it, or join that network
 manually from your phone's WiFi settings.
 
@@ -95,13 +95,13 @@ Design notes, hardware list and the OpenSCAD commands are in
 
 Early development. Working today:
 
-- [x] NHL API client against `api-web.nhle.com` (live scores, period, clock)
+- [x] hockey API client against `api-web.nhle.com` (live scores, period, clock)
 - [x] 128×32 renderer with per-team accent colours
 - [x] Hardware / emulator / headless display backends
 - [x] rpi-image-gen image definition ([image/](image/))
 - [x] CI pipelines — lint/test, plus an image build on native arm64 runners
 - [x] Wi-Fi and settings applied from the boot partition on every boot
-- [x] Team logos, rasterised at build time from the NHL's own artwork
+- [x] Team logos, rasterised at build time from the hockey's own artwork
 - [x] Power play / empty net indicator for the favourite's game and the game on screen
 - [x] Favourite mode: preview → countdown → live → final → next game's preview
 - [x] Shots on goal, live, for every game; favourite's power play/empty net indicator
@@ -131,15 +131,15 @@ renders to a browser window.
 source .venv/bin/activate
 
 # Print today's scores; needs no display at all
-nhl-scoreboard --dump
+scoreboard --dump
 
 # Run the board in the emulator, then open http://localhost:8888
 # (edit scoreboard.local.toml first for favourite_team etc.)
-nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
+scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
 # ~4s each, until Ctrl-C -- also works on the real panel with no network
-nhl-scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
+scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
 # (with sport = "football" in the config it loops the football screens instead; never any sound)
 
 # Print frames as ASCII art - fastest way to iterate on layout
@@ -168,10 +168,10 @@ rotate_seconds = 8          # dwell per game with no favourite, and per idle sce
 poll_seconds = 60
 live_poll_seconds = 15
 show_logos = true           # false = three-letter abbreviations instead
-logo_variant = "dark"       # the NHL's dark-background artwork; right for an LED panel
+logo_variant = "dark"       # the hockey's dark-background artwork; right for an LED panel
 goal_flash_seconds = 6      # how long the GOAL screen stays up after your team scores
 three_stars_seconds = 8     # how long the 3 STARS screen stays up once your team's game is final
-broadcast_delay_seconds = 0  # hold the board this far behind the NHL data to match a TV broadcast (30-60 is typical)
+broadcast_delay_seconds = 0  # hold the board this far behind the hockey data to match a TV broadcast (30-60 is typical)
 show_clock_when_idle = true # clock when there's nothing left to preview; false = "NO GAMES"
 show_standings = true       # favourite's conference playoff picture, once their season starts
 show_clock_between_games = false  # also cycle the clock into the preview/standings alternation
@@ -267,7 +267,7 @@ With a `favourite_team` set (the default, `NSH`), the board follows your team's 
 | Inside `countdown_hours` of puck drop | **Countdown** — start time and `IN 1H 29M`, ticking to `IN 00:59` |
 | Game in progress | **Live** — scores, period and clock, power-play indicator |
 | Your team scores | **GOAL** — "GOAL" and the team's name (`NASHVILLE`) in its colours, with the score, for `goal_flash_seconds`, then back to live |
-| Game just went final | **3 STARS** — the NHL's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
+| Game just went final | **3 STARS** — the hockey's three stars and their stat for the game, for `three_stars_seconds`, once they're named |
 | Final, for `final_hold_minutes` | **Final** — the result stays up |
 | After that | Preview of the next game on the schedule |
 
@@ -346,7 +346,7 @@ before this stay as they were; upload them again to normalize them.
 ## Status page
 
 The board is headless by design, so diagnosing "why is it stuck" would
-otherwise mean SSH-ing in and reading `journalctl -u nhl-scoreboard`. On by
+otherwise mean SSH-ing in and reading `journalctl -u scoreboard`. On by
 default, the board instead serves a small HTML page at
 `http://<name>.local/` (or the board's IP; `:8080` still works) showing the current scene, the last successful
 API poll, the last error (if any) and the favourite team -- enough to check
@@ -429,14 +429,14 @@ Text fallback, used when `show_logos = false` or a team's artwork is missing:
 └──────────────────────────────────────┘
 ```
 
-Logos come from `assets.nhle.com`, the same source the NHL's score API links
+Logos come from `assets.nhle.com`, the same source the hockey's score API links
 per team. `scripts/fetch-logos.py` downloads the SVGs and rasterises them to
 32×32 PNGs; CI runs it before every image build. The PNGs are git-ignored, so
 this repository never redistributes the artwork.
 
 Football mode (the `football` branch) has its own logos, fetched the same way from ESPN's team list:
 `scripts/fetch-logos.py --sport football` writes 12px (for the end zones) and 16px PNGs under
-`assets/logos/football/`, also git-ignored. They are kept apart from the NHL art because abbreviations
+`assets/logos/football/`, also git-ignored. They are kept apart from the hockey art because abbreviations
 such as `BUF`, `CAR`, `DAL`, `DET` and `MIN` are different teams in each league.
 
 ## Licence

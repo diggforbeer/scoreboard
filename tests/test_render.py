@@ -23,10 +23,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from nhl_scoreboard.display.ascii import AsciiCanvas, BBox
-from nhl_scoreboard.display.fonts import FontSet, text_width
-from nhl_scoreboard.display.logos import LogoLibrary
-from nhl_scoreboard.display.renderer import (
+from scoreboard.display.ascii import AsciiCanvas, BBox
+from scoreboard.display.fonts import FontSet, text_width
+from scoreboard.display.logos import LogoLibrary
+from scoreboard.display.renderer import (
     ACCENT,
     DIM,
     FINAL,
@@ -39,14 +39,14 @@ from nhl_scoreboard.display.renderer import (
     WHITE,
     Renderer,
 )
-from nhl_scoreboard.display.teams import (
+from scoreboard.display.teams import (
     TEAM_COLORS,
     TEAM_NAMES,
     team_color,
     team_name,
     team_secondary_color,
 )
-from nhl_scoreboard.nhl.models import (
+from scoreboard.hockey.models import (
     AssistDetail,
     Game,
     GoalEvent,
@@ -123,7 +123,7 @@ def big_score_game(games) -> Game:
 
 @pytest.fixture(scope="module")
 def synthetic_logos(tmp_path_factory) -> LogoLibrary:
-    """A filled circle per team in its colour: deterministic, and no NHL artwork."""
+    """A filled circle per team in its colour: deterministic, and no hockey artwork."""
     from PIL import Image, ImageDraw
 
     root = tmp_path_factory.mktemp("logos")
@@ -372,7 +372,7 @@ def test_clock_scene_favourite(update_snapshots):
 @pytest.mark.parametrize(
     ("name", "title", "subtitle"),
     [
-        ("message_connecting", "NHL", "CONNECTING"),
+        ("message_connecting", "HOCKEY", "CONNECTING"),
         ("message_no_data", "NO DATA", "CHECK NETWORK"),
         ("message_no_games", "NO GAMES", ""),
     ],
@@ -403,7 +403,7 @@ def test_ap_setup_scene_wpa(update_snapshots):
     check the renderer positions and colours it correctly."""
     c = canvas()
     qr_matrix = tuple(tuple((x + y) % 3 == 0 for x in range(21)) for y in range(21))
-    make_renderer().draw_ap_setup(c, "NHL-Scoreboard-Setup", "scoreboard", qr_matrix)
+    make_renderer().draw_ap_setup(c, "Scoreboard-Setup", "scoreboard", qr_matrix)
     art = show("ap_setup_wpa", c)
 
     assert not c.out_of_bounds
@@ -455,12 +455,12 @@ def test_ap_setup_scene_oversized_qr_degrades_to_text_only(update_snapshots, cap
 
 
 def test_ap_setup_scene_long_ssid_never_overflows_its_half(update_snapshots):
-    """The default SSID is 20 characters -- 80px at 4px/char on the tiny
+    """The default SSID is 23 characters -- 92px at 4px/char on the tiny
     font, against only ~62px available on one panel half. Pins down that
     _fit_text actually engages instead of DrawText silently overflowing
     into the QR's half or off the panel entirely."""
     c = canvas()
-    make_renderer().draw_ap_setup(c, "NHL-Scoreboard-Setup", "scoreboard", None)
+    make_renderer().draw_ap_setup(c, "Scoreboard-Setup", "scoreboard", None)
     art = show("ap_setup_long_ssid", c)
 
     assert not c.out_of_bounds
@@ -1617,7 +1617,7 @@ def test_three_stars(games, synthetic_logos, layout, update_snapshots):
 
 
 def test_three_stars_all_from_one_team_are_all_drawn(games):
-    """Whoever the NHL named -- nothing filters stars to the favourite's side."""
+    """Whoever the hockey named -- nothing filters stars to the favourite's side."""
     game = games["live"]
     stars = tuple(a_star(i, game.away.abbrev, f"P. Away{i}", goals=1) for i in (1, 2, 3))
     c = canvas()
@@ -1908,7 +1908,7 @@ def draw_halloween(
     holiday: str = "halloween",
     day=None,
 ) -> bool:
-    from nhl_scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
+    from scoreboard.display.holiday import HOLIDAYS, HolidayOverlay
 
     overlay = HolidayOverlay()
     if flyby_at is not None:
@@ -1927,7 +1927,7 @@ def draw_halloween(
 
 
 def test_halloween_ghost_over_live_game(games, synthetic_logos, update_snapshots):
-    from nhl_scoreboard.display.holiday import GHOST_BODY, GHOST_HEIGHT
+    from scoreboard.display.holiday import GHOST_BODY, GHOST_HEIGHT
 
     game = games["live"]
     plain = canvas()
@@ -1953,7 +1953,7 @@ def test_halloween_ghost_over_live_game(games, synthetic_logos, update_snapshots
 
 
 def test_halloween_pumpkins_frame_the_clock(update_snapshots):
-    from nhl_scoreboard.display.holiday import PUMPKIN
+    from scoreboard.display.holiday import PUMPKIN
 
     now = datetime(2026, 10, 10, 23, 5, tzinfo=UTC)
     plain = canvas()
@@ -1972,7 +1972,7 @@ def test_halloween_pumpkins_frame_the_clock(update_snapshots):
 
 
 def test_thanksgiving_turkey_over_live_game(games, synthetic_logos, update_snapshots):
-    from nhl_scoreboard.display.holiday import TURKEY, TURKEY_BODY
+    from scoreboard.display.holiday import TURKEY, TURKEY_BODY
 
     game = games["live"]
     plain = canvas()
@@ -1994,7 +1994,7 @@ def test_thanksgiving_turkey_over_live_game(games, synthetic_logos, update_snaps
 
 
 def test_thanksgiving_leaves_frame_the_clock(update_snapshots):
-    from nhl_scoreboard.display.holiday import LEAF_GOLD, MAPLE
+    from scoreboard.display.holiday import LEAF_GOLD, MAPLE
 
     now = datetime(2026, 11, 21, 23, 5, tzinfo=UTC)
     plain = canvas()
@@ -2013,7 +2013,7 @@ def test_thanksgiving_leaves_frame_the_clock(update_snapshots):
 
 
 def test_christmas_santa_and_presents_over_live_game(games, synthetic_logos, update_snapshots):
-    from nhl_scoreboard.display.holiday import SANTA, SANTA_RED
+    from scoreboard.display.holiday import SANTA, SANTA_RED
 
     game = games["live"]
     plain = canvas()
@@ -2033,7 +2033,7 @@ def test_christmas_santa_and_presents_over_live_game(games, synthetic_logos, upd
 
 
 def test_christmas_presents_and_snow_frame_the_clock(update_snapshots):
-    from nhl_scoreboard.display.holiday import SNOW
+    from scoreboard.display.holiday import SNOW
 
     now = datetime(2026, 12, 12, 23, 5, tzinfo=UTC)
     plain = canvas()
@@ -2063,7 +2063,7 @@ def test_new_year_fireworks_over_live_game(games, synthetic_logos, update_snapsh
 
 
 def test_new_year_champagne_and_confetti_frame_the_clock(update_snapshots):
-    from nhl_scoreboard.display.holiday import CHAMPAGNE, CONFETTI
+    from scoreboard.display.holiday import CHAMPAGNE, CONFETTI
 
     now = datetime(2026, 12, 31, 23, 5, tzinfo=UTC)
     plain = canvas()
@@ -2083,7 +2083,7 @@ def test_new_year_champagne_and_confetti_frame_the_clock(update_snapshots):
 
 
 def test_valentines_heart_over_live_game(games, synthetic_logos, update_snapshots):
-    from nhl_scoreboard.display.holiday import HEART_RED
+    from scoreboard.display.holiday import HEART_RED
 
     game = games["live"]
     c = canvas()
@@ -2098,7 +2098,7 @@ def test_valentines_heart_over_live_game(games, synthetic_logos, update_snapshot
 
 
 def test_valentines_hearts_frame_the_clock(update_snapshots):
-    from nhl_scoreboard.display.holiday import HEART_PINK, HEART_RED
+    from scoreboard.display.holiday import HEART_PINK, HEART_RED
 
     now = datetime(2027, 2, 14, 1, 5, tzinfo=UTC)
     plain = canvas()
@@ -2119,7 +2119,7 @@ def test_valentines_hearts_frame_the_clock(update_snapshots):
 def test_groundhog_sees_his_shadow_over_live_game(games, synthetic_logos, update_snapshots):
     from datetime import date
 
-    from nhl_scoreboard.display.holiday import GROUNDHOG, GROUNDHOG_SHADOW
+    from scoreboard.display.holiday import GROUNDHOG, GROUNDHOG_SHADOW
 
     game = games["live"]
     c = canvas()
@@ -2154,7 +2154,7 @@ def test_groundhog_burrow_and_verdict_frame_the_clock(year, name, update_snapsho
 
 
 def test_st_patricks_leprechaun_over_live_game(games, synthetic_logos, update_snapshots):
-    from nhl_scoreboard.display.holiday import LEP_BEARD, LEPRECHAUN
+    from scoreboard.display.holiday import LEP_BEARD, LEPRECHAUN
 
     game = games["live"]
     c = canvas()
@@ -2174,7 +2174,7 @@ def test_st_patricks_leprechaun_over_live_game(games, synthetic_logos, update_sn
 
 
 def test_st_patricks_shamrocks_frame_the_clock(update_snapshots):
-    from nhl_scoreboard.display.holiday import SHAMROCK
+    from scoreboard.display.holiday import SHAMROCK
 
     now = datetime(2027, 3, 17, 23, 5, tzinfo=UTC)
     plain = canvas()
@@ -2193,7 +2193,7 @@ def test_st_patricks_shamrocks_frame_the_clock(update_snapshots):
 
 
 def test_easter_bunny_over_live_game(games, synthetic_logos, update_snapshots):
-    from nhl_scoreboard.display.holiday import BUNNY, BUNNY_FUR
+    from scoreboard.display.holiday import BUNNY, BUNNY_FUR
 
     game = games["live"]
     plain = canvas()
@@ -2244,7 +2244,7 @@ def test_flag_holidays_fireworks_and_flags_over_the_clock(name, update_snapshots
 
 @pytest.mark.parametrize(("day", "name"), [(13, "countdown"), (25, "merry")])
 def test_christmas_tree_screen(day, name, update_snapshots):
-    from nhl_scoreboard.display.holiday import TREE_GREEN, TREE_WIDTH
+    from scoreboard.display.holiday import TREE_GREEN, TREE_WIDTH
 
     c = canvas()
     make_renderer().draw_christmas_tree(c, datetime(2026, 12, day, 23, 0, tzinfo=UTC), "NSH")
@@ -2261,7 +2261,7 @@ def test_christmas_tree_screen(day, name, update_snapshots):
 
 
 def test_christmas_tree_screen_on_a_single_panel_is_just_the_tree():
-    from nhl_scoreboard.display.holiday import TREE_GREEN
+    from scoreboard.display.holiday import TREE_GREEN
 
     c = AsciiCanvas(64, H)
     renderer = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ)

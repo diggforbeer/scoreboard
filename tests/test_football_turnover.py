@@ -9,13 +9,13 @@ import dataclasses
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display import football_turnover as ft
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football.director import EVENT
+from scoreboard.app import Scene
+from scoreboard.display import football_plays as fp
+from scoreboard.display import football_turnover as ft
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import events as ev
+from scoreboard.football.director import EVENT
 from test_football_events import detector, make_game, make_play
 from test_football_scenes import check_snapshot, renderer
 
@@ -146,7 +146,7 @@ def test_a_ball_rides_the_tip_of_the_arrow():
 
 def test_the_possession_logo_swaps_sides_when_the_arrow_lands(tmp_path):
     art = logos(tmp_path)
-    from nhl_scoreboard.football.teams import team_color
+    from scoreboard.football.teams import team_color
 
     def brightness(canvas, x0, x1, team):
         return sum(

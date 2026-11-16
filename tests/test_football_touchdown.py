@@ -9,14 +9,14 @@ import dataclasses
 
 import pytest
 
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_field as ff
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display import football_touchdown as ftd
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football.director import EVENT
-from nhl_scoreboard.football.teams import team_color
+from scoreboard.app import Scene
+from scoreboard.display import football_field as ff
+from scoreboard.display import football_plays as fp
+from scoreboard.display import football_touchdown as ftd
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.football import events as ev
+from scoreboard.football.director import EVENT
+from scoreboard.football.teams import team_color
 from test_football_events import detector, make_game, make_play
 from test_football_scenes import check_snapshot, renderer
 

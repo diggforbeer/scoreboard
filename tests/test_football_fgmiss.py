@@ -8,15 +8,15 @@ from itertools import pairwise
 
 import pytest
 
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_fgmiss as fm
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football import pacing
-from nhl_scoreboard.football.demo import _play
-from nhl_scoreboard.football.geometry import FIELD_BOTTOM, FieldLayout
-from nhl_scoreboard.football.models import PlayKind
+from scoreboard.app import Scene
+from scoreboard.display import football_fgmiss as fm
+from scoreboard.display import football_plays as fp
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.football import events as ev
+from scoreboard.football import pacing
+from scoreboard.football.demo import _play
+from scoreboard.football.geometry import FIELD_BOTTOM, FieldLayout
+from scoreboard.football.models import PlayKind
 from test_football_director import started
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, renderer

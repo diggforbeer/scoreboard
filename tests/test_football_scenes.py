@@ -1,6 +1,6 @@
 """Football mode's base scenes: status screens and the plain scoreboard (#352).
 
-Three layers, like the NHL scenes: ASCII snapshots (``--update-snapshots`` after an
+Three layers, like the hockey scenes: ASCII snapshots (``--update-snapshots`` after an
 intentional change), structural assertions that hold whatever the snapshot says (nothing
 off-panel, centred, colours by state), and flow tests walking a game day through the real
 app. Games are built from raw ESPN-shaped dicts so the real parser is in the loop.
@@ -16,17 +16,17 @@ from zoneinfo import ZoneInfo
 import pytest
 from RGBMatrixEmulator import graphics
 
-from nhl_scoreboard.app import Scene, ScoreboardApp
-from nhl_scoreboard.config import FootballConfig, ScoreboardConfig, Settings
-from nhl_scoreboard.display import football_scenes as fs
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.fonts import FontSet
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.display.renderer import SUBDUED, Renderer
-from nhl_scoreboard.football.mode import FB_SCENE_KINDS, FootballMode
-from nhl_scoreboard.football.models import FbGame
-from nhl_scoreboard.football.teams import TEAMS, team_color
-from nhl_scoreboard.football.worker import STALE_AFTER_SECONDS
+from scoreboard.app import Scene, ScoreboardApp
+from scoreboard.config import FootballConfig, ScoreboardConfig, Settings
+from scoreboard.display import football_scenes as fs
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.fonts import FontSet
+from scoreboard.display.matrix import Backend
+from scoreboard.display.renderer import SUBDUED, Renderer
+from scoreboard.football.mode import FB_SCENE_KINDS, FootballMode
+from scoreboard.football.models import FbGame
+from scoreboard.football.teams import TEAMS, team_color
+from scoreboard.football.worker import STALE_AFTER_SECONDS
 from test_app import FakeOptions
 from test_mirror import AsciiMatrix, as_pixels
 
@@ -206,7 +206,7 @@ def test_a_team_that_is_not_one_of_the_32_is_drawn_plain():
     assert fs.side_color(GAMES["unknown_team"].away) not in {team_color(a) for a in TEAMS}
 
 
-def test_each_football_team_is_drawn_in_its_own_colour_not_the_nhl_one():
+def test_each_football_team_is_drawn_in_its_own_colour_not_the_hockey_one():
     c = draw("live")
     assert team_color("WSH") in c.colors(0, 0, 62, 14)  # Washington gold
     assert team_color("NYG") in c.colors(64, 0, 127, 14)  # the Giants' blue
@@ -340,7 +340,7 @@ def test_a_turn_lasts_rotate_seconds_and_wraps():
     assert ids == [1, 1, 2, 2, 3, 4, 1]
 
 
-def test_followed_teams_ignore_case_and_nhl_only_abbreviations_never_match():
+def test_followed_teams_ignore_case_and_hockey_only_abbreviations_never_match():
     m = mode("nyg", ["nsh"])  # NSH is not a football team: dropped by the config
     assert m.pick_game(games_for_selection(), 5.0).id == 1
 
@@ -442,7 +442,7 @@ def test_the_app_draws_every_football_scene_kind(kind, app):
     if kind == "fb_halftime":
         scene = Scene(kind, fb_game=game("WSH", "NYG", "in", 10, 17, name="STATUS_HALFTIME"))
     if kind in ("fb_play", "fb_playtext", "fb_event"):
-        from nhl_scoreboard.football.demo import football_demo_steps
+        from scoreboard.football.demo import football_demo_steps
 
         scene = next(
             s.scene for s in football_demo_steps(datetime.now(UTC)) if s.scene.kind == kind
@@ -450,7 +450,7 @@ def test_the_app_draws_every_football_scene_kind(kind, app):
     app.draw_scene(scene)
     assert app.matrix.shown.pixels, f"{kind} drew nothing"
     assert not app.matrix.shown.out_of_bounds
-    # And it is not the generic NHL "NO GAMES" fall-through.
+    # And it is not the generic hockey "NO GAMES" fall-through.
     plain = AsciiCanvas(128, H)
     renderer().draw_message(plain, "NO GAMES")
     if kind != "fb_no_games":
@@ -474,7 +474,7 @@ def app(tmp_path) -> ScoreboardApp:
     feed = Feed([])
     app = ScoreboardApp(
         settings,
-        client=_Nhl(),
+        client=_Hockey(),
         backend=backend,
         clock=lambda: datetime(2026, 11, 15, 19, 0, tzinfo=UTC),
         monotonic=clock,
@@ -490,7 +490,7 @@ def app(tmp_path) -> ScoreboardApp:
     return app
 
 
-class _Nhl:
+class _Hockey:
     def scores(self, *a, **k):
         return []
 

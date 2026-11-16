@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.football import worker as worker_mod
-from nhl_scoreboard.football.api import MIN_POLL_SECONDS
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.models import FbGame
-from nhl_scoreboard.football.worker import (
+from scoreboard.display.matrix import Backend
+from scoreboard.football import worker as worker_mod
+from scoreboard.football.api import MIN_POLL_SECONDS
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.models import FbGame
+from scoreboard.football.worker import (
     STALE_AFTER_SECONDS,
     FeedSnapshot,
     FeedWorker,
@@ -181,13 +181,13 @@ def test_a_slow_fetch_is_logged_with_its_duration(caplog):
             return super().scores(date)
 
     w = make_worker(Slow(GAMES), clock=clock)
-    with caplog.at_level(logging.DEBUG, logger="nhl_scoreboard.football.worker"):
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.football.worker"):
         w.poll_once()
     assert w.snapshot().fetch_seconds == 5.0
     assert any("slow" in r.message and "5.0s" in r.message for r in caplog.records)
     caplog.clear()
     w2 = make_worker(ScriptedClient(GAMES), clock=Clock())
-    with caplog.at_level(logging.DEBUG, logger="nhl_scoreboard.football.worker"):
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.football.worker"):
         w2.poll_once()
     assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
@@ -208,10 +208,10 @@ def test_before_the_first_success_it_is_connecting_not_stale():
     assert not FeedSnapshot(last_error="boom", failures=9).is_stale(99999.0)
 
 
-def test_the_stale_window_matches_the_nhl_side():
-    from nhl_scoreboard.app import STALE_AFTER_SECONDS as NHL
+def test_the_stale_window_matches_the_hockey_side():
+    from scoreboard import app as hockey_app
 
-    assert STALE_AFTER_SECONDS == NHL == 15 * 60
+    assert STALE_AFTER_SECONDS == hockey_app.STALE_AFTER_SECONDS == 15 * 60
 
 
 # -- the thread ------------------------------------------------------------------
@@ -338,7 +338,7 @@ def test_a_result_that_lands_after_stop_is_never_published():
 
 
 def settings_with(poll=60.0, live=15.0):
-    from nhl_scoreboard.config import ScoreboardConfig
+    from scoreboard.config import ScoreboardConfig
 
     return dataclasses.replace(ScoreboardConfig(), poll_seconds=poll, live_poll_seconds=live)
 
@@ -392,8 +392,8 @@ def fake_backend() -> Backend:
 
 @pytest.fixture
 def app_factory(fake_backend):
-    from nhl_scoreboard.app import ScoreboardApp
-    from nhl_scoreboard.config import Settings
+    from scoreboard.app import ScoreboardApp
+    from scoreboard.config import Settings
 
     made = []
 
@@ -402,7 +402,7 @@ def app_factory(fake_backend):
         settings.status.enabled = False
         app = ScoreboardApp(
             settings,
-            client=_NhlStub(),
+            client=_HockeyStub(),
             backend=fake_backend,
             football_client_factory=client_factory,
         )
@@ -415,7 +415,7 @@ def app_factory(fake_backend):
             app._football.stop()
 
 
-class _NhlStub:
+class _HockeyStub:
     def scores(self, *a, **k):
         return []
 
@@ -453,7 +453,7 @@ def test_switching_sport_starts_and_stops_the_feed_thread(app_factory):
     base = len(feed_threads())
     switch_sport(app, "football")
     assert wait_for(lambda: app._football.ready) and len(feed_threads()) == base + 1
-    switch_sport(app, "nhl")
+    switch_sport(app, "hockey")
     assert app._football is None and len(feed_threads()) == base
 
 
@@ -462,8 +462,8 @@ def test_rapid_switching_with_a_live_loop_leaves_no_threads(app_factory):
     app._running = True
     before = threading.active_count()
     for i in range(60):
-        switch_sport(app, "football" if i % 2 == 0 else "nhl")
-    assert app.current_mode() == "nhl"
+        switch_sport(app, "football" if i % 2 == 0 else "hockey")
+    assert app.current_mode() == "hockey"
     assert wait_for(lambda: threading.active_count() == before)
     assert not feed_threads()
 

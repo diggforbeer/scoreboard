@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Install ruff
         run: pip install ruff
       - name: Lint
@@ -84,6 +84,7 @@ jobs:
         run: pytest tests/e2e -m e2e -v
 
   test:
+    name: Unit tests and code coverage
     runs-on: ubuntu-latest
     # Needed for the coverage-comment step below: pull-requests:write to
     # post/edit the sticky comment, contents:write to push coverage data
@@ -93,33 +94,27 @@ jobs:
     permissions:
       pull-requests: write
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        # 3.11 is the floor (tomllib); 3.13 is what Debian Trixie ships.
-        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false # the coverage-comment action auths its own git ops with the token passed to it below
+      # 3.13 is what Debian Trixie ships, so it is what the board runs; every job uses it.
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
       - name: Install
         run: pip install -e '.[dev]'
-      - name: Test
-        # -n auto: ~4,800 hermetic tests run across the runner's cores (pytest-cov merges the
-        # workers' data), instead of one after another for ~20 minutes. Coverage (which roughly
-        # triples the run) is measured on 3.13 only: that is the leg that posts the comment, and
-        # 3.11 is here to prove the floor version runs the suite, not to measure it again.
-        run: pytest -n auto ${{ matrix.python-version == '3.13' && '--cov --cov-report=term-missing' || '' }}
+      - name: Unit tests and code coverage
+        # One run does both. -n auto spreads the ~4,800 hermetic tests across the runner's
+        # cores (pytest-cov merges the workers' data). COVERAGE_CORE=sysmon is Python's own
+        # monitoring hook: about 1.4x the plain run instead of 3.3x for the default tracer, at
+        # the price of line coverage only (branch coverage needs 3.14 on that core), which
+        # `[tool.coverage.run] branch = false` says out loud.
+        env:
+          COVERAGE_CORE: sysmon
+        run: pytest -n auto --cov --cov-report=term-missing
 
-      # Runs once, not once per matrix leg -- coverage is identical between
-      # 3.11/3.13 (confirmed: both report 88.81% locally and in CI), and
-      # posting twice would just be two competing comment updates. Picked
-      # 3.13 since that's what the shipped image actually runs.
       - name: Post coverage comment
-        if: matrix.python-version == '3.13'
         uses: py-cov-action/python-coverage-comment-action@v4.1
         with:
           GITHUB_TOKEN: ${{ github.token }}
@@ -132,8 +127,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck scripts/*.sh image/files/scripts/nhl-scoreboard-grow-rootfs \
-            image/files/scripts/nhl-scoreboard-setup-ap
+          shellcheck scripts/*.sh image/files/scripts/scoreboard-grow-rootfs \
+            image/files/scripts/scoreboard-setup-ap
 
   layer-lint:
     name: Validate image definitions
@@ -142,7 +137,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Parse image YAML
         run: |
           pip install pyyaml

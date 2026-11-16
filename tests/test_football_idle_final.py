@@ -6,20 +6,20 @@ import json
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.display import football_idle
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from nhl_scoreboard.football.idle_views import (
+from scoreboard.config import FootballConfig
+from scoreboard.display import football_idle
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.football import idle
+from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from scoreboard.football.idle_views import (
     build_final,
     margin_line,
     recap_lines,
     surname,
 )
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.models import FbGame
-from nhl_scoreboard.football.teams import TEAMS, team_color
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.models import FbGame
+from scoreboard.football.teams import TEAMS, team_color
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, Art, utc
 from test_football_scenes import H, check_snapshot, game, raw_game, renderer
@@ -276,7 +276,7 @@ from test_football_scenes import _pixels, app  # noqa: E402,F401  (the real-app 
 
 def test_the_app_draws_the_held_final(app):  # noqa: F811
     scene = type(app.select_scene())  # noqa: F841
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     g = final_game(leaders=LINES)
     assert _pixels(app, Scene("fb_final", fb_game=g, fb_idle=view_of(g)))

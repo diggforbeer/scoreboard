@@ -10,14 +10,14 @@ from itertools import pairwise
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_cointoss as fct
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football.director import EVENT
-from nhl_scoreboard.football.teams import team_color
+from scoreboard.app import Scene
+from scoreboard.display import football_cointoss as fct
+from scoreboard.display import football_plays as fp
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import events as ev
+from scoreboard.football.director import EVENT
+from scoreboard.football.teams import team_color
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, renderer
 

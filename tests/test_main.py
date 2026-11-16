@@ -1,6 +1,6 @@
-"""Tests for the ``nhl-scoreboard`` command line entry point.
+"""Tests for the ``scoreboard`` command line entry point.
 
-``--dump`` is exercised end to end through ``main()`` with the NHL client
+``--dump`` is exercised end to end through ``main()`` with the hockey client
 stubbed out; nothing here touches the network or a matrix backend.
 """
 
@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard import __main__ as cli
-from nhl_scoreboard.config import Settings
-from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game
+from scoreboard import __main__ as cli
+from scoreboard.config import Settings
+from scoreboard.hockey.api import HockeyApiError
+from scoreboard.hockey.models import Game
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def stub_client(monkeypatch, games=None, error=None):
                 raise error
             return games
 
-    monkeypatch.setattr(cli, "NHLClient", FakeClient)
+    monkeypatch.setattr(cli, "HockeyClient", FakeClient)
 
 
 def dump_args(tmp_path, *extra: str) -> list[str]:
@@ -73,7 +73,7 @@ def test_dump_with_no_games_says_so(monkeypatch, tmp_path, capsys):
 
 
 def test_dump_api_failure_exits_1_with_a_message_not_a_traceback(monkeypatch, tmp_path, capsys):
-    stub_client(monkeypatch, error=NHLApiError("boom"))
+    stub_client(monkeypatch, error=HockeyApiError("boom"))
 
     assert cli.main(dump_args(tmp_path)) == 1
 
@@ -89,8 +89,8 @@ def test_dump_never_imports_a_matrix_backend(monkeypatch, tmp_path, games):
     # Another test may already have imported these; clear them for this call
     # (monkeypatch restores the originals afterwards).
     watched = (
-        "nhl_scoreboard.app",
-        "nhl_scoreboard.display.matrix",
+        "scoreboard.app",
+        "scoreboard.display.matrix",
         "rgbmatrix",
         "RGBMatrixEmulator",
     )
@@ -170,14 +170,50 @@ def test_demo_goes_through_the_matrix_backend_path_and_runs_the_demo_loop(monkey
         def run(self):
             calls.append("run")
 
-    fake_app = types.ModuleType("nhl_scoreboard.app")
+    fake_app = types.ModuleType("scoreboard.app")
     fake_app.ScoreboardApp = FakeApp
-    fake_matrix = types.ModuleType("nhl_scoreboard.display.matrix")
+    fake_matrix = types.ModuleType("scoreboard.display.matrix")
     fake_matrix.load_backend = lambda name=None: f"backend:{name}"
-    monkeypatch.setitem(sys.modules, "nhl_scoreboard.app", fake_app)
-    monkeypatch.setitem(sys.modules, "nhl_scoreboard.display.matrix", fake_matrix)
+    monkeypatch.setitem(sys.modules, "scoreboard.app", fake_app)
+    monkeypatch.setitem(sys.modules, "scoreboard.display.matrix", fake_matrix)
 
     argv = ["--demo", "--backend", "RGBMatrixEmulator", "-c", str(tmp_path / "absent.toml")]
     assert cli.main(argv) == 0
 
     assert calls == [("init", "backend:RGBMatrixEmulator"), "signals", "run_demo"]
+
+
+def test_a_real_run_fetches_on_a_worker_thread_but_the_demo_does_not(monkeypatch, tmp_path):
+    # #267: only the real entry point installs the threaded fetcher; the demo
+    # fetches nothing, and every test keeps the synchronous default.
+    from scoreboard.fetcher import ThreadedFetcher
+
+    made = []
+
+    class FakeApp:
+        def __init__(self, settings, backend=None, **kwargs):
+            made.append(kwargs)
+
+        def install_signal_handlers(self):
+            pass
+
+        def run_demo(self):
+            pass
+
+        def run(self):
+            pass
+
+    fake_app = types.ModuleType("scoreboard.app")
+    fake_app.ScoreboardApp = FakeApp
+    fake_matrix = types.ModuleType("scoreboard.display.matrix")
+    fake_matrix.load_backend = lambda name=None: f"backend:{name}"
+    monkeypatch.setitem(sys.modules, "scoreboard.app", fake_app)
+    monkeypatch.setitem(sys.modules, "scoreboard.display.matrix", fake_matrix)
+
+    config = ["-c", str(tmp_path / "absent.toml")]
+    assert cli.main(config) == 0
+    assert cli.main(["--demo", *config]) == 0
+
+    real, demo = made
+    assert isinstance(real["fetcher"], ThreadedFetcher)
+    assert "fetcher" not in demo

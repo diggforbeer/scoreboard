@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard import __main__ as cli
-from nhl_scoreboard.football import queue as q
-from nhl_scoreboard.football import watch as w
-from nhl_scoreboard.football.models import Play, PlayKind
-from nhl_scoreboard.football.queue import PlayQueue, PlayWatcher
+from scoreboard import __main__ as cli
+from scoreboard.football import queue as q
+from scoreboard.football import watch as w
+from scoreboard.football.models import Play, PlayKind
+from scoreboard.football.queue import PlayQueue, PlayWatcher
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
 BASE = datetime(2026, 11, 13, 1, 0, tzinfo=UTC)
@@ -269,7 +269,7 @@ def test_a_play_without_a_wallclock_has_no_lag():
 
 def test_every_play_logs_its_depth_lag_speed_and_how_long_it_ran(caplog):
     queue, clock = make_queue()
-    with caplog.at_level(logging.INFO, logger="nhl_scoreboard.football.queue"):
+    with caplog.at_level(logging.INFO, logger="scoreboard.football.queue"):
         queue.offer([])
         queue.offer([play(n, "rush", at=0) for n in range(1, 5)])
         clock.advance(12)
@@ -288,7 +288,7 @@ def test_every_play_logs_its_depth_lag_speed_and_how_long_it_ran(caplog):
 
 def test_the_baseline_is_logged_so_a_mid_game_start_is_visible(caplog):
     queue, _ = make_queue()
-    with caplog.at_level(logging.INFO, logger="nhl_scoreboard.football.queue"):
+    with caplog.at_level(logging.INFO, logger="scoreboard.football.queue"):
         queue.offer([play(n) for n in range(1, 4)])
     assert any("baseline: 3 plays" in r.getMessage() for r in caplog.records)
 

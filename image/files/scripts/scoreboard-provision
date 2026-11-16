@@ -10,7 +10,7 @@ Failures here are logged but never fatal: a typo in the config file must not
 stop the board from booting, and an unreachable Wi-Fi network should still
 leave a working console.
 
-Wi-Fi joining/rollback itself lives in ``nhl_scoreboard.wifi`` (#133) --
+Wi-Fi joining/rollback itself lives in ``scoreboard.wifi`` (#133) --
 factored out so the AP setup page's live join flow can call the exact same
 tested path as this boot-time one, instead of a second reimplementation.
 This script's only job for wifi is reading ``[wifi]`` out of the TOML and
@@ -27,27 +27,27 @@ import sys
 import tomllib
 from pathlib import Path
 
-#: Same overridable convention as nhl_scoreboard.wifi's IWD_DIR, so tests can
+#: Same overridable convention as scoreboard.wifi's IWD_DIR, so tests can
 #: exercise apply_timezone() against real files without touching the actual
 #: system's /usr/share/zoneinfo, /etc/localtime or /etc/timezone.
-ZONEINFO = Path(os.environ.get("NHL_SCOREBOARD_ZONEINFO_DIR", "/usr/share/zoneinfo"))
-LOCALTIME = Path(os.environ.get("NHL_SCOREBOARD_LOCALTIME", "/etc/localtime"))
-TIMEZONE_FILE = Path(os.environ.get("NHL_SCOREBOARD_TIMEZONE_FILE", "/etc/timezone"))
+ZONEINFO = Path(os.environ.get("SCOREBOARD_ZONEINFO_DIR", "/usr/share/zoneinfo"))
+LOCALTIME = Path(os.environ.get("SCOREBOARD_LOCALTIME", "/etc/localtime"))
+TIMEZONE_FILE = Path(os.environ.get("SCOREBOARD_TIMEZONE_FILE", "/etc/timezone"))
 
 #: Overridable for tests, same convention as the paths above.
-NET_DIR = Path(os.environ.get("NHL_SCOREBOARD_NET_DIR", "/sys/class/net"))
-HOSTNAME_FILE = Path(os.environ.get("NHL_SCOREBOARD_HOSTNAME_FILE", "/etc/hostname"))
-HOSTS_FILE = Path(os.environ.get("NHL_SCOREBOARD_HOSTS_FILE", "/etc/hosts"))
+NET_DIR = Path(os.environ.get("SCOREBOARD_NET_DIR", "/sys/class/net"))
+HOSTNAME_FILE = Path(os.environ.get("SCOREBOARD_HOSTNAME_FILE", "/etc/hostname"))
+HOSTS_FILE = Path(os.environ.get("SCOREBOARD_HOSTS_FILE", "/etc/hosts"))
 #: Existence of this file means the name was chosen once and must never be
 #: re-derived (#292): avahi's own clash rename isn't remembered, this is.
 HOSTNAME_STATE = Path(
-    os.environ.get("NHL_SCOREBOARD_HOSTNAME_STATE", "/var/lib/nhl-scoreboard/hostname-chosen")
+    os.environ.get("SCOREBOARD_HOSTNAME_STATE", "/var/lib/scoreboard/hostname-chosen")
 )
 
 #: The _http._tcp advertisement baked into the image (#292); rewritten here
 #: when [status] port isn't the default so the listing follows the real port.
 AVAHI_SERVICE_FILE = Path(
-    os.environ.get("NHL_SCOREBOARD_AVAHI_SERVICE", "/etc/avahi/services/nhl-scoreboard.service")
+    os.environ.get("SCOREBOARD_AVAHI_SERVICE", "/etc/avahi/services/scoreboard.service")
 )
 
 log = logging.getLogger("scoreboard-provision")
@@ -68,13 +68,13 @@ def main(argv: list[str]) -> int:
     apply_chosen_hostname(config.get("status", {}))
     apply_avahi_port(config.get("status", {}))
     # Imported here, not at module load: this script has to keep running
-    # (timezone/regdom) even on a board where the nhl_scoreboard package
+    # (timezone/regdom) even on a board where the scoreboard package
     # somehow isn't importable, same tolerance read_config() already has
     # for a malformed scoreboard.toml.
     try:
-        from nhl_scoreboard.wifi import apply_wifi
+        from scoreboard.wifi import apply_wifi
     except ImportError:
-        log.error("nhl_scoreboard package not importable; skipping Wi-Fi setup")
+        log.error("scoreboard package not importable; skipping Wi-Fi setup")
         return 0
     wifi = config.get("wifi", {})
     timeout = wifi.get("connect_timeout_seconds")

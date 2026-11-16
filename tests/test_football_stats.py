@@ -11,21 +11,21 @@ from pathlib import Path
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_stats as fs
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football import api
-from nhl_scoreboard.football import director as dr
-from nhl_scoreboard.football.demo import DEMO_STATS
-from nhl_scoreboard.football.stats import (
+from scoreboard.app import Scene
+from scoreboard.display import football_stats as fs
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import api
+from scoreboard.football import director as dr
+from scoreboard.football.demo import DEMO_STATS
+from scoreboard.football.stats import (
     PAGES,
     GameStats,
     StatRow,
     display,
     stats_from_summary,
 )
-from nhl_scoreboard.football.teams import team_color
+from scoreboard.football.teams import team_color
 from test_football_director import started, td
 from test_football_events import make_game, make_play
 from test_football_plays import FakeResponse, FakeSession
@@ -169,7 +169,7 @@ def test_the_stats_page_length_is_the_owners_and_is_clamped():
     stages = run_to_next_play(rig, make_play(0, "rush", off="WSH"), OFFICIAL)
     assert [s.seconds for s in stages if s.stage == dr.STATS] == [9.0]
     assert dr.Timings(stats=1.0).clamped().stats == 3.0
-    assert dr.Timings(stats=99.0).clamped().stats == 20.0
+    assert dr.Timings(stats=99.0).clamped().stats == 40.0
 
 
 def test_without_stats_the_play_text_still_follows_as_before():
@@ -201,7 +201,7 @@ def test_a_late_stats_fetch_is_read_when_the_play_is_built_not_when_it_arrives()
 def scene(share=0.0, stats=DEMO_STATS, game=None):
     return Scene(
         "fb_event", fb_game=game or make_game(), fb_play=OFFICIAL, fb_stage="stats",
-        fb_stats=stats, fb_elapsed=share, fb_seconds=6.0, animating=True,
+        fb_stats=stats, fb_elapsed=share, fb_seconds=12.0, animating=True,
     )  # fmt: skip
 
 
@@ -220,13 +220,13 @@ def synthetic_logos(tmp_path):
     return LogoSet("football", "dark", libs)
 
 
-@pytest.mark.parametrize(("name", "share"), [("first", 1.0), ("second", 7.0)])
+@pytest.mark.parametrize(("name", "share"), [("first", 1.0), ("second", 13.0)])
 def test_each_page_snapshot(name, share, update_snapshots):
     check_snapshot(f"fb_stats_{name}", draw(share).render(), update_snapshots)
 
 
 def test_pages_take_turns_for_as_long_as_the_stage_is_held():
-    seconds = [0.0, 5.9, 6.0, 11.9, 12.0, 100.0]
+    seconds = [0.0, 11.9, 12.0, 23.9, 24.0, 100.0]
     assert [fs.page_of(scene(s), 2) for s in seconds] == [0, 0, 1, 1, 0, 0]
     assert fs.page_of(Scene("fb_event", fb_seconds=0.0), 2) == 0
 
@@ -238,14 +238,14 @@ def test_the_leader_is_lit_in_team_colour_and_the_trailing_side_dims():
     assert canvas.colors(fs.LEFT_X, 0, fs.LEFT_X + 20, 31) == {away}
     assert canvas.colors(fs.RIGHT_X - 20, 0, fs.RIGHT_X, 31) == {fs.TRAILING, home}
     # Page two: NYG is behind on the third-down rate, and WSH has fewer penalties.
-    second = draw(7.0)
+    second = draw(13.0)
     assert fs.TRAILING in second.colors(fs.RIGHT_X - 20, 0, fs.RIGHT_X, 31)
     row = second.colors(fs.LEFT_X, 1, fs.LEFT_X + 20, 5)  # the 3rd-down row, WSH 4/5 vs NYG 1/5
     assert row == {away}
 
 
 def test_the_second_page_marks_its_dot_and_shows_the_other_rows():
-    first, second = draw(1.0), draw(7.0)
+    first, second = draw(1.0), draw(13.0)
     assert first.render() != second.render()
     lit = lambda c, x: c.pixels.get((x, 28)) == fs.LIT_DOT  # noqa: E731
     assert lit(first, 6) and not lit(first, 10)
@@ -275,7 +275,7 @@ def test_pages_are_five_rows_so_they_fit_the_panel():
 
 
 def test_the_mode_hands_the_director_stats_on_a_wide_panel_only():
-    from nhl_scoreboard.football.mode import FootballMode
+    from scoreboard.football.mode import FootballMode
 
     wide = {"on": True}
     mode = FootballMode(client_factory=lambda: None, wide=lambda: wide["on"])
@@ -295,7 +295,7 @@ class StatsClient:
 
 
 def test_the_worker_side_keeps_the_stats_and_a_failed_read_keeps_the_last_good():
-    from nhl_scoreboard.football.mode import FootballMode
+    from scoreboard.football.mode import FootballMode
 
     mode = FootballMode(client_factory=lambda: None)
     client = StatsClient()

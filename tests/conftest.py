@@ -38,7 +38,7 @@ def standings_payload() -> dict:
 
     Unlike ``score.json`` this is not a trimmed real capture: a live call
     made while filing #40 only ever returned the just-finished season's
-    final standings (the off-season quirk documented on ``NHLClient.
+    final standings (the off-season quirk documented on ``HockeyClient.
     standings``), so there was no in-season response to trim from. The
     field names and nesting mirror what that call actually returned.
     """
@@ -57,3 +57,17 @@ def pytest_addoption(parser):
 @pytest.fixture
 def update_snapshots(request) -> bool:
     return request.config.getoption("--update-snapshots")
+
+
+@pytest.fixture(autouse=True)
+def _restore_idle_screens():
+    """A test may register stand-in idle screens (``test_football_idle_selection.register``); they
+    must never outlive it, or a later test on the same worker draws a fake view (a bool) instead
+    of the real screen. This keeps that true for every test file, not just the one that owns the
+    helper."""
+    from scoreboard.football.idle_screens import IDLE_SCREENS
+
+    saved = dict(IDLE_SCREENS)
+    yield
+    IDLE_SCREENS.clear()
+    IDLE_SCREENS.update(saved)
