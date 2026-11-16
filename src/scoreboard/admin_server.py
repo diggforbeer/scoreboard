@@ -298,9 +298,12 @@ from .config import (
     GOAL_FLASH_MIN_SECONDS,
     PANEL_HARDWARE_MAPPING_CHOICES,
     SPORT_CHOICES,
+    TEAM_SPORTS,
+    TEAMS_MAX,
     VALID_ROTATION_SCREENS,
     ConfigWriteError,
     Settings,
+    team_exists,
 )
 from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
@@ -940,6 +943,35 @@ async def _send_football_rotation_config(
     await connection.send(json.dumps(_football_rotation_payload(settings)))
 
 
+def _teams_payload(settings: Settings) -> dict[str, object]:
+    """The ranked list of teams, hockey and football mixed, rank 1 first (epic #470).
+
+    ``available`` is what the page may offer, from each sport's own table so the page has no
+    second list to drift: hockey as abbreviations (the page already knows their names), football
+    with names. ``max`` is the cap the server enforces.
+    """
+    return {
+        "type": "config",
+        "section": "teams",
+        "data": {"teams": [{"sport": e.sport, "team": e.team} for e in settings.teams]},
+        "available": {
+            "hockey": sorted(TEAM_COLORS),
+            "football": [
+                {"abbrev": t.abbrev, "name": f"{t.city} {t.nickname}"}
+                for t in sorted(football_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
+            ],
+        },
+        "max": TEAMS_MAX,
+    }
+
+
+async def _send_teams_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_teams_payload(settings)))
+
+
 async def _send_snapshot(connection: ServerConnection) -> None:
     await connection.send(json.dumps(_snapshot_payload()))
 
@@ -1508,7 +1540,35 @@ _SEND_AFTER_SAVE = {
     "update": _send_update_config,
     "football": _send_football_config,
     "football_rotation": _send_football_rotation_config,
+    "teams": _send_teams_config,
 }
+
+
+def _coerce_teams(data: object) -> list[dict[str, str]]:
+    """Validate a ``teams`` save: the whole new ranked list, rejected whole on the first bad row
+    (like ``_coerce_rotation``). A team is a (sport, abbreviation) pair; the same pair twice, a team
+    the sport does not have, or more than ``TEAMS_MAX`` rows is an error."""
+    if not isinstance(data, dict) or not isinstance(data.get("teams"), list):
+        raise ValueError(json.dumps({"teams": "must be an object with a list of teams"}))
+    rows = data["teams"]
+    if len(rows) > TEAMS_MAX:
+        raise ValueError(json.dumps({"teams": f"at most {TEAMS_MAX} teams"}))
+    entries: list[dict[str, str]] = []
+    for i, row in enumerate(rows):
+        label = f"row {i + 1}"
+        if not isinstance(row, dict):
+            raise ValueError(json.dumps({label: "must be an object"}))
+        sport = str(row.get("sport", "")).strip().lower()
+        team = str(row.get("team", "")).strip().upper()
+        if sport not in TEAM_SPORTS:
+            raise ValueError(json.dumps({label: f"sport must be one of {', '.join(TEAM_SPORTS)}"}))
+        if not team_exists(sport, team):
+            raise ValueError(json.dumps({label: f"{team or '(blank)'} is not a {sport} team"}))
+        entry = {"sport": sport, "team": team}
+        if entry in entries:
+            raise ValueError(json.dumps({label: f"{sport} {team} is already in the list"}))
+        entries.append(entry)
+    return entries
 
 
 def _coerce_update(data: object) -> dict[str, object]:
@@ -1571,6 +1631,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_scalar_fields(message.get("data"), _FOOTBALL_FIELDS)
         elif section == "football_rotation":
             values = _coerce_football_rotation(message.get("data"))
+        elif section == "teams":
+            values = _coerce_teams(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
@@ -1615,6 +1677,8 @@ async def _handle(connection: ServerConnection) -> None:
         # After holiday for the same reason: nothing that counts the earlier messages moves.
         await _send_football_config(connection, settings)
         await _send_football_rotation_config(connection, settings)
+        # And the ranked team list (epic #470) after that.
+        await _send_teams_config(connection, settings)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:

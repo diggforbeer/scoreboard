@@ -64,7 +64,7 @@ def fake_journalctl(tmp_path, monkeypatch):
     return pids
 
 
-async def _drain_initial(client, n=14):
+async def _drain_initial(client, n=15):
     for _ in range(n):
         await client.recv()
 

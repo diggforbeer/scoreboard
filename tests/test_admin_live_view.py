@@ -39,7 +39,7 @@ def mirror(monkeypatch):
     return mirror
 
 
-async def _drain_initial(client, n=14):
+async def _drain_initial(client, n=15):
     for _ in range(n):
         await client.recv()
 
