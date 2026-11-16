@@ -46,12 +46,21 @@ def apply_hostname(
     hosts_file: Path = HOSTS_FILE,
     state_file: Path = HOSTNAME_STATE,
     run: Callable[..., object] = subprocess.run,
+    set_hostname: Callable[[str], None] = socket.sethostname,
 ) -> bool:
     """Make ``name`` the board's hostname and re-announce it. Never raises.
 
     Returns whether the files were written. The state file is written too, so
     ``scoreboard-provision`` never re-derives a MAC name over an owner's choice.
+
+    ``name`` must be a single RFC 1123 label. The admin page already checks, but
+    this function writes it into ``/etc/hostname`` and ``/etc/hosts`` (a newline
+    or tab would add lines there), so it refuses anything else itself rather
+    than trusting every caller to have done so.
     """
+    if not valid_hostname_label(name):
+        log.error("Refusing to set an invalid hostname: %r", name)
+        return False
     try:
         hostname_file.write_text(f"{name}\n")
         if hosts_file.exists():
@@ -63,13 +72,19 @@ def apply_hostname(
         log.error("Could not set hostname: %s", exc)
         return False
     log.info("Hostname set to %s", name)
+    # The kernel's name changes by syscall, not by running ``hostname <name>``:
+    # that is all the command does, and passing a user-chosen value on a command
+    # line is what code scanning flagged (py/command-line-injection).
+    try:
+        set_hostname(name)
+    except OSError as exc:
+        log.warning("Setting the live hostname failed: %s", exc)
     # avahi reads the hostname at startup, so it has to be restarted to
-    # announce the new one. Best-effort.
-    for cmd in (["hostname", name], ["systemctl", "restart", "avahi-daemon.service"]):
-        try:
-            run(cmd, check=False, timeout=30)
-        except (OSError, subprocess.SubprocessError) as exc:
-            log.warning("%s failed: %s", cmd[0], exc)
+    # announce the new one. Best-effort; the command line is constant.
+    try:
+        run(["systemctl", "restart", "avahi-daemon.service"], check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("systemctl failed: %s", exc)
     return True
 
 
