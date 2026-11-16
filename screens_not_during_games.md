@@ -106,6 +106,25 @@ one request fills the grid; `week.teamsOnBye` names the teams missing from it.
 The favourite's next three games in a column: date, opponent, home or away. Data: the
 schedule (`/teams/{id}/schedule`); a missing week number in it is the bye.
 
+### `fb_redzone`: a team has driven inside the 20
+
+An alert, not a rotation screen: while an idle screen is up (the countdown, the final, the
+standings, the week, the schedule, the clock) and a live game moves into the red zone, the alert
+takes the panel for `redzone_seconds` (6, 3-15) and the idle screen comes back. It is the
+league-wide RedZone idea in one card: both crests at the edges (the attacking team's bright, the
+other's dimmed) with their scores, `RED ZONE` pulsing in red, the down and distance in the large
+face, and `<TEAM> BALL ON <SPOT>` under it. Data: the scoreboard's `situation` (`isRedZone`,
+`possession`, `possessionText`), so it costs no request. Rules (`football/redzone.py`):
+
+- **A transition, not a state.** A game already in the zone when the board first sees it only
+  seeds the state; an alert is made when a game *goes* in (or the other team gets the ball in it).
+- **Spaced out.** The same game alerts once per two minutes however often it flickers at the edge;
+  several games entering together queue and show one after another, and one that has waited 30
+  seconds is dropped.
+- **Where.** Over any idle screen on a 128px panel, with `show_redzone` on (it is, by default;
+  one toggle on the admin page). Never over a game scene: the favourite's field and the followed
+  games already show the zone, and a followed team's score banner still comes before the alert.
+
 ## Mockups
 
 Real renders at 128x32 (these screens are skipped on a 64px panel) from the demo steps in
@@ -124,6 +143,8 @@ font has no `@` and no `#`, so away games read `AT`.
 | `fb_bye`: the logo, `BYE WEEK` and the next game, from the schedule. Without a schedule yet (`docs/football/fb_bye_no_next.png`) the title stands alone. | `fb_final`, held 60 minutes: the score, the loser's logo dimmed, and the recap (the leading passer and rusher) across the bottom. Without leaders (`docs/football/fb_final_no_recap.png`) the margin stands in. |
 | ![Division](docs/football/fb_standings_division.png) | ![Conference](docs/football/fb_standings_conference.png) |
 | `fb_standings`, page 1: the favourite's division (rank, record, streak, points for and against), the favourite in white. | Page 2: the conference's seven seeds and the cut line, with the first team out under it. |
+| ![Red zone](docs/football/fb_redzone.png) | ![Red zone, dim](docs/football/fb_redzone_dim.png) |
+| `fb_redzone`: a team has driven inside the 20. `RED ZONE` pulses (bright here)... | ...and dims (the other half of the pulse). The attacking team (here the away side) is bright. |
 | ![Week](docs/football/fb_week.png) | ![Schedule](docs/football/fb_schedule.png) |
 | `fb_week`: eight games a page, away over home; finals with the winner bright, a live game in green, an upcoming one with its kickoff hour. Two pages for 16 games. | `fb_schedule`: the favourite's next three games, week, date, opponent, time. |
 
