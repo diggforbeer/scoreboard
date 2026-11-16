@@ -931,6 +931,21 @@ class ScoreboardApp:
         self._leaders = None
         self._leaders_retry_after = 0.0
 
+    def _colour_scheme(self, favourite: str, *, clock: bool = False) -> tuple[str, str]:
+        """The (sport, team) the clock, tree and holiday overlay take their colours from.
+
+        Under a ranked list it is the overall rank 1, whichever sport is on screen, so the colours
+        do not change as games start and end (epic #470). Without one it is the favourite of the
+        sport running, as before (the clock stays plain in football mode).
+        """
+        if self.settings.teams:
+            first = self.settings.teams[0]
+            return first.sport, first.team
+        football_on = self._sport == "football" and self._football is not None
+        if clock:
+            return "hockey", "" if football_on else favourite
+        return ("football" if football_on else "hockey"), favourite
+
     def _priority(self) -> Priority:
         """The priority layer over the current ranked list (rebuilt only when the list changes)."""
         teams = tuple(self.settings.teams)
@@ -3457,10 +3472,13 @@ class ScoreboardApp:
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
         elif scene.kind == "clock":
-            # The clock's colours are keyed on hockey abbreviations; a football one is no key.
-            r.draw_clock(self.canvas, self.clock(), "" if self._sport == "football" else favourite)
+            sport, abbrev = self._colour_scheme(favourite, clock=True)
+            with use_sport(sport):
+                r.draw_clock(self.canvas, self.clock(), abbrev)
         elif scene.kind == "christmas_tree":
-            r.draw_christmas_tree(self.canvas, self.clock(), favourite)
+            sport, abbrev = self._colour_scheme(favourite)
+            with use_sport(sport):
+                r.draw_christmas_tree(self.canvas, self.clock(), abbrev)
         elif scene.kind == "address":
             r.draw_address(
                 self.canvas,
@@ -3526,7 +3544,8 @@ class ScoreboardApp:
         if football_on and not self._demo_drawing:
             holiday = self._football_game_holiday(scene, holiday)
         min_gap, max_gap = self.settings.holiday.flyby_gap_minutes
-        with use_sport("football" if football_on else "hockey"):
+        sport, favourite = self._colour_scheme(favourite)
+        with use_sport(sport):
             self._overlay_animating = self.holiday_overlay.draw(
                 self.canvas,
                 scene_kind=scene.kind,

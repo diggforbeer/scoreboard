@@ -313,7 +313,7 @@ def _adopt(app, new):
     return new
 
 
-# -- football reads its favourite and horn from the list (#475) ------------------------------------
+# -- football reads its favourite and horn from the list (#475) ----------------------------------
 
 FOOTBALL_LIST = [("football", TEN), ("football", NYG), ("hockey", NSH)]
 
@@ -372,7 +372,7 @@ def test_a_hockey_owner_leaves_football_with_its_lead_team_as_favourite(backend)
     assert rig.app._football_cfg().favourite_team == TEN
 
 
-# -- hockey reads its favourite and horn from the list (#476) -------------------------------------
+# -- hockey reads its favourite and horn from the list (#476) ------------------------------------
 
 HOCKEY_LIST = [("hockey", NSH), ("hockey", TOR), ("football", TEN)]
 
@@ -457,7 +457,7 @@ def test_the_caches_are_kept_while_the_favourite_stays_the_same(backend):
     assert rig.app._schedule is not None
 
 
-# -- the idle screens alternate between sports (#477) ---------------------------------------------
+# -- the idle screens alternate between sports (#477) --------------------------------------------
 
 
 def idle_runs(rig, seconds=420, step=5.0):
@@ -553,3 +553,38 @@ def test_hockey_s_rotation_starts_at_the_idle_origin(backend):
     assert scene_at(mono - 10.0) in ("preview", "countdown"), "ten seconds in: the second entry"
     assert scene_at(mono - 20.0) == "clock", "and round again"
     assert scene_at(0.0) == rig.app._rotate_idle_scenes(upcoming, None, allow_fetch=False).kind
+
+
+# -- colours follow the overall rank 1 (#478) ----------------------------------------------------
+
+
+def test_without_a_list_the_colours_are_the_favourites_as_before(backend):
+    rig = Rig(backend, [])
+    assert rig.app._colour_scheme(NSH) == ("hockey", NSH)
+    assert rig.app._colour_scheme(NSH, clock=True) == ("hockey", NSH)
+
+
+def test_the_colours_follow_the_overall_rank_1_whatever_sport_is_on_screen(backend):
+    rig = Rig(backend, [("football", TEN), ("hockey", NSH)])
+    assert rig.app._colour_scheme("anything") == ("football", TEN)
+    assert rig.app._colour_scheme("anything", clock=True) == ("football", TEN)
+    rig.hockey.today, rig.football.games = [nsh_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.app._colour_scheme(NSH) == ("football", TEN), (
+        "unchanged as the game on screen changes"
+    )
+
+
+def test_the_clock_is_drawn_in_a_football_teams_colours_when_that_team_is_rank_1():
+    from scoreboard.display import holiday
+    from scoreboard.display.ascii import AsciiCanvas
+    from scoreboard.football.teams import team_color
+    from test_football_scenes import renderer
+
+    canvas = AsciiCanvas(128, 32)
+    with holiday.use_sport("football"):
+        renderer(128).draw_clock(canvas, START, TEN)
+    assert tuple(team_color(TEN)) in {tuple(c) for c in canvas.colors(0, 0, 127, 31)}
+    plain = AsciiCanvas(128, 32)
+    renderer(128).draw_clock(plain, START, "")
+    assert tuple(team_color(TEN)) not in {tuple(c) for c in plain.colors(0, 0, 127, 31)}
