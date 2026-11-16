@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Coverage for src/nhl_scoreboard/display/football_cointoss.py: 97%</title>
+    <title>Coverage for src/nhl_scoreboard/display/football_cointoss.py: 98%</title>
     <link rel="icon" sizes="32x32" href="favicon_32_cb_c827f16f.png">
     <link rel="stylesheet" href="style_cb_4667309f.css" type="text/css">
     <script src="coverage_html_cb_54cfdca1.js" defer></script>
@@ -12,7 +12,7 @@
     <div class="content">
         <h1>
             <span class="text">Coverage for </span><b>src<span class="sep">/</span>nhl_scoreboard<span class="sep">/</span>display<span class="sep">/</span>football_cointoss.py</b>:
-            <span class="pc_cov">97%</span>
+            <span class="pc_cov">98%</span>
         </h1>
         <aside id="help_panel_wrapper">
             <input id="help_panel_state" type="checkbox">
@@ -26,7 +26,6 @@
                         <kbd>r</kbd>
                         <kbd>m</kbd>
                         <kbd>x</kbd>
-                        <kbd>p</kbd>
                         &nbsp; toggle line displays
                     </p>
                     <p>
@@ -59,7 +58,6 @@
             <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">62<span class="text"> run</span></button>
             <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">1<span class="text"> missing</span></button>
             <button type="button" class="exc show_exc button_toggle_exc" value="exc" data-shortcut="x" title="Toggle lines excluded">4<span class="text"> excluded</span></button>
-            <button type="button" class="par run show_par button_toggle_par" value="par" data-shortcut="p" title="Toggle lines partially run">1<span class="text"> partial</span></button>
         </h2>
         <p class="text">
             <a id="prevFileLink" class="nav" href="z_594c5133449de029_fonts_py.html">&#xab; prev</a> &nbsp; &nbsp;
@@ -67,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_594c5133449de029_football_fgmiss_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-16 02:13 +0000
+            created at 2026-11-16 02:23 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -192,7 +190,7 @@
     <p class="run run2"><span class="n"><a id="t108" href="#t108">108</a></span><span class="t">            <span class="nam">canvas</span><span class="op">,</span> <span class="nam">r</span><span class="op">.</span><span class="nam">fonts</span><span class="op">.</span><span class="nam">medium</span><span class="op">,</span> <span class="nam">cx</span><span class="op">,</span> <span class="nam">CENTRE_Y</span> <span class="op">+</span> <span class="num">5</span><span class="op">,</span> <span class="nam">color</span><span class="op">,</span> <span class="nam">r_fit</span><span class="op">(</span><span class="nam">team</span><span class="op">,</span> <span class="num">30</span><span class="op">,</span> <span class="nam">r</span><span class="op">.</span><span class="nam">fonts</span><span class="op">.</span><span class="nam">medium</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run run2"><span class="n"><a id="t109" href="#t109">109</a></span><span class="t">        <span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t110" href="#t110">110</a></span><span class="t">    <span class="nam">fade</span> <span class="op">=</span> <span class="nam">min</span><span class="op">(</span><span class="num">1.0</span><span class="op">,</span> <span class="op">(</span><span class="nam">share</span> <span class="op">-</span> <span class="nam">LAND_END</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="nam">TEXT_FADE_END</span> <span class="op">-</span> <span class="nam">LAND_END</span><span class="op">)</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
-    <p class="par run show_par"><span class="n"><a id="t111" href="#t111">111</a></span><span class="t">    <span class="key">if</span> <span class="nam">fade</span> <span class="op">&lt;=</span> <span class="num">0</span><span class="op">:</span>&nbsp;</span><span class="r"><span class="annotate short">111&#x202F;&#x219B;&#x202F;112</span><span class="annotate long">line 111 didn't jump to line 112 because the condition on line 111 was never true</span></span></p>
+    <p class="run"><span class="n"><a id="t111" href="#t111">111</a></span><span class="t">    <span class="key">if</span> <span class="nam">fade</span> <span class="op">&lt;=</span> <span class="num">0</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="mis show_mis"><span class="n"><a id="t112" href="#t112">112</a></span><span class="t">        <span class="key">return</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t113" href="#t113">113</a></span><span class="t">    <span class="nam">shade</span> <span class="op">=</span> <span class="nam">tuple</span><span class="op">(</span><span class="nam">round</span><span class="op">(</span><span class="nam">c</span> <span class="op">*</span> <span class="nam">fade</span><span class="op">)</span> <span class="key">for</span> <span class="nam">c</span> <span class="key">in</span> <span class="nam">color</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t114" href="#t114">114</a></span><span class="t">    <span class="nam">text</span> <span class="op">=</span> <span class="fst">f&quot;</span><span class="op">{</span><span class="nam">team</span><span class="op">}</span><span class="fst"> RECEIVE</span><span class="fst">&quot;</span>&nbsp;</span><span class="r"></span></p>
@@ -225,7 +223,7 @@
             <a class="nav" href="z_594c5133449de029_football_fgmiss_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-16 02:13 +0000
+            created at 2026-11-16 02:23 +0000
         </p>
     </div>
 </footer>

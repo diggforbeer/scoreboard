@@ -26,7 +26,6 @@
                         <kbd>r</kbd>
                         <kbd>m</kbd>
                         <kbd>x</kbd>
-                        <kbd>p</kbd>
                         &nbsp; toggle line displays
                     </p>
                     <p>
@@ -59,7 +58,6 @@
             <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">166<span class="text"> run</span></button>
             <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">1<span class="text"> missing</span></button>
             <button type="button" class="exc show_exc button_toggle_exc" value="exc" data-shortcut="x" title="Toggle lines excluded">3<span class="text"> excluded</span></button>
-            <button type="button" class="par run show_par button_toggle_par" value="par" data-shortcut="p" title="Toggle lines partially run">1<span class="text"> partial</span></button>
         </h2>
         <p class="text">
             <a id="prevFileLink" class="nav" href="z_594c5133449de029_football_turnover_py.html">&#xab; prev</a> &nbsp; &nbsp;
@@ -67,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_594c5133449de029_holiday_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-16 02:13 +0000
+            created at 2026-11-16 02:23 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -237,7 +235,7 @@
     <p class="run"><span class="n"><a id="t153" href="#t153">153</a></span><span class="t"><span class="key">def</span> <span class="nam">_name</span><span class="op">(</span><span class="nam">r</span><span class="op">:</span> <span class="nam">Renderer</span><span class="op">,</span> <span class="nam">canvas</span><span class="op">:</span> <span class="nam">Any</span><span class="op">,</span> <span class="nam">scorer</span><span class="op">:</span> <span class="nam">str</span><span class="op">,</span> <span class="nam">colour</span><span class="op">:</span> <span class="nam">RGB</span><span class="op">,</span> <span class="nam">age</span><span class="op">:</span> <span class="nam">float</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="key">None</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t154" href="#t154">154</a></span><span class="t">    <span class="str">&quot;&quot;&quot;The team name, drawn straight onto ``canvas`` (the real one: see ``_glyph``).&quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t155" href="#t155">155</a></span><span class="t">    <span class="nam">name</span> <span class="op">=</span> <span class="nam">team_name</span><span class="op">(</span><span class="nam">scorer</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
-    <p class="par run show_par"><span class="n"><a id="t156" href="#t156">156</a></span><span class="t">    <span class="key">if</span> <span class="nam">text_width</span><span class="op">(</span><span class="nam">r</span><span class="op">.</span><span class="nam">fonts</span><span class="op">.</span><span class="nam">small</span><span class="op">,</span> <span class="nam">name</span><span class="op">)</span> <span class="op">&gt;</span> <span class="nam">r</span><span class="op">.</span><span class="nam">width</span><span class="op">:</span>&nbsp;</span><span class="r"><span class="annotate short">156&#x202F;&#x219B;&#x202F;157</span><span class="annotate long">line 156 didn't jump to line 157 because the condition on line 156 was never true</span></span></p>
+    <p class="run"><span class="n"><a id="t156" href="#t156">156</a></span><span class="t">    <span class="key">if</span> <span class="nam">text_width</span><span class="op">(</span><span class="nam">r</span><span class="op">.</span><span class="nam">fonts</span><span class="op">.</span><span class="nam">small</span><span class="op">,</span> <span class="nam">name</span><span class="op">)</span> <span class="op">&gt;</span> <span class="nam">r</span><span class="op">.</span><span class="nam">width</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="mis show_mis"><span class="n"><a id="t157" href="#t157">157</a></span><span class="t">        <span class="nam">name</span> <span class="op">=</span> <span class="nam">scorer</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t158" href="#t158">158</a></span><span class="t">    <span class="nam">fade</span> <span class="op">=</span> <span class="nam">_ease</span><span class="op">(</span><span class="op">(</span><span class="nam">age</span> <span class="op">-</span> <span class="nam">NAME_START</span><span class="op">)</span> <span class="op">/</span> <span class="nam">NAME_FADE_SECONDS</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t159" href="#t159">159</a></span><span class="t">    <span class="nam">shade</span> <span class="op">=</span> <span class="nam">_scaled</span><span class="op">(</span><span class="nam">colour</span><span class="op">,</span> <span class="num">0.35</span> <span class="op">+</span> <span class="num">0.65</span> <span class="op">*</span> <span class="nam">fade</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
@@ -359,7 +357,7 @@
             <a class="nav" href="z_594c5133449de029_holiday_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-16 02:13 +0000
+            created at 2026-11-16 02:23 +0000
         </p>
     </div>
 </footer>

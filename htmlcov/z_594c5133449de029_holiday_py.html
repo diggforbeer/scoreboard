@@ -26,7 +26,6 @@
                         <kbd>r</kbd>
                         <kbd>m</kbd>
                         <kbd>x</kbd>
-                        <kbd>p</kbd>
                         &nbsp; toggle line displays
                     </p>
                     <p>
@@ -59,7 +58,6 @@
             <button type="button" class="run button_toggle_run" value="run" data-shortcut="r" title="Toggle lines run">569<span class="text"> run</span></button>
             <button type="button" class="mis show_mis button_toggle_mis" value="mis" data-shortcut="m" title="Toggle lines missing">2<span class="text"> missing</span></button>
             <button type="button" class="exc show_exc button_toggle_exc" value="exc" data-shortcut="x" title="Toggle lines excluded">0<span class="text"> excluded</span></button>
-            <button type="button" class="par run show_par button_toggle_par" value="par" data-shortcut="p" title="Toggle lines partially run">2<span class="text"> partial</span></button>
         </h2>
         <p class="text">
             <a id="prevFileLink" class="nav" href="z_594c5133449de029_goal_light_py.html">&#xab; prev</a> &nbsp; &nbsp;
@@ -67,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_594c5133449de029_logos_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-16 02:13 +0000
+            created at 2026-11-16 02:23 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -259,7 +257,7 @@
     <p class="run"><span class="n"><a id="t175" href="#t175">175</a></span><span class="t">            <span class="nam">drop_w</span><span class="op">,</span> <span class="nam">drop_h</span> <span class="op">=</span> <span class="nam">len</span><span class="op">(</span><span class="nam">drop</span><span class="op">.</span><span class="nam">rows</span><span class="op">[</span><span class="num">0</span><span class="op">]</span><span class="op">)</span><span class="op">,</span> <span class="nam">len</span><span class="op">(</span><span class="nam">drop</span><span class="op">.</span><span class="nam">rows</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t176" href="#t176">176</a></span><span class="t">            <span class="nam">drop_x</span> <span class="op">=</span> <span class="nam">width</span> <span class="op">-</span> <span class="nam">distance</span> <span class="op">+</span> <span class="nam">self</span><span class="op">.</span><span class="nam">drop_column</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t177" href="#t177">177</a></span><span class="t">            <span class="nam">i</span> <span class="op">+=</span> <span class="num">1</span>&nbsp;</span><span class="r"></span></p>
-    <p class="par run show_par"><span class="n"><a id="t178" href="#t178">178</a></span><span class="t">            <span class="key">if</span> <span class="key">not</span> <span class="num">0</span> <span class="op">&lt;=</span> <span class="nam">drop_x</span> <span class="op">&lt;=</span> <span class="nam">width</span> <span class="op">-</span> <span class="nam">drop_w</span><span class="op">:</span>&nbsp;</span><span class="r"><span class="annotate short">178&#x202F;&#x219B;&#x202F;179</span><span class="annotate long">line 178 didn't jump to line 179 because the condition on line 178 was never true</span></span></p>
+    <p class="run"><span class="n"><a id="t178" href="#t178">178</a></span><span class="t">            <span class="key">if</span> <span class="key">not</span> <span class="num">0</span> <span class="op">&lt;=</span> <span class="nam">drop_x</span> <span class="op">&lt;=</span> <span class="nam">width</span> <span class="op">-</span> <span class="nam">drop_w</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="mis show_mis"><span class="n"><a id="t179" href="#t179">179</a></span><span class="t">                <span class="key">continue</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t180" href="#t180">180</a></span><span class="t">            <span class="nam">reached</span> <span class="op">=</span> <span class="nam">travelled</span> <span class="op">&gt;=</span> <span class="nam">distance</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t181" href="#t181">181</a></span><span class="t">            <span class="key">if</span> <span class="key">not</span> <span class="nam">sparkles</span> <span class="key">and</span> <span class="nam">reached</span> <span class="op">!=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">collects</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
@@ -1571,7 +1569,7 @@
     <p class="pln"><span class="n"><a id="t1487" href="#t1487">1487</a></span><span class="t"><span class="str">    &quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t1488" href="#t1488">1488</a></span><span class="t">    <span class="key">for</span> <span class="nam">dy</span><span class="op">,</span> <span class="nam">row</span> <span class="key">in</span> <span class="nam">enumerate</span><span class="op">(</span><span class="nam">rows</span><span class="op">)</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t1489" href="#t1489">1489</a></span><span class="t">        <span class="nam">py</span> <span class="op">=</span> <span class="nam">y</span> <span class="op">+</span> <span class="nam">dy</span>&nbsp;</span><span class="r"></span></p>
-    <p class="par run show_par"><span class="n"><a id="t1490" href="#t1490">1490</a></span><span class="t">        <span class="key">if</span> <span class="key">not</span> <span class="num">0</span> <span class="op">&lt;=</span> <span class="nam">py</span> <span class="op">&lt;</span> <span class="nam">height</span><span class="op">:</span>&nbsp;</span><span class="r"><span class="annotate short">1490&#x202F;&#x219B;&#x202F;1491</span><span class="annotate long">line 1490 didn't jump to line 1491 because the condition on line 1490 was never true</span></span></p>
+    <p class="run"><span class="n"><a id="t1490" href="#t1490">1490</a></span><span class="t">        <span class="key">if</span> <span class="key">not</span> <span class="num">0</span> <span class="op">&lt;=</span> <span class="nam">py</span> <span class="op">&lt;</span> <span class="nam">height</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="mis show_mis"><span class="n"><a id="t1491" href="#t1491">1491</a></span><span class="t">            <span class="key">continue</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t1492" href="#t1492">1492</a></span><span class="t">        <span class="key">for</span> <span class="nam">dx</span><span class="op">,</span> <span class="nam">ch</span> <span class="key">in</span> <span class="nam">enumerate</span><span class="op">(</span><span class="nam">row</span><span class="op">)</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t1493" href="#t1493">1493</a></span><span class="t">            <span class="nam">px</span> <span class="op">=</span> <span class="nam">x</span> <span class="op">+</span> <span class="nam">dx</span>&nbsp;</span><span class="r"></span></p>
@@ -1670,7 +1668,7 @@
             <a class="nav" href="z_594c5133449de029_logos_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-16 02:13 +0000
+            created at 2026-11-16 02:23 +0000
         </p>
     </div>
 </footer>
