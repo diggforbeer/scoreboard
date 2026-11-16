@@ -857,7 +857,8 @@ class TeamEntry:
     team: str
 
 
-def _team_exists(sport: str, team: str) -> bool:
+def team_exists(sport: str, team: str) -> bool:
+    """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports)."""
     return team in TEAM_COLORS if sport == "hockey" else football_team_exists(team)
 
 
@@ -885,7 +886,7 @@ def _parse_teams(raw: Any) -> list[TeamEntry]:
                 "Ignoring teams entry %d: sport %r is not one of %s", index, sport, TEAM_SPORTS
             )
             continue
-        if not _team_exists(sport, team):
+        if not team_exists(sport, team):
             log.warning("Ignoring teams entry %d: %r is not a %s team", index, team, sport)
             continue
         entry = TeamEntry(sport, team)

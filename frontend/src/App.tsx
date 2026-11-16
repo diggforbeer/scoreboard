@@ -180,6 +180,21 @@ interface FootballTeamOption {
   name: string
 }
 
+// The ranked list of teams, hockey and football mixed, rank 1 first (epic #470).
+interface TeamRow {
+  sport: 'hockey' | 'football'
+  team: string
+}
+
+interface TeamsConfig {
+  teams: TeamRow[]
+}
+
+interface TeamsAvailable {
+  hockey: string[]
+  football: FootballTeamOption[]
+}
+
 interface StatusConfig {
   enabled: boolean
   port: number
@@ -311,6 +326,7 @@ type ServerMessage =
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'football'; data: FootballConfig; available: FootballTeamOption[] }
+  | { type: 'config'; section: 'teams'; data: TeamsConfig; available: TeamsAvailable; max: number }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
@@ -369,6 +385,148 @@ function saveFeedback(status: SaveStatus, error: string | null) {
 function teamName(abbrev: string) {
   const team = HOCKEY_TEAMS.find(([code]) => code === abbrev)
   return team ? team[1] : '(none)'
+}
+
+// The ranked list of teams (epic #470): one list for both sports, best first. The first team of
+// each sport is its lead: it gets the horn and the idle screens, so it is marked.
+function TeamsCard({
+  value,
+  available,
+  max,
+  onChange,
+}: {
+  value: TeamsConfig
+  available: TeamsAvailable
+  max: number
+  onChange: (next: TeamsConfig) => void
+}) {
+  const [pick, setPick] = useState('')
+  const teams = value.teams
+  const hockeyNames = Object.fromEntries(HOCKEY_TEAMS)
+  const nameOf = (row: TeamRow) =>
+    row.sport === 'hockey'
+      ? (hockeyNames[row.team] ?? row.team)
+      : (available.football.find((t) => t.abbrev === row.team)?.name ?? row.team)
+  const isLead = (row: TeamRow, index: number) => teams.findIndex((t) => t.sport === row.sport) === index
+  const taken = (sport: string, team: string) => teams.some((t) => t.sport === sport && t.team === team)
+  const full = teams.length >= max
+  const move = (index: number, by: number) => {
+    const next = [...teams]
+    const [row] = next.splice(index, 1)
+    next.splice(index + by, 0, row)
+    onChange({ teams: next })
+  }
+  const add = () => {
+    const [sport, team] = pick.split(':')
+    if (!sport || !team || full || taken(sport, team)) return
+    onChange({ teams: [...teams, { sport: sport as TeamRow['sport'], team }] })
+    setPick('')
+  }
+  return (
+    <>
+      <p className="text-body-secondary small">
+        Your teams in priority order, hockey and football together. The highest-ranked team that is
+        playing gets the screen. The first team of each sport (marked with a horn) gets the goal or
+        touchdown horn and the screens between games.
+      </p>
+      {teams.length === 0 && (
+        <div className="alert alert-info py-2" id="teams-empty">
+          No teams yet. Add your team below; until you do, every live game takes a turn.
+        </div>
+      )}
+      <ol className="list-group list-group-numbered mb-3" id="teams-list">
+        {teams.map((row, index) => (
+          <li
+            className="list-group-item d-flex align-items-center gap-2"
+            key={`${row.sport}:${row.team}`}
+            data-sport={row.sport}
+            data-team={row.team}
+          >
+            <span className="flex-grow-1">
+              {nameOf(row)} ({row.team}){' '}
+              <span className={`badge ${row.sport === 'hockey' ? 'text-bg-primary' : 'text-bg-success'}`}>
+                {row.sport}
+              </span>{' '}
+              {index === 0 && <span className="badge text-bg-warning teams-top">top priority</span>}{' '}
+              {isLead(row, index) && (
+                <span
+                  className="badge text-bg-secondary teams-horn"
+                  title={`The horn and the between-game screens are for your top ${row.sport} team`}
+                >
+                  horn
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
+              aria-label={`Move ${nameOf(row)} up`}
+              disabled={index === 0}
+              onClick={() => move(index, -1)}
+            >
+              &uarr;
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
+              aria-label={`Move ${nameOf(row)} down`}
+              disabled={index === teams.length - 1}
+              onClick={() => move(index, 1)}
+            >
+              &darr;
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-danger"
+              aria-label={`Remove ${nameOf(row)}`}
+              onClick={() => onChange({ teams: teams.filter((_, i) => i !== index) })}
+            >
+              &times;
+            </button>
+          </li>
+        ))}
+      </ol>
+      <div className="d-flex gap-2">
+        <select
+          className="form-select"
+          id="teams-add"
+          aria-label="Add a team"
+          value={pick}
+          disabled={full}
+          onChange={(e) => setPick(e.target.value)}
+        >
+          <option value="">{full ? `Full (${max} teams)` : 'Add a team...'}</option>
+          <optgroup label="Hockey">
+            {available.hockey
+              .filter((abbrev) => !taken('hockey', abbrev))
+              .map((abbrev) => (
+                <option key={abbrev} value={`hockey:${abbrev}`}>
+                  {hockeyNames[abbrev] ?? abbrev} ({abbrev})
+                </option>
+              ))}
+          </optgroup>
+          <optgroup label="Football">
+            {available.football
+              .filter((t) => !taken('football', t.abbrev))
+              .map((t) => (
+                <option key={t.abbrev} value={`football:${t.abbrev}`}>
+                  {t.name} ({t.abbrev})
+                </option>
+              ))}
+          </optgroup>
+        </select>
+        <button
+          type="button"
+          className="btn btn-primary"
+          id="teams-add-button"
+          disabled={!pick || full}
+          onClick={add}
+        >
+          Add
+        </button>
+      </div>
+    </>
+  )
 }
 
 // The favourite dropdown and the "also follow" checklist, shared by the hockey and football pickers so
@@ -509,6 +667,13 @@ function App() {
   const football = footballState.value
   const [footballTeams, setFootballTeams] = useState<FootballTeamOption[]>([])
 
+  const [teamsState, teamsSave] = useAutosave<TeamsConfig>(
+    (v) => save('teams', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const [teamsAvailable, setTeamsAvailable] = useState<TeamsAvailable>({ hockey: [], football: [] })
+  const [teamsMax, setTeamsMax] = useState(12)
+
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
   const [statusSaveError, setStatusSaveError] = useState<string | null>(null)
@@ -644,6 +809,11 @@ function App() {
               footballSave.receiveConfig(message.data)
               setFootballTeams(message.available)
             }
+            else if (message.section === 'teams') {
+              teamsSave.receiveConfig(message.data)
+              setTeamsAvailable(message.available)
+              setTeamsMax(message.max)
+            }
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
             else if (message.section === 'night_mode') nightModeSave.receiveConfig(message.data)
@@ -686,6 +856,7 @@ function App() {
             if (message.section === 'audio') audioSave.receiveSaved()
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
             else if (message.section === 'football') footballSave.receiveSaved()
+            else if (message.section === 'teams') teamsSave.receiveSaved()
             else if (message.section === 'football_rotation') footballRotationSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
@@ -759,6 +930,8 @@ function App() {
               footballSave.receiveError(message.message)
             } else if (message.section === 'football_rotation') {
               footballRotationSave.receiveError(message.message)
+            } else if (message.section === 'teams') {
+              teamsSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -826,6 +999,7 @@ function App() {
     scoreboardSave,
     footballSave,
     footballRotationSave,
+    teamsSave,
     nightModeSave,
     wifiSave,
     rotationSave,
@@ -1334,6 +1508,22 @@ function App() {
 
       </div>
       <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">My teams</h2>
+          {teamsState.value ? (
+            <TeamsCard
+              value={teamsState.value}
+              available={teamsAvailable}
+              max={teamsMax}
+              onChange={(next) => teamsSave.edit(next)}
+            />
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
 
       </div>
       </div>
@@ -2806,6 +2996,7 @@ function App() {
         sections={[
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
           { label: 'Football teams', state: footballState, onUndo: footballSave.undo },
+          { label: 'My teams', state: teamsState, onUndo: teamsSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
           { label: 'Football idle rotation', state: footballRotationState, onUndo: footballRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
