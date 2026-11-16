@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nhl-scoreboard"
+name = "hockey-scoreboard"
 version = "0.1.0"
-description = "NHL scoreboard for a HUB75 LED matrix driven by a Raspberry Pi"
+description = "Hockey scoreboard for a HUB75 LED matrix driven by a Raspberry Pi"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ dependencies = [
     # admin_server.py's page + WebSocket (#178), deployed to the real
     # device as of story 10 -- python3-websockets is a real apt package on
     # this image's Debian release (confirmed live, trixie ships 15.0.1-1),
-    # added to image/layer/nhl-scoreboard.yaml's package list alongside
+    # added to image/layer/hockey-scoreboard.yaml's package list alongside
     # this. Was dev-extras-only through story 9, before deployment.
     "websockets>=13",
 ]
@@ -52,13 +52,13 @@ dev = [
 e2e = ["playwright>=1.40"]
 
 [project.scripts]
-nhl-scoreboard = "nhl_scoreboard.__main__:main"
+hockey-scoreboard = "hockey_scoreboard.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-nhl_scoreboard = ["py.typed"]
+hockey_scoreboard = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
@@ -81,7 +81,7 @@ markers = ["e2e: real end-to-end test against a live browser and subprocess, not
 
 [tool.coverage.run]
 branch = true
-source = ["src/nhl_scoreboard"]
+source = ["src/hockey_scoreboard"]
 # Required by py-cov-action/python-coverage-comment-action: it matches
 # .coverage's recorded paths against the PR's changed files, which only
 # works with paths relative to the repo root, not absolute runner paths.

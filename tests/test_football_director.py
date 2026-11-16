@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.football import director as dr
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football.director import Director, Timings
-from nhl_scoreboard.football.models import FbGame
-from nhl_scoreboard.football.pacing import animation_seconds
-from nhl_scoreboard.football.reversals import Reversal
-from nhl_scoreboard.football.textlayout import playtext_seconds
-from nhl_scoreboard.football.worker import FeedSnapshot
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.football import director as dr
+from hockey_scoreboard.football import events as ev
+from hockey_scoreboard.football.director import Director, Timings
+from hockey_scoreboard.football.models import FbGame
+from hockey_scoreboard.football.pacing import animation_seconds
+from hockey_scoreboard.football.reversals import Reversal
+from hockey_scoreboard.football.textlayout import playtext_seconds
+from hockey_scoreboard.football.worker import FeedSnapshot
 from test_football_events import make_game, make_play
 from test_football_queue import Clock
 

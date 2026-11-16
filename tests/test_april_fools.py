@@ -11,13 +11,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from nhl_scoreboard import april_fools
-from nhl_scoreboard.app import Scene, ScoreboardApp
-from nhl_scoreboard.config import Settings
-from nhl_scoreboard.display.logos import LogoLibrary, default_directories
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.display.teams import GUEST_COLORS, TEAM_COLORS, team_color
-from nhl_scoreboard.nhl.models import Game, GoalEvent, StandingsRow, Star
+from hockey_scoreboard import april_fools
+from hockey_scoreboard.app import Scene, ScoreboardApp
+from hockey_scoreboard.config import Settings
+from hockey_scoreboard.display.logos import LogoLibrary, default_directories
+from hockey_scoreboard.display.matrix import Backend
+from hockey_scoreboard.display.teams import GUEST_COLORS, TEAM_COLORS, team_color
+from hockey_scoreboard.hockey.models import Game, GoalEvent, StandingsRow, Star
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
 
 # 10:00 CDT on April 1 2027 -- inside the window for the default timezone.
@@ -91,7 +91,7 @@ def test_game_swap_relabels_only_the_preds_side():
     assert swapped.start_utc == original.start_utc
 
 
-def test_admirals_logo_and_colours_ship_without_becoming_an_nhl_team():
+def test_admirals_logo_and_colours_ship_without_becoming_an_hockey_team():
     logo = LogoLibrary(default_directories(32, "dark")).get("MIL")
     assert logo is not None
     assert (logo.width, logo.height) == (32, 32)

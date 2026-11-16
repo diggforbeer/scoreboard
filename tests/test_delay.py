@@ -7,8 +7,8 @@ from datetime import timedelta
 
 import pytest
 
-from nhl_scoreboard.delay import DelayQueue
-from nhl_scoreboard.display.matrix import Backend
+from hockey_scoreboard.delay import DelayQueue
+from hockey_scoreboard.display.matrix import Backend
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 from test_flow import (
     FAV,

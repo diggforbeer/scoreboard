@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import textlayout as tl
+from hockey_scoreboard.app import Scene
+from hockey_scoreboard.display import football_plays as fp
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football import textlayout as tl
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, renderer
 

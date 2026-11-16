@@ -1,7 +1,7 @@
 """Synthetic football logos for tests and docs (#349): a plain circle in each team's colour.
 
 The real crests are team artwork: fetched, git-ignored and never committed, exactly like the
-NHL ones. Anything that needs football logos without the artwork writes these instead.
+Hockey ones. Anything that needs football logos without the artwork writes these instead.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.football.teams import TEAMS
 
 
 def write_synthetic_football_logos(root: Path, sizes=(12, 16), variant: str = "dark") -> Path:

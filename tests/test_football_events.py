@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football.events import EventDetector, Scope
-from nhl_scoreboard.football.models import FbGame, Play, PlayKind
-from nhl_scoreboard.football.queue import PlayQueue, Shown
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.football import events as ev
+from hockey_scoreboard.football.events import EventDetector, Scope
+from hockey_scoreboard.football.models import FbGame, Play, PlayKind
+from hockey_scoreboard.football.queue import PlayQueue, Shown
+from hockey_scoreboard.football.teams import TEAMS
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
 BASE = datetime(2026, 11, 15, 18, 0, tzinfo=UTC)
@@ -195,7 +195,7 @@ def test_scoping_for_touchdowns_pinned():
     det, game, _ = detector("NYG", follow=["KC"], game=make_game("KC", "DAL"))
     e = one(run(det, game, td("KC", (7, 0))))
     assert (e.team, e.scope, e.sound) == ("KC", Scope.QUICK, False)
-    # A followed team scoring on the favourite: no screen (the NHL rule).
+    # A followed team scoring on the favourite: no screen (the hockey rule).
     det, game, _ = detector("NYG", follow=["WSH"])
     assert run(det, game, td("WSH", (7, 0))) == []
     # Two followed teams meeting: both count.
@@ -432,7 +432,7 @@ def test_a_game_watched_from_before_kickoff_seeds_at_nil_nil_and_celebrates_the_
 
 def test_an_unseeded_game_treats_its_first_play_as_the_baseline(caplog):
     det, game, _ = detector("NYG", seeded=False)
-    with caplog.at_level(logging.INFO, logger="nhl_scoreboard.football.events"):
+    with caplog.at_level(logging.INFO, logger="hockey_scoreboard.football.events"):
         assert run(det, game, make_play(1, "rush_td_pat", score=(0, 7), off="NYG")) == []
     assert any("unseeded" in r.getMessage() for r in caplog.records)
     assert one(run(det, game, make_play(2, "rush_td_pat", score=(0, 14), off="NYG"))).points == 7

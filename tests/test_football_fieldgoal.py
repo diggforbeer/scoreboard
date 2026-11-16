@@ -10,18 +10,18 @@ from itertools import pairwise
 
 import pytest
 
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_field as ff
-from nhl_scoreboard.display import football_fieldgoal as ffg
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football import pacing
-from nhl_scoreboard.football.demo import _play
-from nhl_scoreboard.football.director import EVENT
-from nhl_scoreboard.football.geometry import FieldLayout
-from nhl_scoreboard.football.models import PlayKind
-from nhl_scoreboard.football.teams import team_color
+from hockey_scoreboard.app import Scene
+from hockey_scoreboard.display import football_field as ff
+from hockey_scoreboard.display import football_fieldgoal as ffg
+from hockey_scoreboard.display import football_plays as fp
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football import events as ev
+from hockey_scoreboard.football import pacing
+from hockey_scoreboard.football.demo import _play
+from hockey_scoreboard.football.director import EVENT
+from hockey_scoreboard.football.geometry import FieldLayout
+from hockey_scoreboard.football.models import PlayKind
+from hockey_scoreboard.football.teams import team_color
 from test_football_director import started
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, renderer

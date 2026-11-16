@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.display import teams as nhl_teams
-from nhl_scoreboard.football import teams
+from hockey_scoreboard.display import teams as hockey_teams
+from hockey_scoreboard.football import teams
 
 #: ESPN's ids for the 32 teams, as returned by .../football/nfl/teams on
 #: 2026-11-13. Pinned here so a typo in the table fails a test.
@@ -16,7 +16,7 @@ ESPN_IDS = {
     "NYJ": 20, "PHI": 21, "PIT": 23, "SF": 25, "SEA": 26, "TB": 27, "TEN": 10, "WSH": 28,
 }  # fmt: skip
 
-#: A colour darker than this is hard to read on the panel. The dimmest NHL
+#: A colour darker than this is hard to read on the panel. The dimmest hockey
 #: colour in display/teams.py sits around 96; 60 leaves room without letting a
 #: navy or black through.
 MIN_LUMINANCE = 60
@@ -78,7 +78,7 @@ def test_an_unknown_team_fails_clearly():
         teams.team_by_id("99")
     with pytest.raises(teams.UnknownTeamError):
         teams.team_by_id(None)
-    assert not teams.is_team("NSH")  # an NHL team is not a football team
+    assert not teams.is_team("NSH")  # a hockey team is not a football team
     assert teams.is_team("kc")
 
 
@@ -86,12 +86,12 @@ def test_abbreviations_are_the_sorted_set_of_valid_teams():
     assert tuple(sorted(ESPN_IDS)) == teams.ABBREVIATIONS
 
 
-def test_the_football_and_nhl_tables_are_separate():
-    assert teams.TEAMS is not nhl_teams.TEAM_COLORS
+def test_the_football_and_hockey_tables_are_separate():
+    assert teams.TEAMS is not hockey_teams.TEAM_COLORS
     # Abbreviations that exist in both leagues resolve to different teams.
-    shared = set(teams.TEAMS) & set(nhl_teams.TEAM_COLORS)
+    shared = set(teams.TEAMS) & set(hockey_teams.TEAM_COLORS)
     assert {"BUF", "CAR", "DAL", "DET", "MIN"} <= shared
-    assert teams.team("BUF").color != nhl_teams.team_color("BUF")
-    assert teams.team("DAL").color != nhl_teams.team_color("DAL")
-    # And NHL-only abbreviations are not football teams.
-    assert "NSH" not in teams.TEAMS and "NSH" in nhl_teams.TEAM_COLORS
+    assert teams.team("BUF").color != hockey_teams.team_color("BUF")
+    assert teams.team("DAL").color != hockey_teams.team_color("DAL")
+    # And hockey-only abbreviations are not football teams.
+    assert "NSH" not in teams.TEAMS and "NSH" in hockey_teams.TEAM_COLORS

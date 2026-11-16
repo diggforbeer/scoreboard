@@ -11,11 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import ScoreboardApp
-from nhl_scoreboard.brightness import lux_to_brightness
-from nhl_scoreboard.config import Settings
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.nhl.models import Game
+from hockey_scoreboard.app import ScoreboardApp
+from hockey_scoreboard.brightness import lux_to_brightness
+from hockey_scoreboard.config import Settings
+from hockey_scoreboard.display.matrix import Backend
+from hockey_scoreboard.hockey.models import Game
 from test_app import FakeClient, FakeGraphics, FakeMatrix, FakeOptions
 
 

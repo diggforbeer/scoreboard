@@ -123,7 +123,7 @@ jobs:
             --prerelease \
             --generate-notes \
             --notes "Test build from the \`${{ steps.version.outputs.branch }}\` branch. Not a stable release: it is only offered to boards that chose this branch under Software update." \
-            dist/nhl-scoreboard-app.tar.gz dist/manifest.json
+            dist/hockey-scoreboard-app.tar.gz dist/manifest.json
 
       - name: Trigger the image build for this tag
         if: steps.version.outputs.branch == 'main'

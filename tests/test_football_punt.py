@@ -8,17 +8,17 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_field as ff
-from nhl_scoreboard.display import football_kickoff as fk
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display import football_punt as fpunt
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import pacing
-from nhl_scoreboard.football.demo import _play
-from nhl_scoreboard.football.geometry import FIELD_BOTTOM, FieldLayout
-from nhl_scoreboard.football.models import PlayKind
-from nhl_scoreboard.football.people import Person
+from hockey_scoreboard.app import Scene
+from hockey_scoreboard.display import football_field as ff
+from hockey_scoreboard.display import football_kickoff as fk
+from hockey_scoreboard.display import football_plays as fp
+from hockey_scoreboard.display import football_punt as fpunt
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football import pacing
+from hockey_scoreboard.football.demo import _play
+from hockey_scoreboard.football.geometry import FIELD_BOTTOM, FieldLayout
+from hockey_scoreboard.football.models import PlayKind
+from hockey_scoreboard.football.people import Person
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, renderer
 

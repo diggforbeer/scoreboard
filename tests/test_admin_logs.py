@@ -14,7 +14,7 @@ import pytest
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
-from nhl_scoreboard import admin_server, updater
+from hockey_scoreboard import admin_server, updater
 
 
 @pytest.fixture(autouse=True)
@@ -44,10 +44,10 @@ def fake_journalctl(tmp_path, monkeypatch):
     script = tmp_path / "journalctl"
     pids = tmp_path / "pids"
     backlog = [
-        _journal_json(1, "2026-09-30 10:00:00,000 INFO    nhl_scoreboard.app: started"),
-        _journal_json(2, "2026-09-30 10:00:01,000 ERROR   nhl_scoreboard.nhl: boom"),
+        _journal_json(1, "2026-09-30 10:00:00,000 INFO    hockey_scoreboard.app: started"),
+        _journal_json(2, "2026-09-30 10:00:01,000 ERROR   hockey_scoreboard.hockey: boom"),
     ]
-    live = _journal_json(3, "2026-09-30 10:00:02,000 WARNING nhl_scoreboard.app: live")
+    live = _journal_json(3, "2026-09-30 10:00:02,000 WARNING hockey_scoreboard.app: live")
     lines = [
         "#!/usr/bin/env python3",
         "import os, sys, time",

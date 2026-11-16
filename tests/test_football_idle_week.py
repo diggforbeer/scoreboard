@@ -7,16 +7,16 @@ import json
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.display import football_idle
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.football_scenes import LIVE
-from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from nhl_scoreboard.football.idle_views import WEEK_MAX_GAMES, WeekView, build_week, week_order
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.models import FbGame
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.display import football_idle
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.display.football_scenes import LIVE
+from hockey_scoreboard.football import idle
+from hockey_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from hockey_scoreboard.football.idle_views import WEEK_MAX_GAMES, WeekView, build_week, week_order
+from hockey_scoreboard.football.mode import FootballMode
+from hockey_scoreboard.football.models import FbGame
+from hockey_scoreboard.football.teams import TEAMS
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, utc
 from test_football_scenes import H, check_snapshot, raw_game, renderer

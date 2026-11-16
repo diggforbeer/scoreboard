@@ -2,11 +2,11 @@
 """Build the app-update bundle + manifest attached to each release (#32).
 
     python scripts/build-app-bundle.py --version v2026.09.29 --out dist
-    gh release upload v2026.09.29 dist/nhl-scoreboard-app.tar.gz dist/manifest.json
+    gh release upload v2026.09.29 dist/hockey-scoreboard-app.tar.gz dist/manifest.json
 
-The bundle is the ``nhl_scoreboard`` package plus, when ``frontend/dist`` has
-been built, the admin page as a top-level ``admin/``; nhl_scoreboard.updater
-unpacks the package over /opt/nhl-scoreboard and ``admin/`` into the admin
+The bundle is the ``hockey_scoreboard`` package plus, when ``frontend/dist`` has
+been built, the admin page as a top-level ``admin/``; hockey_scoreboard.updater
+unpacks the package over /opt/hockey-scoreboard and ``admin/`` into the admin
 page's directory (#185). The manifest carries the HUB75 driver
 pin (from fetch-vendor.sh) so a board can refuse a release that needs a
 rebuilt ``rgbmatrix``, the bundle's sha256, and an ``image`` fingerprint of the
@@ -38,11 +38,11 @@ def driver_pin() -> str:
 
 def build(version: str, out: Path, admin_dist: Path = ROOT / "frontend/dist") -> None:
     out.mkdir(parents=True, exist_ok=True)
-    bundle = out / "nhl-scoreboard-app.tar.gz"
+    bundle = out / "hockey-scoreboard-app.tar.gz"
     with tarfile.open(bundle, "w:gz") as tar:
         tar.add(
-            ROOT / "src/nhl_scoreboard",
-            arcname="nhl_scoreboard",
+            ROOT / "src/hockey_scoreboard",
+            arcname="hockey_scoreboard",
             filter=lambda t: None if "__pycache__" in t.name else t,
         )
         if (admin_dist / "index.html").is_file():

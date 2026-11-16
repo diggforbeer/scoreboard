@@ -11,21 +11,21 @@ from pathlib import Path
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_stats as fs
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football import api
-from nhl_scoreboard.football import director as dr
-from nhl_scoreboard.football.demo import DEMO_STATS
-from nhl_scoreboard.football.stats import (
+from hockey_scoreboard.app import Scene
+from hockey_scoreboard.display import football_stats as fs
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.display.logos import LogoLibrary, LogoSet
+from hockey_scoreboard.football import api
+from hockey_scoreboard.football import director as dr
+from hockey_scoreboard.football.demo import DEMO_STATS
+from hockey_scoreboard.football.stats import (
     PAGES,
     GameStats,
     StatRow,
     display,
     stats_from_summary,
 )
-from nhl_scoreboard.football.teams import team_color
+from hockey_scoreboard.football.teams import team_color
 from test_football_director import started, td
 from test_football_events import make_game, make_play
 from test_football_plays import FakeResponse, FakeSession
@@ -275,7 +275,7 @@ def test_pages_are_five_rows_so_they_fit_the_panel():
 
 
 def test_the_mode_hands_the_director_stats_on_a_wide_panel_only():
-    from nhl_scoreboard.football.mode import FootballMode
+    from hockey_scoreboard.football.mode import FootballMode
 
     wide = {"on": True}
     mode = FootballMode(client_factory=lambda: None, wide=lambda: wide["on"])
@@ -295,7 +295,7 @@ class StatsClient:
 
 
 def test_the_worker_side_keeps_the_stats_and_a_failed_read_keeps_the_last_good():
-    from nhl_scoreboard.football.mode import FootballMode
+    from hockey_scoreboard.football.mode import FootballMode
 
     mode = FootballMode(client_factory=lambda: None)
     client = StatsClient()

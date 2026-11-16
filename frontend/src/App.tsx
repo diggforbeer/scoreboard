@@ -4,10 +4,10 @@ import { TYPING_DELAY_MS, useAutosave } from './autosave'
 import { LiveView, type PanelFrame } from './LiveView'
 import { AutosaveToast } from './AutosaveToast'
 
-// Python admin server (nhl_scoreboard.admin_server) -- one port serves both
+// Python admin server (hockey_scoreboard.admin_server) -- one port serves both
 // this page's own production build and its WebSocket (#178 story 10); in
 // local dev, run it separately alongside the Vite dev server:
-// `python -m nhl_scoreboard.admin_server`. See its own docstring for the
+// `python -m hockey_scoreboard.admin_server`. See its own docstring for the
 // message protocol and what's been ported over so far.
 //
 // A real, shipped bug (found live against the actual board, not caught by
@@ -60,7 +60,7 @@ const HORN_MAX_BYTES = 2 * 1024 * 1024
 // only place this project otherwise enumerates every team. Full names are
 // for this dropdown's own readability; the value saved is still just the
 // 3-letter abbreviation config.py has always expected. Sorted by name.
-const NHL_TEAMS = [
+const HOCKEY_TEAMS = [
   ['ANA', 'Anaheim Ducks'],
   ['BOS', 'Boston Bruins'],
   ['BUF', 'Buffalo Sabres'],
@@ -155,7 +155,7 @@ interface ScoreboardConfig {
   scores_grid: boolean
 }
 
-// The football favourite and followed teams (#348), stored apart from the NHL ones because
+// The football favourite and followed teams (#348), stored apart from the hockey ones because
 // abbreviations like BUF overlap between the leagues. `available` (the 32 teams) comes from
 // the server's football table, so this page has no second copy of that list.
 interface FootballConfig {
@@ -367,12 +367,12 @@ function saveFeedback(status: SaveStatus, error: string | null) {
 }
 
 function teamName(abbrev: string) {
-  const team = NHL_TEAMS.find(([code]) => code === abbrev)
+  const team = HOCKEY_TEAMS.find(([code]) => code === abbrev)
   return team ? team[1] : '(none)'
 }
 
-// The favourite dropdown and the "also follow" checklist, shared by the NHL and football pickers so
-// the two cannot drift apart. `idPrefix` keeps their element ids apart ('sb' for the NHL
+// The favourite dropdown and the "also follow" checklist, shared by the hockey and football pickers so
+// the two cannot drift apart. `idPrefix` keeps their element ids apart ('sb' for the hockey
 // ones, which the e2e test relies on, 'fb' for the football ones).
 function TeamPickers({
   idPrefix,
@@ -1299,7 +1299,7 @@ function App() {
                   value={scoreboard.sport}
                   onChange={(e) => scoreboardSave.edit({ ...scoreboard, sport: e.target.value })}
                 >
-                  <option value="nhl">NHL</option>
+                  <option value="hockey">Hockey</option>
                   <option value="football">Football</option>
                 </select>
               </div>
@@ -1311,13 +1311,13 @@ function App() {
                     favourite={football.favourite_team}
                     alsoFollow={football.also_follow}
                     onChange={(next) => footballSave.edit({ ...football, ...next })}
-                    followHelp="Their live games take turns on screen with your favourite's, and their scores get a quick update. Your football teams are kept apart from your NHL ones."
+                    followHelp="Their live games take turns on screen with your favourite's, and their scores get a quick update. Your football teams are kept apart from your hockey ones."
                   />
                 )
               ) : (
                 <TeamPickers
                   idPrefix="sb"
-                  teams={NHL_TEAMS}
+                  teams={HOCKEY_TEAMS}
                   favourite={scoreboard.favourite_team}
                   alsoFollow={scoreboard.also_follow}
                   onChange={(next) => scoreboardSave.edit({ ...scoreboard, ...next })}
@@ -2653,7 +2653,7 @@ function App() {
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
                 <option value="ding">Ding (followed team scores)</option>
-                {NHL_TEAMS.map(([code, name]) => (
+                {HOCKEY_TEAMS.map(([code, name]) => (
                   <option key={code} value={code}>
                     {name} ({code})
                   </option>
@@ -2778,7 +2778,7 @@ function App() {
           <div className="card-body">
             <h2 className="card-title h5">Logs</h2>
             <p className="text-body-secondary small">
-              Live output of nhl-scoreboard.service (last {LOG_MAX_LINES} lines kept).
+              Live output of hockey-scoreboard.service (last {LOG_MAX_LINES} lines kept).
             </p>
             {logError && <p className="text-danger">{logError}</p>}
             <pre

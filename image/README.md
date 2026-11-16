@@ -9,10 +9,10 @@ Debian-based image builder.
 | Path | Purpose |
 |------|---------|
 | `config/scoreboard.yaml` | Image definition — device, partition sizes, which layers to apply |
-| `layer/nhl-scoreboard.yaml` | Custom layer: installs the app, builds the HUB75 bindings, wires up services |
+| `layer/hockey-scoreboard.yaml` | Custom layer: installs the app, builds the HUB75 bindings, wires up services |
 | `files/systemd/` | Service units for the scoreboard and its provisioner |
 | `files/scripts/scoreboard-provision` | Applies boot-partition settings on every boot |
-| `files/scripts/nhl-scoreboard-grow-rootfs` | Grows the root filesystem to fill the SD card on first boot |
+| `files/scripts/hockey-scoreboard-grow-rootfs` | Grows the root filesystem to fill the SD card on first boot |
 | `files/boot/scoreboard.toml` | The user-editable settings file, installed to `/boot/firmware/` |
 | `files/vendor/` | Vendored `rpi-rgb-led-matrix` source (git-ignored, fetched on demand) |
 | `../assets/logos/` | Team logos rasterised by `scripts/fetch-logos.py` (git-ignored, fetched on demand) |
@@ -28,7 +28,7 @@ GitHub Release when a `v*` tag is pushed.
 
 **A pull request that touches `image/`, `src/`, `fonts/`, `assets/`,
 `scripts/fetch-vendor.sh` or this workflow file must build successfully
-before it can merge** — `nhl-scoreboard.img` is a required status check
+before it can merge** — `hockey-scoreboard.img` is a required status check
 on `main`. A PR that doesn't touch those paths skips the build entirely
 (fast, reports as passing) rather than paying for an irrelevant build.
 Compression and the artifact upload are also skipped on a PR run — the
@@ -98,15 +98,15 @@ python3 scripts/fetch-logos.py        # needs libcairo2, cairosvg, pillow
 rpi-image-gen/rpi-image-gen build -S "$PWD/image" -c scoreboard.yaml
 ```
 
-The image lands in `rpi-image-gen/work/nhl-scoreboard/nhl-scoreboard.img`.
+The image lands in `rpi-image-gen/work/hockey-scoreboard/hockey-scoreboard.img`.
 
 ## What the image contains
 
 Debian Trixie arm64 (`trixie-minbase`) plus:
 
-- The scoreboard app at `/opt/nhl-scoreboard`, run by `nhl-scoreboard.service`
-- Team logos at `/usr/share/nhl-scoreboard/logos/32/{dark,light}/`
-- The default goal siren at `/usr/share/nhl-scoreboard/horns/_default.wav`,
+- The scoreboard app at `/opt/hockey-scoreboard`, run by `hockey-scoreboard.service`
+- Team logos at `/usr/share/hockey-scoreboard/logos/32/{dark,light}/`
+- The default goal siren at `/usr/share/hockey-scoreboard/horns/_default.wav`,
   and `alsa-utils` for `aplay`
 - `rgbmatrix` Python bindings, compiled during the build, then the compiler
   toolchain that built them (`build-essential`, `cmake`, `ninja-build`,
@@ -119,7 +119,7 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 - `dtparam=i2c_arm=on` in `config.txt`, for an optional BH1750 ambient light
   sensor (#44, `auto_brightness` in `scoreboard.toml`); harmless if you
   haven't wired one up
-- `nhl-scoreboard-grow-rootfs.service`, which grows the root filesystem to
+- `hockey-scoreboard-grow-rootfs.service`, which grows the root filesystem to
   fill the SD card on first boot (see below)
 
 ## Notes and gotchas
@@ -145,7 +145,7 @@ Debian Trixie arm64 (`trixie-minbase`) plus:
 - `user1sudo` accepts only `none`, `passwd` or `nopasswd`, and listing `sudo`
   in `user1groups` is rejected as a conflict with it.
 - **Root filesystem growth is untested on real hardware** (tracked in #4).
-  The image ships a small, fixed-size root partition; `nhl-scoreboard-grow-
+  The image ships a small, fixed-size root partition; `hockey-scoreboard-grow-
   rootfs.service` grows it to fill the SD card on first boot, using the same
   two-phase technique (grow the partition table, reboot, then `resize2fs`)
   `raspi-config`'s `do_expand_rootfs` has used for years. `tests/test_grow_

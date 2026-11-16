@@ -7,8 +7,8 @@ import pytest
 import requests
 import responses
 
-from nhl_scoreboard.nhl.api import BASE_URL, NHLApiError, NHLClient
-from nhl_scoreboard.nhl.models import (
+from hockey_scoreboard.hockey.api import BASE_URL, HockeyApiError, HockeyClient
+from hockey_scoreboard.hockey.models import (
     ClubStats,
     GoalieLine,
     SeasonSeriesRecord,
@@ -26,7 +26,7 @@ def _no_real_backoff(monkeypatch):
 @responses.activate
 def test_scores_treats_explicit_null_games_like_absent():
     responses.add(responses.GET, f"{BASE_URL}/score/now", json={"games": None}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.scores() == []
 
 
@@ -49,7 +49,7 @@ def test_scores_skips_a_malformed_game_without_losing_the_rest():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         games = client.scores()
     assert [g.id for g in games] == [1]
 
@@ -73,7 +73,7 @@ def test_scores_ignores_a_null_entry_in_the_games_list():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         games = client.scores()
     assert [g.id for g in games] == [1]
 
@@ -81,7 +81,7 @@ def test_scores_ignores_a_null_entry_in_the_games_list():
 @responses.activate
 def test_standings_treats_explicit_null_like_absent():
     responses.add(responses.GET, f"{BASE_URL}/standings/now", json={"standings": None}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.standings() == []
 
 
@@ -93,7 +93,7 @@ def test_standings_skips_a_malformed_row():
         json={"standings": [None, {"teamAbbrev": "NSH"}]},
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         rows = client.standings()
     assert [r.abbrev for r in rows] == ["NSH"]
 
@@ -106,7 +106,7 @@ def test_situation_returns_none_for_a_malformed_payload():
         json={"situation": "not-an-object"},
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.situation(1) is None
 
 
@@ -118,7 +118,7 @@ def test_scores_hits_score_date_and_returns_display_order(score_payload):
     """score.json lists finals first, then lives, then a future game; the
     client must re-sort to live -> upcoming -> final, each by start time."""
     responses.add(responses.GET, f"{BASE_URL}/score/now", json=score_payload, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         games = client.scores()
     assert [g.id for g in games] == [
         2026010010,
@@ -135,7 +135,7 @@ def test_scores_hits_score_date_and_returns_display_order(score_payload):
 @responses.activate
 def test_scores_follows_the_score_now_redirect():
     """api-web.nhle.com 307-redirects /score/now -> /score/{date}; the app
-    relies on this on every poll (see CLAUDE.md's NHL API notes)."""
+    relies on this on every poll (see CLAUDE.md's hockey API notes)."""
     responses.add(
         responses.GET,
         f"{BASE_URL}/score/now",
@@ -143,7 +143,7 @@ def test_scores_follows_the_score_now_redirect():
         headers={"Location": f"{BASE_URL}/score/2026-09-23"},
     )
     responses.add(responses.GET, f"{BASE_URL}/score/2026-09-23", json={"games": []}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.scores() == []
     assert [c.request.url for c in responses.calls] == [
         f"{BASE_URL}/score/now",
@@ -156,7 +156,7 @@ def test_schedule_upper_cases_and_strips_the_team_abbrev():
     responses.add(
         responses.GET, f"{BASE_URL}/club-schedule-season/NSH/now", json={"games": []}, status=200
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.schedule(" nsh ") == []
     assert responses.calls[0].request.url == f"{BASE_URL}/club-schedule-season/NSH/now"
 
@@ -184,7 +184,7 @@ def test_schedule_sorts_by_start_time_regardless_of_payload_order():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         games = client.schedule("NSH")
     assert [g.id for g in games] == [1, 2, 3]
 
@@ -204,7 +204,7 @@ def test_situation_url_and_parsed_payload():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         situation = client.situation(42)
     assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/landing"
     assert situation is not None
@@ -215,7 +215,7 @@ def test_situation_url_and_parsed_payload():
 def test_situation_returns_none_when_key_is_absent():
     """No ``situation`` key at all -- the shape at even strength."""
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.situation(1) is None
 
 
@@ -243,7 +243,7 @@ def test_goal_scoring_url_and_parsed_payload():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         events = client.goal_scoring(42)
     assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/landing"
     assert [e.scorer_name for e in events] == ["F. Forsberg"]
@@ -254,7 +254,7 @@ def test_goal_scoring_url_and_parsed_payload():
 @responses.activate
 def test_goal_scoring_returns_empty_when_scoring_is_absent():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.goal_scoring(1) == ()
 
 
@@ -281,7 +281,7 @@ def test_team_roster_combines_roster_and_club_stats():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         roster = client.team_roster("nsh")
     urls = [c.request.url for c in responses.calls]
     assert f"{BASE_URL}/roster/NSH/current" in urls
@@ -308,7 +308,7 @@ def test_team_roster_omits_a_player_missing_from_either_side():
         json={"skaters": [{"playerId": 1, "points": 40}]},
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         roster = client.team_roster("NSH")
     assert set(roster) == {1}
 
@@ -335,7 +335,7 @@ def test_three_stars_url_and_parsed_payload():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         stars = client.three_stars(42)
     assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/landing"
     assert [(s.star, s.name, s.team_abbrev, s.goals) for s in stars] == [
@@ -346,7 +346,7 @@ def test_three_stars_url_and_parsed_payload():
 @responses.activate
 def test_three_stars_empty_until_named():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.three_stars(1) == ()
 
 
@@ -372,7 +372,7 @@ def test_season_series_url_and_parsed_payload():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         record = client.season_series(2025020183)
     assert (record.away_wins, record.home_wins) == (0, 3)
     assert record.meetings == (
@@ -390,7 +390,7 @@ def test_season_series_preseason_zero_zero_is_a_real_answer():
         json={"seasonSeriesWins": {"awayTeamWins": 0, "homeTeamWins": 0}, "seasonSeries": []},
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.season_series(1) == SeasonSeriesRecord(0, 0)
 
 
@@ -409,7 +409,7 @@ def test_season_series_preseason_zero_zero_is_a_real_answer():
 @responses.activate
 def test_season_series_returns_none_for_missing_or_malformed_wins(payload):
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/right-rail", json=payload, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.season_series(1) is None
 
 
@@ -449,7 +449,7 @@ def test_season_series_meetings_finished_regular_season_only_oldest_first():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         meetings = client.season_series(1).meetings
     assert [m.game_id for m in meetings] == [2, 3, 4]
     assert meetings[2].last_period_type == "OT"
@@ -479,7 +479,7 @@ def test_season_series_skips_malformed_meetings_but_keeps_the_tally(entry):
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         record = client.season_series(1)
     assert (record.away_wins, record.home_wins) == (1, 0)
     assert [m.game_id for m in record.meetings] == [2]
@@ -493,21 +493,21 @@ def test_season_series_without_a_meetings_list_still_has_the_tally():
         json={"seasonSeriesWins": {"awayTeamWins": 0, "homeTeamWins": 0}},
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.season_series(1) == SeasonSeriesRecord(0, 0)
 
 
 @responses.activate
 def test_season_series_wraps_http_errors():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/right-rail", status=404)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.season_series(1)
 
 
 @responses.activate
 def test_standings_hits_standings_date():
     responses.add(responses.GET, f"{BASE_URL}/standings/now", json={"standings": []}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.standings() == []
     assert responses.calls[0].request.url == f"{BASE_URL}/standings/now"
 
@@ -516,17 +516,17 @@ def test_standings_hits_standings_date():
 
 
 @responses.activate
-def test_get_wraps_a_4xx_status_as_nhl_api_error():
+def test_get_wraps_a_4xx_status_as_hockey_api_error():
     responses.add(responses.GET, f"{BASE_URL}/score/now", status=404)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
 
 
 @responses.activate
-def test_get_wraps_a_5xx_status_as_nhl_api_error():
+def test_get_wraps_a_5xx_status_as_hockey_api_error():
     for _ in range(10):
         responses.add(responses.GET, f"{BASE_URL}/score/now", status=500)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
 
 
@@ -535,14 +535,14 @@ def test_get_wraps_a_connection_error():
     responses.add(
         responses.GET, f"{BASE_URL}/score/now", body=requests.exceptions.ConnectionError("boom")
     )
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
 
 
 @responses.activate
 def test_get_wraps_a_timeout():
     responses.add(responses.GET, f"{BASE_URL}/score/now", body=requests.exceptions.Timeout("boom"))
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
 
 
@@ -555,14 +555,14 @@ def test_get_wraps_invalid_json_body():
         status=200,
         content_type="application/json",
     )
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
 
 
 @responses.activate
 def test_get_wraps_a_valid_json_but_non_object_body():
     responses.add(responses.GET, f"{BASE_URL}/score/now", json=[1, 2, 3], status=200)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
 
 
@@ -574,7 +574,7 @@ def test_get_retries_5xx_then_succeeds():
     responses.add(responses.GET, f"{BASE_URL}/score/now", status=503)
     responses.add(responses.GET, f"{BASE_URL}/score/now", status=503)
     responses.add(responses.GET, f"{BASE_URL}/score/now", json={"games": []}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.scores() == []
     assert len(responses.calls) == 3
 
@@ -583,7 +583,7 @@ def test_get_retries_5xx_then_succeeds():
 def test_get_retries_429_then_succeeds():
     responses.add(responses.GET, f"{BASE_URL}/score/now", status=429)
     responses.add(responses.GET, f"{BASE_URL}/score/now", json={"games": []}, status=200)
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.scores() == []
     assert len(responses.calls) == 2
 
@@ -592,7 +592,7 @@ def test_get_retries_429_then_succeeds():
 def test_get_raises_once_retries_are_exhausted():
     for _ in range(10):
         responses.add(responses.GET, f"{BASE_URL}/score/now", status=503)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
     # total=3 retries -> 1 initial attempt + 3 retries, then give up.
     assert len(responses.calls) == 4
@@ -624,8 +624,8 @@ def test_a_stalled_server_gets_one_retry_not_three():
     try:
         port = listener.getsockname()[1]
         with (
-            NHLClient(base_url=f"http://127.0.0.1:{port}", timeout=(1.0, 0.2)) as client,
-            pytest.raises(NHLApiError),
+            HockeyClient(base_url=f"http://127.0.0.1:{port}", timeout=(1.0, 0.2)) as client,
+            pytest.raises(HockeyApiError),
         ):
             client.scores()
         assert len(accepted) == 2
@@ -638,17 +638,17 @@ def test_a_stalled_server_gets_one_retry_not_three():
 
 
 def test_default_timeout_is_short_enough_for_the_render_loop():
-    from nhl_scoreboard.nhl.api import TIMEOUT
+    from hockey_scoreboard.hockey.api import TIMEOUT
 
     connect, read = TIMEOUT
     assert read <= 5.0 and connect <= 5.0
-    assert NHLClient().timeout == TIMEOUT
+    assert HockeyClient().timeout == TIMEOUT
 
 
 @responses.activate
 def test_get_does_not_retry_a_404():
     responses.add(responses.GET, f"{BASE_URL}/score/now", status=404)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.scores()
     assert len(responses.calls) == 1
 
@@ -688,7 +688,7 @@ def test_club_stats_url_and_parsed_payload():
         },
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         stats = client.club_stats("nsh")
     assert stats == ClubStats(
         skaters=(SkaterLine(1, "F. Forsberg", 30, 20, 50),),
@@ -704,14 +704,14 @@ def test_club_stats_empty_preseason_arrays():
         json={"season": "20262027", "gameType": 2, "skaters": [], "goalies": []},
         status=200,
     )
-    with NHLClient() as client:
+    with HockeyClient() as client:
         assert client.club_stats("NSH") == ClubStats((), ())
 
 
 @responses.activate
 def test_club_stats_wraps_http_errors():
     responses.add(responses.GET, f"{BASE_URL}/club-stats/NSH/now", status=404)
-    with NHLClient() as client, pytest.raises(NHLApiError):
+    with HockeyClient() as client, pytest.raises(HockeyApiError):
         client.club_stats("NSH")
 
 
@@ -733,7 +733,7 @@ def test_situation_scoring_and_stars_share_one_landing_request():
     """One request per game per poll, not one per feature (#263)."""
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", json={}, status=200)
     clock = _Clock()
-    with NHLClient(monotonic=clock) as client:
+    with HockeyClient(monotonic=clock) as client:
         client.situation(42)
         clock.now += 4
         client.goal_scoring(42)
@@ -745,7 +745,7 @@ def test_situation_scoring_and_stars_share_one_landing_request():
 def test_landing_is_refetched_once_the_reuse_window_passes():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", json={}, status=200)
     clock = _Clock()
-    with NHLClient(monotonic=clock) as client:
+    with HockeyClient(monotonic=clock) as client:
         client.situation(42)
         clock.now += 5
         client.situation(42)
@@ -756,7 +756,7 @@ def test_landing_is_refetched_once_the_reuse_window_passes():
 def test_landing_reuse_is_per_game():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/2/landing", json={}, status=200)
-    with NHLClient(monotonic=_Clock()) as client:
+    with HockeyClient(monotonic=_Clock()) as client:
         client.situation(1)
         client.situation(2)
         client.goal_scoring(1)
@@ -768,8 +768,8 @@ def test_landing_reuse_is_per_game():
 def test_a_failed_landing_fetch_is_not_reused():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", status=404)
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/landing", json={}, status=200)
-    with NHLClient(monotonic=_Clock()) as client:
-        with pytest.raises(NHLApiError):
+    with HockeyClient(monotonic=_Clock()) as client:
+        with pytest.raises(HockeyApiError):
             client.situation(42)
         assert client.goal_scoring(42) == ()
     assert _landing_calls(42) == 2
@@ -780,7 +780,7 @@ def test_stale_landings_for_other_games_are_dropped():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/1/landing", json={}, status=200)
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/2/landing", json={}, status=200)
     clock = _Clock()
-    with NHLClient(monotonic=clock) as client:
+    with HockeyClient(monotonic=clock) as client:
         client.situation(1)
         clock.now += 60
         client.situation(2)

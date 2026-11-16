@@ -12,10 +12,10 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from nhl_scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, ScoreboardApp
-from nhl_scoreboard.config import HolidayConfig, Settings
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.holiday import (
+from hockey_scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL, Scene, ScoreboardApp
+from hockey_scoreboard.config import HolidayConfig, Settings
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.display.holiday import (
     BUNNY,
     CANADA_FIREWORKS,
     CLOUD,
@@ -54,8 +54,8 @@ from nhl_scoreboard.display.holiday import (
     easter_sunday,
     egg_teams,
 )
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.display.teams import TEAM_COLORS, team_color, team_secondary_color
+from hockey_scoreboard.display.matrix import Backend
+from hockey_scoreboard.display.teams import TEAM_COLORS, team_color, team_secondary_color
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
 
 W, H = 128, 32
@@ -383,11 +383,11 @@ def test_parsed_from_toml_section():
 
 def test_old_flyby_minute_keys_are_ignored_and_logged_once(caplog, monkeypatch):
     """Retired, not typos (#277): one INFO line per process, never a warning."""
-    from nhl_scoreboard import config
+    from hockey_scoreboard import config
 
     monkeypatch.setattr(config, "_retired_logged", set())
     raw = {"holiday": {"flyby_min_minutes": 5, "flyby_max_minutes": 20}}
-    with caplog.at_level(logging.INFO, logger="nhl_scoreboard.config"):
+    with caplog.at_level(logging.INFO, logger="hockey_scoreboard.config"):
         settings = Settings.from_dict(raw)
         Settings.from_dict(raw)
     assert settings.holiday.flyby_frequency == "occasional"
@@ -916,7 +916,7 @@ def test_holiday_rotation_screen_follows_the_holiday_cheer_switches(holiday_app,
 
 
 def test_holiday_is_an_opt_in_rotation_screen():
-    from nhl_scoreboard.config import VALID_ROTATION_SCREENS
+    from hockey_scoreboard.config import VALID_ROTATION_SCREENS
 
     settings = Settings.from_dict({"rotation": [{"screen": "holiday", "seconds": 10}]})
     assert [e.screen for e in settings.rotation] == ["holiday"]

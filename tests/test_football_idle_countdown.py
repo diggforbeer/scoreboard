@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.display import football_idle
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football.idle import IdleSnapshot
-from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from nhl_scoreboard.football.models import FbGame
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.display import football_idle
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football.idle import IdleSnapshot
+from hockey_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from hockey_scoreboard.football.models import FbGame
 from test_football_scenes import H, check_snapshot, raw_game, renderer
 
 KICKOFF = datetime(2026, 11, 22, 18, 0, tzinfo=UTC)

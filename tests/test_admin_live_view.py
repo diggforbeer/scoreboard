@@ -16,8 +16,8 @@ import pytest
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
-from nhl_scoreboard import admin_server, updater
-from nhl_scoreboard.display.mirror import Mirror
+from hockey_scoreboard import admin_server, updater
+from hockey_scoreboard.display.mirror import Mirror
 
 
 @pytest.fixture(autouse=True)

@@ -9,10 +9,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig, RotationEntry, Settings
-from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.idle_screens import IDLE_SCREENS
-from nhl_scoreboard.football.mode import FootballMode
+from hockey_scoreboard.config import FootballConfig, RotationEntry, Settings
+from hockey_scoreboard.football import idle
+from hockey_scoreboard.football.idle_screens import IDLE_SCREENS
+from hockey_scoreboard.football.mode import FootballMode
 from test_football_idle import Clock, pregame
 from test_football_idle import IdleFeed as _IdleFeed
 from test_football_scenes import game

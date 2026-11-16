@@ -7,13 +7,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from nhl_scoreboard.display import penalty as screen
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.fonts import FontSet
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.display.renderer import Renderer
-from nhl_scoreboard.display.teams import team_color
-from nhl_scoreboard.nhl.models import Penalty, penalties_from_landing
+from hockey_scoreboard.display import penalty as screen
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.display.fonts import FontSet
+from hockey_scoreboard.display.matrix import Backend
+from hockey_scoreboard.display.renderer import Renderer
+from hockey_scoreboard.display.teams import team_color
+from hockey_scoreboard.hockey.models import Penalty, penalties_from_landing
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 from test_flow import (
     FAV,

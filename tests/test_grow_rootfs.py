@@ -1,4 +1,4 @@
-"""nhl-scoreboard-grow-rootfs: the shell script, run for real.
+"""hockey-scoreboard-grow-rootfs: the shell script, run for real.
 
 Every system tool it touches (findmnt, lsblk, parted, sfdisk, resize2fs,
 systemctl, logger) is faked -- a tiny script on a PATH prepended in front
@@ -26,7 +26,7 @@ SCRIPT = (
     / "image"
     / "files"
     / "scripts"
-    / "nhl-scoreboard-grow-rootfs"
+    / "hockey-scoreboard-grow-rootfs"
 )
 
 # A two-partition MBR disk (boot, root) in `parted -ms unit s p` machine
@@ -96,8 +96,8 @@ class Rig:
             "FAKE_CALL_LOG": str(self.call_log),
             "FAKE_PARTED_OUT": TWO_PART_DISK,
             "FAKE_SFDISK_STDIN": str(self.sfdisk_stdin),
-            "NHL_SCOREBOARD_STATE_DIR": str(self.state_dir),
-            "NHL_SCOREBOARD_BOOT_ID_FILE": str(self.boot_id_file),
+            "HOCKEY_SCOREBOARD_STATE_DIR": str(self.state_dir),
+            "HOCKEY_SCOREBOARD_BOOT_ID_FILE": str(self.boot_id_file),
             **(env_extra or {}),
         }
         result = subprocess.run(
@@ -243,7 +243,7 @@ def test_unreadable_boot_id_falls_back_to_trusting_the_marker(rig):
     """No boot id available must never be worse than before the check
     existed: stage 1 still records its marker, and stage 2 still runs
     resize2fs rather than waiting forever for a reboot it can't detect."""
-    missing = {"NHL_SCOREBOARD_BOOT_ID_FILE": str(rig.tmp_path / "no-such-file")}
+    missing = {"HOCKEY_SCOREBOARD_BOOT_ID_FILE": str(rig.tmp_path / "no-such-file")}
 
     result = rig.run(env_extra=missing)
     assert result.returncode == 0, result.stderr

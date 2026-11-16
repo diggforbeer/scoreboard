@@ -1,0 +1,413 @@
+# METABEGIN
+# X-Env-Layer-Name: hockey-scoreboard
+# X-Env-Layer-Version: 0.1.0
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: Hockey scoreboard appliance. Installs the scoreboard
+#  application, builds the rpi-rgb-led-matrix Python bindings for the HUB75
+#  panel, provisions networkd/iwd configuration, and installs a
+#  human-editable settings file on the boot partition.
+# X-Env-Layer-Requires: device-user-admin,systemd-net-min,systemd-timesyncd,iwd,rpi-boot-firmware
+#
+# X-Env-VarPrefix: sb
+#
+# X-Env-Var-srcdir: /dev/null
+# X-Env-Var-srcdir-Desc: Path to the scoreboard source tree (repository root).
+# X-Env-Var-srcdir-Required: y
+# X-Env-Var-srcdir-Valid: dir
+# X-Env-Var-srcdir-Set: y
+#
+# X-Env-Var-assetdir: /dev/null
+# X-Env-Var-assetdir-Desc: Path to image/files containing units and defaults.
+# X-Env-Var-assetdir-Required: y
+# X-Env-Var-assetdir-Valid: dir
+# X-Env-Var-assetdir-Set: y
+#
+# X-Env-Var-vendordir: /dev/null
+# X-Env-Var-vendordir-Desc: Path to vendored third-party source, populated by
+#  scripts/fetch-vendor.sh before the build.
+# X-Env-Var-vendordir-Required: y
+# X-Env-Var-vendordir-Valid: dir
+# X-Env-Var-vendordir-Set: y
+#
+# X-Env-Var-isolated_cpu: 3
+# X-Env-Var-isolated_cpu-Desc: CPU core reserved for the matrix refresh thread
+#  via isolcpus. Set to empty to disable core isolation.
+# X-Env-Var-isolated_cpu-Required: n
+# X-Env-Var-isolated_cpu-Valid: string-or-empty
+# X-Env-Var-isolated_cpu-Set: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # Runtime
+    - python3
+    - python3-requests
+    # config.py's Settings.save() (#51) round-trips scoreboard.toml through
+    # tomlkit so hand-written comments survive an edit -- the app is a plain
+    # source tree on PYTHONPATH, not pip-installed, so this has to come from
+    # apt like python3-requests/python3-pil do, not pyproject.toml's deps.
+    - python3-tomlkit
+    # renderer.py's AP-mode setup scene (#131 follow-up) draws a join QR
+    # code -- just the module-matrix computation (pyproject.toml's `qrcode`
+    # dep), same apt-not-pip reasoning as python3-tomlkit above.
+    - python3-qrcode
+    # admin_server.py (#178 story 10) serves the admin page's WebSocket --
+    # pyproject.toml's `websockets` dep, same apt-not-pip reasoning as
+    # python3-tomlkit/python3-qrcode above. Confirmed a real apt package on
+    # this image's Debian release (15.0.1-1) before relying on it (#178
+    # story 1's own investigation).
+    - python3-websockets
+    - iw
+    # WiFi AP + captive-portal DHCP/DNS for first-boot setup mode (#131),
+    # when neither ethernet nor a configured Wi-Fi profile leaves the board
+    # online. A genuinely new dependency, flagged explicitly rather than
+    # snuck in quietly -- the project has otherwise stuck to stdlib/
+    # essential packages. The AP side itself is iwd's own AccessPoint
+    # support (no hostapd needed); dnsmasq only supplies DHCP leases and
+    # wildcard DNS on the AP interface. Its own dnsmasq.service is masked
+    # below -- only our own instance, scoped to wlan0 and started from
+    # hockey-scoreboard-setup-ap.service, ever runs.
+    - dnsmasq
+    # mDNS responder so the admin page opens as http://scoreboard-xxxx.local
+    # instead of by IP (#292). A new dependency, flagged like dnsmasq above.
+    # The package's postinst enables avahi-daemon.service; the hostname it
+    # announces is set once by scoreboard-provision.
+    - avahi-daemon
+    # avahi-publish-address, for the plain scoreboard.local alias (#292): it
+    # probes for a clash and exits if another board already holds the name.
+    - avahi-utils
+    # hockey-scoreboard-setup-ap's `ip addr`/`ip link` calls need this --
+    # verified missing live on real hardware (#131's follow-up): the
+    # script died immediately with "ip: not found" (exit 127) before ever
+    # reaching the iwctl AP call, so iwctl's own real-hardware behaviour is
+    # still unverified pending this fix. Not pulled in transitively by
+    # anything else already installed here.
+    - iproute2
+    - ca-certificates
+    - alsa-utils
+    # MP3 goal horns (#208): aplay can only play WAV/PCM. A genuinely new
+    # dependency, flagged as such -- chosen over ffmpeg/vlc because it is
+    # purpose-built for the one job (play MPEG audio through ALSA) and far
+    # lighter. Real trixie/arm64 package per Debian's index; install on the
+    # actual image not yet verified (#4).
+    - mpg123
+    # Upload normalisation (#322): audio_normalize.py decodes any uploaded
+    # sound (WAV, MP3, and M4A/OGG/FLAC too) with ffmpeg, then scales it to
+    # the default horn's level. Heavy next to mpg123 (many codec libraries),
+    # a deliberate owner call. mpg123 stays: it plays any MP3 uploaded before
+    # #322 and is the decoder on boards flashed without ffmpeg. Both
+    # degrade to the stdlib/mpg123 path when ffmpeg is absent.
+    - ffmpeg
+    # For the ambient light sensor (#44): light_sensor.py talks to a BH1750
+    # over I2C via this. Harmless if no sensor is wired up -- LightSensor
+    # .open() degrades to None the same as a missing /dev/i2c-* would.
+    - python3-smbus
+    # For the physical push-button (#50): button.py wraps gpiozero.Button.
+    # Same story as python3-smbus above -- harmless with no button wired up,
+    # and Button.open() degrades to None if the pin can't be claimed.
+    - python3-gpiozero
+    # For hockey-scoreboard-grow-rootfs: partition inspection (parted) and
+    # filesystem growth (resize2fs). util-linux (findmnt, lsblk) is
+    # essential and always present, but sfdisk is NOT -- confirmed live on
+    # real hardware (#129): Debian split fdisk/sfdisk/cfdisk out of
+    # util-linux into their own `fdisk` package a while back, and nothing
+    # else here pulls it in transitively. Without it, grow-rootfs's stage 1
+    # fails outright (sfdisk: command not found) on every boot, forever.
+    - fdisk
+    - parted
+    - e2fsprogs
+    # Build-time, for the HUB75 bindings. Upstream builds through
+    # scikit-build-core/CMake, not the old bindings/python Makefile.
+    - build-essential
+    - cmake
+    - ninja-build
+    - cython3
+    - python3-dev
+    - python3-pip
+    # Supplies /usr/include/python3.x/Imaging.h, which the bindings' Pillow
+    # shim includes. Pillow's own wheels ship no C headers, so without this
+    # Debian package the extension build fails on shims/pillow.c.
+    - python3-pil
+    # The compiled rgbmatrix extension links directly against
+    # libpython3.13.so.1.0 -- CMake's Development.Embed find_package
+    # component links extensions the way an embedding host would, not the
+    # usual "resolve symbols from the running interpreter" style most C
+    # extensions use, so this is a genuine runtime dependency. apt has no
+    # way to know that: it's an ELF dependency baked into our own compiled
+    # .so, invisible to dpkg's dependency graph, not a declared Depends of
+    # anything. Without this listed explicitly, purging python3-dev below
+    # takes libpython3.13 down with it via autoremove -- apt correctly (by
+    # its own knowledge) considers it orphaned, since python3-dev was the
+    # only thing that had asked for it. Confirmed by a failed build:
+    # ImportError: libpython3.13.so.1.0: cannot open shared object file.
+    - libpython3.13
+
+  customize-hooks:
+    # ---- scoreboard application -------------------------------------
+    # Installed as a plain source tree on PYTHONPATH rather than a package:
+    # no pip, no network, and nothing to go wrong at first boot.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/opt/hockey-scoreboard"
+      cp -a "$IGconf_sb_srcdir/src/hockey_scoreboard" "$1/opt/hockey-scoreboard/"
+      find "$1/opt/hockey-scoreboard" -name '__pycache__' -type d -prune -exec rm -rf {} +
+      install -d -m 0755 "$1/usr/share/hockey-scoreboard/fonts"
+      install -m 0644 "$IGconf_sb_srcdir"/fonts/*.bdf "$1/usr/share/hockey-scoreboard/fonts/"
+
+    # ---- team logos --------------------------------------------------
+    # Rasterised on the build host by scripts/fetch-logos.py; the board
+    # never fetches artwork at runtime. assets/logos/overrides/ (hand-
+    # picked replacements for crests that don't downscale legibly, #12)
+    # is committed rather than fetched, but lives under the same tree and
+    # is copied recursively along with everything else here -- no special
+    # handling needed for LogoLibrary to find it first at runtime.
+    - |-
+      set -eu
+      LOGOS="$IGconf_sb_srcdir/assets/logos"
+      if [ ! -d "$LOGOS/32/dark" ]; then
+        echo "ERROR: $LOGOS/32/dark missing. Run scripts/fetch-logos.py first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/share/hockey-scoreboard/logos"
+      cp -a "$LOGOS"/. "$1/usr/share/hockey-scoreboard/logos/"
+      find "$1/usr/share/hockey-scoreboard/logos" -type f -exec chmod 0644 {} +
+      echo "Installed $(find "$1/usr/share/hockey-scoreboard/logos" -name '*.png' | wc -l) logo files"
+
+    # ---- admin page (React build) ---------------------------------------
+    # frontend/dist is a CI build product (build-image.yml's own "Build
+    # admin frontend" step, `npm run build`), not a repo file -- Node never
+    # touches the image itself, same "build tools are CI-only" stance as
+    # the rgbmatrix compiler toolchain purged below. admin_server.py
+    # (#178 story 10) serves this directory for any plain HTTP GET.
+    - |-
+      set -eu
+      DIST="$IGconf_sb_srcdir/frontend/dist"
+      if [ ! -f "$DIST/index.html" ]; then
+        echo "ERROR: $DIST/index.html missing. Run 'npm run build' in frontend/ first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/share/hockey-scoreboard/admin"
+      cp -a "$DIST"/. "$1/usr/share/hockey-scoreboard/admin/"
+      find "$1/usr/share/hockey-scoreboard/admin" -type f -exec chmod 0644 {} +
+
+    # ---- goal horns ----------------------------------------------------
+    # The default siren is synthesized and committed to the repo (not
+    # third-party copyrighted content, so unlike logos there is nothing to
+    # fetch at build time). Team-specific WAVs are a user drop-in slot;
+    # none are shipped.
+    - |-
+      set -eu
+      install -d -m 0755 "$1/usr/share/hockey-scoreboard/horns"
+      install -m 0644 "$IGconf_sb_srcdir/assets/horns/_default.wav" \
+        "$1/usr/share/hockey-scoreboard/horns/"
+
+    # ---- HUB75 driver ------------------------------------------------
+    - |-
+      set -eu
+      SRC="$IGconf_sb_vendordir/rpi-rgb-led-matrix"
+      if [ ! -d "$SRC" ]; then
+        echo "ERROR: $SRC missing. Run scripts/fetch-vendor.sh first." >&2
+        exit 1
+      fi
+      install -d -m 0755 "$1/usr/src"
+      cp -a "$SRC" "$1/usr/src/rpi-rgb-led-matrix"
+      # Upstream installs from the repository root through scikit-build-core.
+      # This also avoids lib/Makefile's CPU_ARCH_FLAGS, which default to
+      # -march=native: building natively on a CI runner would target that
+      # runner's CPU and emit instructions a Pi 4's Cortex-A72 lacks. The
+      # CMake path compiles with generic flags, so the result runs on any
+      # ARMv8 Pi.
+      chroot "$1" sh -eu -c '
+        cd /usr/src/rpi-rgb-led-matrix
+        python3 -m pip install --break-system-packages .
+        python3 -c "import rgbmatrix, rgbmatrix.graphics; print(\"rgbmatrix bindings OK\")"
+      '
+
+    # ---- services ----------------------------------------------------
+    - |-
+      set -eu
+      install -m 0755 "$IGconf_sb_assetdir/scripts/scoreboard-provision" \
+        "$1/usr/local/sbin/scoreboard-provision"
+      install -m 0755 "$IGconf_sb_assetdir/scripts/hockey-scoreboard-grow-rootfs" \
+        "$1/usr/local/sbin/hockey-scoreboard-grow-rootfs"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/hockey-scoreboard.service" \
+        "$1/etc/systemd/system/"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/scoreboard-provision.service" \
+        "$1/etc/systemd/system/"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/hockey-scoreboard-grow-rootfs.service" \
+        "$1/etc/systemd/system/"
+
+    # ---- WiFi AP + captive-portal setup mode (#131) --------------------
+    # Masking dnsmasq's own unit stops the package's default, unscoped
+    # instance from starting on every boot (it would otherwise listen on
+    # every interface) -- hockey-scoreboard-setup-ap.service runs the binary
+    # itself, directly, bound to only the AP interface. Done as the plain
+    # symlink-to-/dev/null that `systemctl mask` itself creates, same as
+    # $BDEBSTRAP_HOOKS/enable-units does for our own units below, rather
+    # than invoking systemctl inside the chroot -- there is no running
+    # init here for it to talk to.
+    - |-
+      set -eu
+      install -m 0755 "$IGconf_sb_assetdir/scripts/hockey-scoreboard-setup-ap" \
+        "$1/usr/local/sbin/hockey-scoreboard-setup-ap"
+      install -m 0644 "$IGconf_sb_assetdir/systemd/hockey-scoreboard-setup-ap.service" \
+        "$1/etc/systemd/system/"
+      ln -sf /dev/null "$1/etc/systemd/system/dnsmasq.service"
+
+    # ---- mDNS advertisement of the admin page (#292) -------------------
+    - |-
+      set -eu
+      install -d "$1/etc/avahi/services"
+      install -m 0644 "$IGconf_sb_assetdir/avahi/hockey-scoreboard.service" \
+        "$1/etc/avahi/services/"
+
+    # ---- app self-update (#32) -----------------------------------------
+    # The timer only *checks*; installing is the admin page's button, via
+    # hockey-scoreboard-update-apply.service. The driver commit is recorded so
+    # the updater can refuse a release that needs a rebuilt rgbmatrix. The
+    # timer is enabled by the symlink `systemctl enable` itself makes.
+    - |-
+      set -eu
+      for unit in hockey-scoreboard-update.service hockey-scoreboard-update-now.service \
+          hockey-scoreboard-update-apply.service hockey-scoreboard-update.timer; do
+        install -m 0644 "$IGconf_sb_assetdir/systemd/$unit" "$1/etc/systemd/system/"
+      done
+      install -d -m 0755 "$1/etc/systemd/system/timers.target.wants" "$1/var/lib/hockey-scoreboard"
+      ln -sf /etc/systemd/system/hockey-scoreboard-update.timer \
+        "$1/etc/systemd/system/timers.target.wants/hockey-scoreboard-update.timer"
+      git -C "$IGconf_sb_vendordir/rpi-rgb-led-matrix" rev-parse HEAD \
+        > "$1/usr/share/hockey-scoreboard/driver-commit"
+      # What this image installs outside the app tree, for the updater to
+      # compare a release against (#284).
+      python3 "$IGconf_sb_srcdir/scripts/image_manifest.py" \
+        > "$1/usr/share/hockey-scoreboard/image-manifest.json"
+      # Only a real release build sets sb.version (build-image.yml, --
+      # IGconf_sb_version=<tag>, refs/tags/v* only) -- a PR/dev build
+      # leaves it empty, and installed_version() already treats a missing
+      # VERSION file as "unknown (factory image)", so nothing is written
+      # rather than stamping a fake/blank version.
+      if [ -n "${IGconf_sb_version:-}" ]; then
+        printf '%s\n' "$IGconf_sb_version" > "$1/opt/hockey-scoreboard/VERSION"
+      fi
+
+    # ---- boot partition settings file --------------------------------
+    - |-
+      set -eu
+      install -d -m 0755 "$1/boot/firmware"
+      install -m 0644 "$IGconf_sb_assetdir/boot/scoreboard.toml" \
+        "$1/boot/firmware/scoreboard.toml"
+
+    # ---- firmware configuration --------------------------------------
+    # The matrix driver uses the PWM hardware that the onboard analogue
+    # audio also claims; they cannot coexist. Isolating a core stops the
+    # scheduler from interrupting the refresh thread and causing flicker.
+    # i2c_arm is unconditional, not gated behind auto_brightness (#44): the
+    # scoreboard user is already unconditionally in the i2c group, enabling
+    # the bus costs nothing on a board with no sensor wired up, and
+    # LightSensor already degrades to the static brightness on its own when
+    # nothing answers on it.
+    #
+    # Verified live on real hardware (a board that wouldn't display anything
+    # despite booting fine): appending 'dtparam=audio=off' after the base
+    # image's own 'dtparam=audio=on' is not enough on its own. The firmware
+    # translates each dtparam=audio= occurrence into its own
+    # snd_bcm2835.enable_headphones=/enable_hdmi= pair on the kernel cmdline
+    # rather than collapsing repeats to one final value, so with both lines
+    # present the *last* value for each individual flag wins independently --
+    # which left enable_headphones=1 in effect even with our 'off' appended
+    # last. Stripping the base image's 'on' line outright, not just
+    # overriding it, avoids that. Separately, even with a clean
+    # enable_headphones=0/enable_hdmi=0 cmdline, the snd_bcm2835 kernel
+    # module still loaded (verified via lsmod) -- rpi-rgb-led-matrix's own
+    # startup check is just "is the module loaded", not whether its outputs
+    # are enabled, so it still refused to start. The upstream README's
+    # troubleshooting section is right: blacklisting the module is the part
+    # that actually stops it loading, not the dtparam alone.
+    - |-
+      set -eu
+      CONFIG="$1/boot/firmware/config.txt"
+      sed -i '/^dtparam=audio=on$/d' "$CONFIG"
+      if ! grep -q '^# hockey-scoreboard' "$CONFIG" 2>/dev/null; then
+        printf '\n%s\n%s\n%s\n%s\n%s\n' \
+          '# hockey-scoreboard: the HUB75 driver needs exclusive use of the PWM' \
+          '# peripheral, which the onboard audio output otherwise occupies.' \
+          'dtparam=audio=off' \
+          '# hockey-scoreboard: I2C bus for an optional BH1750 ambient light' \
+          'dtparam=i2c_arm=on' >> "$CONFIG"
+      fi
+      CMDLINE="$1/boot/firmware/cmdline.txt"
+      if [ -n "${IGconf_sb_isolated_cpu:-}" ] && ! grep -q 'isolcpus=' "$CMDLINE"; then
+        sed -i "1s/\$/ isolcpus=${IGconf_sb_isolated_cpu}/" "$CMDLINE"
+      fi
+      install -d -m 0755 "$1/etc/modprobe.d"
+      printf '%s\n' 'blacklist snd_bcm2835' \
+        > "$1/etc/modprobe.d/blacklist-hockey-scoreboard-audio.conf"
+
+    # ---- enable units ------------------------------------------------
+    # hockey-scoreboard-grow-rootfs: re-enabled (#129) after having been
+    # DISABLED (#121) since #120's first-boot hang. #120's own
+    # investigation found the actual cause was an outdated SPI EEPROM
+    # bootloader on that specific board (misreporting RAM size), unrelated
+    # to this repo or to grow-rootfs -- a board with grow-rootfs already
+    # disabled still failed to boot the same way before the EEPROM was
+    # reflashed, so the hang was never actually observed independent of
+    # that issue. Re-enabling on that basis; still needs a real
+    # resize-and-reboot cycle confirmed on hardware (the EEPROM/#126 fixes
+    # only proved the board boots at all) before trusting this the way the
+    # rest of the image is trusted -- see #129.
+    - $BDEBSTRAP_HOOKS/enable-units "$1" hockey-scoreboard-grow-rootfs
+    - $BDEBSTRAP_HOOKS/enable-units "$1" scoreboard-provision
+    - $BDEBSTRAP_HOOKS/enable-units "$1" hockey-scoreboard-setup-ap
+    - $BDEBSTRAP_HOOKS/enable-units "$1" hockey-scoreboard
+
+    # ---- trim the build toolchain -------------------------------------
+    # build-essential, cmake, ninja-build, cython3, python3-dev and
+    # python3-pip exist only to compile the HUB75 bindings above; nothing
+    # at runtime needs a compiler or headers, only the .so they already
+    # produced. Purging them after that step, not before it, shrinks the
+    # image and its attack surface (a device with an SSH server carrying
+    # a full compiler toolchain is a softer target than one without).
+    #
+    # python3-pil stays: unlike the build tools, our own code imports it
+    # at runtime (display/logos.py decodes team logo PNGs with Pillow).
+    # python3 and python3-requests obviously stay too -- autoremove is
+    # scoped to *only* the packages this hook names and what became
+    # orphaned by removing them, so it cannot reach either.
+    #
+    # The import check is the real test here: this hook runs inside the
+    # chroot, so if the purge took something rgbmatrix still needed, the
+    # build fails right here instead of shipping a broken image.
+    - |-
+      set -eu
+      chroot "$1" sh -eu -c '
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get purge -y --auto-remove \
+          build-essential cmake ninja-build cython3 python3-dev python3-pip
+        apt-get clean
+        python3 -c "import rgbmatrix, rgbmatrix.graphics"
+      '
+      echo "rgbmatrix bindings still import correctly after the purge"
+
+    # ---- app import smoke test ----------------------------------------
+    # The rgbmatrix check above only proves the compiled binding survived
+    # the purge -- it says nothing about the app itself, which is a plain
+    # source tree on PYTHONPATH (apt packages, not pip: see the top of
+    # this file), kept in sync with pyproject.toml's deps entirely by
+    # hand. A dependency added to pyproject.toml but not to this layer's
+    # apt package list would pass the CI test job (pip installs it) and
+    # pass the rest of this build (nothing else imports it), then crash
+    # the board on first boot -- same failure class as #21's
+    # libpython3.13. Import every module hockey-scoreboard.service's
+    # ExecStart actually loads, with the same PYTHONPATH, plus every
+    # other module that starts up alongside it, so a missing apt package
+    # fails the image build instead of shipping.
+    - |-
+      set -eu
+      chroot "$1" env PYTHONPATH=/opt/hockey-scoreboard sh -eu -c '
+        python3 -c "import hockey_scoreboard.app, hockey_scoreboard.config, hockey_scoreboard.light_sensor, hockey_scoreboard.button, hockey_scoreboard.admin_server, hockey_scoreboard.setup_server, hockey_scoreboard.updater"
+        python3 -m hockey_scoreboard --help >/dev/null
+        # button.py imports gpiozero lazily, so the line above cannot
+        # catch a missing python3-gpiozero; import it directly instead.
+        python3 -c "import gpiozero"
+      '
+      echo "hockey_scoreboard app modules import correctly"

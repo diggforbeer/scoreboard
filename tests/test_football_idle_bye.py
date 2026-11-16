@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.football_idle import next_game_line
-from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from nhl_scoreboard.football.idle_views import ByeView, PreviewView, build_bye
-from nhl_scoreboard.football.models import FbGame
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.display.football_idle import next_game_line
+from hockey_scoreboard.football import idle
+from hockey_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from hockey_scoreboard.football.idle_views import ByeView, PreviewView, build_bye
+from hockey_scoreboard.football.models import FbGame
 from test_football_idle_preview import FIXTURES, NYG, SCHEDULE, Logos, utc
 from test_football_scenes import H, check_snapshot, renderer
 
@@ -89,7 +89,7 @@ def test_snapshots(update_snapshots):
 
 
 def test_every_team_and_both_home_and_away_fit_the_panel():
-    from nhl_scoreboard.football.teams import TEAMS
+    from hockey_scoreboard.football.teams import TEAMS
 
     for abbrev in TEAMS:
         for next_game in (None, PreviewView(abbrev, "WSH", NEXT.start_utc, "", ""),
@@ -101,7 +101,7 @@ def test_every_team_and_both_home_and_away_fit_the_panel():
 def test_the_title_takes_the_teams_colour_and_a_missing_next_game_leaves_it_alone():
     with_next, alone = draw(ByeView("NYG", NEXT)), draw(ByeView("NYG"))
     assert len(alone.pixels) < len(with_next.pixels)
-    from nhl_scoreboard.football.teams import team_color
+    from hockey_scoreboard.football.teams import team_color
 
     assert team_color("NYG") in set(alone.pixels.values())
 
@@ -121,7 +121,7 @@ class Feed(IdleFeed):
 def test_a_favourite_on_a_bye_gets_the_bye_in_the_real_rotation_and_the_app_draws_it(
     app,  # noqa: F811
 ):
-    from nhl_scoreboard.football.mode import FootballMode
+    from hockey_scoreboard.football.mode import FootballMode
 
     other = game("DAL", "PHI", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)
     clock, feed = Clock(960.0), Feed([other])  # the IdleFeed's scoreboard lists CHI on a bye

@@ -1,7 +1,7 @@
 """WifiJoinAttempt (#133): orchestration only, not apply_wifi()'s own
-join/rollback behaviour (that's test_wifi.py's job) or nhl-scoreboard-setup-
+join/rollback behaviour (that's test_wifi.py's job) or hockey-scoreboard-setup-
 ap's own stop/start behaviour (test_setup_ap.py's). This mocks
-nhl_scoreboard.wifi.apply_wifi() and fakes `systemctl` as a tiny recording
+hockey_scoreboard.wifi.apply_wifi() and fakes `systemctl` as a tiny recording
 script (same idiom as test_scoreboard_provision.py/test_setup_ap.py), so
 what's actually under test here is: does a submission get consumed and turn
 into the right sequence of `systemctl stop`/apply_wifi/`systemctl start`-or-
@@ -23,8 +23,8 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard import wifi_join as wifi_join_module
-from nhl_scoreboard.wifi_join import OUTCOME_DISPLAY_SECONDS, SETUP_AP_UNIT, WifiJoinAttempt
+from hockey_scoreboard import wifi_join as wifi_join_module
+from hockey_scoreboard.wifi_join import OUTCOME_DISPLAY_SECONDS, SETUP_AP_UNIT, WifiJoinAttempt
 
 STOP = f"stop {SETUP_AP_UNIT}"
 START = f"start {SETUP_AP_UNIT}"

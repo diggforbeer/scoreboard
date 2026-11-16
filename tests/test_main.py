@@ -1,6 +1,6 @@
-"""Tests for the ``nhl-scoreboard`` command line entry point.
+"""Tests for the ``hockey-scoreboard`` command line entry point.
 
-``--dump`` is exercised end to end through ``main()`` with the NHL client
+``--dump`` is exercised end to end through ``main()`` with the hockey client
 stubbed out; nothing here touches the network or a matrix backend.
 """
 
@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard import __main__ as cli
-from nhl_scoreboard.config import Settings
-from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import Game
+from hockey_scoreboard import __main__ as cli
+from hockey_scoreboard.config import Settings
+from hockey_scoreboard.hockey.api import HockeyApiError
+from hockey_scoreboard.hockey.models import Game
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def stub_client(monkeypatch, games=None, error=None):
                 raise error
             return games
 
-    monkeypatch.setattr(cli, "NHLClient", FakeClient)
+    monkeypatch.setattr(cli, "HockeyClient", FakeClient)
 
 
 def dump_args(tmp_path, *extra: str) -> list[str]:
@@ -73,7 +73,7 @@ def test_dump_with_no_games_says_so(monkeypatch, tmp_path, capsys):
 
 
 def test_dump_api_failure_exits_1_with_a_message_not_a_traceback(monkeypatch, tmp_path, capsys):
-    stub_client(monkeypatch, error=NHLApiError("boom"))
+    stub_client(monkeypatch, error=HockeyApiError("boom"))
 
     assert cli.main(dump_args(tmp_path)) == 1
 
@@ -89,8 +89,8 @@ def test_dump_never_imports_a_matrix_backend(monkeypatch, tmp_path, games):
     # Another test may already have imported these; clear them for this call
     # (monkeypatch restores the originals afterwards).
     watched = (
-        "nhl_scoreboard.app",
-        "nhl_scoreboard.display.matrix",
+        "hockey_scoreboard.app",
+        "hockey_scoreboard.display.matrix",
         "rgbmatrix",
         "RGBMatrixEmulator",
     )
@@ -170,12 +170,12 @@ def test_demo_goes_through_the_matrix_backend_path_and_runs_the_demo_loop(monkey
         def run(self):
             calls.append("run")
 
-    fake_app = types.ModuleType("nhl_scoreboard.app")
+    fake_app = types.ModuleType("hockey_scoreboard.app")
     fake_app.ScoreboardApp = FakeApp
-    fake_matrix = types.ModuleType("nhl_scoreboard.display.matrix")
+    fake_matrix = types.ModuleType("hockey_scoreboard.display.matrix")
     fake_matrix.load_backend = lambda name=None: f"backend:{name}"
-    monkeypatch.setitem(sys.modules, "nhl_scoreboard.app", fake_app)
-    monkeypatch.setitem(sys.modules, "nhl_scoreboard.display.matrix", fake_matrix)
+    monkeypatch.setitem(sys.modules, "hockey_scoreboard.app", fake_app)
+    monkeypatch.setitem(sys.modules, "hockey_scoreboard.display.matrix", fake_matrix)
 
     argv = ["--demo", "--backend", "RGBMatrixEmulator", "-c", str(tmp_path / "absent.toml")]
     assert cli.main(argv) == 0

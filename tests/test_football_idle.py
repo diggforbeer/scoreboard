@@ -10,12 +10,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.api import STANDINGS_URL, FootballClient
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.models import FbGame
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.football import idle
+from hockey_scoreboard.football.api import STANDINGS_URL, FootballClient
+from hockey_scoreboard.football.mode import FootballMode
+from hockey_scoreboard.football.models import FbGame
+from hockey_scoreboard.football.teams import TEAMS
 from test_football_plays import FakeResponse, FakeSession
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
@@ -380,7 +380,9 @@ def test_each_kind_of_data_is_fetched_again_on_its_own_cadence():
 
 def test_followed_teams_schedules_are_fetched_too_and_a_team_that_is_not_football_is_skipped():
     clock, feed = Clock(), IdleFeed([pregame()])
-    mode = make_mode(feed, clock, "NYG", ["DAL", "NSH"])  # NSH is NHL-only: dropped by the config
+    mode = make_mode(
+        feed, clock, "NYG", ["DAL", "NSH"]
+    )  # NSH is hockey-only: dropped by the config
     mode.worker.poll_once()
     asked = sorted(c[1] for c in feed.calls if isinstance(c, tuple) and c[0] == "schedule")
     assert asked == sorted([NYG_ID, TEAMS["DAL"].espn_id])

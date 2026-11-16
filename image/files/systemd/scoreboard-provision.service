@@ -4,17 +4,17 @@ Documentation=https://github.com/diggforbeer/scoreboard
 # Runs on every boot, not just the first, so editing scoreboard.toml on the
 # boot partition is all it takes to change Wi-Fi network or timezone.
 After=local-fs.target
-Before=nhl-scoreboard.service
-Wants=nhl-scoreboard.service
+Before=hockey-scoreboard.service
+Wants=hockey-scoreboard.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 # Wi-Fi rollback (#51) writes the last known-good [wifi] values back into
-# scoreboard.toml through nhl_scoreboard.config.Settings.save() -- the same
+# scoreboard.toml through hockey_scoreboard.config.Settings.save() -- the same
 # tomlkit write-back the eventual config editor uses -- rather than a second
 # TOML writer, so this needs the app package on the import path too.
-Environment=PYTHONPATH=/opt/nhl-scoreboard
+Environment=PYTHONPATH=/opt/hockey-scoreboard
 ExecStart=/usr/local/sbin/scoreboard-provision /boot/firmware/scoreboard.toml
 
 [Install]

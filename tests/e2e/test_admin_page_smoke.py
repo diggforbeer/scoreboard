@@ -65,7 +65,7 @@ def admin_page(tmp_path):
     frontend/dist, and hand back its URL and the config file it writes. A subprocess,
     not an in-process thread (the way AdminServer itself runs inside
     ScoreboardApp) -- this test wants the real `python -m
-    nhl_scoreboard.admin_server` entry point too, the same thing systemd
+    hockey_scoreboard.admin_server` entry point too, the same thing systemd
     actually execs on the device.
     """
     if not (DIST_DIR / "index.html").is_file():
@@ -75,14 +75,14 @@ def admin_page(tmp_path):
     config_path.write_text("")
 
     env = os.environ.copy()
-    env["NHL_SCOREBOARD_CONFIG"] = str(config_path)
-    env["NHL_SCOREBOARD_ADMIN_DIR"] = str(DIST_DIR)
-    env["NHL_SCOREBOARD_UPDATE_STATE"] = str(tmp_path / "update-state.json")
-    env["NHL_SCOREBOARD_ADMIN_HOST"] = HOST
-    env["NHL_SCOREBOARD_ADMIN_PORT"] = str(PORT)
+    env["HOCKEY_SCOREBOARD_CONFIG"] = str(config_path)
+    env["HOCKEY_SCOREBOARD_ADMIN_DIR"] = str(DIST_DIR)
+    env["HOCKEY_SCOREBOARD_UPDATE_STATE"] = str(tmp_path / "update-state.json")
+    env["HOCKEY_SCOREBOARD_ADMIN_HOST"] = HOST
+    env["HOCKEY_SCOREBOARD_ADMIN_PORT"] = str(PORT)
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "nhl_scoreboard.admin_server"],
+        [sys.executable, "-m", "hockey_scoreboard.admin_server"],
         env=env,
         cwd=REPO_ROOT,
         stdout=subprocess.PIPE,
@@ -158,7 +158,7 @@ def test_update_card_lists_image_level_changes(admin_page):
     write(
         {
             "status": "differs",
-            "files": ["scripts/nhl-scoreboard-setup-ap"],
+            "files": ["scripts/hockey-scoreboard-setup-ap"],
             "packages": ["mpg123"],
             "command": "sudo apt-get install -y mpg123",
         }
@@ -171,7 +171,7 @@ def test_update_card_lists_image_level_changes(admin_page):
             page.get_by_role("button", name="Setup", exact=True).click()
             differs = page.get_by_test_id("image-changes-differs")
             differs.wait_for(timeout=15000)
-            assert "scripts/nhl-scoreboard-setup-ap" in differs.inner_text()
+            assert "scripts/hockey-scoreboard-setup-ap" in differs.inner_text()
             assert "sudo apt-get install -y mpg123" in differs.inner_text()
             assert page.get_by_role("button", name="Install v2026.09.02").is_visible()
 
@@ -310,15 +310,15 @@ def live_admin_page(tmp_path, monkeypatch):
     own thread, with a panel Mirror (#268) -- plus a stand-in render loop
     that publishes a snapshot whenever one is asked for, each a different
     colour in the top-left LED. The standalone `python -m
-    nhl_scoreboard.admin_server` above has no panel to mirror, so it can't
+    hockey_scoreboard.admin_server` above has no panel to mirror, so it can't
     exercise the live view."""
     if not (DIST_DIR / "index.html").is_file():
         pytest.skip(f"{DIST_DIR}/index.html missing -- run `npm run build` in frontend/ first")
     import threading
     from datetime import UTC, datetime
 
-    from nhl_scoreboard import admin_server
-    from nhl_scoreboard.display.mirror import Mirror
+    from hockey_scoreboard import admin_server
+    from hockey_scoreboard.display.mirror import Mirror
 
     monkeypatch.setattr(admin_server, "ADMIN_DIR", DIST_DIR)
     config_path = tmp_path / "scoreboard.toml"
@@ -411,7 +411,7 @@ def _wait_until(condition, timeout=15.0):
 def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
     """#348: in football mode the Scoreboard card shows the football pickers, backed by the separate
     ``[football]`` section. Switching sport swaps the pickers without losing either set of
-    choices, and BUF as the NHL favourite and BUF as the football favourite are two settings."""
+    choices, and BUF as the hockey favourite and BUF as the football favourite are two settings."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -421,7 +421,7 @@ def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
             page.goto(admin_page.url)
             page.wait_for_selector("#sb-favourite-team", timeout=15000)
 
-            # NHL mode: the NHL pickers, and no football ones.
+            # Hockey mode: the hockey pickers, and no football ones.
             assert page.locator("#fb-favourite-team").count() == 0
             page.select_option("#sb-favourite-team", "BUF")
             _wait_until(lambda: admin_page.config()["scoreboard"].get("favourite_team") == "BUF")
@@ -445,7 +445,9 @@ def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
             )
             football = admin_page.config()["football"]
             assert football["favourite_team"] == "BUF"
-            assert admin_page.config()["scoreboard"]["favourite_team"] == "BUF"  # NHL's, untouched
+            assert (
+                admin_page.config()["scoreboard"]["favourite_team"] == "BUF"
+            )  # hockey's, untouched
 
             # The favourite is not also offered as a followed team.
             assert page.locator("#fb-follow-BUF").count() == 0
@@ -456,20 +458,20 @@ def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
             assert page.input_value("#fb-favourite-team") == "BUF"
             assert page.is_checked("#fb-follow-NYG") and page.is_checked("#fb-follow-WSH")
 
-            # Back to NHL: its own favourite is still there; the football choices are kept on disk.
-            page.select_option("#sb-sport", "nhl")
+            # Back to hockey: its favourite is still there; the football choices are kept on disk.
+            page.select_option("#sb-sport", "hockey")
             page.wait_for_selector("#sb-favourite-team", timeout=15000)
             assert page.input_value("#sb-favourite-team") == "BUF"
             assert page.locator("#fb-favourite-team").count() == 0
-            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "nhl")
+            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "hockey")
             assert admin_page.config()["football"]["also_follow"] == ["NYG", "WSH"]
         finally:
             browser.close()
 
 
 def test_football_mode_has_its_own_idle_rotation_card(admin_page):
-    """#422: the football idle rotation card replaces the NHL one in football mode, saves
-    ``[[football.rotation]]`` and the two timers, and leaves the NHL ``[[rotation]]`` alone."""
+    """#422: the football idle rotation card replaces the hockey one in football mode, saves
+    ``[[football.rotation]]`` and the two timers, and leaves the hockey ``[[rotation]]`` alone."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:

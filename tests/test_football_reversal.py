@@ -9,14 +9,14 @@ import dataclasses
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display import football_punt as punt
-from nhl_scoreboard.display import football_reversal as frv
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football.director import REVERSAL
-from nhl_scoreboard.football.reversals import Reversal
+from hockey_scoreboard.app import Scene
+from hockey_scoreboard.display import football_plays as fp
+from hockey_scoreboard.display import football_punt as punt
+from hockey_scoreboard.display import football_reversal as frv
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.display.logos import LogoLibrary, LogoSet
+from hockey_scoreboard.football.director import REVERSAL
+from hockey_scoreboard.football.reversals import Reversal
 from test_football_events import make_game, make_play, one
 from test_football_reversals import celebrate, td_by_home
 from test_football_scenes import check_snapshot, renderer
@@ -131,7 +131,7 @@ def test_the_two_title_lines_then_the_reason_then_the_score_run_down_the_panel()
 
 def test_the_logo_is_the_team_whose_play_was_reversed_and_a_flag_stands_at_the_right(tmp_path):
     art = logos(tmp_path)
-    from nhl_scoreboard.football.teams import team_color
+    from hockey_scoreboard.football.teams import team_color
 
     c = draw(TD, art=art)
     assert any(col == team_color("NYG") and x < 20 for (x, _), col in c.pixels.items())

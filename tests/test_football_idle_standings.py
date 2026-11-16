@@ -6,14 +6,14 @@ import json
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import idle
-from nhl_scoreboard.football.idle import Conference, Division, Standings, StandingsRow
-from nhl_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
-from nhl_scoreboard.football.idle_views import PLAYOFF_SEEDS, StandingsView, build_standings
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football import idle
+from hockey_scoreboard.football.idle import Conference, Division, Standings, StandingsRow
+from hockey_scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
+from hockey_scoreboard.football.idle_views import PLAYOFF_SEEDS, StandingsView, build_standings
+from hockey_scoreboard.football.mode import FootballMode
+from hockey_scoreboard.football.teams import TEAMS
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, utc
 from test_football_scenes import H, check_snapshot, game, renderer
@@ -158,7 +158,7 @@ def test_every_team_of_the_table_fits_on_both_pages():
 
 
 def test_ties_unseeded_first_out_and_long_streaks_fit():
-    from nhl_scoreboard.football.idle_views import StandingsView as V
+    from hockey_scoreboard.football.idle_views import StandingsView as V
 
     rows = tuple(row("NYG", "10-6-1", 3, "W12", 512, 399) for _ in range(4))
     out = row("CHI", "4-12-1", None, "L10", 100, 500)
@@ -169,7 +169,7 @@ def test_ties_unseeded_first_out_and_long_streaks_fit():
 
 
 def test_the_streak_colour_is_green_for_a_win_streak_and_red_for_a_loss_streak():
-    from nhl_scoreboard.display.football_scenes import LIVE, RED_ZONE
+    from hockey_scoreboard.display.football_scenes import LIVE, RED_ZONE
 
     view = build_standings(ctx(FAV))
     colours = set(draw(view, 0).pixels.values())

@@ -5,13 +5,13 @@
 
 These are **design mockups, not renderer output**: no football renderer exists
 yet, so each frame is drawn here, pixel by pixel, to show the layout the design
-describes. They reuse the NHL guide's dot rendering (``scripts/render-screens.py``)
+describes. They reuse the hockey guide's dot rendering (``scripts/render-screens.py``)
 and the project's own BDF fonts, so size, pitch and type match the real panel.
-Teams are real football abbreviations in plain colour circles, as the NHL guide does,
+Teams are real football abbreviations in plain colour circles, as the hockey guide does,
 because the crests are team artwork and are not committed.
 
 When the real renderer lands, the images should come from it (the way
-``render-screens.py`` does for the NHL) and this script should be deleted.
+``render-screens.py`` does for the hockey) and this script should be deleted.
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from RGBMatrixEmulator import graphics  # noqa: E402
 
-from nhl_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
-from nhl_scoreboard.display.fonts import font_path  # noqa: E402
-from nhl_scoreboard.display.mirror import Frame  # noqa: E402
+from hockey_scoreboard.display.ascii import AsciiCanvas  # noqa: E402
+from hockey_scoreboard.display.fonts import font_path  # noqa: E402
+from hockey_scoreboard.display.mirror import Frame  # noqa: E402
 
 OUT = REPO_ROOT / "docs" / "football"
 
@@ -351,7 +351,7 @@ def real_screens() -> set[str]:
     """Screens the real renderer now draws (``football.demo``): their images come from
     ``render-screens.py --sport football``, so a mockup of the same name is retired,
     not rewritten."""
-    from nhl_scoreboard.football.demo import football_demo_steps
+    from hockey_scoreboard.football.demo import football_demo_steps
 
     return {step.name for step in football_demo_steps(render_screens.NOW)}
 

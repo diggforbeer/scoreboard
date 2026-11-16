@@ -1,4 +1,4 @@
-"""nhl-scoreboard-setup-ap: the shell script, run for real (#131).
+"""hockey-scoreboard-setup-ap: the shell script, run for real (#131).
 
 Same approach as test_grow_rootfs.py and test_scoreboard_provision.py: the
 actual script, invoked as a subprocess, with every external tool it shells
@@ -29,7 +29,11 @@ from pathlib import Path
 import pytest
 
 SCRIPT = (
-    Path(__file__).resolve().parents[1] / "image" / "files" / "scripts" / "nhl-scoreboard-setup-ap"
+    Path(__file__).resolve().parents[1]
+    / "image"
+    / "files"
+    / "scripts"
+    / "hockey-scoreboard-setup-ap"
 )
 
 
@@ -97,14 +101,14 @@ class Rig:
         env = {
             "PATH": f"{self.bindir}:{os.environ['PATH']}",
             "FAKE_CALL_LOG": str(self.call_log),
-            "NHL_SCOREBOARD_AP_DNSMASQ_CONF": str(self.dnsmasq_conf),
-            "NHL_SCOREBOARD_AP_STATE_FILE": str(self.state_file),
-            "NHL_SCOREBOARD_AP_SCAN_FILE": str(self.scan_file),
-            "NHL_SCOREBOARD_AP_ACTIVE_FILE": str(self.active_file),
+            "HOCKEY_SCOREBOARD_AP_DNSMASQ_CONF": str(self.dnsmasq_conf),
+            "HOCKEY_SCOREBOARD_AP_STATE_FILE": str(self.state_file),
+            "HOCKEY_SCOREBOARD_AP_SCAN_FILE": str(self.scan_file),
+            "HOCKEY_SCOREBOARD_AP_ACTIVE_FILE": str(self.active_file),
             # Real scans need to settle asynchronously (see the script's own
             # comment); tests don't have a real radio to wait on.
-            "NHL_SCOREBOARD_AP_SCAN_SETTLE_SECONDS": "0",
-            "NHL_SCOREBOARD_AP_START_RETRY_SECONDS": "0",
+            "HOCKEY_SCOREBOARD_AP_SCAN_SETTLE_SECONDS": "0",
+            "HOCKEY_SCOREBOARD_AP_START_RETRY_SECONDS": "0",
             "FAKE_COUNTER_DIR": str(self.counter_dir),
             **(env_extra or {}),
         }
@@ -166,9 +170,9 @@ def test_offline_brings_up_open_ap_and_starts_dnsmasq(rig):
     # this itself as part of `ap start` on this driver.
     assert "iwctl station wlan0 disconnect" in result.calls
     assert "iwctl device wlan0 set-property Mode ap" in result.calls
-    assert "iwctl ap wlan0 start-open NHL-Scoreboard-Setup" in result.calls
+    assert "iwctl ap wlan0 start-open Hockey-Scoreboard-Setup" in result.calls
     # start-open succeeded, so the WPA2-PSK fallback must never be tried.
-    assert "iwctl ap wlan0 start NHL-Scoreboard-Setup" not in result.calls
+    assert "iwctl ap wlan0 start Hockey-Scoreboard-Setup" not in result.calls
     assert "dnsmasq --no-daemon" in result.calls
 
     conf = rig.dnsmasq_conf.read_text()
@@ -179,7 +183,7 @@ def test_offline_brings_up_open_ap_and_starts_dnsmasq(rig):
     # Open network succeeded -- the app must never show/encode a password
     # that isn't actually required to join.
     state = json.loads(rig.state_file.read_text())
-    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": None, "open": True}
+    assert state == {"ssid": "Hockey-Scoreboard-Setup", "password": None, "open": True}
 
 
 def test_start_open_unsupported_falls_back_to_psk(rig):
@@ -188,12 +192,12 @@ def test_start_open_unsupported_falls_back_to_psk(rig):
         env_extra={"FAKE_DEFAULT_ROUTE": "", "FAKE_IWCTL_AP_START_OPEN_EXIT": "1"},
     )
     assert result.returncode == 0, result.stderr
-    assert "iwctl ap wlan0 start-open NHL-Scoreboard-Setup" in result.calls
-    assert "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard" in result.calls
+    assert "iwctl ap wlan0 start-open Hockey-Scoreboard-Setup" in result.calls
+    assert "iwctl ap wlan0 start Hockey-Scoreboard-Setup scoreboard" in result.calls
     assert "dnsmasq --no-daemon" in result.calls
 
     state = json.loads(rig.state_file.read_text())
-    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard", "open": False}
+    assert state == {"ssid": "Hockey-Scoreboard-Setup", "password": "scoreboard", "open": False}
 
 
 def test_ap_totally_unavailable_never_starts_dnsmasq(rig):
@@ -211,8 +215,8 @@ def test_ap_totally_unavailable_never_starts_dnsmasq(rig):
     # Every mode gets its full retry budget (#173) before giving up, not
     # just a single attempt.
     calls = result.calls.splitlines()
-    assert count_calls(calls, "iwctl ap wlan0 start-open NHL-Scoreboard-Setup") == 2
-    assert count_calls(calls, "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard") == 2
+    assert count_calls(calls, "iwctl ap wlan0 start-open Hockey-Scoreboard-Setup") == 2
+    assert count_calls(calls, "iwctl ap wlan0 start Hockey-Scoreboard-Setup scoreboard") == 2
 
 
 def test_transient_start_open_failure_is_retried(rig):
@@ -225,13 +229,13 @@ def test_transient_start_open_failure_is_retried(rig):
     )
     assert result.returncode == 0, result.stderr
     calls = result.calls.splitlines()
-    assert count_calls(calls, "iwctl ap wlan0 start-open NHL-Scoreboard-Setup") == 2
+    assert count_calls(calls, "iwctl ap wlan0 start-open Hockey-Scoreboard-Setup") == 2
     # The retry succeeded, so the PSK fallback is never reached.
-    assert count_calls(calls, "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard") == 0
+    assert count_calls(calls, "iwctl ap wlan0 start Hockey-Scoreboard-Setup scoreboard") == 0
     assert "retrying" in result.stdout
     assert "dnsmasq --no-daemon" in result.calls
     state = json.loads(rig.state_file.read_text())
-    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": None, "open": True}
+    assert state == {"ssid": "Hockey-Scoreboard-Setup", "password": None, "open": True}
 
 
 def test_transient_psk_start_failure_is_retried(rig):
@@ -245,10 +249,10 @@ def test_transient_psk_start_failure_is_retried(rig):
     )
     assert result.returncode == 0, result.stderr
     calls = result.calls.splitlines()
-    assert count_calls(calls, "iwctl ap wlan0 start NHL-Scoreboard-Setup scoreboard") == 2
+    assert count_calls(calls, "iwctl ap wlan0 start Hockey-Scoreboard-Setup scoreboard") == 2
     assert "dnsmasq --no-daemon" in result.calls
     state = json.loads(rig.state_file.read_text())
-    assert state == {"ssid": "NHL-Scoreboard-Setup", "password": "scoreboard", "open": False}
+    assert state == {"ssid": "Hockey-Scoreboard-Setup", "password": "scoreboard", "open": False}
 
 
 def test_ap_settings_are_overridable(rig):
@@ -256,10 +260,10 @@ def test_ap_settings_are_overridable(rig):
         "start",
         env_extra={
             "FAKE_DEFAULT_ROUTE": "",
-            "NHL_SCOREBOARD_AP_IFACE": "wlan1",
-            "NHL_SCOREBOARD_AP_SSID": "TestSetupNet",
-            "NHL_SCOREBOARD_AP_ADDR": "192.168.99.1",
-            "NHL_SCOREBOARD_AP_PREFIX": "28",
+            "HOCKEY_SCOREBOARD_AP_IFACE": "wlan1",
+            "HOCKEY_SCOREBOARD_AP_SSID": "TestSetupNet",
+            "HOCKEY_SCOREBOARD_AP_ADDR": "192.168.99.1",
+            "HOCKEY_SCOREBOARD_AP_PREFIX": "28",
         },
     )
     assert result.returncode == 0, result.stderr

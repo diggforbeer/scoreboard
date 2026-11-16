@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-NHL scoreboard for a 128×32 HUB75 LED matrix (two 64×32 P2.5 panels) on a
+Hockey scoreboard for a 128×32 HUB75 LED matrix (two 64×32 P2.5 panels) on a
 Raspberry Pi 4, shipped as a flashable image built by rpi-image-gen in CI.
-Python app in `src/nhl_scoreboard/`; image definition in `image/`.
+Python app in `src/hockey_scoreboard/`; image definition in `image/`.
 
 ## Workflow
 
@@ -61,7 +61,7 @@ Python app in `src/nhl_scoreboard/`; image definition in `image/`.
   changes; read that file for the exact string. In broad strokes, as of
   this writing it covers: venv setup and test/lint (`python3 -m venv`,
   `source`/`. path/to/activate`, `pip install`, `pytest`, `ruff check`,
-  `ruff format`), `python3` and `nhl-scoreboard` generally plus
+  `ruff format`), `python3` and `hockey-scoreboard` generally plus
   `playwright install` (for rendering/screenshotting the admin page or
   demo-mode panel scenes, #153), `git fetch`/`git merge`/`gh pr view`
   (resolving a merge conflict against `main`), and
@@ -127,9 +127,9 @@ pytest -s tests/test_render.py       # prints every rendered frame as ASCII
 pytest --update-snapshots            # after an INTENTIONAL layout change; then review the diff
 ruff check . && ruff format .        # CI runs both; an unused `noqa` fails CI (RUF100)
 
-nhl-scoreboard --demo                                            # loop every scene with made-up games; with sport = "football", the football steps (silent)
-nhl-scoreboard --dump                                            # today's scores as text; no display
-nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live board at http://localhost:8888
+hockey-scoreboard --demo                                            # loop every scene with made-up games; with sport = "football", the football steps (silent)
+hockey-scoreboard --dump                                            # today's scores as text; no display
+hockey-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml   # live board at http://localhost:8888
 python scripts/preview.py --fixture                              # frames as ASCII, offline
 python scripts/render-screens.py                                 # docs/screens/*.png for screens.md; rerun after a layout change
 python scripts/render-screens.py --sport football                     # docs/football/*.png from football.demo steps; --check fails when stale
@@ -152,7 +152,7 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   `assert_logo_layout`, `assert_indicator`, `assert_centered`): nothing
   off-panel, text centred, scores right-aligned, colours by state, favourite
   underline only where it belongs. Add both when adding a scene.
-- **Tests are hermetic.** No network, no NHL artwork. Logo tests use
+- **Tests are hermetic.** No network, no hockey artwork. Logo tests use
   synthetic circle PNGs in team colours (`synthetic_logos` fixture).
   `tests/fixtures/score.json` is a trimmed real API capture; `test_flow.py`
   builds games with its `game()` helper.
@@ -224,7 +224,7 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   mush, same failure mode regardless of colour. `display/logos.py`'s
   `default_directories()` checks `assets/logos/overrides/{size}/{variant}/`
   *before* the fetched directory for exactly this (#12); WSH is the first
-  one there. That override is NOT the NHL CDN's `WSH_dark.svg` cropped
+  one there. That override is NOT the hockey CDN's `WSH_dark.svg` cropped
   smaller -- that endpoint serves an ornate eagle+shield+sword mark, not
   the team's actual current primary logo (the bold two-wing "W" with a
   simple eagle head). The override PNG was built from a user-supplied
@@ -365,7 +365,7 @@ border, whistle and ripples, then `PENALTY  NSH` / `#9 FORSBERG` / `SLASHING
 on the issue's recommended options, so: **both teams** in the favourite's own
 game only (not `also_follow` games), every penalty type, full animation every
 time, silent, no config switch. Source is `summary.penalties` in the shared
-`landing` payload (`NHLClient.penalties()`, a fourth reader, no new request),
+`landing` payload (`HockeyClient.penalties()`, a fourth reader, no new request),
 polled by `refresh_penalties()` at `live_poll_seconds`, skipped in
 intermission/shootout, applied through the delay queue. First fetch per game is
 a baseline that never fires; `Penalty.key` is period+time+team+player+call.
@@ -375,9 +375,9 @@ below goal/scorer in `_apply_goal_override`, above blowout/three stars; the
 age comes from `_penalty_age`, not `Scene`. Unverified: whether `landing`
 lags the whistle on a live game, and hardware cost (#4).
 
-The `three_stars` scene (#156) is the NHL's three stars of the favourite's
+The `three_stars` scene (#156) is the hockey's three stars of the favourite's
 game, from `gamecenter/{id}/landing`'s top-level `threeStars` (verified
-present on a real final game; `NHLClient.three_stars()`, a third reader
+present on a real final game; `HockeyClient.three_stars()`, a third reader
 of the same URL `situation()`/`goal_scoring()` use -- one shared request,
 #263). The
 trigger is **not** a detector of its own: it's `refresh()`'s existing
@@ -395,7 +395,7 @@ is over. Fire-once is a separate guarantee (`_three_stars_shown`, pruned
 with the other per-game state, #64). It's the last layer of
 `_apply_goal_override`'s chain, over the held-final `game` scene only,
 for `three_stars_seconds`, then the normal final takes over. Stars are
-whoever the NHL named -- either team, never filtered to the favourite.
+whoever the hockey named -- either team, never filtered to the favourite.
 `Star.goals`/`assists`/`points` are **per-game** totals, not
 season-to-date like `GoalEvent`'s `goalsToDate`/`assistsToDate`; a
 goalie's entry carries goalie stats instead (unmodelled), so it reads 0
@@ -412,7 +412,7 @@ the grid used to linger after the game, #259 follow-up):
 `Game.shows_shootout` -> `Renderer.draw_shootout`, a horizontal grid, away
 row over home row, one column per attempt (green disc goal, red X anything
 else, dim ring still to come), no shooter names (owner's call). Data is
-`summary.shootout` from `gamecenter/{id}/landing` (`NHLClient.shootout()`),
+`summary.shootout` from `gamecenter/{id}/landing` (`HockeyClient.shootout()`),
 absent until the shootout begins -- the screen then shows empty rings. Rows
 are matched by `teamAbbrev`, never by order. Polled by `refresh_shootouts()`
 every `shootout_poll_seconds` (default 5), which also lowers
@@ -445,7 +445,7 @@ polls; the loop uses `ANIMATION_FRAME_INTERVAL` only while a cell is
 animating (`_shootout_animating`). Past the window the frame is the static
 look.
 
-`Shootout.state(away, home)` (pure, `nhl/models.py`) returns a
+`Shootout.state(away, home)` (pure, `hockey/models.py`) returns a
 `ShootoutState`: `open`, `must_score` (team), `sudden_death`, `decided`
 (winner) or `unknown`. Three rounds each; it ends early once one side's
 goals exceed the other's plus its remaining shots; once both have shot
@@ -464,7 +464,7 @@ each popping in its newest attempt. None of this is verified on hardware
 (#4) or against a live sudden-death payload.
 
 The `standings` scene (#40) is the favourite's conference playoff picture:
-`conference_standings()`/`standings_window()` (`nhl/models.py`) rank the
+`conference_standings()`/`standings_window()` (`hockey/models.py`) rank the
 favourite's conference by `conferenceSequence` and trim it to the
 favourite plus up to two teams on either side, clamped at either end of
 the conference so a team sitting 1st or last still gets a full-size
@@ -485,7 +485,7 @@ but not rendered or colour-coded -- they're confirmed from only one real,
 end-of-season response and not documented anywhere; don't act on them
 without verifying against a few more live examples first. Note that the
 window itself is a straight `conferenceSequence` cut (favourite ± a few
-spots by overall conference rank), not the NHL's actual playoff line
+spots by overall conference rank), not the hockey's actual playoff line
 (top 3 per division + next 2 wild cards, conference-wide) -- `StandingsRow.
 in_playoff_position` already computes the real rule from `division_sequence`/
 `wildcard_sequence` (both parsed, both unused by the renderer today), so a
@@ -607,7 +607,7 @@ duplicate `def`s after merging two features that touch the same area.
 `leaders` (#201) is another `[[rotation]]` screen, also opt-in (absent from
 `_default_rotation`): the favourite's top goal scorer, top point getter and
 top two goalies by `gamesPlayed`, from `club-stats/{TEAM}/now`
-(`NHLClient.club_stats()`, hourly TTL `LEADERS_TTL_SECONDS`, same backoff as
+(`HockeyClient.club_stats()`, hourly TTL `LEADERS_TTL_SECONDS`, same backoff as
 standings, cache keyed by team and reset on a favourite switch). No
 minimum-games floor, by the owner's decision: ties -- everyone at zero early
 on -- are broken at random once per fetch (`team_leaders()`), so the pick
@@ -863,11 +863,11 @@ pass to "complete" the screen guide or make it cover every scene kind (its
 `tests/test_blowout.py` pins this; if one of its fence tests fails, the fix is
 never to document it.
 
-Demo mode (#47, `nhl-scoreboard --demo`) loops every scene with synthetic
+Demo mode (#47, `hockey-scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
 like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`
 deliberately bypasses the real state machine -- no `select_scene()`,
-`refresh()`, situation/brightness sampling, config reload or NHL client
+`refresh()`, situation/brightness sampling, config reload or hockey client
 call -- and hands synthetic `Scene`s straight to `draw_scene()` (the
 dispatch half of `draw()`, split out for this). Coercing real game data
 into every state on demand isn't possible, and a bench board may have no
@@ -877,7 +877,7 @@ only draws. Both layouts are shown by toggling `renderer.logos` per step
 between the configured library and `None` (text fallback), restored on
 exit; with `show_logos = false` every step is just text.
 
-## NHL API notes
+## Hockey API notes
 
 - `api-web.nhle.com/v1/score/now` 307-redirects to `/score/{date}`; follow it.
 - `score/now`'s per-team objects include `sog` (shots on goal) directly --
@@ -887,19 +887,19 @@ exit; with `show_logos = false` every step is just text.
   4-on-4 arrives as a situation but is not an advantage.
 - `club-schedule-season/{TEAM}/now` is ~180KB for the season; cached 1h.
 - Team logo URLs are per-team in the score payload; the pattern is
-  `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
+  `assets.nhle.com/logos/hockey/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
 - **Every fetch blocks the render loop**, so a slow API freezes the panel
   (clock, animations, button, goal flash) for as long as the request
   takes. Seen on a real board, 2026-10-10: `score/now` read timeouts at
   10s with three retries each froze it ~44s per poll, ~2.5 min across
-  three back-to-back polls. `nhl/api.py`'s `TIMEOUT` is now `(5, 5)` and a
+  three back-to-back polls. `hockey/api.py`'s `TIMEOUT` is now `(5, 5)` and a
   timed-out connect or read is retried once (quick 429/5xx answers keep
   three), so one stalled poll costs ~10s. Moving fetches off the render
   thread would remove the stall entirely; not done, not yet needed.
 - **One `gamecenter/{id}/landing` request per game per poll (#263).**
   `situation()`, `goal_scoring()` and `three_stars()` all read that URL,
-  and the run loop calls them back to back; `NHLClient._landing` reuses a
+  and the run loop calls them back to back; `HockeyClient._landing` reuses a
   payload fetched in the last `LANDING_REUSE_SECONDS` (5s) for the same
   game, so they share one request instead of making two or three. A failed
   fetch caches nothing. Each feature still keeps its own polling schedule
@@ -927,7 +927,7 @@ exit; with `show_logos = false` every step is just text.
   `timeRemaining: "00:00"`, `running: false`, `inIntermission: false` for
   well over one `live_poll_seconds` cycle, on both `score/now` and
   `gamecenter/{id}/landing`, not just a one-frame flicker. `Game.
-  in_intermission` (`nhl/models.py`) now infers intermission itself from
+  in_intermission` (`hockey/models.py`) now infers intermission itself from
   `timeRemaining == "00:00" and not running` whenever the flag hasn't
   caught up, gated on the game actually being live (`LIVE`/`CRIT`) --
   a `FINAL`/`OFF` game's clock sits at `00:00`/not-running too, and is
@@ -945,8 +945,8 @@ exit; with `show_logos = false` every step is just text.
   board's barrel jack; nothing into the Pi's USB-C.
 - **A wrong `hardware_mapping` is a silent failure, not an error** --
   verified on real hardware (an Adafruit RGB Matrix Bonnet left on the
-  shipped `"regular"` default): `nhl-scoreboard.service` starts, stays
-  active, keeps polling the NHL API, logs nothing wrong -- it is just
+  shipped `"regular"` default): `hockey-scoreboard.service` starts, stays
+  active, keeps polling the hockey API, logs nothing wrong -- it is just
   driving the wrong physical GPIO pins for that adapter, so the panel
   stays completely dark with zero diagnostic signal anywhere
   (`systemctl status`/`journalctl` both look completely healthy).
@@ -1000,7 +1000,7 @@ exit; with `show_logos = false` every step is just text.
   existing WebSocket as base64 (`upload_horn`; `max_size` raised to fit the
   2 MB `HORN_MAX_BYTES` cap) rather than a new HTTP POST path -- the file
   name is never client-supplied, only a validated team key. Files land in
-  `/var/lib/nhl-scoreboard/horns` (`audio.upload_directory()`, persistent
+  `/var/lib/hockey-scoreboard/horns` (`audio.upload_directory()`, persistent
   across reflash/update, unlike `/usr/share`), which `default_directories()`
   searches before the image-baked directory. Not verified on hardware (#4);
   deleting an upload back to the shipped horn is not built.
@@ -1070,7 +1070,7 @@ exit; with `show_logos = false` every step is just text.
   use), which is an ELF dependency `apt` cannot see -- purging
   `python3-dev` alone swept it via `--auto-remove` and broke the image
   (`ImportError: libpython3.13.so.1.0`) even though the required test
-  suite was entirely green. This is *why* `nhl-scoreboard.img` is now a
+  suite was entirely green. This is *why* `hockey-scoreboard.img` is now a
   required check (below): the self-verifying import check in the hook
   caught it correctly, but nothing gated the merge on that check having
   run at all.
@@ -1115,7 +1115,7 @@ exit; with `show_logos = false` every step is just text.
   reading bdebstrap's own internals, not this repo's config -- out of
   scope for what this project needs. Removed from the workflow rather
   than shipped as inert complexity that looks like it's helping.
-- `nhl-scoreboard.img` is a **required status check** on `main`, and
+- `hockey-scoreboard.img` is a **required status check** on `main`, and
   `build-image.yml` runs on `pull_request` (unconditionally at the
   trigger level) with the actual path-relevance check done *inside* the
   workflow, as a job-level `if:` gated by a `changes` job. Do not move
@@ -1177,12 +1177,12 @@ exit; with `show_logos = false` every step is just text.
 
 Infrastructure phase only, sub-issue of #116 -- gets a phone able to reach
 the board at all when it has no working network yet, plus (#132) the
-nearby-network scan `nhl-scoreboard-setup-ap` caches for the setup page to
+nearby-network scan `hockey-scoreboard-setup-ap` caches for the setup page to
 render as a picker. The setup page itself lives in `setup_server.py` (see
 the "WiFi setup page" section below); wiring a submission into the
 credential-submission/rollback flow is #133, not done anywhere yet.
 
-- **Trigger condition** (`image/files/scripts/nhl-scoreboard-setup-ap`,
+- **Trigger condition** (`image/files/scripts/hockey-scoreboard-setup-ap`,
   `cmd_check`/`is_online`): "has a default route", checked with
   `ip route show default`, not "no `[wifi]` configured" -- scoreboard-
   provision's `apply_wifi()` already treats a bare config as "relying on
@@ -1191,7 +1191,7 @@ credential-submission/rollback flow is #133, not done anywhere yet.
   of matching specific interface names (eth0 vs enp0s0 vs a USB dongle
   vary by hardware) -- it is also exactly what the app itself needs to
   reach `api-web.nhle.com`, so "no default route" and "board can't do its
-  job" are the same condition. `nhl-scoreboard-setup-ap.service` orders
+  job" are the same condition. `hockey-scoreboard-setup-ap.service` orders
   itself `After=scoreboard-provision.service`, which already blocks up to
   its own `WIFI_CONNECT_TIMEOUT` resolving any configured Wi-Fi (connect,
   or roll back) before returning -- so by the time this script runs, that
@@ -1209,7 +1209,7 @@ credential-submission/rollback flow is #133, not done anywhere yet.
   whatever this image's Debian release actually ships without a real
   board to check. Treat the open-network path as the intended default,
   not a confirmed one, until it's checked on hardware.
-- **dnsmasq is a genuinely new dependency** (`image/layer/nhl-scoreboard.
+- **dnsmasq is a genuinely new dependency** (`image/layer/hockey-scoreboard.
   yaml`), added for DHCP leases + wildcard DNS (`address=/#/<ap-addr>`, so
   every hostname a phone's OS probes resolves to the board -- that's what
   actually triggers the OS's captive-portal prompt). Flagged here as a
@@ -1218,7 +1218,7 @@ credential-submission/rollback flow is #133, not done anywhere yet.
   is masked at image-build time (a plain `ln -sf /dev/null` symlink, the
   same thing `systemctl mask` itself creates -- not `systemctl mask`
   directly, since there's no running init inside the mmdebstrap chroot for
-  it to talk to): only the scoped instance `nhl-scoreboard-setup-ap`
+  it to talk to): only the scoped instance `hockey-scoreboard-setup-ap`
   starts directly, `--conf-file`'d and `bind-interfaces`'d to the AP
   interface only, ever runs.
 - **No self-monitoring teardown loop.** A WiFi radio cannot be an AP and a
@@ -1228,13 +1228,13 @@ credential-submission/rollback flow is #133, not done anywhere yet.
   end) is meant to be driven by #133's submission flow once *it* confirms
   a real network joined -- not by this script guessing.
 - **`stop` only acts if `start` took over the radio** (`ACTIVE_FILE`,
-  `/run/nhl-scoreboard-setup-ap-active`). The unit's `ExecStopPost` runs
+  `/run/hockey-scoreboard-setup-ap-active`). The unit's `ExecStopPost` runs
   `stop` even when `start` exited at once because the board was already
   online, and the old unconditional `ip addr flush dev wlan0` deleted the
   DHCP address networkd had just got: wlan0 associated, router showed a
   lease, board had no IP and DNS failed ("Temporary failure in name
   resolution") until Ethernet nudged it. Found live via `ip -br addr`.
-- Tested the same way as `nhl-scoreboard-grow-rootfs`/`scoreboard-
+- Tested the same way as `hockey-scoreboard-grow-rootfs`/`scoreboard-
   provision`: the real script, run as a subprocess, with `ip`/`iwctl`/
   `dnsmasq`/`logger` faked on the PATH (`tests/test_setup_ap.py`). What
   that does *not* prove: that `start-open` exists, that a real phone shows
@@ -1248,8 +1248,8 @@ credential-submission/rollback flow is #133, not done anywhere yet.
   `iwctl station <dev> scan` + `get-networks` itself, still in station
   mode, immediately before the `Mode ap` switch above, and caches the
   result as a JSON array of unique SSIDs to
-  `/run/nhl-scoreboard-setup-ap-networks.json`
-  (`NHL_SCOREBOARD_AP_SCAN_FILE`). Has to happen here and only here: this
+  `/run/hockey-scoreboard-setup-ap-networks.json`
+  (`HOCKEY_SCOREBOARD_AP_SCAN_FILE`). Has to happen here and only here: this
   chip can't scan while its own AP is active (see the next section for
   why), so once `Mode ap` is set there is no later point at which a scan
   would even be possible. `parse_networks` is an awk script that anchors
@@ -1295,9 +1295,9 @@ actually joining the chosen network is #133, not built yet.
   offline, so it stays stdlib-only on principle, not just by inheritance)
   -- and is started/stopped by `ScoreboardApp` itself
   (`_sync_setup_server()`, called once per `run()` loop tick), gated on
-  nothing but whether `nhl-scoreboard-setup-ap`'s own state file exists --
+  nothing but whether `hockey-scoreboard-setup-ap`'s own state file exists --
   the same signal `_ap_setup_scene` already keys off of for the panel's QR
-  scene. `nhl-scoreboard.service` already runs as root and already polls
+  scene. `hockey-scoreboard.service` already runs as root and already polls
   that file every frame, so this needed no new unit, no new packaging, and
   no new privilege: binding `wifi_setup.port`'s default of 80 needs root,
   which the service already has.
@@ -1319,7 +1319,7 @@ actually joining the chosen network is #133, not built yet.
   points that host back at this board.
 - **This module never touches iwd/iwctl.** On submit it writes
   `{"ssid": ..., "password": ...}` to
-  `/run/nhl-scoreboard-setup-submission.json` (`ap_submission_state_path`,
+  `/run/hockey-scoreboard-setup-submission.json` (`ap_submission_state_path`,
   atomic tmp+replace, same convention as `Settings.save()`) and nothing
   else -- that file is the hand-off point for #133's still-unbuilt join
   flow, not consumed by anything yet. `password` is `None` for an open
@@ -1341,7 +1341,7 @@ first-time-user constraints -- not #51's original boot-time-only
 assumptions.
 
 - **`apply_wifi()` moved from `scoreboard-provision` into
-  `nhl_scoreboard/wifi.py`**, an importable module, so both the boot-time
+  `hockey_scoreboard/wifi.py`**, an importable module, so both the boot-time
   caller and this live join flow call the exact same tested join/rollback
   path instead of two implementations of "try new credentials, roll back
   on failure." `scoreboard-provision` itself now just parses `[wifi]` out
@@ -1360,11 +1360,11 @@ assumptions.
   the phone's setup-page request arrived over -- killing that connection
   before any response describing success/failure could reach it.
   `wifi_join.py`'s `WifiJoinAttempt` writes a state file
-  (`/run/nhl-scoreboard-wifi-join-state.json`) with `attempting`/
+  (`/run/hockey-scoreboard-wifi-join-state.json`) with `attempting`/
   `connected`/`failed`, read by `_wifi_join_scene()` the same way #141's
   `_ap_setup_scene()` already reads its own -- and given **top** priority
   in `select_scene()`, even over `ap_setup`: a failed attempt restarts
-  `nhl-scoreboard-setup-ap`, which recreates its own state file underneath
+  `hockey-scoreboard-setup-ap`, which recreates its own state file underneath
   the still-counting-down "Failed..." message, and that message has to win
   until its own display window (`OUTCOME_DISPLAY_SECONDS`, 15s) elapses.
 - **The join runs on a background thread**, off `ScoreboardApp.run()`'s own
@@ -1379,7 +1379,7 @@ assumptions.
   not a rare edge case, which matters given the real-hardware finding
   below.
 - **The AP is only ever stopped/started via `systemctl {stop,start}
-  nhl-scoreboard-setup-ap.service`** (#173), never by running the
+  hockey-scoreboard-setup-ap.service`** (#173), never by running the
   setup-ap script directly. `start` ends in `exec dnsmasq`, so dnsmasq is
   the unit's Main PID; the original direct-script call tore the radio down
   under it without systemd ever stopping the unit, orphaning dnsmasq behind
@@ -1391,9 +1391,9 @@ assumptions.
   defensive guard against this chip's known transient mode-switching
   failures, not proven to eliminate them (#4).
 - **`[wifi] connect_timeout_seconds`** (default 90, matching
-  `nhl_scoreboard.wifi`'s own `WIFI_CONNECT_TIMEOUT` default) is a real
+  `hockey_scoreboard.wifi`'s own `WIFI_CONNECT_TIMEOUT` default) is a real
   `WifiConfig` dataclass field now, exposed properly instead of left as the
-  `NHL_SCOREBOARD_WIFI_TIMEOUT` env var (still there, still the underlying
+  `HOCKEY_SCOREBOARD_WIFI_TIMEOUT` env var (still there, still the underlying
   default, but that one's for tests/low-level overrides, not something a
   real user would find). `ssid`/`password`/`country` stay deliberately
   unmodelled in `WifiConfig` -- `scoreboard-provision` reads those straight
@@ -1431,7 +1431,7 @@ when it was written; that history is left as-is rather than rewritten.
 
 - **Story 1 (done): prove the pipeline end to end.** `frontend/` (a Vite +
   React + TypeScript SPA, `frontend/README.md` has the exact run commands)
-  connects over a real WebSocket to `src/nhl_scoreboard/ws_server.py` (a
+  connects over a real WebSocket to `src/hockey_scoreboard/ws_server.py` (a
   new, minimal `websockets`-based server) and displays one real piece of
   app state -- the installed version, the same value
   `updater.installed_version()` already provides the admin page's status
@@ -1493,7 +1493,7 @@ when it was written; that history is left as-is rather than rewritten.
   that are actions on the real system rather than config file edits, and
   the first real use of *push* rather than request/response --
   `updater.check()`/`apply()` run out of process (the real
-  `nhl-scoreboard-update-{now,apply}.service` units `status_server.py`
+  `hockey-scoreboard-update-{now,apply}.service` units `status_server.py`
   already triggers via `systemctl start --no-block`, not reimplemented
   here) and write `updater.STATE_FILE` on their own schedule, with no way
   for this process to know when except by watching for it -- exactly the
@@ -1545,7 +1545,7 @@ when it was written; that history is left as-is rather than rewritten.
   reads it, per the Rendering rules note above). First real use of a new
   `_FieldSpec.restart_required` flag: 12 of the 17 fields are baked into
   the constructed `RGBMatrix` and only take effect after
-  `nhl-scoreboard.service` restarts (see the "wrong hardware_mapping is a
+  `hockey-scoreboard.service` restarts (see the "wrong hardware_mapping is a
   silent failure" hardware note); only the five brightness-related fields
   (`brightness`, `auto_brightness`, `min_brightness`, `max_brightness`,
   `brightness_poll_seconds`) hot-apply. The flag is informational for the
@@ -1612,8 +1612,8 @@ when it was written; that history is left as-is rather than rewritten.
      (`Upgrade: websocket` -- what a real browser's `new WebSocket(...)`
      always sends, checked directly rather than assumed) is let through
      to the existing handler, anything else is served as a static file
-     out of `ADMIN_DIR` (`/usr/share/nhl-scoreboard/admin` on the device,
-     same directory-env-var pattern as fonts' `NHL_SCOREBOARD_FONT_DIR`),
+     out of `ADMIN_DIR` (`/usr/share/hockey-scoreboard/admin` on the device,
+     same directory-env-var pattern as fonts' `HOCKEY_SCOREBOARD_FONT_DIR`),
      falling back to `index.html` for this single-page app's one route.
      No reverse proxy, no second port. `frontend/dist` is a CI build
      product now (`build-image.yml`'s new "Build admin frontend" step,
@@ -1663,12 +1663,12 @@ when it was written; that history is left as-is rather than rewritten.
   Verified two ways, since this story has no #4-style real-hardware
   check available: a full local production-mode run (`npm run build`,
   then `admin_server.py` pointed at the built `dist/` with
-  `NHL_SCOREBOARD_ADMIN_DIR`, no Vite involved at all) -- confirmed the
+  `HOCKEY_SCOREBOARD_ADMIN_DIR`, no Vite involved at all) -- confirmed the
   built page loads, a save round-trips, and the WebSocket still works on
   the same port a static GET does; and the normal Vite-dev-server pass
   used for every earlier story. **Not verified on real hardware** (no Pi
   in this session) -- flagged the same way every other real-hardware-only
-  gap in this project is (see `image/layer/nhl-scoreboard.yaml`'s own
+  gap in this project is (see `image/layer/hockey-scoreboard.yaml`'s own
   `python3-websockets` addition and CLAUDE.md's Image build facts).
 - **Follow-up, same day: the manual verification above is now a real CI
   job.** `tests/e2e/test_admin_page_smoke.py` + `ci.yml`'s `e2e` job do
@@ -1691,7 +1691,7 @@ when it was written; that history is left as-is rather than rewritten.
   `image/files/scripts` and `image/files/systemd` and lists the layer's
   apt packages; `build-app-bundle.py` puts that in `manifest.json` as
   `image`, and the image build writes the same thing to
-  `/usr/share/nhl-scoreboard/image-manifest.json` (`IMAGE_MANIFEST_FILE`),
+  `/usr/share/hockey-scoreboard/image-manifest.json` (`IMAGE_MANIFEST_FILE`),
   the board's record. `updater.check()` stores `image_changes` in the
   state file: `match`, `differs` (changed files plus *new* packages, with
   the `apt-get install -y` command; removed packages are ignored), or
@@ -1711,7 +1711,7 @@ when it was written; that history is left as-is rather than rewritten.
   `[panel]` shown on Display with its own Save (`saveBrightness`): it sends only
   its five fields so a half-edited, restart-required Setup form never rides
   along; a server echo of `[panel]` does replace that unsaved Setup draft.
-  The planned Sports tab (NHL | Football pills) and the decisions it waits on are
+  The planned Sports tab (hockey | Football pills) and the decisions it waits on are
   in #449.
 - **Autosave + Undo (#273).** Every section except Panel and Status saves
   itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
@@ -1798,7 +1798,7 @@ once WiFi has already joined and torn the AP down.
   this page's own SSID/password/QR scene right now. "It's not lighting up"
   cycles to the next of the 3 documented candidates
   (`config.PANEL_HARDWARE_MAPPING_CHOICES`/`next_hardware_mapping`) and
-  restarts `nhl-scoreboard.service` -- no naming/identification knowledge
+  restarts `hockey-scoreboard.service` -- no naming/identification knowledge
   required, just "does the panel show something now, yes or no."
 - **The WiFi form is gated while a trial is unconfirmed.** A successful
   WiFi join tears this very AP down (#133) -- letting someone submit
@@ -1811,7 +1811,7 @@ once WiFi has already joined and torn the AP down.
   sees the card but is never blocked by it. Someone who walks away
   mid-trial comes back to the same card, still gated, until they confirm.
 - **`[panel]` never hot-reloads**, so "try the next option" writes the new
-  value then fires `systemctl restart nhl-scoreboard.service` on a
+  value then fires `systemctl restart hockey-scoreboard.service` on a
   background thread -- restarting only the app, not the whole board, so the
   phone's own connection to the AP is never interrupted, only the setup
   page's process for a couple of seconds. The HTTP response (a
@@ -1820,7 +1820,7 @@ once WiFi has already joined and torn the AP down.
 - **A trial survives the restart it causes, on purpose.** Cycling
   mappings kills and restarts the very process serving the setup page, so
   in-memory state can't track it across that gap --
-  `/run/nhl-scoreboard-hw-mapping-trial.json` does: its existence is the
+  `/run/hockey-scoreboard-hw-mapping-trial.json` does: its existence is the
   gate, its content the JSON list of mappings tried so far (an empty or
   unreadable one, as #180's first version wrote, still gates). The marker
   is written *before* the mapping is saved, and put back if the save
@@ -1854,7 +1854,7 @@ once WiFi has already joined and torn the AP down.
 
 ## Disk-destructive code (grow-rootfs)
 
-`image/files/scripts/nhl-scoreboard-grow-rootfs` edits a live partition
+`image/files/scripts/hockey-scoreboard-grow-rootfs` edits a live partition
 table on the user's SD card. Getting it wrong bricks the card, not just
 the app -- treat any change to it with the care that implies, not the
 same bar as everything else in this repo.
@@ -1889,7 +1889,7 @@ same bar as everything else in this repo.
   matrix never showed anything, `sudo fdisk`/Disk Management from another
   machine showed the root partition still at its original shipped size --
   the `sfdisk` grow never even landed), which #121 responded to by
-  commenting out `image/layer/nhl-scoreboard.yaml`'s `enable-units` call
+  commenting out `image/layer/hockey-scoreboard.yaml`'s `enable-units` call
   for this service as a precaution. #120's own investigation later found
   the actual cause was an outdated SPI EEPROM bootloader on that specific
   board (misreporting RAM size) -- unrelated to this repo or to
@@ -1918,14 +1918,14 @@ same bar as everything else in this repo.
      `fdisk` package a while back (confirmed live: `dpkg -S sfdisk` found
      nothing, `apt-cache policy fdisk` showed `Installed: (none)`); the
      apt package list's own comment wrongly assumed util-linux always
-     carries it. Fixed by adding `fdisk` to `image/layer/nhl-scoreboard.
+     carries it. Fixed by adding `fdisk` to `image/layer/hockey-scoreboard.
      yaml`'s packages. Without it, stage 1 would fail every single boot
      forever (`sfdisk: command not found`, exit 127, the *retryable*
      failure path -- never a hang, just a partition that never grows).
-  With both fixed, verified live: `nhl-scoreboard-grow-rootfs.service`
+  With both fixed, verified live: `hockey-scoreboard-grow-rootfs.service`
   ran stage 1 (`sfdisk`, reboot), then stage 2 automatically on the next
   boot (`resize2fs`), root partition went from 2.5G to 29.5G on a 29.7G
-  card, and `nhl-scoreboard.service` came back up fine afterward. If a
+  card, and `hockey-scoreboard.service` came back up fine afterward. If a
   real board ever hangs or fails to grow again with this enabled, that's
   new evidence of a *different* bug, not this one -- capture it
   (HDMI console, `journalctl`) before changing anything, per #129.
@@ -2022,7 +2022,7 @@ so a stale one prints the wrong case. So:
 `avahi-daemon` advertises the board as `<name>.local`. The default name is
 `scoreboard-xxxx` (last 4 hex of the MAC), chosen once by
 `scoreboard-provision`'s `ensure_hostname()` and remembered in
-`/var/lib/nhl-scoreboard/hostname-chosen`, so boot order with a second board
+`/var/lib/hockey-scoreboard/hostname-chosen`, so boot order with a second board
 can never rename it (avahi's own clash rename isn't remembered).
 
 - **Owner name:** `[status] hostname` (admin page, Status page card) replaces

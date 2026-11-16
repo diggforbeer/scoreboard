@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from nhl_scoreboard.config import (
+from hockey_scoreboard.config import (
     PANEL_HARDWARE_MAPPING_CHOICES,
     ConfigWriteError,
     Settings,
@@ -124,7 +124,7 @@ def test_brightness_clamp_is_kept_within_0_100():
 
 
 def test_inverted_brightness_clamp_is_swapped_not_left_broken(caplog):
-    from nhl_scoreboard.config import PanelConfig
+    from hockey_scoreboard.config import PanelConfig
 
     panel = PanelConfig(min_brightness=80, max_brightness=20)
     assert (panel.min_brightness, panel.max_brightness) == (20, 80)
@@ -132,7 +132,7 @@ def test_inverted_brightness_clamp_is_swapped_not_left_broken(caplog):
 
 
 def test_static_brightness_is_clamped_like_min_and_max():
-    from nhl_scoreboard.config import PanelConfig
+    from hockey_scoreboard.config import PanelConfig
 
     assert PanelConfig(brightness=0).brightness == 1
     assert PanelConfig(brightness=500).brightness == 100
@@ -163,7 +163,7 @@ def test_goal_flash_seconds_is_kept_between_4_and_15(tmp_path, caplog, written, 
 
 
 def test_bad_brightness_poll_seconds_is_floored(caplog):
-    from nhl_scoreboard.config import PanelConfig
+    from hockey_scoreboard.config import PanelConfig
 
     assert PanelConfig(brightness_poll_seconds=0).brightness_poll_seconds == 1.0
     assert "brightness_poll_seconds" in caplog.text
@@ -288,7 +288,7 @@ def test_night_mode_parses_valid_times(tmp_path):
 def test_night_mode_malformed_times_fall_back_with_a_warning(bad, caplog):
     from datetime import time
 
-    from nhl_scoreboard.config import NightModeConfig
+    from hockey_scoreboard.config import NightModeConfig
 
     night = NightModeConfig(start_time=bad, end_time=bad)
     assert (night.start_time, night.end_time) == ("22:30", "07:00")
@@ -299,26 +299,26 @@ def test_night_mode_malformed_times_fall_back_with_a_warning(bad, caplog):
 
 @pytest.mark.parametrize(("given", "expected"), [(-10, 0), (0, 0), (40, 40), (250, 100)])
 def test_night_mode_dim_brightness_clamped_to_0_100(given, expected):
-    from nhl_scoreboard.config import NightModeConfig
+    from hockey_scoreboard.config import NightModeConfig
 
     assert NightModeConfig(dim_brightness=given).dim_brightness == expected
 
 
 @pytest.mark.parametrize(("given", "expected"), [(-10, 0), (0, 0), (40, 40), (250, 100)])
 def test_audio_volume_clamped_to_0_100(given, expected):
-    from nhl_scoreboard.config import AudioConfig
+    from hockey_scoreboard.config import AudioConfig
 
     assert AudioConfig(volume=given).volume == expected
 
 
 def test_audio_volume_defaults_to_100():
-    from nhl_scoreboard.config import AudioConfig
+    from hockey_scoreboard.config import AudioConfig
 
     assert AudioConfig().volume == 100
 
 
 def test_night_mode_bad_suppress_scope_falls_back_to_tracked(caplog):
-    from nhl_scoreboard.config import NightModeConfig
+    from hockey_scoreboard.config import NightModeConfig
 
     assert NightModeConfig(suppress_scope="everyone").suppress_scope == "tracked"
     assert "suppress_scope" in caplog.text
@@ -326,14 +326,14 @@ def test_night_mode_bad_suppress_scope_falls_back_to_tracked(caplog):
 
 @pytest.mark.parametrize(("given", "expected"), [("tracked", "tracked"), (" ALL ", "all")])
 def test_night_mode_valid_suppress_scope_passes_through(given, expected, caplog):
-    from nhl_scoreboard.config import NightModeConfig
+    from hockey_scoreboard.config import NightModeConfig
 
     assert NightModeConfig(suppress_scope=given).suppress_scope == expected
     assert "suppress_scope" not in caplog.text
 
 
 def test_night_mode_cooldown_clamped_to_zero():
-    from nhl_scoreboard.config import NightModeConfig
+    from hockey_scoreboard.config import NightModeConfig
 
     assert NightModeConfig(cooldown_minutes=-5).cooldown_minutes == 0
     assert NightModeConfig(cooldown_minutes=0).cooldown_minutes == 0
@@ -362,7 +362,7 @@ def test_button_parses_its_section(tmp_path):
 
 
 def test_button_mute_minutes_clamped_to_zero(caplog):
-    from nhl_scoreboard.config import ButtonConfig
+    from hockey_scoreboard.config import ButtonConfig
 
     assert ButtonConfig(mute_minutes=-5).mute_minutes == 0
     assert ButtonConfig(mute_minutes=0).mute_minutes == 0
@@ -371,7 +371,7 @@ def test_button_mute_minutes_clamped_to_zero(caplog):
 
 @pytest.mark.parametrize("given", [0, 0.1, -1])
 def test_button_hold_seconds_floored_with_a_warning(given, caplog):
-    from nhl_scoreboard.config import MIN_HOLD_SECONDS, ButtonConfig
+    from hockey_scoreboard.config import MIN_HOLD_SECONDS, ButtonConfig
 
     with caplog.at_level(logging.WARNING):
         assert ButtonConfig(hold_seconds=given).hold_seconds == MIN_HOLD_SECONDS
@@ -379,7 +379,7 @@ def test_button_hold_seconds_floored_with_a_warning(given, caplog):
 
 
 def test_button_reasonable_hold_seconds_left_alone(caplog):
-    from nhl_scoreboard.config import ButtonConfig
+    from hockey_scoreboard.config import ButtonConfig
 
     assert ButtonConfig(hold_seconds=0.5).hold_seconds == 0.5
     assert ButtonConfig(hold_seconds=3).hold_seconds == 3
@@ -403,7 +403,7 @@ def test_rotation_absent_from_file_defaults_to_an_empty_list():
 
 
 def test_rotation_parses_screen_and_seconds_in_file_order(tmp_path):
-    from nhl_scoreboard.config import RotationEntry
+    from hockey_scoreboard.config import RotationEntry
 
     path = tmp_path / "scoreboard.toml"
     path.write_text(
@@ -430,7 +430,7 @@ def test_rotation_parses_screen_and_seconds_in_file_order(tmp_path):
 
 def test_rotation_accepts_the_opt_in_matchup_screen(tmp_path):
     """#157: only reachable by listing it explicitly -- see test_flow's default-rotation test."""
-    from nhl_scoreboard.config import RotationEntry
+    from hockey_scoreboard.config import RotationEntry
 
     path = tmp_path / "scoreboard.toml"
     path.write_text('[[rotation]]\nscreen = "matchup"\nseconds = 6\n')
@@ -439,7 +439,7 @@ def test_rotation_accepts_the_opt_in_matchup_screen(tmp_path):
 
 def test_scores_grid_screen_and_fallback_setting_load(tmp_path):
     """#269: "scores_grid" is a valid rotation screen; the fallback grid is opt-in."""
-    from nhl_scoreboard.config import RotationEntry
+    from hockey_scoreboard.config import RotationEntry
 
     assert Settings().scoreboard.scores_grid is False
     path = tmp_path / "scoreboard.toml"
@@ -452,7 +452,7 @@ def test_scores_grid_screen_and_fallback_setting_load(tmp_path):
 
 
 def test_legacy_scores_rotation_screen_loads_as_scores_grid(tmp_path):
-    from nhl_scoreboard.config import RotationEntry
+    from hockey_scoreboard.config import RotationEntry
 
     path = tmp_path / "scoreboard.toml"
     path.write_text('[[rotation]]\nscreen = "scores"\nseconds = 9\n')
@@ -468,7 +468,7 @@ def test_rotation_entry_with_unknown_screen_is_dropped_with_a_warning(tmp_path, 
 
 @pytest.mark.parametrize("bad_seconds", [0, -5, "soon"])
 def test_rotation_entry_with_non_positive_or_non_numeric_seconds_is_dropped(bad_seconds, caplog):
-    from nhl_scoreboard.config import _parse_rotation
+    from hockey_scoreboard.config import _parse_rotation
 
     entries = _parse_rotation([{"screen": "clock", "seconds": bad_seconds}])
     assert entries == []
@@ -476,7 +476,7 @@ def test_rotation_entry_with_non_positive_or_non_numeric_seconds_is_dropped(bad_
 
 
 def test_rotation_valid_entries_kept_alongside_dropped_invalid_ones(tmp_path):
-    from nhl_scoreboard.config import RotationEntry
+    from hockey_scoreboard.config import RotationEntry
 
     path = tmp_path / "scoreboard.toml"
     path.write_text(
@@ -494,7 +494,7 @@ def test_rotation_valid_entries_kept_alongside_dropped_invalid_ones(tmp_path):
 
 
 def test_save_writes_rotation_as_an_array_of_tables(tmp_path):
-    from nhl_scoreboard.config import RotationEntry
+    from hockey_scoreboard.config import RotationEntry
 
     path = tmp_path / "scoreboard.toml"
     path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
@@ -555,17 +555,17 @@ def test_followed_teams_without_a_favourite_is_just_also_follow():
     assert settings.scoreboard.followed_teams == ["TOR"]
 
 
-def test_sport_defaults_to_nhl_and_accepts_football(tmp_path):
-    assert Settings.load(tmp_path / "missing.toml").scoreboard.sport == "nhl"
+def test_sport_defaults_to_hockey_and_accepts_football(tmp_path):
+    assert Settings.load(tmp_path / "missing.toml").scoreboard.sport == "hockey"
     path = tmp_path / "scoreboard.toml"
     path.write_text('[scoreboard]\nsport = "football"\n')
     assert Settings.load(path).scoreboard.sport == "football"
 
 
-def test_invalid_sport_warns_once_and_falls_back_to_nhl(tmp_path, caplog):
+def test_invalid_sport_warns_once_and_falls_back_to_hockey(tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
     path.write_text('[scoreboard]\nsport = "cricket"\n')
     caplog.set_level(logging.WARNING)
     settings = Settings.load(path)
-    assert settings.scoreboard.sport == "nhl"
+    assert settings.scoreboard.sport == "hockey"
     assert caplog.text.count("scoreboard.sport") == 1

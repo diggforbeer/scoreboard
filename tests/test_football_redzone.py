@@ -7,13 +7,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football import redzone as rz
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.models import FbGame, FbSituation
-from nhl_scoreboard.football.redzone import RedZoneWatcher, attacking_team
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.config import FootballConfig
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football import redzone as rz
+from hockey_scoreboard.football.mode import FootballMode
+from hockey_scoreboard.football.models import FbGame, FbSituation
+from hockey_scoreboard.football.redzone import RedZoneWatcher, attacking_team
+from hockey_scoreboard.football.teams import TEAMS
 from test_football_idle import Clock
 from test_football_idle_selection import (
     BASE,
@@ -185,7 +185,7 @@ def test_a_long_spot_is_fitted_and_a_missing_one_is_left_out():
 
 
 def build(games, *, show=True, wide=True, follow=(), rotation=("fb_preview",)):
-    from nhl_scoreboard.config import RotationEntry  # noqa: F401
+    from hockey_scoreboard.config import RotationEntry  # noqa: F401
 
     clock = Clock(BASE)
     cfg = FootballConfig(

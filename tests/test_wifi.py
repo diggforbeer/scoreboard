@@ -1,4 +1,4 @@
-"""nhl_scoreboard.wifi: the return value and connect_timeout override (#133).
+"""hockey_scoreboard.wifi: the return value and connect_timeout override (#133).
 
 The full join/rollback *behaviour* (profile writing, [Security] compare,
 rollback) is already thoroughly covered at the script level in
@@ -12,7 +12,7 @@ connect_timeout overriding the module-level default.
 Same subprocess-per-call approach as test_scoreboard_provision.py's Rig
 (fresh env vars each call, since IWD_DIR/STATE_FILE/LAST_GOOD_FILE are
 computed once at import time) -- but invoking a small inline script that
-imports nhl_scoreboard.wifi directly, so the actual return value is
+imports hockey_scoreboard.wifi directly, so the actual return value is
 observable, which running the full scoreboard-provision script never lets a
 caller see.
 """
@@ -68,7 +68,7 @@ def rig(tmp_path: Path):
         config_path.write_text(config_toml)
         script = textwrap.dedent(f"""
             from pathlib import Path
-            from nhl_scoreboard.wifi import apply_wifi
+            from hockey_scoreboard.wifi import apply_wifi
             result = apply_wifi(
                 {{"ssid": {ssid!r}, "password": {password!r}}},
                 Path({str(config_path)!r}),
@@ -78,9 +78,9 @@ def rig(tmp_path: Path):
         """)
         env = {
             "PATH": f"{bindir}:{os.environ['PATH']}",
-            "NHL_SCOREBOARD_IWD_DIR": str(iwd_dir),
-            "NHL_SCOREBOARD_WIFI_TIMEOUT": "1",
-            "NHL_SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
+            "HOCKEY_SCOREBOARD_IWD_DIR": str(iwd_dir),
+            "HOCKEY_SCOREBOARD_WIFI_TIMEOUT": "1",
+            "HOCKEY_SCOREBOARD_WIFI_POLL_INTERVAL": "0.1",
             "PYTHONPATH": SRC,
             **(env_extra or {}),
         }
@@ -127,7 +127,7 @@ def test_no_ssid_returns_true_as_nothing_to_do(rig):
 
 
 def test_connect_timeout_override_is_honoured_over_the_env_default(rig):
-    """NHL_SCOREBOARD_WIFI_TIMEOUT is set to 1s by the rig; passing
+    """HOCKEY_SCOREBOARD_WIFI_TIMEOUT is set to 1s by the rig; passing
     connect_timeout=0.2 explicitly should make a failed join give up well
     before even that -- proving the parameter, not the env var, won."""
     import time
@@ -138,7 +138,10 @@ def test_connect_timeout_override_is_honoured_over_the_env_default(rig):
         "badpass",
         "",
         connect_timeout=0.2,
-        env_extra={"FAKE_IWCTL_STATE": "disconnected", "NHL_SCOREBOARD_WIFI_POLL_INTERVAL": "0.05"},
+        env_extra={
+            "FAKE_IWCTL_STATE": "disconnected",
+            "HOCKEY_SCOREBOARD_WIFI_POLL_INTERVAL": "0.05",
+        },
     )
     elapsed = time.monotonic() - start
     assert proc.returncode == 0, proc.stderr

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.display import football_field as ff
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.football.geometry import FIELD_BOTTOM, FIELD_TOP, FieldLayout
-from nhl_scoreboard.football.teams import TEAMS
+from hockey_scoreboard.display import football_field as ff
+from hockey_scoreboard.display.ascii import AsciiCanvas
+from hockey_scoreboard.football.geometry import FIELD_BOTTOM, FIELD_TOP, FieldLayout
+from hockey_scoreboard.football.teams import TEAMS
 from test_football_scenes import (
     Clock,
     Feed,
@@ -119,13 +119,13 @@ def test_the_band_shows_the_clock_the_score_and_the_down(capsys):
     c, _ = field(situation(40, 10, offence="NYG"))
     colors = band_colors(c)
     assert ff.FIRST_DOWN not in colors  # (the field's marker colours are not the band's)
-    from nhl_scoreboard.display import football_scenes as fs
+    from hockey_scoreboard.display import football_scenes as fs
 
     assert fs.LIVE in colors and fs.SITUATION in colors and fs.WHITE in colors
 
 
 def test_the_band_turns_red_in_the_red_zone():
-    from nhl_scoreboard.display import football_scenes as fs
+    from hockey_scoreboard.display import football_scenes as fs
 
     c, _ = field(situation(88, 10, offence="NYG", red=True))
     assert fs.RED_ZONE in band_colors(c) and fs.SITUATION not in band_colors(c)
@@ -137,14 +137,14 @@ def test_the_band_turns_red_in_the_red_zone():
      ("15:00 - 2nd", "2ND 15:00"), ("Halftime", "HALFTIME")],
 )  # fmt: skip
 def test_the_band_clock_is_short_so_the_score_fits(detail, expected):
-    from nhl_scoreboard.display import football_scenes as fs
+    from hockey_scoreboard.display import football_scenes as fs
 
     g = game("WSH", "NYG", "in", 0, 0, short=detail)
     assert fs.band_clock(g, renderer()) == expected
 
 
 def test_goal_to_go_text_is_tightened_to_leave_room_for_the_score():
-    from nhl_scoreboard.display import football_scenes as fs
+    from hockey_scoreboard.display import football_scenes as fs
 
     c, _ = field(situation(5, 5, offence="NYG", red=True, text="1st & Goal"))
     down = [x for (x, y), rgb in c.pixels.items() if y < FIELD_TOP and rgb == fs.RED_ZONE]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fingerprint of what the image build installs outside the app tree (#284).
 
-The in-app updater only swaps ``/opt/nhl-scoreboard`` and the admin page, so
+The in-app updater only swaps ``/opt/hockey-scoreboard`` and the admin page, so
 anything installed elsewhere (scripts in /usr/local/sbin, systemd units, apt
 packages) only changes by reflashing. This records a sha256 per file under
 ``image/files/scripts`` and ``image/files/systemd`` plus the layer's apt
@@ -44,7 +44,7 @@ def build(root: Path = ROOT) -> dict[str, object]:
         for path in sorted((root / "image/files" / directory).iterdir()):
             if path.is_file():
                 files[f"{directory}/{path.name}"] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return {"files": files, "packages": package_list(root / "image/layer/nhl-scoreboard.yaml")}
+    return {"files": files, "packages": package_list(root / "image/layer/hockey-scoreboard.yaml")}
 
 
 if __name__ == "__main__":

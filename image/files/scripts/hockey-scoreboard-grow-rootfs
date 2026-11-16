@@ -1,0 +1,120 @@
+#!/bin/sh
+# Grow the root filesystem to fill whatever card the image was flashed
+# onto. The image ships with a small, fixed-size root partition (see
+# image/config/scoreboard.yaml); most of a real SD card is otherwise
+# unused, with no room for logs to grow.
+#
+# Two-phase across a reboot -- the same technique raspi-config's
+# do_expand_rootfs has used for years (see RPi-Distro/raspi-config). It is
+# NOT reinvented here: growing a partition table entry while its
+# filesystem is mounted only rewrites the table (sector 0), never the
+# data, since the start sector is never moved -- but the running kernel
+# has already cached the old, smaller table in memory and only ever
+# re-reads it fresh at boot, so resize2fs cannot act on the new size
+# until after a reboot. The reboot request is non-blocking and could fail
+# or be skipped, so stage 2 checks one really happened (below) rather
+# than trusting the stage-1 marker alone.
+#
+# Safe by construction:
+#   - refuses unless the root partition is the LAST partition on the disk
+#     (growing one that has another partition after it would overwrite
+#     that partition's data)
+#   - the start sector is passed back to sfdisk explicitly unchanged, on
+#     top of sfdisk's own refusal to write an invalid/overlapping layout
+#   - idempotent and safe to run on every boot: sfdisk validates and
+#     commits its new layout atomically (no partial writes to recover
+#     from), and resize2fs is a documented no-op when there is nothing
+#     left to grow
+#   - stage 2 only runs after a real reboot: the stage-1 marker records
+#     the kernel's boot ID, and a matching ID means the kernel still has
+#     the old table cached, where resize2fs would be a silent no-op that
+#     then marks the whole job done for good. If the boot ID can't be
+#     read, stage 2 trusts the marker exactly as it did before this check
+#   - MBR only (matches this image's layout); GPT would additionally need
+#     its backup header relocated, which this script does not attempt
+#
+# Run by hockey-scoreboard-grow-rootfs.service, gated so it stops trying
+# once $DONE_MARKER exists.
+set -eu
+
+# Overridable so tests/test_grow_rootfs.py can run this against a tmp
+# directory instead of real system state.
+STATE_DIR="${HOCKEY_SCOREBOARD_STATE_DIR:-/var/lib/hockey-scoreboard}"
+GROWN_MARKER="$STATE_DIR/rootfs-partition-grown"
+DONE_MARKER="$STATE_DIR/rootfs-grown"
+#: A fresh random UUID every real boot (boot_id(5); see systemd/journalctl's
+#: own use of the same file). Overridable so tests can simulate "no reboot
+#: happened yet" (same value across two runs) vs. "a real reboot happened"
+#: (different value) without an actual reboot.
+BOOT_ID_FILE="${HOCKEY_SCOREBOARD_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
+CURRENT_BOOT_ID=$(cat "$BOOT_ID_FILE" 2>/dev/null || echo "")
+
+log() {
+    logger -t hockey-scoreboard-grow-rootfs "$1"
+    echo "$1"
+}
+
+if [ -f "$DONE_MARKER" ]; then
+    exit 0
+fi
+mkdir -p "$STATE_DIR"
+
+# findmnt's reported source isn't always a /dev/mmcblkXpY-style path --
+# confirmed live on real hardware (#129), it reported /dev/disk/by-slot/
+# system, an alias with no trailing partition number. The digit-extraction
+# below silently produced an empty PART_NUM, which never matched
+# LAST_PART_NUM, tripping the "not the last partition" safety refusal (and
+# permanently marking DONE_MARKER) even though the partition genuinely was
+# last -- resize2fs was never even attempted. readlink -f canonicalises
+# whatever alias findmnt hands back (by-slot, by-partuuid, by-label, ...)
+# to the real /dev/mmcblkXpY node every other line here already assumes.
+ROOT_PART=$(readlink -f "$(findmnt / -o source -n)")
+ROOT_DEV="/dev/$(lsblk -no pkname "$ROOT_PART")"
+PART_NUM=$(echo "$ROOT_PART" | grep -o '[0-9]*$')
+
+if [ -f "$GROWN_MARKER" ]; then
+    # Stage 2: we grew the partition table on a previous boot and have
+    # since rebooted, so the kernel now sees the larger partition --
+    # unless the marker's boot ID says we haven't rebooted after all.
+    MARKER_BOOT_ID=$(cat "$GROWN_MARKER")
+    if [ -n "$CURRENT_BOOT_ID" ] && [ "$MARKER_BOOT_ID" = "$CURRENT_BOOT_ID" ]; then
+        log "Partition grown but no reboot has happened yet; requesting it again"
+        systemctl --no-block reboot
+        exit 1
+    fi
+    log "Growing filesystem on $ROOT_PART to fill its partition"
+    if resize2fs "$ROOT_PART"; then
+        touch "$DONE_MARKER"
+        rm -f "$GROWN_MARKER"
+        log "Root filesystem grown; done"
+        exit 0
+    fi
+    log "resize2fs failed; will retry next boot"
+    exit 1
+fi
+
+# Stage 1: grow the partition table entry, then reboot so the kernel
+# re-reads it fresh.
+LAST_PART_NUM=$(parted "$ROOT_DEV" -ms unit s p | tail -n 1 | cut -f 1 -d:)
+if [ "$LAST_PART_NUM" != "$PART_NUM" ]; then
+    log "$ROOT_PART (partition $PART_NUM) is not the last partition on $ROOT_DEV (that's $LAST_PART_NUM); refusing to grow it"
+    touch "$DONE_MARKER"
+    exit 0
+fi
+
+PART_START=$(parted "$ROOT_DEV" -ms unit s p | grep "^${PART_NUM}:" | cut -f 2 -d: | sed 's/[^0-9]//g')
+if [ -z "$PART_START" ]; then
+    log "Could not determine the start of $ROOT_PART; refusing to grow it"
+    touch "$DONE_MARKER"
+    exit 0
+fi
+
+log "Growing partition $PART_NUM on $ROOT_DEV (start sector $PART_START unchanged, size -> max)"
+if ! printf '%s,+\n' "$PART_START" | sfdisk --no-reread -N "$PART_NUM" "$ROOT_DEV"; then
+    log "sfdisk failed; partition table left untouched, will retry next boot"
+    exit 1
+fi
+
+printf '%s\n' "$CURRENT_BOOT_ID" > "$GROWN_MARKER"
+log "Partition table grown; rebooting so the kernel picks it up"
+systemctl --no-block reboot
