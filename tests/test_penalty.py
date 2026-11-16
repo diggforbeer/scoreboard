@@ -14,6 +14,7 @@ from scoreboard.display.matrix import Backend
 from scoreboard.display.renderer import Renderer
 from scoreboard.display.teams import team_color
 from scoreboard.hockey.models import Penalty, penalties_from_landing
+from teamcfg import set_favourite
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 from test_flow import (
     FAV,
@@ -280,6 +281,6 @@ def test_penalties_are_polled_only_for_the_favourites_live_game(live):
 
 def test_no_favourite_means_no_polling(live):
     app, _clock, client = live
-    app.settings.scoreboard.favourite_team = ""
+    set_favourite(app.settings, "")
     app.refresh_penalties()
     assert client.penalty_calls == []

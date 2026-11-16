@@ -43,7 +43,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from PIL import Image, ImageDraw  # noqa: E402
 
 from scoreboard.app import ScoreboardApp  # noqa: E402
-from scoreboard.config import Settings  # noqa: E402
+from scoreboard.config import Settings, TeamEntry  # noqa: E402
 from scoreboard.demo import demo_steps  # noqa: E402
 from scoreboard.display.ascii import AsciiCanvas  # noqa: E402
 from scoreboard.display.logos import LogoLibrary  # noqa: E402
@@ -109,6 +109,8 @@ def make_app(logos: LogoLibrary) -> ScoreboardApp:
 
     settings = Settings()
     settings.status.enabled = False
+    # The docs images show Nashville's screens: it is the favourite the demo steps are built around.
+    settings.teams = [TeamEntry("hockey", "NSH")]
     backend = Backend(
         name="render-screens",
         RGBMatrix=_Matrix,
@@ -224,7 +226,7 @@ def _render(real_logos: bool, sport: str) -> dict[str, Image.Image]:
                 app.renderer.football_logos = LogoSet("football", "dark", libraries)
             steps = football_demo_steps(NOW)
         else:
-            steps = demo_steps(app.settings.scoreboard.favourite_team, NOW)
+            steps = demo_steps("NSH", NOW)
         images = {step.name: to_image(capture(app, step)) for step in steps}
     return images
 

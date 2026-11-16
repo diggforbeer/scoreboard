@@ -43,6 +43,7 @@ from scoreboard.hockey.models import (
     Star,
 )
 from scoreboard.wifi_join import WifiJoinAttempt
+from teamcfg import apply_team_kwargs, set_favourite, set_follow
 
 
 class FakeCanvas:
@@ -194,6 +195,7 @@ def games() -> list[Game]:
 
 def build_app(fake_backend, games, **scoreboard_kwargs) -> ScoreboardApp:
     settings = Settings()
+    scoreboard_kwargs = apply_team_kwargs(settings, scoreboard_kwargs)
     for key, value in scoreboard_kwargs.items():
         setattr(settings.scoreboard, key, value)
     return ScoreboardApp(settings, client=FakeClient(games), backend=fake_backend)
@@ -402,7 +404,7 @@ def test_with_situation_attaches_and_stale_entries_are_dropped(fake_backend, gam
     assert shown.id == game.id
 
     # Change favourite and move on: the CGY entry is no longer a target.
-    app.settings.scoreboard.favourite_team = "NYI"  # final, not live
+    set_favourite(app.settings, "NYI")  # final, not live
     while app.games[app.index].involves("CGY"):
         app.advance()
     app.refresh_situations()
@@ -677,21 +679,21 @@ def test_reload_noop_without_a_source_file(fake_backend, games):
 
 def test_reload_noop_when_file_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     assert app.reload_config_if_changed() is False
 
 
 def test_reload_picks_up_a_changed_setting(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
 
-    path.write_text('[scoreboard]\nfavourite_team = "TOR"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "TOR"\n[scoreboard]\n')
     _touch_later(path, app)
 
     assert app.reload_config_if_changed() is True
-    assert app.settings.scoreboard.favourite_team == "TOR"
+    assert app._hockey_cfg().favourite_team == "TOR"
 
 
 def test_reload_invalidates_schedule_cache_on_favourite_team_change(fake_backend, games, tmp_path):
@@ -703,13 +705,13 @@ def test_reload_invalidates_schedule_cache_on_favourite_team_change(fake_backend
     season-series screen (#157) kept showing the old opponent after a
     favourite switch -- it's fed straight from next_favourite_game()."""
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     # Simulate an already-fetched, still-fresh schedule cache for the old favourite.
     app._schedule = (app.monotonic(), games)
     app._schedule_retry_after = app.monotonic() + 100
 
-    path.write_text('[scoreboard]\nfavourite_team = "TOR"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "TOR"\n[scoreboard]\n')
     _touch_later(path, app)
     app.reload_config_if_changed()
 
@@ -719,14 +721,16 @@ def test_reload_invalidates_schedule_cache_on_favourite_team_change(fake_backend
 
 def test_reload_keeps_schedule_cache_when_favourite_team_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "UTC"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\ntimezone = "UTC"\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     app._schedule = (app.monotonic(), games)
     app._schedule_retry_after = app.monotonic() + 100
     cached = app._schedule
 
     # Change something unrelated -- the schedule cache must survive.
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\ntimezone = "America/Chicago"\n')
+    path.write_text(
+        '[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\ntimezone = "America/Chicago"\n'
+    )
     _touch_later(path, app)
     app.reload_config_if_changed()
 
@@ -740,7 +744,7 @@ def test_favourite_team_switch_triggers_a_fresh_schedule_fetch(fake_backend, gam
     invalidation actually changes real fetch behaviour, not just internal
     bookkeeping."""
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "EDM"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "EDM"\n[scoreboard]\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     app.refresh()
     assert app.favourite_game_today() is None
@@ -753,7 +757,7 @@ def test_favourite_team_switch_triggers_a_fresh_schedule_fetch(fake_backend, gam
     app.next_favourite_game()
     assert app.client.schedule_calls == 1
 
-    path.write_text('[scoreboard]\nfavourite_team = "WPG"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "WPG"\n[scoreboard]\n')
     _touch_later(path, app)
     app.reload_config_if_changed()
 
@@ -763,14 +767,14 @@ def test_favourite_team_switch_triggers_a_fresh_schedule_fetch(fake_backend, gam
 
 def test_reload_keeps_previous_settings_on_parse_error(fake_backend, games, tmp_path, caplog):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
 
     path.write_text("this is not valid toml [[[")
     _touch_later(path, app)
 
     assert app.reload_config_if_changed() is False
-    assert app.settings.scoreboard.favourite_team == "NSH"
+    assert app._hockey_cfg().favourite_team == "NSH"
     assert "reload failed" in caplog.text.lower()
 
 
@@ -1063,7 +1067,7 @@ def night_app(
     fake_backend, games, now=NIGHT, sensor=None, favourite="NSH", **night_kwargs
 ) -> ScoreboardApp:
     settings = Settings()
-    settings.scoreboard.favourite_team = favourite
+    set_favourite(settings, favourite)
     settings.night_mode.enabled = True
     for key, value in night_kwargs.items():
         setattr(settings.night_mode, key, value)
@@ -1129,7 +1133,7 @@ def test_tracked_scope_other_live_games_do_not_suppress(fake_backend, games):
 
 def test_tracked_scope_counts_followed_teams_live_games(fake_backend, games):
     app = night_app(fake_backend, games, favourite="NSH", suppress_scope="tracked")
-    app.settings.scoreboard.also_follow = ["CAR"]  # CAR@FLA is live
+    set_follow(app.settings, ["CAR"])  # CAR@FLA is live
     assert app._night_mode_suppressed()
 
 
@@ -1260,11 +1264,15 @@ def test_reload_drops_light_sensor_when_auto_brightness_turned_off(fake_backend,
 
 def test_reload_keeps_light_sensor_when_auto_brightness_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[panel]\nauto_brightness = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text(
+        '[panel]\nauto_brightness = true\n[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n'
+    )
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     old_sensor = app.light_sensor
 
-    path.write_text('[panel]\nauto_brightness = true\n[scoreboard]\nfavourite_team = "TOR"\n')
+    path.write_text(
+        '[panel]\nauto_brightness = true\n[[teams]]\nsport = "hockey"\nteam = "TOR"\n[scoreboard]\n'
+    )
     _touch_later(path, app)
     app.reload_config_if_changed()
 
@@ -1316,11 +1324,15 @@ def test_reload_rebuilds_admin_server_on_port_change(fake_backend, games, tmp_pa
 
 def test_reload_keeps_admin_server_when_status_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text(
+        '[status]\nenabled = true\n[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n'
+    )
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     old_server = app.admin_server
 
-    path.write_text('[status]\nenabled = true\n[scoreboard]\nfavourite_team = "TOR"\n')
+    path.write_text(
+        '[status]\nenabled = true\n[[teams]]\nsport = "hockey"\nteam = "TOR"\n[scoreboard]\n'
+    )
     _touch_later(path, app)
     app.reload_config_if_changed()
 
@@ -1450,7 +1462,7 @@ def test_horn_plays_again_once_mute_minutes_pass(fake_backend, games, mock_pins)
 
     src.now += 1
     app._on_goal(game)
-    assert app.horn.calls == [app.settings.scoreboard.favourite_team]
+    assert app.horn.calls == [app._hockey_cfg().favourite_team]
 
 
 def test_mute_minutes_zero_never_mutes(fake_backend, games, mock_pins):
@@ -1559,7 +1571,9 @@ def test_reload_rebuilds_button_on_pin_or_hold_change(
 
 def test_reload_keeps_button_when_button_unchanged(fake_backend, games, tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[button]\nenabled = true\n[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text(
+        '[button]\nenabled = true\n[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n'
+    )
     spy = SpyButton()
     app = ScoreboardApp(
         Settings.load(path), client=FakeClient(games), backend=fake_backend, button=spy
@@ -1567,7 +1581,8 @@ def test_reload_keeps_button_when_button_unchanged(fake_backend, games, tmp_path
 
     # mute_minutes is read per press, so changing it alone needs no rebuild either.
     path.write_text(
-        '[button]\nenabled = true\nmute_minutes = 5\n[scoreboard]\nfavourite_team = "TOR"\n'
+        "[button]\nenabled = true\nmute_minutes = 5\n"
+        '[[teams]]\nsport = "hockey"\nteam = "TOR"\n[scoreboard]\n'
     )
     _touch_later(path, app)
     app.reload_config_if_changed()
@@ -1612,12 +1627,15 @@ def test_admin_page_save_writes_file_and_reload_picks_it_up(fake_backend, games,
     reload_config_if_changed() (#51) -- polled every main-loop tick -- is
     what actually applies the change to the running app."""
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text(
+        "[status]\nenabled = true\nport = 0\n"
+        '[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n'
+    )
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     assert app.admin_server is not None
     app.admin_server.start()
     try:
-        data = _save_data_for(app.settings, "scoreboard", favourite_team="TOR")
+        data = _save_data_for(app.settings, "scoreboard", rotate_seconds=21.0)
         ack = _ws_save(app.admin_server.port, "scoreboard", data)
         assert ack["type"] == "saved"
     finally:
@@ -1625,10 +1643,10 @@ def test_admin_page_save_writes_file_and_reload_picks_it_up(fake_backend, games,
 
     # Not applied yet -- the admin server's own thread never touches the
     # live Settings.
-    assert app.settings.scoreboard.favourite_team == "NSH"
+    assert app.settings.scoreboard.rotate_seconds == 8.0
     _touch_later(path, app)
     assert app.reload_config_if_changed() is True
-    assert app.settings.scoreboard.favourite_team == "TOR"
+    assert app.settings.scoreboard.rotate_seconds == 21.0
 
 
 def test_admin_page_save_disabling_status_does_not_crash_in_flight_request(
@@ -1657,7 +1675,10 @@ def test_admin_page_save_concurrent_with_reload_does_not_raise(fake_backend, gam
     """A save from the admin server's own thread and reload_config_if_changed() on the
     main thread running at the same time must not raise or deadlock (#110 SS1)."""
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[status]\nenabled = true\nport = 0\n[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text(
+        "[status]\nenabled = true\nport = 0\n"
+        '[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n'
+    )
     app = ScoreboardApp(Settings.load(path), client=FakeClient(games), backend=fake_backend)
     app.admin_server.start()
     errors: list[Exception] = []
@@ -1701,8 +1722,10 @@ TICKS_PER_SCENE = round(DEMO_SCENE_SECONDS / FRAME_INTERVAL)
 
 def demo_app(fake_backend, games, **panel_kwargs) -> tuple[ScoreboardApp, FakeClockSource]:
     src = FakeClockSource()
+    settings = Settings()
+    set_favourite(settings, "NSH")  # the demo shows a favourite's screens
     app = ScoreboardApp(
-        Settings(),
+        settings,
         client=FakeClient(games),
         backend=fake_backend,
         clock=lambda: DEMO_NOW,
@@ -1792,7 +1815,7 @@ def test_demo_draws_each_step_in_order_for_demo_scene_seconds(fake_backend, game
     app, src = demo_app(fake_backend, games)
     stub_renderer(app)
     calls = spy_draw_scene(app)
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     run_demo_for_frames(app, src, 3 * TICKS_PER_SCENE)
 
@@ -1805,7 +1828,7 @@ def test_demo_loops_back_to_the_first_step(fake_backend, games):
     app, src = demo_app(fake_backend, games)
     stub_renderer(app)
     calls = spy_draw_scene(app)
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     run_demo_for_frames(app, src, demo_ticks(steps) + TICKS_PER_SCENE)
 
@@ -1826,7 +1849,7 @@ def test_demo_never_touches_the_real_state_machine(fake_backend, games):
         "_on_goal",
     ):
         setattr(app, name, lambda *a, _name=name, **k: forbidden.append(_name))
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     run_demo_for_frames(app, src, demo_ticks(steps))
 
@@ -1841,7 +1864,7 @@ def test_demo_goal_scenes_never_play_the_horn(fake_backend, games):
     app, src = demo_app(fake_backend, games)
     stub_renderer(app)
     calls = spy_draw_scene(app)
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     run_demo_for_frames(app, src, demo_ticks(steps, 2))
 
@@ -1879,7 +1902,7 @@ def test_demo_toggles_logos_per_step_and_restores_them(fake_backend, games):
     library = object()
     app.renderer.logos = library
     calls = spy_draw_scene(app)
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     run_demo_for_frames(app, src, demo_ticks(steps))
 
@@ -1896,7 +1919,7 @@ def test_demo_without_a_logo_library_draws_everything_as_text(fake_backend, game
     stub_renderer(app)
     app.renderer.logos = None  # show_logos = false
     calls = spy_draw_scene(app)
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     run_demo_for_frames(app, src, demo_ticks(steps))
 
@@ -1922,7 +1945,7 @@ def test_the_favourites_goal_plays_the_goal_light_from_the_moment_of_the_goal(fa
     drawn = []
     app.renderer.draw_goal = lambda canvas, game, team, age: drawn.append(age)
     live = next(g for g in games if g.is_live)
-    favourite = app.settings.scoreboard.favourite_team
+    favourite = app._hockey_cfg().favourite_team
     app.last_goal = (live.id, app.monotonic(), favourite)
 
     app.draw_scene(Scene("goal", live, goal_team=favourite))
@@ -2539,7 +2562,7 @@ def test_live_demo_steps_through_scenes_then_returns_to_real_scenes(fake_backend
     app, src = demo_app(fake_backend, games)
     stub_renderer(app)
     calls = spy_draw_scene(app)
-    steps = demo_steps(app.settings.scoreboard.favourite_team, DEMO_NOW)
+    steps = demo_steps(app._hockey_cfg().favourite_team, DEMO_NOW)
 
     app.set_demo_mode(True)
     app.draw()

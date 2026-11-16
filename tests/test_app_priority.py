@@ -72,15 +72,12 @@ class FootballFeed:
 
 
 class Rig:
-    def __init__(self, backend, teams, *, legacy_sport="hockey"):
+    def __init__(self, backend, teams):
         self.clock = Clock(START)
         self.hockey = HockeyClient()
         self.football = FootballFeed()
         self.horn = RecordingHorn()
         settings = Settings()
-        settings.scoreboard.sport = legacy_sport
-        settings.scoreboard.favourite_team = NSH
-        settings.football.favourite_team = TEN
         settings.teams = [TeamEntry(s, t) for s, t in teams]
         self.settings = settings
         self.app = ScoreboardApp(
@@ -144,17 +141,36 @@ def test_a_football_team_on_top_starts_the_board_on_football(backend):
     assert rig.sport == "football" and rig.app._football is not None
 
 
-def test_without_a_ranked_list_nothing_changes_hockey_alone_builds_no_football_mode(backend):
+def test_with_no_team_ranked_both_feeds_run_and_the_board_starts_on_hockey(backend):
     rig = Rig(backend, [])
-    assert rig.app._football is None and rig.sport == "hockey"
+    assert rig.app._football is not None and rig.sport == "hockey"
 
 
-def test_without_a_ranked_list_the_old_sport_setting_still_decides(backend):
-    rig = Rig(backend, [], legacy_sport="football")
-    assert rig.sport == "football" and rig.app._football is not None
-    rig.hockey.today, rig.football.games = [nsh_live()], [ten_far()]
-    rig.poll(60)
-    assert rig.sport == "football", "no list: the list does not choose"
+def test_a_hockey_only_list_never_builds_football_s_mode_and_a_football_only_one_skips_hockey(
+    backend,
+):
+    hockey_only = Rig(backend, [("hockey", NSH)])
+    assert hockey_only.app._football is None, (
+        "no football team is ranked: football's feed is not polled"
+    )
+    football_only = Rig(backend, [("football", TEN)])
+    assert football_only.app._football is not None and football_only.sport == "football"
+    football_only.hockey.today, football_only.football.games = [nsh_live()], [ten_far()]
+    football_only.poll(60)
+    assert football_only.hockey.polls == 0, "no hockey team is ranked: hockey's feed is not polled"
+
+
+def test_with_no_team_ranked_a_live_game_takes_the_board_hockey_first_else_football(backend):
+    rig = Rig(backend, [])
+    rig.hockey.today, rig.football.games = [nsh_live()], [ten_live()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "hockey"
+    rig.hockey.today = [nsh_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "football", "only football has a live game"
+    rig.football.games = [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "hockey", "nothing live: hockey keeps the board (every game, or the clock)"
 
 
 # -- the list chooses the sport ------------------------------------------------------------------
@@ -187,17 +203,10 @@ def test_a_lower_ranked_team_does_not_pull_the_board_off_a_higher_ranked_live_ga
 
 
 def test_a_countdown_counts_across_sports(backend):
-    rig = Rig(backend, [("football", TEN), ("hockey", NSH)], legacy_sport="hockey")
+    rig = Rig(backend, [("football", TEN), ("hockey", NSH)])
     rig.hockey.today, rig.football.games = [nsh_far()], [ten_soon()]
     rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
     assert rig.sport == "football", "TEN is 30 minutes from kickoff, inside football's window"
-
-
-def test_with_nothing_on_the_top_teams_sport_has_the_idle_screens(backend):
-    rig = Rig(backend, [("football", TEN), ("hockey", NSH)], legacy_sport="hockey")
-    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
-    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
-    assert rig.sport == "football"
 
 
 def test_a_final_is_held_across_a_sport_change(backend):
@@ -294,17 +303,27 @@ def test_a_failing_football_feed_does_not_stop_hockey(backend):
 # -- editing the list while running --------------------------------------------------------------
 
 
-def test_a_first_ranked_team_starts_football_s_feed_and_an_empty_list_hands_back_to_the_setting(
-    backend,
-):
-    rig = Rig(backend, [])
+def test_editing_the_list_starts_and_stops_football_s_feed_and_switches_at_once(backend):
+    rig = Rig(backend, [("hockey", NSH)])
     assert rig.app._football is None
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_live()]
     new = Settings()
     new.teams = [TeamEntry("football", TEN)]
-    rig.app._apply_teams_change(_adopt(rig.app, new))
-    assert rig.app._football is not None, "football's feed now runs beside hockey's"
-    rig.app._apply_teams_change(_adopt(rig.app, Settings()))
-    assert rig.sport == "hockey" and rig.app._football is None, "the old setting decides again"
+    rig.app._apply_reloaded_settings(_adopt_copy(rig.app, new))
+    assert rig.app._football is not None, "football's feed now runs"
+    rig.app._football.worker.poll_once()
+    rig.poll(0)
+    assert rig.sport == "football", "an edit takes effect now, not after the dwell"
+    back = Settings()
+    back.teams = [TeamEntry("hockey", NSH)]
+    rig.app._apply_reloaded_settings(_adopt_copy(rig.app, back))
+    assert rig.app._football is None and rig.sport == "hockey"
+
+
+def _adopt_copy(app, new):
+    """The reloaded settings object the app is handed (keeps the old one's source path)."""
+    new.source_path = app.settings.source_path
+    return new
 
 
 def _adopt(app, new):
@@ -322,9 +341,15 @@ def nyg_live():
     return football_game("DAL", NYG, "in", 3, 7, game_id=30)
 
 
-def test_without_a_list_football_reads_the_real_settings_object(backend):
-    rig = Rig(backend, [], legacy_sport="football")
-    assert rig.app._football_cfg() is rig.settings.football
+def test_with_no_team_ranked_football_has_no_favourite_and_no_horn(backend):
+    rig = Rig(backend, [])
+    cfg = rig.app._football_cfg()
+    assert (cfg.favourite_team, cfg.also_follow, cfg.followed_teams, cfg.horn_team) == (
+        "",
+        [],
+        [],
+        "",
+    )
 
 
 def test_the_owner_is_football_s_favourite_and_the_other_ranked_teams_are_followed(backend):
@@ -381,9 +406,15 @@ def tor_live():
     return game(2, "MTL", TOR, START, "LIVE")
 
 
-def test_without_a_list_hockey_reads_the_real_settings_object(backend):
+def test_with_no_team_ranked_hockey_has_no_favourite_and_no_horn(backend):
     rig = Rig(backend, [])
-    assert rig.app._hockey_cfg() is rig.settings.scoreboard
+    cfg = rig.app._hockey_cfg()
+    assert (cfg.favourite_team, cfg.also_follow, cfg.followed_teams, cfg.horn_team) == (
+        "",
+        [],
+        [],
+        "",
+    )
 
 
 def test_the_owner_is_hockey_s_favourite_and_the_lead_keeps_the_horn(backend):
@@ -423,13 +454,6 @@ def test_an_owner_that_is_not_the_lead_gets_the_ding_and_not_the_horn(backend):
     assert rig.app._hockey_cfg().favourite_team == TOR
     rig.app._on_goal(rig.hockey.today[1], TOR)
     assert rig.horn.calls == [] and rig.horn.ding_calls == 1
-
-
-def test_without_a_list_the_favourites_goal_still_sounds_the_horn(backend):
-    rig = Rig(backend, [])
-    rig.hockey.today = [nsh_live()]
-    rig.app._on_goal(rig.hockey.today[0], NSH)
-    assert rig.horn.calls == [NSH] and rig.horn.ding_calls == 0
 
 
 def test_when_the_owner_changes_the_favourite_s_cached_schedule_and_leaders_are_dropped(backend):
@@ -530,11 +554,11 @@ def test_an_owner_interrupts_the_alternation_and_hands_back(backend):
     assert {s for s, _ in idle_runs(rig, seconds=200)} == {"hockey", "football"}
 
 
-def test_without_a_list_the_idle_rotation_is_untouched(backend):
+def test_with_no_team_ranked_the_idle_rotation_is_not_shifted(backend):
     rig = Rig(backend, [])
     rig.hockey.today = [nsh_far()]
     rig.poll(60)
-    assert rig.app._idle_origin == 0.0 and rig.app._football is None
+    assert rig.app._idle_origin == 0.0
 
 
 def test_hockey_s_rotation_starts_at_the_idle_origin(backend):
@@ -558,10 +582,10 @@ def test_hockey_s_rotation_starts_at_the_idle_origin(backend):
 # -- colours follow the overall rank 1 (#478) ----------------------------------------------------
 
 
-def test_without_a_list_the_colours_are_the_favourites_as_before(backend):
+def test_with_no_team_ranked_the_colours_are_plain(backend):
     rig = Rig(backend, [])
-    assert rig.app._colour_scheme(NSH) == ("hockey", NSH)
-    assert rig.app._colour_scheme(NSH, clock=True) == ("hockey", NSH)
+    assert rig.app._colour_scheme(NSH) == ("hockey", "")
+    assert rig.app._colour_scheme(NSH, clock=True) == ("hockey", "")
 
 
 def test_the_colours_follow_the_overall_rank_1_whatever_sport_is_on_screen(backend):

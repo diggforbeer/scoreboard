@@ -17,7 +17,7 @@ import pytest
 from RGBMatrixEmulator import graphics
 
 from scoreboard.app import Scene, ScoreboardApp
-from scoreboard.config import FootballConfig, ScoreboardConfig, Settings
+from scoreboard.config import FootballConfig, ScoreboardConfig, Settings, TeamEntry
 from scoreboard.display import football_scenes as fs
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.display.fonts import FontSet
@@ -27,6 +27,7 @@ from scoreboard.football.mode import FB_SCENE_KINDS, FootballMode
 from scoreboard.football.models import FbGame
 from scoreboard.football.teams import TEAMS, team_color
 from scoreboard.football.worker import STALE_AFTER_SECONDS
+from teamcfg import fcfg
 from test_app import FakeOptions
 from test_mirror import AsciiMatrix, as_pixels
 
@@ -293,7 +294,7 @@ def games_for_selection():
 
 def mode(favourite="", follow=(), rotate=8.0):
     scoreboard = dataclasses.replace(ScoreboardConfig(), rotate_seconds=rotate)
-    football = FootballConfig(favourite_team=favourite, also_follow=list(follow))
+    football = fcfg(favourite_team=favourite, also_follow=list(follow))
     return FootballMode(lambda: scoreboard, client_factory=lambda: None, football=lambda: football)
 
 
@@ -413,7 +414,7 @@ def test_an_empty_slate_is_the_clock_or_no_games_not_no_data():
     narrow = FootballMode(client_factory=lambda: Feed([]), monotonic=clock, wide=lambda: False)
     narrow.worker.poll_once()
     assert narrow.scene().kind == "clock"
-    no_clock = FootballConfig(rotation=[{"screen": "fb_week", "seconds": 8}])
+    no_clock = fcfg(rotation=[{"screen": "fb_week", "seconds": 8}])
     bare = FootballMode(client_factory=lambda: Feed([]), monotonic=clock, football=lambda: no_clock)
     bare.worker.poll_once()
     assert bare.scene().kind == "fb_no_games"
@@ -466,11 +467,9 @@ def app(tmp_path) -> ScoreboardApp:
     clock = Clock()
     settings = Settings()
     settings.status.enabled = False
-    settings.scoreboard.sport = "football"
+    settings.teams = [TeamEntry("football", "NYG")]  # the favourite; football is the only sport
     # Only the clock in the idle rotation: these tests are about the plain game-day scenes.
-    settings.football = FootballConfig(
-        favourite_team="NYG", rotation=[{"screen": "clock", "seconds": 6}]
-    )
+    settings.football = FootballConfig(rotation=[{"screen": "clock", "seconds": 6}])
     feed = Feed([])
     app = ScoreboardApp(
         settings,
@@ -551,7 +550,7 @@ def test_the_status_box_reports_the_football_feed(app):
 
 
 def test_april_fools_never_relabels_football_scenes(app):
-    app.settings.scoreboard.favourite_team = "NSH"
+    app.settings.teams = [TeamEntry("football", "NYG"), TeamEntry("hockey", "NSH")]
     app.clock = lambda: datetime(2027, 4, 1, 19, 0, tzinfo=UTC)
     app.feed.answers = [[GAMES["live"]]]
     app._football.worker.poll_once()

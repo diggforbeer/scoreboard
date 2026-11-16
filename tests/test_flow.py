@@ -37,6 +37,7 @@ from scoreboard.hockey.models import (
     StandingsRow,
     Star,
 )
+from teamcfg import apply_team_kwargs, set_favourite, set_follow
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 
 FAV = "NSH"
@@ -204,7 +205,8 @@ class FakeFootballClient:
 
 def make_app(fake_backend, clock: Clock, client: FlowClient, horn=None, **cfg) -> ScoreboardApp:
     settings = Settings()
-    settings.scoreboard.favourite_team = FAV
+    set_favourite(settings, FAV)
+    cfg = apply_team_kwargs(settings, cfg)
     for k, v in cfg.items():
         setattr(settings.scoreboard, k, v)
     return ScoreboardApp(
@@ -493,7 +495,7 @@ def test_opponent_first_sighting_never_plays_the_wah_wah(fake_backend):
 
 def test_opponent_goal_is_silent_in_an_unrelated_game_or_without_a_favourite(day):
     app, clock, client = day
-    app.settings.scoreboard.favourite_team = ""
+    set_favourite(app.settings, "")
     client.today[1] = dataclasses.replace(client.today[1], state="LIVE", period=1)
     tick(app, clock, hours=6, minutes=5)
     client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), away=1)
@@ -1449,7 +1451,7 @@ def test_leaders_failure_backs_off_and_keeps_cached(day):
 def test_leaders_skipped_with_no_favourite(day):
     app, _, client = day
     client.club = _club()
-    app.settings.scoreboard.favourite_team = ""
+    set_favourite(app.settings, "")
     app.settings.rotation = [RotationEntry("leaders", 5)]
     assert app._leaders_scene() is None
     assert client.club_stats_calls == []
@@ -1468,7 +1470,7 @@ def _live(g: Game, **scores) -> Game:
 def followed(day):
     """The day above, also following SEA (live at SEA @ CGY all along)."""
     app, clock, client = day
-    app.settings.scoreboard.also_follow = ["SEA"]
+    set_follow(app.settings, ["SEA"])
     app.refresh()
     return app, clock, client
 
@@ -1513,7 +1515,7 @@ def test_the_favourites_intermission_gives_others_turns_and_itself_a_quick_one(f
 
 def test_the_favourites_intermission_stays_up_with_nothing_else_live(day):
     app, clock, client = day
-    app.settings.scoreboard.also_follow = ["SEA"]
+    set_follow(app.settings, ["SEA"])
     client.today[0] = dataclasses.replace(client.today[0], state="OFF")
     client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
     tick(app, clock, hours=6)
@@ -1523,7 +1525,7 @@ def test_the_favourites_intermission_stays_up_with_nothing_else_live(day):
 def test_followed_games_take_equal_turns_while_the_favourite_is_not_playing(followed):
     app, clock, client = followed
     app.settings.scoreboard.rotate_seconds = 10
-    app.settings.scoreboard.also_follow = ["SEA", "DAL"]
+    set_follow(app.settings, ["SEA", "DAL"])
     client.today.append(game(7, "DAL", "COL", PUCK_DROP - timedelta(hours=1), "LIVE", period=1))
     tick(app, clock, seconds=1)
     # Two 25s cycles: each live game gets a full turn, the pregame favourite half of one.
@@ -1606,7 +1608,7 @@ def test_a_followed_teams_opponent_scoring_does_not_interrupt(followed):
 
 def test_a_followed_team_scoring_on_the_favourite_is_not_celebrated(day):
     app, clock, client = day
-    app.settings.scoreboard.also_follow = ["TBL"]
+    set_follow(app.settings, ["TBL"])
     client.today[1] = _live(client.today[1])
     tick(app, clock, hours=6)
 
@@ -1624,7 +1626,7 @@ def test_a_followed_team_scoring_on_the_favourite_is_not_celebrated(day):
 def test_two_followed_teams_meeting_each_fire_their_own_goals(day):
     """Neither is the favourite, so both sides' goals interrupt."""
     app, clock, client = day
-    app.settings.scoreboard.also_follow = ["SEA", "CGY"]
+    set_follow(app.settings, ["SEA", "CGY"])
     tick(app, clock, seconds=1)
 
     client.today[0] = _live(client.today[0], away=1)  # SEA
@@ -1640,7 +1642,7 @@ def test_two_followed_teams_meeting_each_fire_their_own_goals(day):
 
 def test_no_scorer_screen_for_a_followed_teams_goal_on_the_favourite(day):
     app, clock, client = day
-    app.settings.scoreboard.also_follow = ["TBL"]
+    set_follow(app.settings, ["TBL"])
     app.settings.scoreboard.live_poll_seconds = 0
     client.today[1] = _live(client.today[1])
     tick(app, clock, hours=6)
@@ -1655,15 +1657,15 @@ def test_goals_already_on_the_board_when_a_team_is_followed_do_not_fire(day):
     app, clock, client = day
     client.today[0] = _live(client.today[0], away=3)
     tick(app, clock, seconds=1)
-    app.settings.scoreboard.also_follow = ["SEA"]
+    set_follow(app.settings, ["SEA"])
     tick(app, clock, seconds=1)
     assert app.last_goal is None
 
 
 def test_followed_teams_live_games_cycle_with_no_favourite_set(followed):
     app, _clock, _client = followed
-    app.settings.scoreboard.favourite_team = ""
-    app.settings.scoreboard.also_follow = ["SEA"]
+    set_favourite(app.settings, "")
+    set_follow(app.settings, ["SEA"])
     assert scene(app) == ("game", 9)
 
 
@@ -1828,14 +1830,14 @@ def test_draw_dispatches_scores_scene(fake_backend):
 def test_scores_grid_fallback_keeps_followed_teams_polling(fake_backend):
     """The grid drops only the index-based "on-screen" game; followed teams keep theirs (#260)."""
     app, _clock, _client = league_night(fake_backend, favourite_team="", scores_grid=True)
-    app.settings.scoreboard.also_follow = ["TOR"]
+    set_follow(app.settings, ["TOR"])
     assert [g.id for g in app.situation_targets()] == [101]
 
 
 def test_a_live_followed_game_takes_the_screen_over_the_grid(fake_backend):
     """Which games preempt is #260's call; the grid only covers what's left (#269)."""
     app, _clock, _client = league_night(fake_backend, scores_grid=True)
-    app.settings.scoreboard.also_follow = ["TOR"]
+    set_follow(app.settings, ["TOR"])
     assert scene(app) == ("game", 101)
 
 
@@ -2103,7 +2105,7 @@ def test_the_ding_is_silenced_by_the_button_mute(followed):
 
 def test_a_followed_opponent_gets_the_wah_wah_not_the_ding(day):
     app, clock, client = day
-    app.settings.scoreboard.also_follow = ["TBL"]
+    set_follow(app.settings, ["TBL"])
     client.today[1] = _live(client.today[1])
     tick(app, clock, hours=6)
     client.today[1] = _live(client.today[1], away=1)  # TBL scores on NSH
@@ -2126,7 +2128,7 @@ def test_a_followed_game_first_seen_mid_score_stays_quiet(fake_backend):
     client = FlowClient()
     client.today = [game(9, "SEA", "CGY", PUCK_DROP, "LIVE", period=2, home_score=0, away_score=2)]
     app = make_app(fake_backend, Clock(PUCK_DROP + timedelta(hours=1)), client)
-    app.settings.scoreboard.also_follow = ["SEA"]
+    set_follow(app.settings, ["SEA"])
     app.refresh()
     assert app.horn.ding_calls == 0
 
@@ -2213,9 +2215,11 @@ def test_a_blowout_flashes_once_per_game(day):
 
 
 def switch_sport(app: ScoreboardApp, sport: str) -> None:
-    new = dataclasses.replace(app.settings.scoreboard, sport=sport)
-    settings = dataclasses.replace(app.settings, scoreboard=new)
-    app._apply_reloaded_settings(settings)
+    """What an admin edit of the ranked list does: a football team on top, or the hockey one."""
+    from scoreboard.config import TeamEntry
+
+    team = {"football": "NYG", "hockey": FAV}[sport]
+    app._apply_reloaded_settings(dataclasses.replace(app.settings, teams=[TeamEntry(sport, team)]))
 
 
 def test_sport_defaults_to_hockey_mode(day):

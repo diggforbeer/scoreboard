@@ -20,6 +20,7 @@ from scoreboard.display.mirror import (
     parse_bdf,
 )
 from scoreboard.display.teams import TEAM_COLORS, team_color
+from teamcfg import set_favourite
 from test_app import FakeClient, FakeOptions
 
 emulator = pytest.importorskip("RGBMatrixEmulator")
@@ -56,6 +57,7 @@ def app(tmp_path) -> ScoreboardApp:
     now = [1000.0]
     settings = Settings()
     settings.status.enabled = False
+    set_favourite(settings, "NSH")
     app = ScoreboardApp(
         settings,
         client=FakeClient([]),

@@ -20,12 +20,11 @@ def test_defaults_describe_two_chained_64x32_panels():
     assert settings.panel.rgb_sequence == "RGB"
 
 
-def test_default_favourite_is_nashville_but_overridable(tmp_path):
-    assert Settings().scoreboard.favourite_team == "NSH"
-
+def test_nobody_is_ranked_by_default(tmp_path):
+    assert Settings().teams == []
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = ""\n')
-    assert Settings.load(path).scoreboard.favourite_team == ""
+    path.write_text("[scoreboard]\n")
+    assert Settings.load(path).teams == []
 
 
 def test_loads_toml(tmp_path):
@@ -33,7 +32,6 @@ def test_loads_toml(tmp_path):
     path.write_text(
         """
         [scoreboard]
-        favourite_team = "tor"
         rotate_seconds = 5
 
         [panel]
@@ -42,7 +40,6 @@ def test_loads_toml(tmp_path):
         """
     )
     settings = Settings.load(path)
-    assert settings.scoreboard.favourite_team == "TOR"  # normalised to upper
     assert settings.scoreboard.rotate_seconds == 5
     assert settings.panel.chain_length == 1
     assert settings.panel.width == 64
@@ -198,9 +195,9 @@ def test_save_preserves_comments_and_only_changes_targeted_keys(tmp_path):
     path = tmp_path / "scoreboard.toml"
     path.write_text(
         """
-        # a helpful comment about favourite_team
+        # a helpful comment about rotate_seconds
         [scoreboard]
-        favourite_team = "NSH"
+        timezone = "UTC"
         rotate_seconds = 8
 
         # a helpful comment about brightness
@@ -210,26 +207,26 @@ def test_save_preserves_comments_and_only_changes_targeted_keys(tmp_path):
         """
     )
     settings = Settings.load(path)
-    settings.save({"scoreboard": {"favourite_team": "tor"}, "panel": {"brightness": 80}})
+    settings.save({"scoreboard": {"timezone": "America/Chicago"}, "panel": {"brightness": 80}})
 
     text = path.read_text()
-    assert "# a helpful comment about favourite_team" in text
+    assert "# a helpful comment about rotate_seconds" in text
     assert "# a helpful comment about brightness" in text
-    assert 'favourite_team = "tor"' in text
+    assert 'timezone = "America/Chicago"' in text
     assert "brightness = 80" in text
     # Untouched keys are byte-for-byte unchanged.
     assert "rotate_seconds = 8" in text
     assert "chain_length = 2" in text
 
     # In-memory settings reflect the write without a separate reload.
-    assert settings.scoreboard.favourite_team == "TOR"  # normalised, same as load
+    assert settings.scoreboard.timezone == "America/Chicago"
     assert settings.panel.brightness == 80
     assert settings.panel.chain_length == 2
 
 
 def test_save_adds_a_section_missing_from_the_file(tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     settings = Settings.load(path)
     settings.save({"audio": {"enabled": False}})
     assert settings.audio.enabled is False
@@ -239,17 +236,17 @@ def test_save_adds_a_section_missing_from_the_file(tmp_path):
 def test_save_without_a_loaded_file_raises():
     settings = Settings()
     with pytest.raises(ConfigWriteError):
-        settings.save({"scoreboard": {"favourite_team": "TOR"}})
+        settings.save({"scoreboard": {"rotate_seconds": 12}})
 
 
 def test_save_failure_is_not_silent(tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     settings = Settings.load(path)
     path.unlink()
     path.mkdir()  # any write to "path" now fails with IsADirectoryError
     with pytest.raises(ConfigWriteError):
-        settings.save({"scoreboard": {"favourite_team": "TOR"}})
+        settings.save({"scoreboard": {"rotate_seconds": 12}})
 
 
 def test_physical_size_follows_pitch():
@@ -265,7 +262,7 @@ def test_night_mode_defaults_off_without_a_section(tmp_path):
     from datetime import time
 
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     night = Settings.load(path).night_mode
     assert night.enabled is False
     assert (night.start, night.end) == (time(22, 30), time(7, 0))
@@ -341,7 +338,7 @@ def test_night_mode_cooldown_clamped_to_zero():
 
 def test_button_defaults_off_without_a_section(tmp_path):
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     button = Settings.load(path).button
     assert button.enabled is False
     assert button.pin == 26
@@ -497,7 +494,7 @@ def test_save_writes_rotation_as_an_array_of_tables(tmp_path):
     from scoreboard.config import RotationEntry
 
     path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nfavourite_team = "NSH"\n')
+    path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n[scoreboard]\n')
     settings = Settings.load(path)
     settings.save(
         {
@@ -516,8 +513,8 @@ def test_save_writes_rotation_as_an_array_of_tables(tmp_path):
     assert reloaded.rotation == settings.rotation
     text = path.read_text()
     assert "[[rotation]]" in text
-    # The untouched [scoreboard] section survives the write.
-    assert 'favourite_team = "NSH"' in text
+    # The untouched ranked team list survives the write.
+    assert 'team = "NSH"' in text
 
 
 def test_next_hardware_mapping_cycles_through_all_documented_choices():
@@ -528,44 +525,3 @@ def test_next_hardware_mapping_cycles_through_all_documented_choices():
 
 def test_next_hardware_mapping_unknown_value_starts_over_at_the_first_choice():
     assert next_hardware_mapping("some-hand-edited-value") == PANEL_HARDWARE_MAPPING_CHOICES[0]
-
-
-def test_also_follow_defaults_to_nobody():
-    assert Settings().scoreboard.also_follow == []
-    assert Settings().scoreboard.followed_teams == ["NSH"]
-
-
-def test_also_follow_is_normalised_and_drops_unknowns_and_the_favourite(caplog):
-    with caplog.at_level(logging.WARNING):
-        settings = Settings.from_dict(
-            {"scoreboard": {"favourite_team": "nsh", "also_follow": ["dal", "NSH", "ZZZ", "DAL"]}}
-        )
-    assert settings.scoreboard.also_follow == ["DAL"]
-    assert settings.scoreboard.followed_teams == ["NSH", "DAL"]
-    assert "ZZZ" in caplog.text
-
-
-def test_a_bare_also_follow_string_is_one_team():
-    settings = Settings.from_dict({"scoreboard": {"also_follow": "TOR"}})
-    assert settings.scoreboard.also_follow == ["TOR"]
-
-
-def test_followed_teams_without_a_favourite_is_just_also_follow():
-    settings = Settings.from_dict({"scoreboard": {"favourite_team": "", "also_follow": ["TOR"]}})
-    assert settings.scoreboard.followed_teams == ["TOR"]
-
-
-def test_sport_defaults_to_hockey_and_accepts_football(tmp_path):
-    assert Settings.load(tmp_path / "missing.toml").scoreboard.sport == "hockey"
-    path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nsport = "football"\n')
-    assert Settings.load(path).scoreboard.sport == "football"
-
-
-def test_invalid_sport_warns_once_and_falls_back_to_hockey(tmp_path, caplog):
-    path = tmp_path / "scoreboard.toml"
-    path.write_text('[scoreboard]\nsport = "cricket"\n')
-    caplog.set_level(logging.WARNING)
-    settings = Settings.load(path)
-    assert settings.scoreboard.sport == "hockey"
-    assert caplog.text.count("scoreboard.sport") == 1

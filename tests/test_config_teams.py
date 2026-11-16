@@ -119,7 +119,7 @@ def test_teams_for_and_rank_of():
 TEMPLATE = """\
 # A comment that must survive every save.
 [scoreboard]
-favourite_team = "NSH"   # and this one
+rotate_seconds = 9   # and this one
 
 [[teams]]
 sport = "hockey"
@@ -160,7 +160,7 @@ def test_saving_keeps_the_comments_and_the_other_sections(tmp_path):
     settings.save({"teams": [entry("football", "TEN")]})
     text = settings.source_path.read_text()
     assert "# A comment that must survive every save." in text and "# and this one" in text
-    assert settings.scoreboard.favourite_team == "NSH" and settings.panel.rows == 32
+    assert settings.scoreboard.rotate_seconds == 9 and settings.panel.rows == 32
 
 
 def test_saving_an_empty_list_removes_it(tmp_path):

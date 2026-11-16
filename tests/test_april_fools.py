@@ -18,6 +18,7 @@ from scoreboard.display.logos import LogoLibrary, default_directories
 from scoreboard.display.matrix import Backend
 from scoreboard.display.teams import GUEST_COLORS, TEAM_COLORS, team_color
 from scoreboard.hockey.models import Game, GoalEvent, StandingsRow, Star
+from teamcfg import set_favourite
 from test_app import FakeClient, FakeClockSource, FakeGraphics, FakeMatrix, FakeOptions
 
 # 10:00 CDT on April 1 2027 -- inside the window for the default timezone.
@@ -106,8 +107,10 @@ def test_admirals_logo_and_colours_ship_without_becoming_an_hockey_team():
 def app():
     src = FakeClockSource()
     now = {"t": APRIL_1_MORNING}
+    settings = Settings()
+    set_favourite(settings, "NSH")
     application = ScoreboardApp(
-        Settings(),
+        settings,
         client=FakeClient([]),
         backend=Backend("fake", FakeMatrix, FakeOptions, FakeGraphics),
         clock=lambda: now["t"],

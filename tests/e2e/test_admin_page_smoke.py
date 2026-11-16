@@ -120,17 +120,20 @@ def test_admin_page_loads_and_saves_a_real_change(admin_page):
         try:
             page = browser.new_page()
             page.goto(admin_page.url)
-            page.wait_for_selector("#sb-favourite-team", timeout=15000)
+            page.wait_for_selector("#teams-add", timeout=15000)
 
             connection_value = page.locator(".card-body", has_text="Connection").locator(".fs-5")
             assert connection_value.inner_text() == "open"
 
-            # Autosave (#273): picking a team is the whole save, no button.
-            page.select_option("#sb-favourite-team", "TOR")
+            # Autosave (#273): adding a team is the whole save, no button.
+            page.select_option("#teams-add", "hockey:TOR")
+            page.click("#teams-add-button")
             page.wait_for_selector("text=saved ✓", timeout=15000)
 
-            assert page.input_value("#sb-favourite-team") == "TOR"
-            assert admin_page.config()["scoreboard"]["favourite_team"] == "TOR"
+            assert page.locator("#teams-list li[data-team='TOR']").count() == 1
+            _wait_until(
+                lambda: admin_page.config()["teams"] == [{"sport": "hockey", "team": "TOR"}]
+            )
         finally:
             browser.close()
 
@@ -408,10 +411,10 @@ def _wait_until(condition, timeout=15.0):
     raise AssertionError("condition never became true")
 
 
-def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
-    """#348: in football mode the Scoreboard card shows the football pickers, backed by the separate
-    ``[football]`` section. Switching sport swaps the pickers without losing either set of
-    choices, and BUF as the hockey favourite and BUF as the football favourite are two settings."""
+def test_each_sports_idle_rotation_card_shows_for_the_sports_that_have_a_ranked_team(admin_page):
+    """#422 and epic #470: the football idle rotation card (and the hockey one) appear for a sport
+    with a ranked team, both while nothing is ranked; the football card saves
+    ``[[football.rotation]]`` and the timers and leaves the hockey ``[[rotation]]`` alone."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -419,78 +422,29 @@ def test_football_mode_has_its_own_favourite_and_followed_teams(admin_page):
         try:
             page = browser.new_page()
             page.goto(admin_page.url)
-            page.wait_for_selector("#sb-favourite-team", timeout=15000)
-
-            # Hockey mode: the hockey pickers, and no football ones.
-            assert page.locator("#fb-favourite-team").count() == 0
-            page.select_option("#sb-favourite-team", "BUF")
-            _wait_until(lambda: admin_page.config()["scoreboard"].get("favourite_team") == "BUF")
-
-            # Switching to football swaps the pickers.
-            page.select_option("#sb-sport", "football")
-            page.wait_for_selector("#fb-favourite-team", timeout=15000)
-            assert page.locator("#sb-favourite-team").count() == 0
-            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "football")
-            # All 32 football teams are offered, plus "(none)", and there is no default favourite.
-            assert page.locator("#fb-favourite-team option").count() == 33
-            assert page.input_value("#fb-favourite-team") == ""
-
-            page.select_option(
-                "#fb-favourite-team", "BUF"
-            )  # the same abbreviation, football's team
-            page.check("#fb-follow-NYG")
-            page.check("#fb-follow-WSH")
-            _wait_until(
-                lambda: admin_page.config().get("football", {}).get("also_follow") == ["NYG", "WSH"]
-            )
-            football = admin_page.config()["football"]
-            assert football["favourite_team"] == "BUF"
-            assert (
-                admin_page.config()["scoreboard"]["favourite_team"] == "BUF"
-            )  # hockey's, untouched
-
-            # The favourite is not also offered as a followed team.
-            assert page.locator("#fb-follow-BUF").count() == 0
-
-            # A reload keeps the sport and the football choices.
-            page.reload()
-            page.wait_for_selector("#fb-favourite-team", timeout=15000)
-            assert page.input_value("#fb-favourite-team") == "BUF"
-            assert page.is_checked("#fb-follow-NYG") and page.is_checked("#fb-follow-WSH")
-
-            # Back to hockey: its favourite is still there; the football choices are kept on disk.
-            page.select_option("#sb-sport", "hockey")
-            page.wait_for_selector("#sb-favourite-team", timeout=15000)
-            assert page.input_value("#sb-favourite-team") == "BUF"
-            assert page.locator("#fb-favourite-team").count() == 0
-            _wait_until(lambda: admin_page.config()["scoreboard"].get("sport") == "hockey")
-            assert admin_page.config()["football"]["also_follow"] == ["NYG", "WSH"]
-        finally:
-            browser.close()
-
-
-def test_football_mode_has_its_own_idle_rotation_card(admin_page):
-    """#422: the football idle rotation card replaces the hockey one in football mode, saves
-    ``[[football.rotation]]`` and the two timers, and leaves the hockey ``[[rotation]]`` alone."""
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            page.goto(admin_page.url)
-            page.wait_for_selector("#sb-sport", timeout=15000)
+            page.wait_for_selector("#teams-add", timeout=15000)
+            football = page.get_by_role("heading", name="Football idle rotation")
+            hockey = page.get_by_role("heading", name="Idle rotation", exact=True)
             page.get_by_role("button", name="Display", exact=True).click()
-            assert page.get_by_role("heading", name="Football idle rotation").count() == 0
-            assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 1
+            football.wait_for(timeout=15000)
+            assert football.count() == 1 and hockey.count() == 1, "nothing ranked: both show"
 
             page.get_by_role("button", name="Home", exact=True).click()
-            page.select_option("#sb-sport", "football")
+            page.select_option("#teams-add", "hockey:NSH")
+            page.click("#teams-add-button")
             page.get_by_role("button", name="Display", exact=True).click()
-            page.get_by_role("heading", name="Football idle rotation").wait_for(timeout=15000)
-            assert page.get_by_role("heading", name="Idle rotation", exact=True).count() == 0
+            hockey.wait_for(timeout=15000)
+            assert football.count() == 0, "only a hockey team is ranked"
 
-            page.get_by_role("button", name="Add row").click()
+            page.get_by_role("button", name="Home", exact=True).click()
+            page.select_option("#teams-add", "football:TEN")
+            page.click("#teams-add-button")
+            page.get_by_role("button", name="Display", exact=True).click()
+            football.wait_for(timeout=15000)
+            assert hockey.count() == 1, "both sports have a ranked team"
+
+            card = football.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
+            card.get_by_role("button", name="Add row").click()
             page.select_option('[aria-label="football rotation screen 1"]', "fb_week")
             page.fill('[aria-label="football rotation seconds 1"]', "12")
             page.fill("#football-final-hold", "45")

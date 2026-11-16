@@ -53,37 +53,24 @@ Decided by the owner: a board runs **hockey or football, one at a time**, chosen
 picker. There is no mixing, no priority between the two sports, and no
 "Hockey wins" rule.
 
-- A new setting picks the sport: `[scoreboard] sport = "hockey"` (the default, so a
-  board that never touches it behaves exactly as today) or `"football"`. The admin
-  page's Scoreboard card gets a matching dropdown.
-- With `hockey`, the app is exactly the existing hockey app. Nothing in `screens.md`
-  changes and no football code runs.
-- With `football`, the board runs the football logic in this file: its own data
-  source (ESPN), its own scene selection and its own `fb_` screens. The hockey
-  logic stays idle.
-- **Teams work like hockey.** In football mode the admin page's Scoreboard card shows an
-  Football **favourite team** and **followed teams** (the 32 football teams), in place of the
-  Hockey ones, set the same way. Changing the picker swaps which pickers show.
-  - They are stored separately from the hockey settings (proposed: a `[football]`
-    section with `favourite_team` and `also_follow`), not shared, because the
-    abbreviations overlap between the leagues (`BUF`, `CAR`, `DAL`, `DET`, `MIN`
-    and others) and mean different teams. Switching sport and back keeps each
-    sport's choices.
-  - The favourite is the board's primary team: its game takes the screen, gets the
-    full celebrations and the horn, and its logo and colours are used where the hockey
-    board uses the favourite's. Followed teams are the secondary ones: they take
-    their turn on the screen and get the quick score updates, as in hockey.
-  - **Built (story #348):** `[football] favourite_team` and `also_follow` in the config
-    (`FootballConfig`), the 32 teams sent to the admin page from the football table so it has no
-    second list, validated against the football table (a hockey-only abbreviation such as `NSH` is
-    rejected on a live save and ignored with a warning from a hand-edited TOML). The favourite
-    is not also followed, duplicates collapse, and with no favourite set the board shows every
-    game. In football mode the Scoreboard card shows the football pickers in place of the hockey ones; its
-    other settings (puck-drop countdown, shootout polling, goal timings) are hockey-only and are
-    still shown, which a later story should hide.
-  - Open: whether the followed-team rules (primary-first, quick turns, goal-style
-    updates) are copied exactly or adjusted for football, where a game is three
-    hours and a score is rarer than a hockey goal.
+- **Which sport runs is not a setting any more** (epic #470): the ranked `[[teams]]` list holds
+  hockey and football teams together and the board runs whichever sport has the team that matters
+  most right now (see "Ranked teams" in `CLAUDE.md` and "Several games at once" below). The sport
+  selector on the admin page is gone; `--sport` only picks what `--dump` prints and `--demo` shows.
+- With a hockey team on top and nothing football on, the app is the existing hockey app. With a
+  football team on, the board runs the football logic in this file: its own data source (ESPN), its
+  own scene selection and its own `fb_` screens.
+- **Teams** are `[[teams]]` entries `{sport, team}` (the abbreviations overlap between the leagues:
+  `BUF`, `CAR`, `DAL`, `DET`, `MIN`, so the sport is part of the key). The admin page's **My teams**
+  card edits the one list; row 1 is "top priority" and each sport's first team carries the horn.
+  - **The favourite** is the owner: the highest-ranked football team that is live, in its countdown
+    window or in a held final (else the lead football team, for the idle screens). Its game takes the
+    screen and gets the full celebrations; the other ranked football teams are **followed**: they take
+    their turn and get the quick score updates. The horn flag is the lead football team's alone.
+  - The football code reads the favourite through `priority.TeamView` (`favourite_team`,
+    `followed_teams`, `horn_team`), so the rules below say "the favourite" and "a followed team".
+  - The old `[football] favourite_team` / `also_follow` keys were retired (ignored with one warning,
+    dropped on the next save; no migration).
 - Shared between the two: the panel, brightness and night mode, the admin page,
   Wi-Fi, the updater, holidays, the clock and the button. These are not
   sport-specific.
@@ -542,7 +529,7 @@ beyond that (`won the toss`, `deferred`, `chose to receive`) is out of scope.
 #### When it shows
 
 - Triggered by the first `Coin Toss` play seen for a game the board follows (the
-  favourite, or an `also_follow` team), when the game goes live.
+  favourite, or a followed team), when the game goes live.
 - Not shown for a game that is already in progress at startup (baselined on first
   sight, like goals), or one that is not followed.
 - Overtime has its own toss in the real game. Whether the feed publishes a second
@@ -644,7 +631,7 @@ Same scoping rule as the hockey board, confirmed by the owner, with **one
 exception: field goals** (see below):
 
 - The **favourite's** scores get the full celebration and the horn.
-- A **followed** team's scores (`also_follow`) get the quick version: the plain
+- A **followed** team's scores (the other ranked football teams) get the quick version: the plain
   score screen, no horn.
 - An opponent's score, or an unfollowed game's, gets nothing beyond the normal
   play-text layout.
@@ -1062,7 +1049,7 @@ celebrated. It compares **outcomes**, and reports the rules that fired: `play_go
 
 Screens the board actually draws are rendered from the code, not by hand:
 `python scripts/render-screens.py --sport football` walks `football.demo.football_demo_steps()` (the
-same steps `scoreboard --demo` loops when `sport = "football"`) through the real app and writes
+same steps `scoreboard --demo --sport football` loops) through the real app and writes
 `docs/football/<step name>.png` with synthetic team-coloured circles for logos and a fixed clock,
 so they are reproducible. `--sport football --check` fails when a committed image is stale, and a
 test does the same. Nothing here touches `docs/screens/`.

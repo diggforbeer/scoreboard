@@ -586,10 +586,13 @@ def _final_steps(now: datetime) -> list[DemoStep]:
 
     def view(game: FbGame):
         from ..config import FootballConfig
+        from ..priority import TeamView
         from .idle import IdleSnapshot
         from .idle_screens import IdleContext
 
-        ctx = IdleContext(0.0, now, [game], IdleSnapshot(), FootballConfig(favourite_team=HOME))
+        ctx = IdleContext(
+            0.0, now, [game], IdleSnapshot(), TeamView(FootballConfig(), HOME, [], HOME)
+        )
         return Scene("fb_final", fb_game=game, fb_idle=build_final(ctx))
 
     leaders = (

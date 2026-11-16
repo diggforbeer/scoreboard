@@ -8,6 +8,7 @@ from scoreboard.config import FOOTBALL_TIMING_RANGES, FootballConfig, Settings
 from scoreboard.football import events as ev
 from scoreboard.football.director import PLAY, PLAYTEXT, Timings, timings_from
 from scoreboard.football.mode import FootballMode
+from teamcfg import fcfg
 from test_football_director import started, td
 from test_football_events import make_play
 
@@ -37,9 +38,7 @@ def test_out_of_range_and_garbage_values_are_held_or_defaulted():
 def test_the_owners_lengths_reach_the_director():
     rig = started(make_play(1, "rush", off="WSH"))
     rig.director._timings = lambda: timings_from(
-        FootballConfig(
-            favourite_team="NYG", score_seconds=12, score_detail_seconds=5, playtext_seconds=9
-        )
+        fcfg(favourite_team="NYG", score_seconds=12, score_detail_seconds=5, playtext_seconds=9)
     )
     rig.poll(make_play(1, "rush", off="WSH"), td())
     stages = rig.run()
@@ -51,7 +50,7 @@ def test_the_owners_lengths_reach_the_director():
 
 
 def test_football_mode_builds_its_timings_from_the_football_settings():
-    cfg = FootballConfig(favourite_team="NYG", score_seconds=11)
+    cfg = fcfg(favourite_team="NYG", score_seconds=11)
     mode = FootballMode(client_factory=lambda: None, football=lambda: cfg)
     assert mode.director._timings().score == 11.0
     cfg.score_seconds = 13  # read afresh each time, so an admin change needs no restart

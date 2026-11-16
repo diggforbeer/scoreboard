@@ -14,6 +14,7 @@ from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
 from scoreboard.football.idle_views import PLAYOFF_SEEDS, StandingsView, build_standings
 from scoreboard.football.mode import FootballMode
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, utc
 from test_football_scenes import H, check_snapshot, game, renderer
@@ -57,7 +58,7 @@ def ctx(favourite="NYG", table=FULL, week=10):
         scoreboard=idle.Scoreboard((), 2, 2026, week, (), ()) if week else None,
         standings_cached=idle.Cached(table, 0.0) if table else None,
     )
-    return IdleContext(0.0, utc(2026, 11, 9), [], snap, FootballConfig(favourite_team=favourite))
+    return IdleContext(0.0, utc(2026, 11, 9), [], snap, fcfg(favourite_team=favourite))
 
 
 # -- the builder ------------------------------------------------------------------------------
@@ -194,7 +195,7 @@ class Feed(IdleFeed):
 def test_the_two_pages_split_the_rotation_entrys_seconds():
     clock = Clock(960.0)
     feed = Feed([game("WSH", "DAL", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)])
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG",
         also_follow=["DAL"],  # standings are only fetched when someone is followed
         rotation=[{"screen": "fb_standings", "seconds": 10}, {"screen": "clock", "seconds": 5}],
@@ -214,7 +215,7 @@ def test_the_two_pages_split_the_rotation_entrys_seconds():
 def test_a_single_page_screen_stays_on_page_zero():
     clock = Clock(960.0)
     feed = Feed([game("WSH", "DAL", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)])
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG", also_follow=["DAL"],
         rotation=[{"screen": "fb_standings", "seconds": 10}, {"screen": "clock", "seconds": 5}],
     )  # fmt: skip
@@ -228,7 +229,7 @@ def test_a_single_page_screen_stays_on_page_zero():
 def test_a_page_length_replaces_the_rows_seconds_for_a_paged_screen_only():
     clock = Clock(960.0)
     feed = Feed([game("WSH", "DAL", "pre", short="x", start="2026-11-22T18:00Z", game_id=5)])
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG",
         also_follow=["DAL"],
         page_seconds=3,
