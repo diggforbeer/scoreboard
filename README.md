@@ -6,15 +6,15 @@
 |------------------------------------------------------- | -------: | -------: | -------: | -------: | ------: | --------: |
 | src/nhl\_scoreboard/\_\_init\_\_.py                    |        1 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/\_\_main\_\_.py                    |      102 |        7 |       34 |        4 |     92% |88, 93-94, 153-155, 178 |
-| src/nhl\_scoreboard/admin\_server.py                   |      816 |       52 |      292 |       20 |     93% |769-\>767, 771-772, 777, 842-\>exit, 968-969, 976-977, 985-986, 1098, 1104, 1111-1113, 1127-1128, 1199-1200, 1242, 1245, 1248, 1251, 1275-\>1277, 1319, 1354-1356, 1377, 1412, 1437, 1478, 1481-\>1492, 1523-\>1526, 1786-1787, 1809-1828, 1832-1835, 1891, 1922-1924, 1963 |
-| src/nhl\_scoreboard/app.py                             |     1753 |       71 |      692 |       45 |     95% |605-606, 633-\>635, 638, 648-649, 659-\>665, 769-771, 789-\>791, 848, 850, 1022-1023, 1042, 1045, 1068-1069, 1396-1397, 1530-1532, 1546, 1570, 1573, 1576-1578, 1607, 1626-\>exit, 1695, 1717, 1734-\>1731, 1779, 1788, 1807, 1810, 1830, 1833, 1839, 1850, 1853, 1859, 1965, 2053, 2100, 2131-\>2133, 2143-2145, 2160-2162, 2207-2209, 2227, 2246-\>2248, 2251, 2353-2355, 2387-2388, 2410-2411, 2469-2470, 2560, 2587, 2784, 2822, 2835, 2992, 3000, 3133 |
+| src/nhl\_scoreboard/admin\_server.py                   |      816 |       52 |      292 |       20 |     93% |770-\>768, 772-773, 778, 843-\>exit, 969-970, 977-978, 986-987, 1099, 1105, 1112-1114, 1128-1129, 1200-1201, 1243, 1246, 1249, 1252, 1276-\>1278, 1320, 1355-1357, 1378, 1413, 1438, 1479, 1482-\>1493, 1524-\>1527, 1787-1788, 1810-1829, 1833-1836, 1892, 1923-1925, 1964 |
+| src/nhl\_scoreboard/app.py                             |     1755 |       71 |      694 |       45 |     95% |606-607, 634-\>636, 639, 649-650, 660-\>666, 770-772, 790-\>792, 849, 851, 1023-1024, 1043, 1046, 1069-1070, 1397-1398, 1531-1533, 1547, 1571, 1574, 1577-1579, 1608, 1627-\>exit, 1696, 1718, 1735-\>1732, 1780, 1789, 1808, 1811, 1831, 1834, 1840, 1851, 1854, 1860, 1966, 2054, 2101, 2132-\>2134, 2144-2146, 2161-2163, 2208-2210, 2228, 2247-\>2249, 2252, 2354-2356, 2388-2389, 2411-2412, 2470-2471, 2561, 2588, 2785, 2823, 2836, 2993, 3001, 3136 |
 | src/nhl\_scoreboard/april\_fools.py                    |       24 |        2 |        0 |        0 |     92% |     51-54 |
 | src/nhl\_scoreboard/audio.py                           |      130 |        2 |       38 |        0 |     99% |  242, 249 |
 | src/nhl\_scoreboard/audio\_normalize.py                |      132 |       19 |       36 |        6 |     82% |86-87, 111, 128, 130-143, 154, 158, 161-163, 165, 173 |
 | src/nhl\_scoreboard/blowout.py                         |       23 |        0 |       10 |        0 |    100% |           |
 | src/nhl\_scoreboard/brightness.py                      |        9 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/button.py                          |       56 |        1 |        6 |        0 |     98% |        51 |
-| src/nhl\_scoreboard/config.py                          |      454 |        6 |       90 |        2 |     99% |411-412, 414-415, 962-963 |
+| src/nhl\_scoreboard/config.py                          |      457 |        6 |       90 |        2 |     99% |412-413, 415-416, 967-968 |
 | src/nhl\_scoreboard/delay.py                           |       28 |        0 |        6 |        0 |    100% |           |
 | src/nhl\_scoreboard/demo.py                            |       76 |        0 |       10 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/\_\_init\_\_.py            |        0 |        0 |        0 |        0 |    100% |           |
@@ -24,7 +24,7 @@
 | src/nhl\_scoreboard/display/football\_fgmiss.py        |       60 |        0 |       10 |        1 |     99% |116-\>exit |
 | src/nhl\_scoreboard/display/football\_field.py         |       82 |        0 |       32 |        1 |     99% |187-\>exit |
 | src/nhl\_scoreboard/display/football\_fieldgoal.py     |      120 |        0 |       20 |        1 |     99% |198-\>exit |
-| src/nhl\_scoreboard/display/football\_idle.py          |      237 |        2 |       78 |        4 |     98% |80-\>82, 109-\>111, 172-173, 268-\>275 |
+| src/nhl\_scoreboard/display/football\_idle.py          |      260 |        2 |       84 |        4 |     98% |80-\>82, 109-\>111, 172-173, 268-\>275 |
 | src/nhl\_scoreboard/display/football\_incomplete.py    |       84 |        0 |       14 |        1 |     99% |   93-\>95 |
 | src/nhl\_scoreboard/display/football\_kickoff.py       |       87 |        1 |       26 |        1 |     98% |        84 |
 | src/nhl\_scoreboard/display/football\_pass.py          |       79 |        0 |       10 |        0 |    100% |           |
@@ -48,23 +48,24 @@
 | src/nhl\_scoreboard/display/matrix.py                  |       43 |        0 |        4 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/mirror.py                  |      148 |        4 |       42 |        2 |     97% |98, 126, 176, 197 |
 | src/nhl\_scoreboard/display/penalty.py                 |      118 |        1 |       42 |        1 |     99% |       126 |
-| src/nhl\_scoreboard/display/renderer.py                |      758 |        3 |      262 |       10 |     99% |470-\>476, 642-\>644, 781-\>783, 792-\>797, 1087, 1122, 1398-\>1427, 1413-\>1412, 1420, 1433-\>1435 |
+| src/nhl\_scoreboard/display/renderer.py                |      761 |        3 |      262 |       10 |     99% |470-\>476, 642-\>644, 781-\>783, 792-\>797, 1087, 1122, 1404-\>1433, 1419-\>1418, 1426, 1439-\>1441 |
 | src/nhl\_scoreboard/display/teams.py                   |       16 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/\_\_init\_\_.py           |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/api.py                    |      156 |        0 |       38 |        0 |    100% |           |
-| src/nhl\_scoreboard/football/demo.py                   |      180 |        0 |        8 |        0 |    100% |           |
-| src/nhl\_scoreboard/football/director.py               |      195 |        7 |       70 |        9 |     94% |185, 200, 233, 236-\>exit, 246-\>248, 252-\>248, 260, 312, 326, 348 |
+| src/nhl\_scoreboard/football/demo.py                   |      181 |        0 |        8 |        0 |    100% |           |
+| src/nhl\_scoreboard/football/director.py               |      196 |        7 |       70 |        9 |     94% |187, 202, 235, 238-\>exit, 248-\>250, 254-\>250, 262, 314, 328, 350 |
 | src/nhl\_scoreboard/football/events.py                 |      208 |        8 |       82 |        5 |     96% |269, 296, 305, 349, 353-356 |
 | src/nhl\_scoreboard/football/geometry.py               |       91 |        0 |       16 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/idle.py                   |      238 |        7 |       38 |        4 |     96% |52-54, 113, 323-\>314, 338, 347-348 |
 | src/nhl\_scoreboard/football/idle\_screens.py          |       45 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/idle\_views.py            |      219 |        2 |       68 |        0 |     99% |   253-254 |
-| src/nhl\_scoreboard/football/mode.py                   |      272 |        3 |       94 |        5 |     98% |82-84, 175-\>177, 186-\>188, 229-\>224, 506 |
+| src/nhl\_scoreboard/football/mode.py                   |      287 |        3 |       98 |        5 |     98% |83-85, 178-\>180, 189-\>191, 232-\>227, 531 |
 | src/nhl\_scoreboard/football/models.py                 |      299 |        2 |       36 |        3 |     99% |33, 224-\>222, 253 |
 | src/nhl\_scoreboard/football/pacing.py                 |       42 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/people.py                 |      135 |        0 |       36 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/playtext.py               |      241 |        5 |       58 |        0 |     98% |217-218, 266-268 |
 | src/nhl\_scoreboard/football/queue.py                  |      136 |        1 |       34 |        1 |     99% |       199 |
+| src/nhl\_scoreboard/football/redzone.py                |       75 |        2 |       24 |        1 |     97% |   108-109 |
 | src/nhl\_scoreboard/football/reversals.py              |      124 |        0 |       54 |        3 |     98% |176-\>183, 179-\>183, 234-\>236 |
 | src/nhl\_scoreboard/football/stats.py                  |       83 |        5 |       32 |        2 |     94% |82, 109-110, 114, 134 |
 | src/nhl\_scoreboard/football/teams.py                  |       40 |        0 |        0 |        0 |    100% |           |
@@ -81,7 +82,7 @@
 | src/nhl\_scoreboard/updater.py                         |      287 |       28 |       78 |       10 |     90% |115-116, 134, 154, 172-176, 180-185, 231-\>241, 251-253, 277, 313-318, 322-328, 339, 406-\>408, 433-\>435, 456-\>459, 461, 465 |
 | src/nhl\_scoreboard/wifi.py                            |      140 |      109 |       28 |        0 |     18% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/nhl\_scoreboard/wifi\_join.py                      |       86 |        7 |       10 |        0 |     93% |112-114, 117-118, 201-202 |
-| **TOTAL**                                              | **12200** |  **417** | **3468** |  **176** | **96%** |           |
+| **TOTAL**                                              | **12323** |  **419** | **3504** |  **177** | **96%** |           |
 
 
 ## Setup coverage badge
