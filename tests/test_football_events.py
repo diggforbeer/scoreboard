@@ -530,3 +530,59 @@ def test_a_score_that_arrives_on_a_play_that_does_not_score_is_not_a_celebration
     # The running score did catch up, so the next real score is measured from 7, not 6.
     nxt = make_play(3, "rush_td_pat", score=(0, 14), off="NYG")
     assert one(run(det, game, nxt)).points == 7
+
+
+# -- the horn under a ranked list (epic #470, #475) -----------------------------------------------
+
+
+def _viewed(favourite, follow, horn):
+    from scoreboard.priority import TeamView
+
+    cfg = TeamView(FootballConfig(), favourite, follow, horn)
+    det = EventDetector(lambda: cfg)
+    game = make_game()  # WSH at NYG
+    det.seed(game.id, None)
+    return det, game
+
+
+def test_the_lead_team_carries_the_horn_when_it_owns_the_board():
+    det, game = _viewed("NYG", ["DAL"], horn="NYG")
+    td = one(run(det, game, make_play(1, "rush_td_pat", score=(0, 7), off="NYG")))
+    assert (td.team, td.scope, td.sound) == ("NYG", Scope.FULL, True)
+
+
+def test_an_owner_that_is_not_the_lead_gets_the_full_screen_but_no_horn():
+    det, game = _viewed("NYG", ["DAL"], horn="DAL")  # NYG owns the board, DAL leads football
+    td = one(run(det, game, make_play(1, "rush_td_pat", score=(0, 7), off="NYG")))
+    assert (td.team, td.scope, td.sound) == ("NYG", Scope.FULL, False)
+
+
+def test_the_lead_team_carries_the_horn_even_as_a_quick_banner_elsewhere():
+    det, _ = _viewed("NYG", ["DAL"], horn="DAL")
+    elsewhere = make_game("DAL", "PHI", game_id=2)  # DAL, the lead, is followed in another game
+    det.seed(elsewhere.id, None)
+    td = one(run(det, elsewhere, make_play(1, "rush_td_pat", score=(7, 0), off="DAL")))
+    assert (td.team, td.scope, td.sound) == ("DAL", Scope.QUICK, True)
+
+
+def test_a_followed_team_that_is_not_the_lead_never_has_the_horn():
+    det, _ = _viewed("NYG", ["DAL"], horn="NYG")
+    elsewhere = make_game("DAL", "PHI", game_id=2)
+    det.seed(elsewhere.id, None)
+    td = one(run(det, elsewhere, make_play(1, "rush_td_pat", score=(7, 0), off="DAL")))
+    assert (td.scope, td.sound) == (Scope.QUICK, False)
+
+
+def test_a_made_field_goal_follows_the_same_horn_rule():
+    det, game = _viewed("NYG", ["DAL"], horn="NYG")
+    kick = one(run(det, game, make_play(1, "fg_good", score=(0, 3), off="NYG")))
+    assert (kick.team, kick.scope, kick.sound) == ("NYG", Scope.FULL, True)
+    det2, game2 = _viewed("NYG", ["DAL"], horn="DAL")
+    kick2 = one(run(det2, game2, make_play(1, "fg_good", score=(0, 3), off="NYG")))
+    assert kick2.sound is False
+
+
+def test_the_plain_settings_still_give_the_favourite_the_horn():
+    det, game, _ = detector("NYG")
+    td = one(run(det, game, make_play(1, "rush_td_pat", score=(0, 7), off="NYG")))
+    assert td.sound is True
