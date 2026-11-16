@@ -217,6 +217,7 @@ FOOTBALL_GAME_SCENES = frozenset(
         "fb_countdown",
         "fb_preview",
         "fb_final",
+        "fb_redzone",
     }
 )
 
@@ -3088,6 +3089,8 @@ class ScoreboardApp:
             r.draw_fb_halftime(self.canvas, scene.fb_game)
         elif scene.kind == "fb_countdown":
             r.draw_fb_countdown(self.canvas, scene.fb_game, self.clock())
+        elif scene.kind == "fb_redzone":
+            r.draw_fb_redzone(self.canvas, scene.fb_game, scene.fb_elapsed)
         elif scene.kind == "fb_schedule":
             r.draw_fb_schedule(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind == "fb_week":

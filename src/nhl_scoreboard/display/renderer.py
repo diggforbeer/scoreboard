@@ -1222,6 +1222,12 @@ class Renderer:
 
         football_idle.draw_fb_countdown(self, canvas, game, now)
 
+    def draw_fb_redzone(self, canvas: Any, game: Any, seconds: float) -> None:
+        """The red zone alert over the idle screens; see ``football_idle``."""
+        from . import football_idle
+
+        football_idle.draw_fb_redzone(self, canvas, game, seconds)
+
     def draw_fb_preview(self, canvas: Any, view: Any, now: Any) -> None:
         """The football next-game preview (#424); see ``football_idle``."""
         from . import football_idle

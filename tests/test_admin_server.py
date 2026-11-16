@@ -2539,10 +2539,12 @@ def test_sends_the_football_rotation_last_with_the_defaults_and_screens(app_dir,
             "reversal": 5.0,
             "cointoss": 6.0,
             "stats": 6.0,
+            "redzone": 6.0,
         },
         "show_countdown": True,
         "show_bye": True,
         "show_final": True,
+        "show_redzone": True,
     }
     assert [d["screen"] for d in message["defaults"]] == [
         "fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock",

@@ -32,6 +32,7 @@ from .idle import (
 )
 from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
+from .redzone import RedZoneWatcher
 from .stats import GameStats
 from .teams import is_team, team
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
@@ -120,6 +121,8 @@ class FootballMode:
             stats=self._stats_for,
         )
         self._core_sync = CoreSync()
+        #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
+        self.redzone = RedZoneWatcher(monotonic)
         #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here so a
         #: sport switch, which builds a fresh mode, starts with none. The feed worker's thread
         #: owns it: it must not be used from the render loop.
@@ -263,6 +266,7 @@ class FootballMode:
                 client.close()
         self.rosters.clear()
         self._idle_cache.clear()
+        self.redzone.clear()
         self._stats = {}
 
     @property
@@ -295,9 +299,10 @@ class FootballMode:
         if snap.is_stale(now):
             return Scene("fb_no_data")
         games = snap.games or ()
+        self.redzone.observe(games)
         idle_kind = self._idle_kind(games, snap, now)
         if idle_kind is not None:
-            return self._idle_scene(idle_kind, games, snap, now)
+            return self._redzone_scene(games) or self._idle_scene(idle_kind, games, snap, now)
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
@@ -310,6 +315,26 @@ class FootballMode:
         if current is None:
             return base
         return self._play_scene(current, base)
+
+    def _redzone_scene(self, games: Sequence[FbGame]) -> Scene | None:
+        """The red zone alert, if one is due while an idle screen is up (see ``redzone``).
+
+        Only on a 128px panel (the idle screens are), and only when the owner has not turned it
+        off. The alert is one short card; the idle screen comes back when it has had its seconds.
+        """
+        from ..app import Scene
+
+        cfg = self._football() if self._football else _no_football()
+        if not cfg.show_redzone or not self._wide():
+            return None
+        seconds = timings_from(cfg).redzone
+        shown = self.redzone.current(games, seconds)
+        if shown is None:
+            return None
+        game, elapsed = shown
+        return Scene(
+            "fb_redzone", fb_game=game, fb_elapsed=elapsed, fb_seconds=seconds, animating=True
+        )
 
     # -- the idle selection (#422) -----------------------------------------------
 

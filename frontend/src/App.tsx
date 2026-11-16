@@ -172,6 +172,7 @@ interface FootballRotationConfig {
   show_countdown: boolean
   show_bye: boolean
   show_final: boolean
+  show_redzone: boolean
 }
 
 interface FootballTeamOption {
@@ -1698,6 +1699,7 @@ function App() {
                       ['show_countdown', 'Countdown before kickoff'],
                       ['show_bye', 'Bye-week screen'],
                       ['show_final', 'Hold the final after a game'],
+                      ['show_redzone', 'Red zone alert over the idle screens'],
                     ] as const
                   ).map(([key, label]) => (
                     <div className="form-check" key={key}>
@@ -1744,6 +1746,7 @@ function App() {
                   ['reversal', 'Reversal'],
                   ['cointoss', 'Coin toss'],
                   ['stats', 'Team stats page (official timeout)'],
+                  ['redzone', 'Red zone alert (over the idle screens)'],
                 ] as const
               ).map(([key, label]) => {
                 const range = footballTimingRanges[key]
