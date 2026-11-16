@@ -887,7 +887,7 @@ exit; with `show_logos = false` every step is just text.
   4-on-4 arrives as a situation but is not an advantage.
 - `club-schedule-season/{TEAM}/now` is ~180KB for the season; cached 1h.
 - Team logo URLs are per-team in the score payload; the pattern is
-  `assets.nhle.com/logos/hockey/svg/{ABBR}_{light|dark}.svg`.
+  `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
 - **Every fetch blocks the render loop**, so a slow API freezes the panel
   (clock, animations, button, goal flash) for as long as the request
