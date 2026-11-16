@@ -11,7 +11,7 @@ from scoreboard.config import Settings, TeamEntry
 from scoreboard.display.matrix import Backend
 from scoreboard.hockey.api import HockeyApiError
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
-from test_flow import Clock, FlowClient, game
+from test_flow import Clock, FlowClient, RecordingHorn, game
 from test_football_scenes import game as football_game
 
 START = datetime(2026, 11, 22, 17, 0, tzinfo=UTC)
@@ -75,6 +75,7 @@ class Rig:
         self.clock = Clock(START)
         self.hockey = HockeyClient()
         self.football = FootballFeed()
+        self.horn = RecordingHorn()
         settings = Settings()
         settings.scoreboard.sport = legacy_sport
         settings.scoreboard.favourite_team = NSH
@@ -87,6 +88,7 @@ class Rig:
             backend=backend,
             clock=lambda: self.clock.now,
             monotonic=lambda: self.clock.mono,
+            horn=self.horn,
             football_client_factory=lambda: self.football,
         )
 
@@ -365,3 +367,88 @@ def test_a_hockey_owner_leaves_football_with_its_lead_team_as_favourite(backend)
     rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
     assert rig.sport == "hockey"
     assert rig.app._football_cfg().favourite_team == TEN
+
+
+# -- hockey reads its favourite and horn from the list (#476) -------------------------------------
+
+HOCKEY_LIST = [("hockey", NSH), ("hockey", TOR), ("football", TEN)]
+
+
+def tor_live():
+    return game(2, "MTL", TOR, START, "LIVE")
+
+
+def test_without_a_list_hockey_reads_the_real_settings_object(backend):
+    rig = Rig(backend, [])
+    assert rig.app._hockey_cfg() is rig.settings.scoreboard
+
+
+def test_the_owner_is_hockey_s_favourite_and_the_lead_keeps_the_horn(backend):
+    rig = Rig(backend, HOCKEY_LIST)
+    rig.hockey.today, rig.football.games = [nsh_far(), tor_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    cfg = rig.app._hockey_cfg()
+    assert cfg.favourite_team == TOR, "TOR is the highest-ranked hockey team that is playing"
+    assert cfg.also_follow == [NSH] and cfg.horn_team == NSH
+    assert rig.sport == "hockey"
+
+
+def test_the_board_shows_the_owners_game(backend):
+    rig = Rig(backend, HOCKEY_LIST)
+    rig.hockey.today, rig.football.games = [nsh_far(), tor_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    scene = rig.app.select_scene()
+    assert scene.game is not None and scene.game.involves(TOR)
+
+
+def test_the_lead_teams_goal_sounds_the_horn_and_nobody_elses(backend):
+    rig = Rig(backend, HOCKEY_LIST)
+    rig.hockey.today, rig.football.games = [nsh_live(), tor_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    rig.app._on_goal(rig.hockey.today[0], NSH)  # the lead owns the board and scores
+    assert rig.horn.calls == [NSH] and rig.horn.ding_calls == 0
+    rig.app._on_goal(rig.hockey.today[1], TOR)  # a followed team scores
+    assert rig.horn.calls == [NSH] and rig.horn.ding_calls == 1, (
+        "the ding, as for any followed team"
+    )
+
+
+def test_an_owner_that_is_not_the_lead_gets_the_ding_and_not_the_horn(backend):
+    rig = Rig(backend, HOCKEY_LIST)
+    rig.hockey.today, rig.football.games = [nsh_far(), tor_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.app._hockey_cfg().favourite_team == TOR
+    rig.app._on_goal(rig.hockey.today[1], TOR)
+    assert rig.horn.calls == [] and rig.horn.ding_calls == 1
+
+
+def test_without_a_list_the_favourites_goal_still_sounds_the_horn(backend):
+    rig = Rig(backend, [])
+    rig.hockey.today = [nsh_live()]
+    rig.app._on_goal(rig.hockey.today[0], NSH)
+    assert rig.horn.calls == [NSH] and rig.horn.ding_calls == 0
+
+
+def test_when_the_owner_changes_the_favourite_s_cached_schedule_and_leaders_are_dropped(backend):
+    rig = Rig(backend, HOCKEY_LIST)
+    rig.hockey.today, rig.football.games = [nsh_far(), tor_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.app._hockey_cfg().favourite_team == TOR
+    rig.app._schedule = (1.0, [nsh_far()])
+    rig.app._leaders = (TOR, 1.0, None)
+    rig.hockey.today = [
+        nsh_live(),
+        tor_live(),
+    ]  # the lead plays now: it takes the favourite's place
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.app._hockey_cfg().favourite_team == NSH
+    assert rig.app._schedule is None and rig.app._leaders is None
+
+
+def test_the_caches_are_kept_while_the_favourite_stays_the_same(backend):
+    rig = Rig(backend, HOCKEY_LIST)
+    rig.hockey.today, rig.football.games = [nsh_live()], [ten_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    rig.app._schedule = (1.0, [nsh_far()])
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.app._schedule is not None
