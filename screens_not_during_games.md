@@ -1,7 +1,7 @@
 # Football (football) screens when no game is on: design and todo
 
 What a football board shows **between games**: before kickoff, after the final whistle, on
-and on a bye week. It is the football counterpart of the NHL
+and on a bye week. It is the football counterpart of the hockey
 guide's "Before a game" and "Between games" sections in [`screens.md`](screens.md)
 (`preview`, `countdown`, `standings`, the idle rotation, `clock`).
 
@@ -30,7 +30,7 @@ board falls back to these, and only these:
 | The feed is stale or never answered | `fb_no_data` / `fb_connecting` |
 
 So on a bye week or in March the board says `NO GAMES football` and nothing else, and the
-idle clock, holidays and everything between games that the NHL board has are absent.
+idle clock, holidays and everything between games that the hockey board has are absent.
 The scoreboard feed is asked for **today's slate only** (`scores(date=None)`), so the
 board cannot say when the next game is. The research below (`football_api.md`, "Between
 games") shows the feed already hands the board more than it uses: the week, a list of the
@@ -38,14 +38,14 @@ teams on a bye, and the whole season's calendar.
 
 ## Principles
 
-- **Never a blank or a bare "NO GAMES" while there is something worth saying.** The NHL
+- **Never a blank or a bare "NO GAMES" while there is something worth saying.** The hockey
   rule ("a screen with nothing to show right now is skipped, never shown blank") carries
   over.
 - **The favourite comes first.** Everything below is about the favourite's team; with no
   favourite set it is about the league.
 - **Football is a weekly sport.** The next game is days away, not hours: the useful
   numbers are days and the day and time of kickoff, not a puck-drop countdown.
-- **Same machinery as the NHL idle rotation where it fits**: a list of screens, each for
+- **Same machinery as the hockey idle rotation where it fits**: a list of screens, each for
   its own number of seconds, a screen with nothing to show skipped. Whether football mode reads
   the existing `[[rotation]]` setting or gets its own is an open question.
 - **Cheap on the feed.** Anything that needs more than the live scoreboard (a schedule, a
@@ -61,7 +61,7 @@ on 2026-11-13; the findings are in `football_api.md`, "Between games".
 ### `fb_countdown`: kickoff is close
 
 The favourite's game starts within the hour (or the hours before, as `countdown_minutes`
-does in NHL). Both teams' logos at the edges, `KICKOFF IN` and a countdown in the middle
+does in hockey). Both teams' logos at the edges, `KICKOFF IN` and a countdown in the middle
 (`0:42:15`), the broadcast time under it. Replaces `fb_scores` for that game once it is
 inside the window. Data: the game's start time, already in the scoreboard feed.
 
@@ -69,7 +69,7 @@ inside the window. Data: the game's start time, already in the scoreboard feed.
 
 The favourite's next game, up to a week out: `SUN 12:00 PM`, `@ WSH` or `vs DAL`, both
 logos, the week number, optionally the records and the broadcast. The football equivalent of the
-NHL `preview`, with days instead of hours. Data: the team **schedule** (`/teams/{id}/schedule`, 17 games, 300 KB, fetched daily) gives
+Hockey `preview`, with days instead of hours. Data: the team **schedule** (`/teams/{id}/schedule`, 17 games, 300 KB, fetched daily) gives
 the next game's date and opponent; **records** and the **broadcast** are on the scoreboard
 events (`records`, `broadcasts`) once the game is in the week being polled.
 
@@ -83,7 +83,7 @@ teams on a bye that week, so no schedule is needed to know; the next game is in 
 ### `fb_final`: after the game
 
 `fb_scores` already holds the final. Proposed: after the game the favourite's final stays
-for a set time (the NHL's `final_hold_minutes`), then the rotation resumes. Optionally a
+for a set time (the hockey's `final_hold_minutes`), then the rotation resumes. Optionally a
 **recap** line (the winning team, the margin, the leading passer or rusher). Data: the
 final score and, for the recap, the final event's `leaders` (the game's top passer and rusher, each tagged with its team: #420).
 
@@ -96,7 +96,7 @@ divisions): each team's `overall` record, `playoffSeed`, `streak` and points for
 
 ### `fb_week`: the league's slate
 
-Everyone's score for the week on one frame, the way `scores` shows several NHL games: on a
+Everyone's score for the week on one frame, the way `scores` shows several hockey games: on a
 Sunday, the other 15 games; on Monday, the whole week's finals. A grid of small score
 cells, paged. Data: `scoreboard?week=N&seasontype=2` returns the **whole week's** games (16 for week 12), so
 one request fills the grid; `week.teamsOnBye` names the teams missing from it.
@@ -148,11 +148,11 @@ font has no `@` and no `#`, so away games read `AT`.
 | ![Week](docs/football/fb_week.png) | ![Schedule](docs/football/fb_schedule.png) |
 | `fb_week`: eight games a page, away over home; finals with the winner bright, a live game in green, an upcoming one with its kickoff hour. Two pages for 16 games. | `fb_schedule`: the favourite's next three games, week, date, opponent, time. |
 
-## Carry-over from the NHL idle rotation
+## Carry-over from the hockey idle rotation
 
-The NHL side is in [`screens.md`](screens.md), "Between games". Proposed fate of each:
+The hockey side is in [`screens.md`](screens.md), "Between games". Proposed fate of each:
 
-| NHL screen | In football mode |
+| Hockey screen | In football mode |
 |---|---|
 | `clock` (`clock`, `show_clock_when_idle`) | **Carries over unchanged**: it is not sport-specific. The fallback when nothing else has anything to show. |
 | `christmas_tree` and the holiday decorations | **Carry over unchanged**; the holiday overlay is sport-aware (#430): Football team colours in football mode, and on a game screen only on Thanksgiving and Christmas games. |
@@ -160,13 +160,13 @@ The NHL side is in [`screens.md`](screens.md), "Between games". Proposed fate of
 | `preview`, `countdown` | Become `fb_preview`, `fb_countdown` above. |
 | `standings`, `division`, `wildcard`, `conference_leaders` | Become `fb_standings` (a division page and a conference page). |
 | `scores` (the all-games grid) | Becomes `fb_week`. |
-| `matchup`, `matchup_meetings` (the NHL season series) | **Do not apply**: teams meet once or twice a year. Optionally a head-to-head line on `fb_preview`. |
+| `matchup`, `matchup_meetings` (the hockey season series) | **Do not apply**: teams meet once or twice a year. Optionally a head-to-head line on `fb_preview`. |
 | `leaders` (the favourite's top players) | Possible later as team leaders (passing, rushing); needs the roster stats endpoint. |
 | `three_stars` | **Does not apply.** |
 
 ## Which screen is chosen (proposed)
 
-Highest first; the first that has something to show wins, as in the NHL list in
+Highest first; the first that has something to show wins, as in the hockey list in
 `screens.md`:
 
 1. The favourite's game live, or a followed team's live game (as today: `pick_game`).
@@ -229,7 +229,7 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
       not the shared `[[rotation]]`, so switching sport never shows screens that do not exist. The
       admin page gets a football version of the Idle rotation card.
 - [x] **The final is held 60 minutes, with a recap line.** A setting (default 60 minutes, like the
-      NHL's `final_hold_minutes`); the final screen adds a **recap**: the leading passer and rusher
+      Hockey's `final_hold_minutes`); the final screen adds a **recap**: the leading passer and rusher
       (the per-event `leaders`: see #420 in `football_api.md`).
 - [x] **Preseason and playoffs are games.** All three seasons get the same screens. The round is
       labelled: `PRESEASON WK 2`, `WILD CARD`, `DIVISIONAL`, `CONF CHAMP`, `SUPER BOWL`. A `TBD @ TBD`

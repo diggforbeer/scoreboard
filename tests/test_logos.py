@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.display.logos import ALPHA_FLOOR, LogoLibrary, decode
+from scoreboard.display.logos import ALPHA_FLOOR, LogoLibrary, decode
 
 PIL = pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
@@ -89,7 +89,7 @@ def test_cache_loads_once(tmp_path, monkeypatch):
 
 
 def test_override_directory_is_checked_before_the_fetched_one():
-    from nhl_scoreboard.display.logos import default_directories
+    from scoreboard.display.logos import default_directories
 
     # Compare path components, not strings: str(Path) uses "\" on Windows.
     tails = [d.parts[-4:] for d in default_directories(32, "dark")]
@@ -103,7 +103,7 @@ def test_wsh_override_ships_and_is_legible():
     32px (#12); this repo carries a hand-picked replacement instead of
     falling back to text for every Capitals game. Sanity-check it's
     actually there and isn't itself a near-empty or corrupt image."""
-    from nhl_scoreboard.display.logos import LogoLibrary
+    from scoreboard.display.logos import LogoLibrary
 
     lib = LogoLibrary.default(variant="dark")
     logo = lib.get("WSH")

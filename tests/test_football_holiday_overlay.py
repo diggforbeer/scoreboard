@@ -7,12 +7,12 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from nhl_scoreboard.app import FOOTBALL_GAME_SCENES, Scene
-from nhl_scoreboard.display import holiday
-from nhl_scoreboard.display.holiday import HOLIDAYS, egg_teams, use_sport
-from nhl_scoreboard.display.teams import TEAM_COLORS
-from nhl_scoreboard.football import teams as football_teams
-from nhl_scoreboard.football.idle_views import PreviewView, game_holiday, is_thanksgiving
+from scoreboard.app import FOOTBALL_GAME_SCENES, Scene
+from scoreboard.display import holiday
+from scoreboard.display.holiday import HOLIDAYS, egg_teams, use_sport
+from scoreboard.display.teams import TEAM_COLORS
+from scoreboard.football import teams as football_teams
+from scoreboard.football.idle_views import PreviewView, game_holiday, is_thanksgiving
 from test_football_idle_preview import utc
 from test_football_scenes import _pixels, app, game  # noqa: F401  (the real-app fixture)
 
@@ -56,12 +56,12 @@ def test_the_boards_zone_decides_the_day():
 # -- Football colours -----------------------------------------------------------------------------
 
 
-def test_the_overlay_takes_football_colours_in_football_mode_and_nhl_colours_otherwise():
+def test_the_overlay_takes_football_colours_in_football_mode_and_hockey_colours_otherwise():
     with use_sport("football"):
         assert holiday.team_color("KC") == football_teams.team_color("KC")
         assert holiday.team_secondary_color("KC") == football_teams.team_secondary_color("KC")
         assert set(holiday.team_codes()) == set(football_teams.TEAMS)
-    assert holiday.team_color("NSH") == holiday.nhl_team_color("NSH")  # back to the NHL table
+    assert holiday.team_color("NSH") == holiday.hockey_team_color("NSH")  # back to the hockey table
     assert set(holiday.team_codes()) == set(TEAM_COLORS)
 
 
@@ -69,14 +69,14 @@ def test_the_easter_basket_picks_only_teams_of_the_sport_in_use():
     with use_sport("football"):
         picks = egg_teams("NYG", date(2027, 3, 28))
     assert picks[0] == "NYG" and set(picks) <= set(football_teams.TEAMS)
-    nhl = egg_teams("NSH", date(2027, 3, 28))
-    assert set(nhl) <= set(TEAM_COLORS)
+    hockey = egg_teams("NSH", date(2027, 3, 28))
+    assert set(hockey) <= set(TEAM_COLORS)
 
 
 def test_the_sport_resets_even_when_drawing_raises():
     with pytest.raises(RuntimeError), use_sport("football"):
         raise RuntimeError
-    assert holiday.team_color("NSH") == holiday.nhl_team_color("NSH")
+    assert holiday.team_color("NSH") == holiday.hockey_team_color("NSH")
 
 
 # -- the app: which scenes get a holiday ----------------------------------------------------------
@@ -193,13 +193,13 @@ def test_the_same_game_a_day_later_is_not(app):  # noqa: F811
     assert drawn(app, scene, holidays=True) == drawn(app, scene, holidays=False)
 
 
-def test_nhl_mode_colours_are_untouched():
-    assert holiday.team_color("NSH") == holiday.nhl_team_color("NSH")
-    assert holiday.team_secondary_color("NSH") == holiday.nhl_team_secondary_color("NSH")
+def test_hockey_mode_colours_are_untouched():
+    assert holiday.team_color("NSH") == holiday.hockey_team_color("NSH")
+    assert holiday.team_secondary_color("NSH") == holiday.hockey_team_secondary_color("NSH")
 
 
 def test_snapshots_of_each_overlay_over_an_football_screen(app, update_snapshots):  # noqa: F811
-    from nhl_scoreboard.display.ascii import AsciiCanvas
+    from scoreboard.display.ascii import AsciiCanvas
     from test_football_scenes import check_snapshot
 
     with_holiday(app)

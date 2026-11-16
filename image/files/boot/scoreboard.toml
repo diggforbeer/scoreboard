@@ -1,5 +1,5 @@
 # ============================================================
-#  NHL Scoreboard settings
+#  Scoreboard settings
 # ============================================================
 #
 #  Edit this file on the SD card's boot partition (it shows up as a small
@@ -22,9 +22,9 @@ country = "CA"
 connect_timeout_seconds = 90
 
 [scoreboard]
-# Which sport the board runs: "nhl" (default) or "football". Anything else is
-# treated as "nhl".
-sport = "nhl"
+# Which sport the board runs: "hockey" (default) or "football". Anything else is
+# treated as "hockey".
+sport = "hockey"
 # Three-letter team abbreviation, followed as your team's day: a preview of
 # the next game, a countdown as puck drop approaches, the live score, the
 # final for a while, then the preview of the game after that. Set to "" for
@@ -49,7 +49,7 @@ timezone = "America/Chicago"
 # explicit [[rotation]] list overrides it (see the bottom of this section).
 rotate_seconds = 8
 
-# How often to ask the NHL for updated scores, in seconds.
+# How often to ask the hockey for updated scores, in seconds.
 poll_seconds = 60
 # Faster polling while a game is actually in progress.
 live_poll_seconds = 15
@@ -77,15 +77,15 @@ logo_variant = "dark"
 goal_flash_seconds = 6
 
 # How long the follow-up scorer/assist detail screen stays up once it
-# fires (later than the GOAL screen above, once the NHL's play-by-play
+# fires (later than the GOAL screen above, once the hockey's play-by-play
 # catches up with who actually scored).
 goal_detail_seconds = 8
 
 # How long the "3 STARS" screen stays up once your team's game is final and
-# the NHL has named its three stars, before the final score takes over.
+# the hockey has named its three stars, before the final score takes over.
 three_stars_seconds = 8
 
-# Hold the whole board this many seconds behind the NHL data, so scores, the
+# Hold the whole board this many seconds behind the hockey data, so scores, the
 # goal horn and the GOAL screen line up with a TV broadcast, which runs 30-60
 # seconds behind the API. 0 = no delay. Trial and error: watch a goal on TV
 # and note how early the board was.
@@ -152,12 +152,12 @@ scores_grid = false
 
 [football]
 # Used only when [scoreboard] sport = "football". The football favourite and followed teams are
-# kept apart from the NHL ones above, because abbreviations like BUF, CAR, DAL, DET
+# kept apart from the hockey ones above, because abbreviations like BUF, CAR, DAL, DET
 # and MIN are different teams in each league; switching sport and back keeps both.
 # Also editable on the admin page (Scoreboard card, once Sport is football).
 #
 # ESPN's abbreviation for your team: KC, NYG, WSH, GB, SF, ... There is no default:
-# with none set, the board shows every game. An NHL-only abbreviation (NSH, TOR) is
+# with none set, the board shows every game. A hockey-only abbreviation (NSH, TOR) is
 # ignored with a warning.
 favourite_team = ""
 # More football teams to follow. Example: also_follow = ["NYG", "DAL"]
@@ -224,7 +224,7 @@ enabled = true
 
 [wifi_setup]
 # The setup page served while the board's own first-boot WiFi access point
-# (see nhl-scoreboard-setup-ap) is up -- lets a phone connected to that AP
+# (see scoreboard-setup-ap) is up -- lets a phone connected to that AP
 # pick a network from a scan taken just before the AP came up, or type one
 # in by hand, and submit a password. On by default: while the AP is up,
 # this is the only way to actually choose a network (the AP itself just
@@ -350,8 +350,8 @@ pixel_mapper = ""
 #   "adafruit-hat-pwm" Adafruit board with the GPIO4-GPIO18 solder mod.
 #
 # IMPORTANT if the panel stays completely dark after setup: a wrong value
-# here does NOT show up as an error anywhere. nhl-scoreboard.service
-# starts fine, keeps running, keeps polling the NHL API -- it's just
+# here does NOT show up as an error anywhere. scoreboard.service
+# starts fine, keeps running, keeps polling the hockey API -- it's just
 # driving the wrong physical pins for your actual adapter, so nothing
 # ever lights up. Verified on real hardware: an Adafruit RGB Matrix
 # Bonnet left on the "regular" default ran for 7+ minutes with an

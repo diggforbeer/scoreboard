@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from nhl_scoreboard.config import FootballConfig
-from nhl_scoreboard.football import director as dr
-from nhl_scoreboard.football.director import Director
-from nhl_scoreboard.football.mode import FootballMode
-from nhl_scoreboard.football.teams import TEAMS
-from nhl_scoreboard.football.worker import FeedSnapshot
+from scoreboard.config import FootballConfig
+from scoreboard.football import director as dr
+from scoreboard.football.director import Director
+from scoreboard.football.mode import FootballMode
+from scoreboard.football.teams import TEAMS
+from scoreboard.football.worker import FeedSnapshot
 from test_football_events import make_game, make_play
 from test_football_idle_selection import (
     BASE,

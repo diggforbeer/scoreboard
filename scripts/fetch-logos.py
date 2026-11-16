@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Fetch team logos and rasterise them for the panel.
 
-NHL: downloads each team's SVG from the NHL's asset CDN -- the same source the
+Hockey: downloads each team's SVG from the hockey's asset CDN -- the same source the
 score API links per team -- and renders it to a small PNG. Football (#349): reads the
 logo links out of ESPN's teams endpoint and downsizes its 500px PNGs. Run before an
 image build (CI does) and for local development; output is git-ignored, so the
 repository never redistributes the artwork itself.
 
-    python scripts/fetch-logos.py               # NHL: 32px, both variants
+    python scripts/fetch-logos.py               # hockey: 32px, both variants
     python scripts/fetch-logos.py --size 32 --variant dark
     python scripts/fetch-logos.py --sport football   # football: 12px and 16px, dark
 
@@ -31,17 +31,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from nhl_scoreboard.display.teams import TEAM_COLORS  # noqa: E402
-from nhl_scoreboard.football.teams import ABBREVIATIONS as FOOTBALL_ABBREVIATIONS  # noqa: E402
+from scoreboard.display.teams import TEAM_COLORS  # noqa: E402
+from scoreboard.football.teams import ABBREVIATIONS as FOOTBALL_ABBREVIATIONS  # noqa: E402
 
 LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbrev}_{variant}.svg"
 ESPN_TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams"
-USER_AGENT = "nhl-scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
+USER_AGENT = "scoreboard/0.1 (+https://github.com/diggforbeer/scoreboard)"
 #: The sizes fetched for the football by default (see the module docstring).
 FOOTBALL_SIZES = (12, 16)
 #: Which of ESPN's logo entries each variant name means.
 FOOTBALL_REL = {"dark": ("full", "dark"), "light": ("full", "default")}
-#: A crest whose lit pixels average darker than this (0-255 luma) is brightened, like the NHL
+#: A crest whose lit pixels average darker than this (0-255 luma) is brightened, like the hockey
 #: table lifts navy and burgundy team colours: Carolina's black panther measured 31 at 12px
 #: with no bright pixel at all, where every other team is 62 or more. ESPN's other variants
 #: (on-black, white) do not help: it is a black cat. Never brightened more than ``LIFT_CAP``x.
@@ -59,7 +59,7 @@ def rasterise(svg_bytes: bytes, size: int):
     image = Image.open(io.BytesIO(png)).convert("RGBA")
     bbox = image.getbbox()
     if bbox:
-        # The NHL SVGs sit inside a 960x640 viewBox with generous margins;
+        # The hockey SVGs sit inside a 960x640 viewBox with generous margins;
         # cropping to the drawn area is what makes 32px usable.
         image = image.crop(bbox)
     image.thumbnail((size, size), Image.LANCZOS)
@@ -71,7 +71,7 @@ def rasterise(svg_bytes: bytes, size: int):
 def rasterise_png(png_bytes: bytes, size: int):
     """A downloaded PNG, cropped to what is drawn and fitted to ``size`` x ``size``.
 
-    Cropping matters as much as for the NHL SVGs: ESPN's 500px logos have a margin, and
+    Cropping matters as much as for the hockey SVGs: ESPN's 500px logos have a margin, and
     spending the 12 pixels on it would shrink the crest.
     """
     from PIL import Image
@@ -158,20 +158,20 @@ def _show(target: Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
-        "--sport", choices=["nhl", "football"], default="nhl", help="Which league's logos"
+        "--sport", choices=["hockey", "football"], default="hockey", help="Which league's logos"
     )
     parser.add_argument(
         "--size",
         type=int,
         nargs="+",
         default=None,
-        help="Output width/height in px (default: 32 for the NHL; 12 and 16 for the football)",
+        help="Output width/height in px (default: 32 for the hockey; 12 and 16 for the football)",
     )
     parser.add_argument(
         "--variant",
         choices=["dark", "light", "both"],
         default=None,
-        help="Which artwork (default: both for the NHL, dark for the football)",
+        help="Which artwork (default: both for the hockey, dark for the football)",
     )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output root directory")
     parser.add_argument("--teams", nargs="*", default=None, help="Abbrevs to fetch (default: all)")

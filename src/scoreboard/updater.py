@@ -1,0 +1,465 @@
+"""App-layer self-update (#32): check for a newer release, apply it on demand.
+
+The app on the image is a plain source tree on PYTHONPATH
+(``/opt/scoreboard``), not a pip install, so an update is "replace that
+directory and restart the service". Two deliberately separate steps:
+
+* ``check`` -- daily (``scoreboard-update.timer``) or on the admin
+  page's button -- asks GitHub for the latest release and records in
+  ``update-state.json`` whether it is newer and hot-applicable. Downloads
+  nothing.
+* ``apply`` -- only ever started by the admin page's button -- downloads the
+  bundle, checks its sha256, and swaps it in with the same shape as
+  ``wifi.apply_wifi()``: the new tree is written *alongside* the live one,
+  swapped in by rename, the service is restarted and must actually come up,
+  and if it doesn't the previous tree is renamed back and the service
+  restarted again.
+
+Both run as their own systemd oneshot units, not inside the app: an apply
+restarts ``scoreboard.service``, which would kill it if it were running
+as a thread of the app. Stdlib only, so it needs nothing beyond the base
+image.
+
+"Healthy" is deliberately just "the service stayed active for
+``HEALTH_SECONDS``" -- with ``Restart=always`` a crash-looping release goes
+``activating (auto-restart)`` and fails that check. It does not prove the
+panel is rendering; that was considered and left out on purpose (#32).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.request
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+log = logging.getLogger(__name__)
+
+#: Overridable so tests run the real code against temp dirs, same convention
+#: as wifi.IWD_DIR.
+APP_DIR = Path(os.environ.get("SCOREBOARD_APP_DIR", "/opt/scoreboard"))
+STATE_FILE = Path(
+    os.environ.get("SCOREBOARD_UPDATE_STATE", "/var/lib/scoreboard/update-state.json")
+)
+#: Full commit of the HUB75 driver this image compiled, written at image
+#: build time. The compiled ``rgbmatrix`` can't be rebuilt on the device (the
+#: toolchain is purged, #11), so a release pinning a different one needs a
+#: reflash.
+DRIVER_COMMIT_FILE = Path(
+    os.environ.get("SCOREBOARD_DRIVER_COMMIT", "/usr/share/scoreboard/driver-commit")
+)
+#: The image-level fingerprint (scripts, units, apt packages) this board was
+#: flashed with, written at image build time by scripts/image_manifest.py.
+#: The updater can't change those things, so this stays the record of what is
+#: on the board until a reflash replaces it (#284). Absent on older boards.
+IMAGE_MANIFEST_FILE = Path(
+    os.environ.get("SCOREBOARD_IMAGE_MANIFEST", "/usr/share/scoreboard/image-manifest.json")
+)
+RELEASE_URL = os.environ.get(
+    "SCOREBOARD_RELEASE_URL",
+    "https://api.github.com/repos/diggforbeer/scoreboard/releases/latest",
+)
+#: Every release, newest first, pre-releases included. Branch channels (#341)
+#: live here: ``latest`` never returns a pre-release, which is the point of
+#: keeping a branch's builds off the stable channel.
+RELEASES_URL = os.environ.get(
+    "SCOREBOARD_RELEASES_URL",
+    "https://api.github.com/repos/diggforbeer/scoreboard/releases?per_page=50",
+)
+STABLE_BRANCH = "main"
+#: Where admin_server.py serves the built React page from; same env var, so
+#: the updater and the server can't disagree about it. The bundle's optional
+#: top-level ``admin/`` directory (frontend/dist) is swapped in here (#185).
+ADMIN_DIR = Path(os.environ.get("SCOREBOARD_ADMIN_DIR", "/usr/share/scoreboard/admin"))
+BUNDLE_ASSET = "scoreboard-app.tar.gz"
+MANIFEST_ASSET = "manifest.json"
+SERVICE = "scoreboard.service"
+HEALTH_SECONDS = float(os.environ.get("SCOREBOARD_UPDATE_HEALTH_SECONDS", "20"))
+HEALTH_POLL_SECONDS = float(os.environ.get("SCOREBOARD_UPDATE_HEALTH_POLL", "1"))
+HTTP_TIMEOUT = 30
+
+#: ``v2026.11.12``, ``v2026.11.12.3`` and, for a branch channel (#341),
+#: ``v2026.11.12.3-football``: the branch name rides after a hyphen.
+_CALVER = re.compile(r"^v(\d{4})\.(\d{2})\.(\d{2})(?:\.(\d+))?(?:-([a-z0-9][a-z0-9-]*))?$")
+
+
+# -- state ---------------------------------------------------------------
+
+
+def read_state() -> dict[str, Any]:
+    try:
+        data = json.loads(STATE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_state(state: dict[str, Any]) -> None:
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = STATE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2))
+        tmp.replace(STATE_FILE)
+    except OSError as exc:
+        log.error("Could not write %s: %s", STATE_FILE, exc)
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def installed_version() -> str:
+    """The release tag this tree was built from; ``""`` if unknown (a fresh image)."""
+    try:
+        return (APP_DIR / "VERSION").read_text().strip()
+    except OSError:
+        return ""
+
+
+def _version_key(tag: str) -> tuple[int, ...] | None:
+    match = _CALVER.match(tag)
+    if not match:
+        return None
+    return tuple(int(part or 0) for part in match.groups()[:4])
+
+
+def tag_branch(tag: str) -> str:
+    """The branch a release tag was built from: ``football`` for ``v2026.11.12.3-football``,
+    ``main`` for a plain CalVer tag (or anything unrecognised)."""
+    match = _CALVER.match(tag)
+    return (match.group(5) if match else None) or STABLE_BRANCH
+
+
+def is_newer(latest: str, installed: str) -> bool:
+    if not installed:
+        return True  # unknown -- a freshly flashed image carries no VERSION
+    if tag_branch(latest) != tag_branch(installed):
+        # Switching channel: the dates of two different lines of work say
+        # nothing about which is "newer", and the owner asked for this one.
+        return True
+    latest_key, installed_key = _version_key(latest), _version_key(installed)
+    if latest_key is None or installed_key is None:
+        return latest != installed
+    return latest_key > installed_key
+
+
+def _drivers_match(wanted: str) -> bool:
+    try:
+        have = DRIVER_COMMIT_FILE.read_text().strip()
+    except OSError:
+        have = ""
+    if not wanted or not have:
+        return True  # can't tell; don't block on missing information
+    return have.startswith(wanted) or wanted.startswith(have)
+
+
+# -- check ---------------------------------------------------------------
+
+
+def _fetch_json(url: str) -> Any:
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/vnd.github+json", "User-Agent": "scoreboard"}
+    )
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
+        return json.load(response)
+
+
+def _download(url: str, dest: Path) -> None:
+    request = urllib.request.Request(url, headers={"User-Agent": "scoreboard"})
+    with (
+        urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response,
+        dest.open("wb") as out,
+    ):
+        shutil.copyfileobj(response, out)
+
+
+def image_changes(release: Any) -> dict[str, Any] | None:
+    """How a release's image-level files differ from what this board has (#284).
+
+    None when the release carries no fingerprint (an older release: nothing to
+    say). ``status`` is ``unknown`` when the board has no record, which is never
+    treated as a match. Informational only; the app update still applies.
+    """
+    if not isinstance(release, dict):
+        return None
+    try:
+        board = json.loads(IMAGE_MANIFEST_FILE.read_text())
+        if not isinstance(board, dict):
+            raise ValueError("not an object")
+    except (OSError, ValueError):
+        return {"status": "unknown", "files": [], "packages": [], "command": ""}
+    wanted = release.get("files") or {}
+    have = board.get("files") or {}
+    files = sorted(n for n in wanted.keys() | have.keys() if wanted.get(n) != have.get(n))
+    packages = sorted(set(release.get("packages") or []) - set(board.get("packages") or []))
+    command = "sudo apt-get install -y " + " ".join(packages) if packages else ""
+    status = "differs" if files or packages else "match"
+    return {"status": status, "files": files, "packages": packages, "command": command}
+
+
+def channels(releases: Any) -> list[str]:
+    """Branches that have published releases, ``main`` first, from a releases listing."""
+    found: set[str] = set()
+    if isinstance(releases, list):
+        for item in releases:
+            if isinstance(item, dict) and not item.get("draft"):
+                found.add(tag_branch(str(item.get("tag_name", ""))))
+    found.discard(STABLE_BRANCH)
+    return [STABLE_BRANCH, *sorted(found)]
+
+
+def latest_for_branch(releases: Any, branch: str) -> dict[str, Any]:
+    """The newest release published for ``branch``, by version.
+
+    Not "the first one listed": GitHub orders the listing by tag name, so
+    ``v2026.11.13.9-football`` comes before ``v2026.11.13.21-football``.
+    """
+    best: dict[str, Any] | None = None
+    best_key: tuple[int, ...] = ()
+    if isinstance(releases, list):
+        for item in releases:
+            if not isinstance(item, dict) or item.get("draft"):
+                continue
+            tag = str(item.get("tag_name", ""))
+            if tag_branch(tag) != branch:
+                continue
+            key = _version_key(tag) or ()
+            if best is None or key > best_key:
+                best, best_key = item, key
+    if best is None:
+        raise KeyError(f"no release has been published for branch {branch!r}")
+    return best
+
+
+def configured_branch(config_path: str | None = None) -> str:
+    try:
+        from .config import Settings
+
+        return Settings.load(config_path).update.branch
+    except Exception:  # a broken config must not stop an update check
+        log.warning("Could not read update.branch; following %s", STABLE_BRANCH)
+        return STABLE_BRANCH
+
+
+def check(branch: str | None = None) -> dict[str, Any]:
+    """Look up the latest release on ``branch`` and record whether it can be applied."""
+    branch = branch or configured_branch()
+    state = read_state()
+    state["checked_at"] = _now()
+    state["installed"] = installed_version()
+    state["branch"] = branch
+    try:
+        # One listing serves both the channel picker and a non-stable branch's
+        # release; the stable channel keeps using GitHub's own "latest".
+        try:
+            listing = _fetch_json(RELEASES_URL)
+            state["channels"] = channels(listing)
+        except (OSError, ValueError):
+            listing = None
+            state.setdefault("channels", [STABLE_BRANCH])
+        if branch not in state["channels"]:
+            state["channels"] = [*state["channels"], branch]
+        if branch == STABLE_BRANCH:
+            release = _fetch_json(RELEASE_URL)
+        elif listing is None:
+            raise ValueError("could not list releases")
+        else:
+            release = latest_for_branch(listing, branch)
+        tag = str(release["tag_name"])
+        assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
+        state.update(
+            latest=tag, error="", available=False, applicable=False, reason="", image_changes=None
+        )
+        if not is_newer(tag, state["installed"]):
+            state["reason"] = "Up to date"
+        elif BUNDLE_ASSET not in assets or MANIFEST_ASSET not in assets:
+            state["reason"] = "This release has no app bundle (reflash to update)"
+        else:
+            manifest = _fetch_json(assets[MANIFEST_ASSET])
+            state["available"] = True
+            state["image_changes"] = image_changes(manifest.get("image"))
+            if not _drivers_match(str(manifest.get("driver_commit", ""))):
+                state["reason"] = "Needs a reflash: the HUB75 driver changed"
+            else:
+                state.update(
+                    applicable=True,
+                    bundle_url=assets[BUNDLE_ASSET],
+                    sha256=str(manifest["sha256"]),
+                )
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        # URLError/HTTPError are OSErrors; JSON errors are ValueErrors.
+        log.warning("Update check failed: %s", exc)
+        state["error"] = f"Could not check for updates: {exc}"
+    _write_state(state)
+    return state
+
+
+# -- apply ---------------------------------------------------------------
+
+
+def _systemctl(*args: str) -> bool:
+    try:
+        subprocess.run(["systemctl", *args], check=True, capture_output=True, timeout=60)
+        return True
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.error("systemctl %s failed: %s", " ".join(args), exc)
+        return False
+
+
+def _service_active() -> bool:
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", SERVICE], capture_output=True, text=True, timeout=10
+        )
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return result.stdout.strip() == "active"
+
+
+def wait_until_healthy(seconds: float, poll: float) -> bool:
+    """True if the service is active at every poll for ``seconds``."""
+    deadline = time.monotonic() + seconds
+    while True:
+        if not _service_active():
+            return False
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(poll)
+
+
+def _extract(bundle: Path, dest: Path) -> None:
+    """Unpack ``bundle`` into ``dest``, refusing anything but plain files/dirs inside it."""
+    dest.mkdir(parents=True)
+    with tarfile.open(bundle) as tar:
+        members = tar.getmembers()
+        for member in members:
+            target = (dest / member.name).resolve()
+            if not target.is_relative_to(dest.resolve()) or not (member.isfile() or member.isdir()):
+                raise ValueError(f"unsafe path in bundle: {member.name}")
+        tar.extractall(dest, members=members)
+    if not (dest / "scoreboard" / "__init__.py").is_file():
+        raise ValueError("bundle does not contain scoreboard/")
+
+
+def _record(state: dict[str, Any], outcome: str, detail: str) -> None:
+    state["last_apply"] = {"outcome": outcome, "detail": detail, "at": _now()}
+    _write_state(state)
+
+
+def apply() -> bool:
+    """Install the release ``check()`` found. True if it is now running and healthy."""
+    state = read_state()
+    if not (state.get("available") and state.get("applicable") and state.get("bundle_url")):
+        log.error("No applicable update recorded; run a check first")
+        _record(state, "failed", "No applicable update to install")
+        return False
+
+    tag = state["latest"]
+    _record(state, "in_progress", f"Installing {tag}")
+    new_dir = APP_DIR.with_name(APP_DIR.name + ".new")
+    prev_dir = APP_DIR.with_name(APP_DIR.name + ".prev")
+    new_admin = ADMIN_DIR.with_name(ADMIN_DIR.name + ".new")
+    prev_admin = ADMIN_DIR.with_name(ADMIN_DIR.name + ".prev")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / BUNDLE_ASSET
+            _download(state["bundle_url"], bundle)
+            digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+            if digest != state.get("sha256"):
+                raise ValueError("checksum mismatch")
+            shutil.rmtree(new_dir, ignore_errors=True)
+            shutil.rmtree(new_admin, ignore_errors=True)
+            _extract(bundle, new_dir)
+            (new_dir / "VERSION").write_text(f"{tag}\n")
+            # The frontend rides in the same (already checksummed) bundle so
+            # the page can't lag the backend it talks to. Staged next to the
+            # live directory now so the swap below is only renames.
+            if (new_dir / "admin").is_dir():
+                shutil.move(str(new_dir / "admin"), new_admin)
+    except (OSError, ValueError, tarfile.TarError) as exc:
+        log.error("Could not prepare %s: %s", tag, exc)
+        shutil.rmtree(new_dir, ignore_errors=True)
+        shutil.rmtree(new_admin, ignore_errors=True)
+        _record(state, "failed", f"Download failed, nothing changed: {exc}")
+        return False
+
+    # Swap by rename: the live tree stays intact as .prev until the new one
+    # has proven itself, like apply_wifi() keeping the old iwd profile.
+    shutil.rmtree(prev_dir, ignore_errors=True)
+    APP_DIR.rename(prev_dir)
+    new_dir.rename(APP_DIR)
+    swapped_admin = new_admin.is_dir()
+    if swapped_admin:
+        shutil.rmtree(prev_admin, ignore_errors=True)
+        if ADMIN_DIR.exists():
+            ADMIN_DIR.rename(prev_admin)
+        new_admin.rename(ADMIN_DIR)
+    log.info("Installed %s alongside the previous tree; restarting %s", tag, SERVICE)
+
+    if _systemctl("restart", SERVICE) and wait_until_healthy(HEALTH_SECONDS, HEALTH_POLL_SECONDS):
+        log.info("%s is running %s", SERVICE, tag)
+        shutil.rmtree(prev_dir, ignore_errors=True)
+        shutil.rmtree(prev_admin, ignore_errors=True)
+        state.update(
+            installed=tag,
+            available=False,
+            applicable=False,
+            reason="Up to date",
+            image_changes=None,
+        )
+        _record(state, "success", f"Updated to {tag}")
+        return True
+
+    log.error("%s did not come up on %s; rolling back", SERVICE, tag)
+    failed_dir = APP_DIR.with_name(APP_DIR.name + ".failed")
+    shutil.rmtree(failed_dir, ignore_errors=True)
+    APP_DIR.rename(failed_dir)
+    prev_dir.rename(APP_DIR)
+    shutil.rmtree(failed_dir, ignore_errors=True)
+    if swapped_admin:
+        shutil.rmtree(ADMIN_DIR, ignore_errors=True)
+        if prev_admin.exists():
+            prev_admin.rename(ADMIN_DIR)
+    _systemctl("restart", SERVICE)
+    _record(state, "rolled_back", f"{tag} did not start; restored the previous version")
+    return False
+
+
+# -- CLI -----------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="scoreboard.updater")
+    parser.add_argument("action", choices=("check", "apply"))
+    parser.add_argument("--force", action="store_true", help="check even if [update] is disabled")
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--branch", default=None, help="follow this branch for this check only")
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    if args.action == "check":
+        if not args.force:
+            from .config import Settings
+
+            if not Settings.load(args.config).update.enabled:
+                log.info("Update checks are disabled ([update] enabled = false)")
+                return 0
+        branch = args.branch or configured_branch(args.config)
+        return 0 if not check(branch).get("error") else 1
+    return 0 if apply() else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

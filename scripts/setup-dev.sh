@@ -16,7 +16,7 @@ else
     echo "==> .venv already exists"
 fi
 
-echo "==> Installing nhl-scoreboard in editable mode with dev extras"
+echo "==> Installing scoreboard in editable mode with dev extras"
 "${VENV}/bin/pip" install --quiet --upgrade pip
 "${VENV}/bin/pip" install --quiet -e '.[dev]'
 
@@ -53,8 +53,8 @@ cat <<'EOF'
 
     source .venv/bin/activate
 
-    nhl-scoreboard --dump                                              # today's scores, no display
-    nhl-scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml    # live board: http://localhost:8888
+    scoreboard --dump                                              # today's scores, no display
+    scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml    # live board: http://localhost:8888
                                                                         #   admin page: http://localhost:8080
     python scripts/preview.py --fixture                                # frames as ASCII, offline
     pytest                                                             # 199+ tests, ~1s, fully offline

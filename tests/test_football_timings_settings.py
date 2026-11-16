@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import dataclasses
 
-from nhl_scoreboard.config import FOOTBALL_TIMING_RANGES, FootballConfig, Settings
-from nhl_scoreboard.football import events as ev
-from nhl_scoreboard.football.director import PLAY, PLAYTEXT, Timings, timings_from
-from nhl_scoreboard.football.mode import FootballMode
+from scoreboard.config import FOOTBALL_TIMING_RANGES, FootballConfig, Settings
+from scoreboard.football import events as ev
+from scoreboard.football.director import PLAY, PLAYTEXT, Timings, timings_from
+from scoreboard.football.mode import FootballMode
 from test_football_director import started, td
 from test_football_events import make_play
 

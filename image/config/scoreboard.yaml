@@ -1,10 +1,10 @@
-# Image definition for the NHL scoreboard appliance.
+# Image definition for the scoreboard appliance.
 #
 # Build from the repository root:
 #   ./scripts/fetch-vendor.sh
 #   rpi-image-gen build -S ./image -c scoreboard.yaml
 #
-# Output: work/nhl-scoreboard/nhl-scoreboard.img
+# Output: work/scoreboard/scoreboard.img
 
 include:
   file: trixie-minbase.yaml
@@ -23,13 +23,13 @@ device:
 
 image:
   layer: image-rpios
-  name: nhl-scoreboard
+  name: scoreboard
   boot_part_size: 256M
   # Room for the toolchain used to build the HUB75 bindings, plus headroom.
   root_part_size: 2560M
 
 layer:
-  app: nhl-scoreboard
+  app: scoreboard
 
 # The base layers default to UK locale and the restrictive '00' wireless
 # regulatory domain. The provisioning script resets timezone and regdom from
@@ -48,9 +48,9 @@ sb:
   assetdir: ${@SRCROOT}/files
   vendordir: ${@SRCROOT}/files/vendor
   # The release tag this image was built from, e.g. v2026.09.29.4 --
-  # stamped into /opt/nhl-scoreboard/VERSION at build time so the admin
+  # stamped into /opt/scoreboard/VERSION at build time so the admin
   # page can show it even on a board that's never taken a hot update
-  # (nhl_scoreboard.updater only ever writes that file itself on a
+  # (scoreboard.updater only ever writes that file itself on a
   # successful apply(), never at image-build time). Empty by default;
   # build-image.yml overrides this with the real tag for an actual
   # release build (-- IGconf_sb_version=...), left blank for a PR/dev

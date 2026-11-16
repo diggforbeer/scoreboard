@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from nhl_scoreboard.demo import DemoStep, demo_steps
+from scoreboard.demo import DemoStep, demo_steps
 
 NOW = datetime(2026, 10, 14, 23, 0, tzinfo=UTC)
 EVERY_KIND = {
@@ -126,9 +126,9 @@ def test_every_step_renders_on_panel(width):
     """Draw each step through the real renderer; nothing may land off-panel."""
     from zoneinfo import ZoneInfo
 
-    from nhl_scoreboard.display.ascii import AsciiCanvas
-    from nhl_scoreboard.display.fonts import FontSet
-    from nhl_scoreboard.display.renderer import Renderer
+    from scoreboard.display.ascii import AsciiCanvas
+    from scoreboard.display.fonts import FontSet
+    from scoreboard.display.renderer import Renderer
 
     graphics = pytest.importorskip("RGBMatrixEmulator").graphics
     r = Renderer(graphics, FontSet(graphics), width, 32, ZoneInfo("America/Chicago"))
@@ -190,7 +190,7 @@ def test_every_step_renders_on_panel(width):
 
 def test_every_holidays_art_is_shown():
     """Per distinct fly-by, not per name: both Thanksgivings share the turkey."""
-    from nhl_scoreboard.display.holiday import HOLIDAYS
+    from scoreboard.display.holiday import HOLIDAYS
 
     named = [s.holiday for s in demo_steps("NSH", NOW) if s.holiday is not None]
     assert all(name in HOLIDAYS for name in named)

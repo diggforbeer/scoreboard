@@ -13,17 +13,17 @@ from pathlib import Path
 
 import pytest
 
-from nhl_scoreboard.app import (
+from scoreboard.app import (
     LEADERS_TTL_SECONDS,
     SCHEDULE_TTL_SECONDS,
     SEASON_SERIES_TTL_SECONDS,
     STANDINGS_TTL_SECONDS,
     ScoreboardApp,
 )
-from nhl_scoreboard.config import RotationEntry, Settings
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import (
+from scoreboard.config import RotationEntry, Settings
+from scoreboard.display.matrix import Backend
+from scoreboard.hockey.api import HockeyApiError
+from scoreboard.hockey.models import (
     PLAYOFF_LINE_MIN_GAMES,
     ClubStats,
     Game,
@@ -136,13 +136,13 @@ class FlowClient:
     def club_stats(self, team, date="now"):
         self.club_stats_calls.append(team)
         if self.fail_club_stats:
-            raise NHLApiError("boom")
+            raise HockeyApiError("boom")
         return self.club
 
     def season_series(self, game_id):
         self.season_series_calls.append(game_id)
         if self.fail_season_series:
-            raise NHLApiError("boom")
+            raise HockeyApiError("boom")
         return self.series.get(game_id)
 
     def scores(self, date="now"):
@@ -154,7 +154,7 @@ class FlowClient:
     def shootout(self, game_id):
         self.shootout_calls.append(game_id)
         if self.fail_shootout:
-            raise NHLApiError("boom")
+            raise HockeyApiError("boom")
         return self.shootouts.get(game_id)
 
     def goal_scoring(self, game_id):
@@ -166,19 +166,19 @@ class FlowClient:
     def three_stars(self, game_id):
         self.three_stars_calls.append(game_id)
         if self.fail_three_stars:
-            raise NHLApiError("boom")
+            raise HockeyApiError("boom")
         return self.stars.get(game_id, ())
 
     def schedule(self, team):
         self.schedule_calls += 1
         if self.fail_schedule:
-            raise NHLApiError("boom")
+            raise HockeyApiError("boom")
         return sorted(self.season, key=lambda g: g.start_utc)
 
     def standings(self, date="now"):
         self.standings_calls += 1
         if self.fail_standings:
-            raise NHLApiError("boom")
+            raise HockeyApiError("boom")
         return list(self.standings_rows)
 
     def close(self):
@@ -538,7 +538,7 @@ def test_goal_override_does_not_leak_onto_a_different_game(day):
     tick(app, clock, seconds=1)
     assert app.last_goal is not None and app.last_goal[0] == 1
 
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     unrelated = Scene("game", client.today[0])  # SEA @ CGY, unrelated game
     assert app._apply_goal_override(unrelated) is unrelated
@@ -552,7 +552,7 @@ def test_goal_does_not_override_countdown_or_preview(day):
     client.today[1] = score(dataclasses.replace(client.today[1], state="LIVE", period=1), home=1)
     tick(app, clock, seconds=1)
 
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     preview = Scene("preview", client.season[2])
     assert app._apply_goal_override(preview) is preview
@@ -713,7 +713,7 @@ def test_goal_detail_override_does_not_leak_onto_a_different_game(day):
     app.refresh_goal_details()
     assert app._goal_detail is not None and app._goal_detail[0] == 1
 
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     unrelated = Scene("game", client.today[0])  # SEA @ CGY, unrelated game
     assert app._apply_goal_override(unrelated) is unrelated
@@ -730,7 +730,7 @@ def test_goal_detail_does_not_override_countdown_or_preview(day):
     client.goal_events[1] = (goal_event(),)
     app.refresh_goal_details()
 
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     preview = Scene("preview", client.season[2])
     assert app._apply_goal_override(preview) is preview
@@ -877,7 +877,7 @@ def test_three_stars_ignores_a_non_favourite_game_going_final(day):
 
 
 def test_three_stars_keeps_an_all_opponent_selection(day):
-    """Stars are whoever the NHL named -- nothing filters them to the favourite."""
+    """Stars are whoever the hockey named -- nothing filters them to the favourite."""
     app, clock, client = day
     _watch_the_favourite_go_final(app, clock, client)
     opponents = tuple(star(i, "TBL", f"P. Opponent{i}") for i in (1, 2, 3))
@@ -931,7 +931,7 @@ def test_three_stars_does_not_override_a_different_game(day):
     client.stars[1] = STARS
     app.refresh_three_stars()
 
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     unrelated = Scene("game", client.today[0])
     assert app._apply_goal_override(unrelated) is unrelated
@@ -1073,7 +1073,7 @@ def test_clock_between_games_never_interrupts_a_live_or_final_held_game(day):
 
 def test_explicit_rotation_overrides_derived_default_with_per_entry_seconds(day):
     """An explicit [[rotation]] (#150) replaces the show_*/rotate_seconds-derived list entirely."""
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, clock, _client = day
     app.settings.rotation = [RotationEntry("clock", 3), RotationEntry("countdown_preview", 7)]
@@ -1093,7 +1093,7 @@ def test_explicit_rotation_skips_unavailable_entries_and_falls_back(day):
     standings itself ineligible (no rows), nothing in the rotation can be
     shown at all and the board falls back to cycling today's games by index.
     """
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     client.standings_rows = []
@@ -1680,7 +1680,7 @@ def test_a_followed_teams_goal_detail_interrupts_the_other_game(followed):
     assert app._goal_detail is not None and app._goal_detail[0] == 9
     assert app._goal_detail[2].team_abbrev == "SEA", "only the followed team's goal"
 
-    from nhl_scoreboard.app import Scene
+    from scoreboard.app import Scene
 
     assert app._apply_goal_override(Scene("game", client.today[1])).kind == "goal_detail"
 
@@ -1840,7 +1840,7 @@ def test_a_live_followed_game_takes_the_screen_over_the_grid(fake_backend):
 
 
 def test_division_screen_shows_only_the_favourites_division(day):
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("division", 8)]
@@ -1858,7 +1858,7 @@ def test_division_screen_shows_only_the_favourites_division(day):
 
 
 def test_division_screen_waits_until_the_favourite_has_played(day):
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("division", 8)]
@@ -1891,7 +1891,7 @@ def late_season(rows, games=PLAYOFF_LINE_MIN_GAMES):
 @pytest.mark.parametrize("screen", ["standings", "top_west", "division", "wildcard"])
 def test_playoff_line_waits_until_enough_games_are_played(day, screen):
     """Too early in the season the order is noise, so no screen draws a line (#298)."""
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry(screen, 8)]
@@ -1907,7 +1907,7 @@ def test_playoff_line_waits_until_enough_games_are_played(day, screen):
 
 
 def test_wildcard_screen_lists_the_race_with_the_line_after_second(day):
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("wildcard", 8)]
@@ -1921,7 +1921,7 @@ def test_wildcard_screen_lists_the_race_with_the_line_after_second(day):
 
 
 def test_wildcard_screen_waits_until_the_favourite_has_played(day):
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("wildcard", 8)]
@@ -1931,7 +1931,7 @@ def test_wildcard_screen_waits_until_the_favourite_has_played(day):
 
 
 def test_standings_screens_carry_the_real_playoff_cut(day):
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("top_west", 8)]
@@ -1946,7 +1946,7 @@ def test_standings_screens_carry_the_real_playoff_cut(day):
 
 def test_top_west_scrolls_the_whole_conference_over_its_dwell(day):
     """top_west/top_east (#200) list every team and scroll them down the slot."""
-    from nhl_scoreboard.config import RotationEntry
+    from scoreboard.config import RotationEntry
 
     app, _clock, client = day
     app.settings.rotation = [RotationEntry("top_west", 20)]
@@ -2218,9 +2218,9 @@ def switch_sport(app: ScoreboardApp, sport: str) -> None:
     app._apply_reloaded_settings(settings)
 
 
-def test_sport_defaults_to_nhl_mode(day):
+def test_sport_defaults_to_hockey_mode(day):
     app, _, _ = day
-    assert app.current_mode() == "nhl"
+    assert app.current_mode() == "hockey"
     assert not scene(app)[0].startswith("fb_")
 
 
@@ -2235,8 +2235,8 @@ def test_switching_to_football_shows_connecting_then_no_games_and_back(day):
     assert app.select_scene().kind == "clock"
     app.draw()  # draws through the real renderer without error
 
-    switch_sport(app, "nhl")
-    assert app.current_mode() == "nhl"
+    switch_sport(app, "hockey")
+    assert app.current_mode() == "hockey"
     assert app.select_scene().kind == "connecting"
     tick(app, clock, minutes=1)
     assert app.select_scene().kind not in ("connecting", "fb_no_games")
@@ -2253,7 +2253,7 @@ def test_switching_sport_re_baselines_goals_and_stays_silent(day):
 
     switch_sport(app, "football")
     assert app._known_scores == {} and app.games == []
-    switch_sport(app, "nhl")
+    switch_sport(app, "hockey")
     assert app._known_scores == {}
 
     # The favourite is already up 2-0: the first sight after a switch is a
@@ -2273,10 +2273,10 @@ def test_rapid_sport_switching_leaks_nothing(day):
     app, clock, _ = day
     threads = threading.active_count()
     for i in range(200):
-        switch_sport(app, "football" if i % 2 == 0 else "nhl")
+        switch_sport(app, "football" if i % 2 == 0 else "hockey")
         clock.advance(seconds=1)
         app.refresh()
     assert threading.active_count() == threads
-    assert app.current_mode() == "nhl"
+    assert app.current_mode() == "hockey"
     assert app._football is None
     assert len(app._known_scores) <= 2

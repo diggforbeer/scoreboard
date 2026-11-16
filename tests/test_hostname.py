@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nhl_scoreboard.hostname import (
+from scoreboard.hostname import (
     AliasPublisher,
     apply_hostname,
     normalise_hostname,

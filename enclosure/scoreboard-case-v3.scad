@@ -1,4 +1,4 @@
-// NHL Scoreboard enclosure v3 -- holds a Raspberry Pi 4 (or 3 Model B+)
+// Scoreboard enclosure v3 -- holds a Raspberry Pi 4 (or 3 Model B+)
 // with an RGB matrix hat, two upward-firing speakers and the two chained
 // HUB75 panels, which snap onto steel washers with their own magnetic
 // screws.

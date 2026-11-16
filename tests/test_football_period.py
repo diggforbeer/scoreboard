@@ -6,16 +6,16 @@ from __future__ import annotations
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_period as fper
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display import football_scenes as fsc
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football import pacing
-from nhl_scoreboard.football.demo import _play
-from nhl_scoreboard.football.mode import FB_SCENE_KINDS, resting_kind
-from nhl_scoreboard.football.models import PlayKind
+from scoreboard.app import Scene
+from scoreboard.display import football_period as fper
+from scoreboard.display import football_plays as fp
+from scoreboard.display import football_scenes as fsc
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import pacing
+from scoreboard.football.demo import _play
+from scoreboard.football.mode import FB_SCENE_KINDS, resting_kind
+from scoreboard.football.models import PlayKind
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, game, renderer
 

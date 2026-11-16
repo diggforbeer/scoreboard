@@ -1,4 +1,4 @@
-"""nhl_scoreboard.admin_server (#178): real app state flows across a real
+"""scoreboard.admin_server (#178): real app state flows across a real
 WebSocket connection, in both directions.
 
 Plain `asyncio.run()` inside ordinary test functions rather than adding
@@ -20,8 +20,8 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 from websockets.sync.client import connect as sync_connect
 
-from nhl_scoreboard import admin_server, updater
-from nhl_scoreboard.config import Settings
+from scoreboard import admin_server, updater
+from scoreboard.config import Settings
 
 
 @pytest.fixture
@@ -461,9 +461,7 @@ def test_update_check_acks_immediately_and_starts_the_check_unit(
 
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received) == {"type": "checking"}
-    assert fake_systemctl == [
-        ["systemctl", "start", "--no-block", "nhl-scoreboard-update-now.service"]
-    ]
+    assert fake_systemctl == [["systemctl", "start", "--no-block", "scoreboard-update-now.service"]]
 
 
 def test_update_apply_acks_immediately_and_starts_the_apply_unit(
@@ -477,7 +475,7 @@ def test_update_apply_acks_immediately_and_starts_the_apply_unit(
     received = asyncio.run(_serve_and_run(scenario))
     assert json.loads(received) == {"type": "applying"}
     assert fake_systemctl == [
-        ["systemctl", "start", "--no-block", "nhl-scoreboard-update-apply.service"]
+        ["systemctl", "start", "--no-block", "scoreboard-update-apply.service"]
     ]
 
 
@@ -624,7 +622,7 @@ def test_watcher_broadcasts_to_every_connected_client(
 
 
 _DEFAULT_SCOREBOARD_DATA = {
-    "sport": "nhl",
+    "sport": "hockey",
     "favourite_team": "NSH",
     "also_follow": [],
     "timezone": "America/Chicago",
@@ -1397,7 +1395,7 @@ def _wav_b64(frames=100):
 @pytest.fixture
 def upload_dir(tmp_path, monkeypatch):
     path = tmp_path / "uploaded-horns"
-    monkeypatch.setenv("NHL_SCOREBOARD_UPLOAD_HORN_DIR", str(path))
+    monkeypatch.setenv("SCOREBOARD_UPLOAD_HORN_DIR", str(path))
     return path
 
 
@@ -1419,7 +1417,7 @@ def test_upload_horn_stores_team_file(app_dir, config_path, upload_dir):
 def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upload_dir):
     reply = _upload("default", _wav_b64())
     assert reply["name"] == "_default.wav"
-    from nhl_scoreboard.audio import GoalHornPlayer
+    from scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
 
@@ -1427,7 +1425,7 @@ def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upl
 def test_upload_horn_wah_wah_overrides_the_shipped_sting(app_dir, config_path, upload_dir):
     reply = _upload("wah_wah", _wav_b64())
     assert reply["name"] == "_wah_wah.wav"
-    from nhl_scoreboard.audio import GoalHornPlayer
+    from scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().wah_wah_path() == upload_dir / "_wah_wah.wav"
     # Listed beside the horns, and it never shadows a goal horn.
@@ -1488,7 +1486,7 @@ def _fake_decoder(monkeypatch, wav_b64=None, missing=False):
     import base64
     import subprocess
 
-    from nhl_scoreboard import audio_normalize
+    from scoreboard import audio_normalize
 
     calls = []
 
@@ -1546,7 +1544,7 @@ def test_upload_horn_mp3_without_mpg123_is_rejected(app_dir, config_path, upload
 @pytest.fixture(autouse=True)
 def no_ffmpeg(monkeypatch):
     """The suite runs the mpg123/stdlib path unless a test installs ffmpeg."""
-    from nhl_scoreboard import audio_normalize
+    from scoreboard import audio_normalize
 
     monkeypatch.setattr(audio_normalize, "_which", lambda name: None)
 
@@ -1555,7 +1553,7 @@ def _fake_ffmpeg(monkeypatch, wav_b64=None, returncode=0, timeout=False):
     import base64
     import subprocess
 
-    from nhl_scoreboard import audio_normalize
+    from scoreboard import audio_normalize
 
     calls = []
 
@@ -1641,7 +1639,7 @@ def _stored_levels(path):
 
 @pytest.mark.parametrize("amplitude", [500, 3000, 12000])
 def test_upload_horn_normalizes_to_the_target(app_dir, config_path, upload_dir, amplitude):
-    from nhl_scoreboard import audio_normalize
+    from scoreboard import audio_normalize
 
     reply = _upload("NSH", _tone_b64(amplitude))
     assert reply["type"] == "horn_uploaded" and reply["gain_db"] is not None
@@ -1656,7 +1654,7 @@ def test_upload_horn_peak_ceiling_limits_gain(app_dir, config_path, upload_dir):
     import io
     import wave
 
-    from nhl_scoreboard import audio_normalize
+    from scoreboard import audio_normalize
 
     # A sparse click: tiny RMS, full-scale-ish peak, so the ceiling binds.
     frames = bytearray(b"\x00\x00" * 8000)
@@ -1691,7 +1689,7 @@ def test_upload_horn_rejects_over_long_clip(app_dir, config_path, upload_dir):
 def test_upload_horn_rejects_a_corrupt_mp3(app_dir, config_path, upload_dir, monkeypatch):
     import subprocess
 
-    from nhl_scoreboard import audio_normalize
+    from scoreboard import audio_normalize
 
     monkeypatch.setattr(
         audio_normalize, "_run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, b"", b"")
@@ -1885,7 +1883,7 @@ def test_play_horn_reports_no_file_found_distinct_from_disabled(
     developer's own git-ignored drop-in horn can sit too) as further
     fallbacks, so default_directories() itself has to be replaced to
     guarantee nothing anywhere resolves."""
-    from nhl_scoreboard import audio as audio_module
+    from scoreboard import audio as audio_module
 
     empty_dir = tmp_path / "truly-empty"
     monkeypatch.setattr(audio_module, "default_directories", lambda override="": [empty_dir])
@@ -1974,7 +1972,7 @@ def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_pat
     -- proves Delete isn't just "remove a file", it actually changes what a
     real goal would play next, by reading path_for() through GoalHornPlayer."""
     _upload("default", _wav_b64())
-    from nhl_scoreboard.audio import GoalHornPlayer
+    from scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
 
@@ -2315,7 +2313,7 @@ def test_save_status_rejects_a_bad_hostname(app_dir, config_path, monkeypatch):
 def test_upload_horn_ding_overrides_the_shipped_ding(app_dir, config_path, upload_dir):
     reply = _upload("ding", _wav_b64())
     assert reply["name"] == "_ding.wav"
-    from nhl_scoreboard.audio import GoalHornPlayer
+    from scoreboard.audio import GoalHornPlayer
 
     assert GoalHornPlayer.default().ding_path() == upload_dir / "_ding.wav"
     assert {"team": "ding", "filename": "_ding.wav"} in admin_server._list_uploaded_horns()
@@ -2438,7 +2436,7 @@ def test_saving_the_football_favourite_and_followed_teams_writes_the_football_se
     assert reloaded.football.also_follow == ["NYG", "WSH"]
 
 
-def test_an_nhl_abbreviation_is_rejected_for_the_football_favourite_and_nothing_is_written(
+def test_an_hockey_abbreviation_is_rejected_for_the_football_favourite_and_nothing_is_written(
     app_dir, config_path
 ):
     async def scenario(client):
@@ -2451,7 +2449,7 @@ def test_an_nhl_abbreviation_is_rejected_for_the_football_favourite_and_nothing_
     assert config_path.read_text() == ""
 
 
-def test_an_nhl_abbreviation_in_the_football_followed_list_is_rejected(app_dir, config_path):
+def test_an_hockey_abbreviation_in_the_football_followed_list_is_rejected(app_dir, config_path):
     async def scenario(client):
         await _skip_initial(client)
         return await _save_football(client, {"also_follow": ["KC", "TOR"]})
@@ -2487,7 +2485,7 @@ def test_unknown_and_mistyped_football_fields_are_rejected(app_dir, config_path)
     assert config_path.read_text() == ""
 
 
-def test_the_football_and_nhl_favourites_are_saved_independently(app_dir, config_path):
+def test_the_football_and_hockey_favourites_are_saved_independently(app_dir, config_path):
     """BUF means Buffalo in both leagues but they are two different teams."""
 
     async def scenario(client):

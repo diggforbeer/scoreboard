@@ -6,9 +6,9 @@ import dataclasses
 
 import pytest
 
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display.renderer import ACCENT, FINAL, INTERMISSION, LIVE, LOSS, WHITE
-from nhl_scoreboard.nhl.models import Shootout, ShootoutAttempt
+from scoreboard.app import Scene
+from scoreboard.display.renderer import ACCENT, FINAL, INTERMISSION, LIVE, LOSS, WHITE
+from scoreboard.hockey.models import Shootout, ShootoutAttempt
 from test_flow import FAV, PUCK_DROP, Clock, FlowClient, game, make_app, score, tick
 from test_flow import fake_backend as fake_backend  # fixture, re-exported for this module
 from test_render import H, W, canvas, check_snapshot, make_renderer, show

@@ -7,10 +7,10 @@ panel moves through them on a game day, see the game-flow page on the wiki
 and "What it shows" in the [README](README.md#what-it-shows).
 
 **About the pictures.** Every panel image below is generated, not drawn by
-hand: `scripts/render-screens.py` pushes each scene of `nhl-scoreboard
+hand: `scripts/render-screens.py` pushes each scene of `scoreboard
 --demo` through the real renderer and saves it as round LED dots to
 `docs/screens/`. The teams are made up (your favourite plays the home side)
-and logos are plain circles in team colours, because the real crests are NHL
+and logos are plain circles in team colours, because the real crests are hockey
 artwork and aren't committed. Animated screens are stills: a shootout shows
 its settled look, a holiday its fly-by two seconds in, a scrolling table its
 top. A test fails when an image goes stale, so after a layout change run:
@@ -62,7 +62,7 @@ and a status band underneath. The score is white; the status colour tells
 the state: green while live, amber in intermission, dim once final.
 
 The band shows, in order of precedence: **power play** (`PP 1:23`, in amber)
-or **empty net** (`EN`) from the NHL's situation data; otherwise **shots on
+or **empty net** (`EN`) from the hockey's situation data; otherwise **shots on
 goal** (`SOG 16-23`), which is always available. The period and clock sit
 below it (`2ND 08:17`, `INT2`, `OT`, `FINAL`, `FINAL/OT`, `FINAL/SO`).
 
@@ -125,7 +125,7 @@ season goal total and points, and up to two assists (or `UNASSISTED`). The
 text sits between the logos; a long name can run into a cropped logo on a
 single 64px panel, which is accepted rather than truncated (#122).
 
-It shows once the NHL names the scorer, usually seconds after the goal. For
+It shows once the hockey names the scorer, usually seconds after the goal. For
 the favourite's goal it waits for the goal light to finish its
 `goal_flash_seconds`, then gets its own full `goal_detail_seconds` (#338). A
 followed team's quick goal flash is replaced as soon as the scorer is ready.
@@ -153,7 +153,7 @@ amber, majors red, misconducts dim red. It runs 6.5s (2.5s of entrance).
   (no extra request), on `live_poll_seconds`, only for the favourite's live game.
 - Not verified on a live game (does `landing` lag the whistle?) or on hardware (#4).
 
-### `three_stars`: the NHL's three stars
+### `three_stars`: the hockey's three stars
 
 ![Three stars](docs/screens/three_stars.png)
 
@@ -266,7 +266,7 @@ serving last season's final table all summer. Hourly refresh.
   explicit `[[rotation]]`, it is there only if listed.
 - A rule marks the real playoff cut once some team in the table has played
   41 games; before that the order is noise and the line misleads.
-- The window is a straight conference-rank cut, not the NHL's actual playoff
+- The window is a straight conference-rank cut, not the hockey's actual playoff
   line, which the rule above does draw correctly.
 
 ### `conference_leaders`: the whole conference
@@ -369,7 +369,7 @@ network the phone's request arrived over. Top priority of every screen, for
 | | | |
 |---|---|---|
 | ![Connecting](docs/screens/connecting.png) | ![No data](docs/screens/no_data.png) | ![No games](docs/screens/no_games.png) |
-| `NHL CONNECTING`: before the first successful score fetch. | `NO DATA` / `CHECK NETWORK`: the last good poll is over 15 minutes old. | `NO GAMES`: nothing to show and the idle clock is off. |
+| `Hockey CONNECTING`: before the first successful score fetch. | `NO DATA` / `CHECK NETWORK`: the last good poll is over 15 minutes old. | `NO GAMES`: nothing to show and the idle clock is off. |
 
 ## Holiday decorations
 

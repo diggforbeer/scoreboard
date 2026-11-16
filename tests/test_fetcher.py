@@ -1,4 +1,4 @@
-"""NHL fetches run off the render thread (#267).
+"""Hockey fetches run off the render thread (#267).
 
 Two layers: the fetchers on their own (ordering, de-duplication, failure
 handling), and the whole app on a ``ThreadedFetcher`` with a client that hangs,
@@ -14,11 +14,11 @@ from datetime import timedelta
 
 import pytest
 
-from nhl_scoreboard.app import STALE_AFTER_SECONDS
-from nhl_scoreboard.display.matrix import Backend
-from nhl_scoreboard.fetcher import InlineFetcher, ThreadedFetcher
-from nhl_scoreboard.nhl.api import NHLApiError
-from nhl_scoreboard.nhl.models import PlayerSeasonDetail
+from scoreboard.app import STALE_AFTER_SECONDS
+from scoreboard.display.matrix import Backend
+from scoreboard.fetcher import InlineFetcher, ThreadedFetcher
+from scoreboard.hockey.api import HockeyApiError
+from scoreboard.hockey.models import PlayerSeasonDetail
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 from test_flow import FAV, PUCK_DROP, Clock, FlowClient, game, goal_event, make_app
 
@@ -56,7 +56,7 @@ def test_inline_runs_and_applies_on_the_calling_thread():
 
 def test_inline_turns_an_api_error_into_a_failed_result():
     done = Collected()
-    error = NHLApiError("boom")
+    error = HockeyApiError("boom")
 
     def work():
         raise error
@@ -136,7 +136,7 @@ def test_results_apply_in_submission_order(fetcher):
 
 def test_a_failure_is_delivered_and_the_worker_keeps_going(fetcher):
     done = Collected()
-    api_error = NHLApiError("503")
+    api_error = HockeyApiError("503")
 
     def raises_api():
         raise api_error
@@ -329,7 +329,7 @@ def test_a_failed_threaded_fetch_keeps_the_last_good_games_and_records_the_error
         assert [g.id for g in app.games] == [1]
 
         def failing(date="now"):
-            raise NHLApiError("503")
+            raise HockeyApiError("503")
 
         client.scores = failing
         clock.advance(seconds=30)
@@ -400,7 +400,7 @@ def test_a_failed_roster_fetch_still_shows_the_scorer(fake_backend):
     app, _clock, client = live_favourite(fake_backend, threaded=False)
 
     def failing(team):
-        raise NHLApiError("boom")
+        raise HockeyApiError("boom")
 
     client.team_roster = failing
     app.refresh_goal_details()
@@ -428,7 +428,7 @@ def test_a_slow_fetch_is_logged_at_warning_and_counted(caplog):
     clock = FakeTime()
     worker = ThreadedFetcher(monotonic=clock)
     try:
-        with caplog.at_level("DEBUG", logger="nhl_scoreboard.fetcher"):
+        with caplog.at_level("DEBUG", logger="scoreboard.fetcher"):
             worker.submit(
                 ("situation", 3), lambda: setattr(clock, "now", clock.now + 5), Collected()
             )
@@ -469,7 +469,7 @@ def test_stats_show_what_is_waiting_how_long_and_how_the_last_one_went():
         )
 
         def api_down():
-            raise NHLApiError("503")
+            raise HockeyApiError("503")
 
         worker.submit(("shootout", 9), api_down, Collected())
         assert worker.wait_idle()
@@ -491,7 +491,7 @@ def test_the_status_box_says_when_there_is_no_worker(fake_backend):
     client = HangingClient()
     clock = Clock(PUCK_DROP - timedelta(hours=2))
     app = make_app(fake_backend, clock, client)  # the default, inline fetcher
-    assert app.status_snapshot()["nhl fetch worker"] == "inline (no worker)"
+    assert app.status_snapshot()["hockey fetch worker"] == "inline (no worker)"
 
 
 def test_the_status_box_shows_a_hung_worker_and_then_a_healthy_one(fake_backend):
@@ -503,17 +503,17 @@ def test_the_status_box_shows_a_hung_worker_and_then_a_healthy_one(fake_backend)
         app.refresh()
         assert client.entered.wait(2)
         status = app.status_snapshot()
-        assert status["nhl fetch worker"].startswith("busy: 1 in flight, oldest ")
-        assert status["last nhl fetch"] == "(none yet)"
+        assert status["hockey fetch worker"].startswith("busy: 1 in flight, oldest ")
+        assert status["last hockey fetch"] == "(none yet)"
 
         client.release.set()
         settle(app)
         status = app.status_snapshot()
-        assert status["nhl fetch worker"] == "idle"
-        assert status["last nhl fetch"].startswith("scores, ") and status[
-            "last nhl fetch"
+        assert status["hockey fetch worker"] == "idle"
+        assert status["last hockey fetch"].startswith("scores, ") and status[
+            "last hockey fetch"
         ].endswith(", ok")
-        assert status["nhl fetch totals"] == "1 done, 0 failed, 0 slow (over 3s)"
+        assert status["hockey fetch totals"] == "1 done, 0 failed, 0 slow (over 3s)"
     finally:
         client.release.set()
         app.fetcher.close()

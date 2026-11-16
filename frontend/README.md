@@ -1,14 +1,14 @@
 # Admin page frontend (React + Vite)
 
 A React SPA connected to a Python admin server, built as vertical slices
-(#178). See `src/nhl_scoreboard/admin_server.py`'s own docstring for
+(#178). See `src/scoreboard/admin_server.py`'s own docstring for
 exactly what's been built and the decisions behind it. As of story 10,
 this is the admin page that ships: `admin_server.py` serves this page's
 production build *and* its WebSocket on one port, started by
 `ScoreboardApp` itself the same way `status_server.py` (the HTML-forms
 page this replaces) used to be. `frontend/dist/` is a CI build product
 (`build-image.yml`'s own "Build admin frontend" step), copied into the
-image at `/usr/share/nhl-scoreboard/admin` -- Node never touches the
+image at `/usr/share/scoreboard/admin` -- Node never touches the
 device itself.
 
 Every config section `status_server.py` had is here: the Scoreboard
@@ -17,7 +17,7 @@ the Status page section (`enabled`/`port` -- still named `[status]` in
 `scoreboard.toml`, now controlling this server instead of the old one),
 the Panel section (17 fields, grouped into Geometry/Driver-PWM/
 Brightness, with a "restart required" badge on the 12 fields that need
-`nhl-scoreboard.service` to restart before they take effect), the Night
+`scoreboard.service` to restart before they take effect), the Night
 mode section (6 fields: enabled, the dim window's start/end time, dimmed
 brightness, suppress scope, cooldown), the Wi-Fi section (just
 `connect_timeout_seconds` -- SSID/password/country editing did **not**
@@ -57,7 +57,7 @@ Two processes, in separate terminals, from the repo root:
 
 ```bash
 source .venv/bin/activate
-python -m nhl_scoreboard.admin_server        # ws://localhost:8765/
+python -m scoreboard.admin_server        # ws://localhost:8765/
 ```
 
 ```bash
@@ -68,21 +68,21 @@ npm run dev                               # http://localhost:5173/
 
 By default the admin server reads/writes `scoreboard.local.toml` in the
 repo root (same git-ignored dev config every other local-dev command uses)
--- override with `NHL_SCOREBOARD_CONFIG` to point at a different file.
-Similarly, `NHL_SCOREBOARD_UPDATE_STATE` overrides where it watches for the
-update-check/apply state file (real default: `/var/lib/nhl-scoreboard/
+-- override with `SCOREBOARD_CONFIG` to point at a different file.
+Similarly, `SCOREBOARD_UPDATE_STATE` overrides where it watches for the
+update-check/apply state file (real default: `/var/lib/scoreboard/
 update-state.json`, root-only, not writable as yourself) and
-`NHL_SCOREBOARD_ADMIN_UPDATE_POLL` overrides how often it checks (default
+`SCOREBOARD_ADMIN_UPDATE_POLL` overrides how often it checks (default
 1s) -- point the first at a scratch path and write JSON to it by hand to
 see the Software update card update itself with zero clicks.
-`NHL_SCOREBOARD_ADMIN_SNAPSHOT_POLL` is the equivalent for the Board
+`SCOREBOARD_ADMIN_SNAPSHOT_POLL` is the equivalent for the Board
 status box (default 2s), fed by `SNAPSHOT_PROVIDER` -- `None` outside a
 real `ScoreboardApp` (dev mode included), which the Board status box shows
 as "no live app to report on" rather than blank/broken.
 
 Open `http://localhost:5173/` -- it should show `WebSocket: open`, the
 installed version (`unknown (factory image)` unless something has written
-`/opt/nhl-scoreboard/VERSION`, e.g. via `NHL_SCOREBOARD_APP_DIR` pointed at
+`/opt/scoreboard/VERSION`, e.g. via `SCOREBOARD_APP_DIR` pointed at
 a directory that has one), and the Audio section pre-filled from the config
 file -- editable, with a "Saved." confirmation on submit and no navigation.
 
@@ -93,9 +93,9 @@ static files and the WebSocket on the same port.
 
 ```bash
 npm run build                                        # -> dist/
-NHL_SCOREBOARD_ADMIN_DIR="$PWD/dist" \
-  NHL_SCOREBOARD_CONFIG=../scoreboard.local.toml \
-  python -m nhl_scoreboard.admin_server                # http://localhost:8765/
+SCOREBOARD_ADMIN_DIR="$PWD/dist" \
+  SCOREBOARD_CONFIG=../scoreboard.local.toml \
+  python -m scoreboard.admin_server                # http://localhost:8765/
 ```
 
 Open `http://localhost:8765/` directly -- no separate frontend server this

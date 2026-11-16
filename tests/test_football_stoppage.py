@@ -12,15 +12,15 @@ from itertools import pairwise
 import pytest
 
 from football_logos import write_synthetic_football_logos
-from nhl_scoreboard.app import Scene
-from nhl_scoreboard.display import football_plays as fp
-from nhl_scoreboard.display import football_stoppage as fs
-from nhl_scoreboard.display.ascii import AsciiCanvas
-from nhl_scoreboard.display.logos import LogoLibrary, LogoSet
-from nhl_scoreboard.football import pacing
-from nhl_scoreboard.football.demo import _play
-from nhl_scoreboard.football.models import PlayKind
-from nhl_scoreboard.football.teams import team_color
+from scoreboard.app import Scene
+from scoreboard.display import football_plays as fp
+from scoreboard.display import football_stoppage as fs
+from scoreboard.display.ascii import AsciiCanvas
+from scoreboard.display.logos import LogoLibrary, LogoSet
+from scoreboard.football import pacing
+from scoreboard.football.demo import _play
+from scoreboard.football.models import PlayKind
+from scoreboard.football.teams import team_color
 from test_football_events import make_game, make_play
 from test_football_scenes import check_snapshot, game, renderer
 

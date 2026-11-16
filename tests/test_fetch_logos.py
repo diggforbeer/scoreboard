@@ -2,7 +2,7 @@
 
 Loaded via importlib since the script lives outside src/ and its filename
 isn't a valid module name (hyphenated). Network access (fetch()) is always
-stubbed -- these tests never touch the real NHL CDN.
+stubbed -- these tests never touch the real hockey CDN.
 """
 
 from __future__ import annotations
