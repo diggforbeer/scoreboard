@@ -2065,7 +2065,13 @@ can never rename it (avahi's own clash rename isn't remembered).
   script *ignores* an invalid one. `apply_hostname()` (admin save) and
   `scoreboard-provision` (boot) both write `/etc/hostname`, `/etc/hosts` and
   the state file, then restart avahi, so the MAC name is never re-derived over
-  the owner's choice.
+  the owner's choice. `apply_hostname()` re-validates the label itself (a
+  newline in it would add lines to `/etc/hosts`) and sets the live name with
+  `socket.sethostname`, not by running `hostname <name>` (code scanning alert
+  32, `py/command-line-injection`); the only command it runs is a constant
+  `systemctl restart avahi-daemon.service`. Tests must pass `set_hostname=`,
+  or the real call renames the machine when run as root. `scoreboard-provision`
+  keeps its own copy of the `hostname` call, behind its own validation.
 - **`scoreboard.local` alias:** `[status] local_alias` (default on).
   `AliasPublisher` runs `avahi-publish-address scoreboard.local <ip>` (package
   `avahi-utils`); without `-R` it probes and exits if another board has the
