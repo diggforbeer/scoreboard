@@ -137,7 +137,8 @@ sides fit.
 
 **Which game** (`FootballMode.pick_game`), using the football favourite and followed teams:
 
-1. The favourite's game holds the screen **alone while it is live**.
+1. The favourite's game holds the screen **alone while it is live** (see "Several games at once"
+   below for what that means for the other games' plays).
 2. Otherwise the games the followed teams are in take turns, `rotate_seconds` each, the
    favourite's first; if any of them is live, only the live ones.
 3. With nobody followed, or none of them playing (a bye), every game takes a turn, live
@@ -146,6 +147,31 @@ sides fit.
 Turns are timed by the monotonic clock, so a refresh that changes the slate never makes the
 board skip or repeat a game. There is no hold timer for a finished game (NHL has
 `final_hold_minutes`): a final stays on the rotation until the slate moves on.
+
+### Several games at once
+
+The favourite is the primary; followed teams are secondary and break in. (Decided after looking at
+a board with a favourite and a followed team both live: every play of both games was animated in
+turn, so the screen swung between games every ten to twenty seconds.)
+
+- **While the favourite's game holds the screen** (it is live and not at the half, or its
+  countdown or final is up), another game's plays are **not animated**. Only what is news comes
+  through, as the quick screens: a followed team's touchdown, field goal, score, turnover, and
+  any reversal. Its plain plays, play text, missed kicks, coin toss and team stats are dropped
+  (the plays are still read, so the running score and the reversal watch stay right).
+  At the half nothing is held, so the other games' plays show in full.
+- **The favourite goes first.** If the favourite's play is waiting while another game's screens
+  are up or queued, the favourite's goes ahead and the others follow it: a followed team's
+  touchdown is late, never lost. A reversal on screen is never cut off.
+- **A reversal takes only its own game's queued screens** with it. It still preempts what is on
+  screen when it is the on-screen game's (or the favourite's); a reversal in another game waits
+  until the current chain finishes, so it never cuts a celebration off.
+- **The favourite's countdown and final keep the screen** when a followed team's game is live
+  (`FootballMode._idle_kind`): the order is the favourite's live game, its countdown, its final,
+  then a followed team's live game, then the idle rotation. A followed team's score or turnover
+  breaks in over the countdown or final, then the idle screen returns.
+- Not changed: the favourite's preview, standings, week and schedule screens (the rotation) still
+  give way to a followed team's live game, as before.
 
 ### Play scenes (the plumbing, #377)
 
@@ -177,7 +203,8 @@ play text`, then the board returns to `fb_scores` (the resting field arrives wit
   skipped, the shown one at double speed); the events of skipped plays still celebrate, shown
   before the play that was animated.
 - **Which game:** the one on screen first, then any other watched game with plays waiting, so a
-  followed team's touchdown is not lost because another game was on screen.
+  followed team's touchdown is not lost because another game was on screen. While the favourite
+  holds the screen the other games are reduced to their news: see "Several games at once".
 - **Which games are fetched:** only live (or about-to-start, within 20 minutes) games the
   favourite or a followed team is in; with none of those, the first live game. Never the whole
   slate. The core feed (jersey numbers, the toss) is fetched when the site feed shows a new play.

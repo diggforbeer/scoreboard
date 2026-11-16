@@ -58,6 +58,8 @@ def _situation(
     possession: str, yard_line: int, down: int = 1, distance: int = 10, red_zone: bool = False
 ) -> dict[str, Any]:
     short = f"{down}{('st', 'nd', 'rd', 'th')[down - 1]} & {distance}"
+    # The feed's ``yardLine`` counts from the home goal line; the spot is read off the near end.
+    spot = f"{HOME} {yard_line}" if yard_line <= 50 else f"{AWAY} {100 - yard_line}"
     return {
         "down": down,
         "distance": distance,
@@ -65,6 +67,7 @@ def _situation(
         "downDistanceText": short,
         "shortDownDistanceText": short,
         "possession": str(TEAMS[possession].espn_id),
+        "possessionText": spot,
         "isRedZone": red_zone,
     }
 
@@ -715,6 +718,12 @@ def football_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_no_games", "fb_no_games"),
         step("fb_scores", "fb_scores_pregame", pregame),
         step("fb_countdown", "fb_countdown", countdown),
+        DemoStep(
+            Scene("fb_redzone", fb_game=red, fb_elapsed=0.2, animating=True), name="fb_redzone"
+        ),
+        DemoStep(
+            Scene("fb_redzone", fb_game=red, fb_elapsed=0.7, animating=True), name="fb_redzone_dim"
+        ),
         *_preview_steps(),
         *_bye_steps(),
         *_schedule_steps(),
