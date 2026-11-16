@@ -22,7 +22,7 @@
 | src/nhl\_scoreboard/display/fonts.py                   |       29 |        2 |        6 |        1 |     91% |     33-34 |
 | src/nhl\_scoreboard/display/football\_cointoss.py      |       63 |        1 |       16 |        1 |     97% |       112 |
 | src/nhl\_scoreboard/display/football\_fgmiss.py        |       60 |        0 |       10 |        1 |     99% |116-\>exit |
-| src/nhl\_scoreboard/display/football\_field.py         |       82 |        0 |       32 |        1 |     99% |187-\>exit |
+| src/nhl\_scoreboard/display/football\_field.py         |       82 |        0 |       32 |        0 |    100% |           |
 | src/nhl\_scoreboard/display/football\_fieldgoal.py     |      120 |        0 |       20 |        1 |     99% |198-\>exit |
 | src/nhl\_scoreboard/display/football\_idle.py          |      260 |        2 |       84 |        4 |     98% |80-\>82, 109-\>111, 172-173, 268-\>275 |
 | src/nhl\_scoreboard/display/football\_incomplete.py    |       84 |        0 |       14 |        1 |     99% |   93-\>95 |
@@ -72,7 +72,7 @@
 | src/nhl\_scoreboard/football/textlayout.py             |       28 |        0 |        4 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/watch.py                  |       74 |        0 |       10 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/worker.py                 |      164 |        4 |       34 |        2 |     97% |180-\>exit, 187-\>192, 235-236, 298-299 |
-| src/nhl\_scoreboard/hostname.py                        |       63 |        2 |       10 |        1 |     96% |57-\>60, 71-72 |
+| src/nhl\_scoreboard/hostname.py                        |       69 |        2 |       10 |        0 |     97% |     86-87 |
 | src/nhl\_scoreboard/light\_sensor.py                   |       38 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/network.py                         |       11 |        2 |        0 |        0 |     82% |     25-26 |
 | src/nhl\_scoreboard/nhl/\_\_init\_\_.py                |        3 |        0 |        0 |        0 |    100% |           |
@@ -82,7 +82,7 @@
 | src/nhl\_scoreboard/updater.py                         |      287 |       28 |       78 |       10 |     90% |115-116, 134, 154, 172-176, 180-185, 231-\>241, 251-253, 277, 313-318, 322-328, 339, 406-\>408, 433-\>435, 456-\>459, 461, 465 |
 | src/nhl\_scoreboard/wifi.py                            |      140 |      109 |       28 |        0 |     18% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/nhl\_scoreboard/wifi\_join.py                      |       86 |        7 |       10 |        0 |     93% |112-114, 117-118, 201-202 |
-| **TOTAL**                                              | **12372** |  **421** | **3524** |  **179** | **96%** |           |
+| **TOTAL**                                              | **12378** |  **421** | **3524** |  **177** | **96%** |           |
 
 
 ## Setup coverage badge
