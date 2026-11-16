@@ -366,6 +366,7 @@ FOOTBALL_TIMING_RANGES: dict[str, tuple[float, float, float]] = {
     "reversal": (5.0, 3.0, 15.0),
     "cointoss": (6.0, 4.0, 12.0),
     "stats": (6.0, 3.0, 20.0),
+    "redzone": (6.0, 3.0, 15.0),
 }
 #: What football mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
 DEFAULT_FOOTBALL_ROTATION: tuple[tuple[str, float], ...] = (
@@ -577,9 +578,12 @@ class FootballConfig:
     reversal_seconds: float = 5.0
     cointoss_seconds: float = 6.0
     stats_seconds: float = 6.0
+    redzone_seconds: float = 6.0
     show_countdown: bool = True
     show_bye: bool = True
     show_final: bool = True
+    #: The red zone alert over the idle screens (see ``football/redzone.py``).
+    show_redzone: bool = True
 
     def __post_init__(self) -> None:
         self.page_seconds = _non_negative(self.page_seconds, "football.page_seconds")
@@ -594,6 +598,7 @@ class FootballConfig:
         self.show_countdown = bool(self.show_countdown)
         self.show_bye = bool(self.show_bye)
         self.show_final = bool(self.show_final)
+        self.show_redzone = bool(self.show_redzone)
         self.rotation = _parse_rotation(
             self.rotation if isinstance(self.rotation, list) else [],
             FOOTBALL_ROTATION_SCREENS,

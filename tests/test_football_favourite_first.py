@@ -17,6 +17,7 @@ from nhl_scoreboard.config import FootballConfig
 from nhl_scoreboard.football import director as dr
 from nhl_scoreboard.football.director import Director
 from nhl_scoreboard.football.mode import FootballMode
+from nhl_scoreboard.football.teams import TEAMS
 from nhl_scoreboard.football.worker import FeedSnapshot
 from test_football_events import make_game, make_play
 from test_football_idle_selection import (
@@ -31,6 +32,7 @@ from test_football_queue import Clock
 from test_football_scenes import game
 
 TICK = 0.25
+KC_ID = TEAMS["KC"].espn_id
 FAV = make_game("WSH", "NYG", game_id=1)  # the favourite NYG's game
 OTHER = make_game("PHI", "DAL", game_id=2)  # DAL, followed, elsewhere
 
@@ -309,3 +311,35 @@ def test_a_followed_teams_touchdown_breaks_in_over_the_favourites_countdown():
     assert ("fb_event", 9) in seen, seen
     assert ("fb_play", 9) not in seen and ("fb_playtext", 9) not in seen, seen
     assert ("fb_countdown", 7) in seen, "and the countdown is back after the banner"
+
+
+def test_a_red_zone_alert_shows_over_the_favourites_countdown_after_any_score_banner():
+    from test_football_redzone import with_situation
+
+    register("fb_countdown", "fb_preview")
+    utc = Utc(datetime(2026, 11, 22, 17, 5, tzinfo=UTC))
+    clock = Clock(BASE)
+    out = with_situation(followed_live(), KC_ID, red=False)
+    feed = PlaysFeed([nyg_game("pre"), out])
+    feed.followed_plays = [make_play(1, "rush", off="LV")]
+    config = FootballConfig(favourite_team="NYG", also_follow=["KC"])
+    mode = FootballMode(
+        client_factory=lambda: feed, monotonic=clock, football=lambda: config, utc_now=utc
+    )
+    mode.worker.poll_once()
+    assert mode.scene().kind == "fb_countdown"
+    # KC drives into the red zone and scores on the same poll.
+    feed.games = [nyg_game("pre"), with_situation(followed_live(), KC_ID, red=True)]
+    feed.followed_plays = [
+        make_play(1, "rush", off="LV"),
+        make_play(2, "rush_td_pat", score=(0, 7), off="KC"),
+    ]
+    clock.t += 20
+    mode.worker.poll_once()
+    order = []
+    for _ in range(120):
+        clock.t += 0.25
+        kind = mode.scene().kind
+        if not order or order[-1] != kind:
+            order.append(kind)
+    assert order[:3] == ["fb_event", "fb_redzone", "fb_countdown"], order

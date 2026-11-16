@@ -91,6 +91,7 @@ class Timings:
     reversal: float = 5.0  #: ``fb_reversal_seconds``
     cointoss: float = 6.0  #: ``fb_cointoss_seconds``
     stats: float = 6.0  #: ``fb_stats_seconds``: one page of the team stats over a TV timeout
+    redzone: float = 6.0  #: the red zone alert over the idle screens (``football.redzone``)
 
     def clamped(self) -> Timings:
         def hold(value: float, low: float, high: float) -> float:
@@ -107,6 +108,7 @@ class Timings:
             reversal=hold(self.reversal, 3.0, 15.0),
             cointoss=hold(self.cointoss, 4.0, 12.0),
             stats=hold(self.stats, 3.0, 20.0),
+            redzone=hold(self.redzone, 3.0, 15.0),
         )
 
 
