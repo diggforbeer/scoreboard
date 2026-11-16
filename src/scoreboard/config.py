@@ -844,8 +844,8 @@ class Settings:
     scoreboard: ScoreboardConfig = field(default_factory=ScoreboardConfig)
     football: FootballConfig = field(default_factory=FootballConfig)
     #: The ranked list of teams, hockey and football mixed, rank 1 first (epic #470). Empty when
-    #: absent from the file. For now it sits beside the per-sport favourite settings, which the
-    #: later stories of the epic retire.
+    #: absent from the file. It is the only place teams are set (the old per-sport favourite
+    #: settings are retired).
     teams: list[TeamEntry] = field(default_factory=list)
     #: The idle rotation (#150), explicit ``[[rotation]]`` entries in file
     #: order. Empty when absent from the file -- app.py derives the old

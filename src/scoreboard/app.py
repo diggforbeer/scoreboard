@@ -901,8 +901,8 @@ class ScoreboardApp:
         return LogoSet("football", settings.scoreboard.logo_variant)
 
     def _new_football(self) -> FootballMode:
-        """A fresh football mode over the live settings. Its feed thread is not started here:
-        ``run()`` starts it, and a live sport switch starts it once the loop is running."""
+        """A football mode over the live settings. Its feed thread is not started here: ``run()``
+        starts it, and a later edit of the ranked list starts it once the loop is running."""
         return FootballMode(
             lambda: self.settings.scoreboard,
             client_factory=self._football_client_factory,
@@ -1116,7 +1116,9 @@ class ScoreboardApp:
         # Both feeds keep running: football's mode stays up and only starts its screens afresh when
         # it takes the board.
         if self._football is None:
-            if self._wants("football", self.settings):
+            # Normally only when a football team is ranked (or none is); a demo on a hockey-only
+            # board asks for football explicitly, and football's mode must exist to show it.
+            if sport == "football" or self._wants("football", self.settings):
                 self._football = self._new_football()
                 if self._running:
                     self._football.start()

@@ -211,8 +211,8 @@ class RosterCache:
 
     ``fetch(team_id)`` returns ``{athlete id: RosterPlayer}`` or ``None`` on failure. ``get`` never
     raises and never blocks the caller twice: a failure keeps whatever the last good fetch gave (or
-    nothing) and is not retried for ``retry`` seconds. Held by ``FootballMode``, so a sport switch
-    starts with an empty cache. Not thread-safe: the feed worker owns it.
+    nothing) and is not retried for ``retry`` seconds. Held by ``FootballMode``, so it lives as
+    long as the mode. Not thread-safe: the feed worker owns it.
     """
 
     def __init__(

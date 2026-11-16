@@ -612,3 +612,11 @@ def test_the_clock_is_drawn_in_a_football_teams_colours_when_that_team_is_rank_1
     plain = AsciiCanvas(128, 32)
     renderer(128).draw_clock(plain, START, "")
     assert tuple(team_color(TEN)) not in {tuple(c) for c in plain.colors(0, 0, 127, 31)}
+
+
+def test_a_demo_can_ask_for_football_on_a_board_that_ranks_only_hockey(backend):
+    """``--demo --sport football`` switches the sport by hand: football's mode must then exist."""
+    rig = Rig(backend, [("hockey", NSH)])
+    assert rig.app._football is None
+    rig.app._switch_sport("football")
+    assert rig.app.current_mode() == "football" and rig.app._football is not None

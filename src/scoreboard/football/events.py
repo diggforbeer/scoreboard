@@ -16,8 +16,9 @@ Rules, from ``football_screen.md``:
   (``PLAIN`` for a team that is not followed). Turnovers and the coin toss are about the
   game rather than a team: ``FULL`` in the favourite's game, ``QUICK`` in a followed game.
 * **Nothing fires for the score the board started with.** A game's score is seeded from the
-  play queue's baseline, and a fresh detector (a new mode after a sport switch) starts
-  empty; an unseeded game treats its first play as the baseline rather than guess.
+  play queue's baseline, and a fresh detector (the director is rebuilt when football takes the
+  board back from another sport) starts empty; an unseeded game treats its first play as the
+  baseline rather than guess.
 * **Skipped plays still count.** The queue may skip plays to catch up; a touchdown among
   them must still celebrate, so the detector reads every skipped play as well as the one
   shown, in order.
