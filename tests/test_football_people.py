@@ -14,7 +14,6 @@ from pathlib import Path
 
 import requests
 
-from scoreboard.config import FootballConfig
 from scoreboard.football import api, people
 from scoreboard.football.events import CoinToss, EventDetector, Scope
 from scoreboard.football.mode import FootballMode
@@ -28,6 +27,7 @@ from scoreboard.football.people import (
     resolve_people,
     roster_from_payload,
 )
+from teamcfg import fcfg
 from test_football_events import make_game
 from test_football_plays import FakeResponse, FakeSession
 
@@ -367,7 +367,7 @@ def test_a_site_play_the_core_feed_lacks_is_kept_and_nothing_is_mutated():
 
 def test_the_core_coin_toss_gives_the_event_detector_its_receiver():
     game = make_game("CIN", "ATL")  # ATL is home (ESPN id 1), CIN away (4)
-    cfg = FootballConfig(favourite_team="ATL")
+    cfg = fcfg(favourite_team="ATL")
     det = EventDetector(lambda: cfg)
     det.seed(game.id, None)
     toss = next(p for p in merge_core(site_plays(), core_plays()) if p.kind == PlayKind.COIN_TOSS)

@@ -7,7 +7,6 @@ import json
 
 import pytest
 
-from scoreboard.config import FootballConfig
 from scoreboard.display import football_idle
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.display.football_scenes import LIVE
@@ -17,6 +16,7 @@ from scoreboard.football.idle_views import WEEK_MAX_GAMES, WeekView, build_week,
 from scoreboard.football.mode import FootballMode
 from scoreboard.football.models import FbGame
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 from test_football_idle import Clock, IdleFeed
 from test_football_idle_preview import FIXTURES, utc
 from test_football_scenes import H, check_snapshot, raw_game, renderer
@@ -43,7 +43,7 @@ def slate(n, mix=("post", "in", "pre")):
 
 def ctx(games=(), week=None, now=utc(2026, 11, 15, 17)):
     snap = idle.IdleSnapshot(week_cached=idle.Cached(week, 0.0) if week else None)
-    return IdleContext(0.0, now, list(games), snap, FootballConfig(favourite_team="NYG"))
+    return IdleContext(0.0, now, list(games), snap, fcfg(favourite_team="NYG"))
 
 
 # -- the data --------------------------------------------------------------------------------
@@ -175,7 +175,7 @@ class Feed(IdleFeed):
 def test_the_pages_split_the_entrys_seconds_and_one_page_stays_put():
     clock = Clock(960.0)
     feed = Feed(slate(12))
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG",
         rotation=[{"screen": "fb_week", "seconds": 10}, {"screen": "clock", "seconds": 5}],
     )
@@ -220,7 +220,7 @@ def test_a_page_out_of_range_shows_the_nearest_page():
 def test_a_one_page_screen_keeps_the_rows_seconds_even_with_a_page_length_set():
     clock = Clock(960.0)
     feed = Feed(slate(3))
-    cfg = FootballConfig(
+    cfg = fcfg(
         favourite_team="NYG",
         page_seconds=2,
         rotation=[{"screen": "fb_week", "seconds": 10}, {"screen": "clock", "seconds": 5}],

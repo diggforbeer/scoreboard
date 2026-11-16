@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 
-from scoreboard.config import FootballConfig
 from scoreboard.football import director as dr
 from scoreboard.football import events as ev
 from scoreboard.football.director import Director, Timings
@@ -17,6 +16,7 @@ from scoreboard.football.pacing import animation_seconds
 from scoreboard.football.reversals import Reversal
 from scoreboard.football.textlayout import playtext_seconds
 from scoreboard.football.worker import FeedSnapshot
+from teamcfg import fcfg
 from test_football_events import make_game, make_play
 from test_football_queue import Clock
 
@@ -28,7 +28,7 @@ class Rig:
 
     def __init__(self, favourite="NYG", follow=(), delay=0.0, game: FbGame | None = None):
         self.clock = Clock()
-        self.cfg = FootballConfig(favourite_team=favourite, also_follow=list(follow))
+        self.cfg = fcfg(favourite_team=favourite, also_follow=list(follow))
         self.delay = delay
         self.game = game or make_game()
         self.director = Director(lambda: self.cfg, self.clock, lambda: self.delay, self.clock.utc)

@@ -297,7 +297,6 @@ from .config import (
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
     PANEL_HARDWARE_MAPPING_CHOICES,
-    SPORT_CHOICES,
     TEAM_SPORTS,
     TEAMS_MAX,
     VALID_ROTATION_SCREENS,
@@ -315,6 +314,7 @@ from .hostname import (
     normalise_hostname,
     valid_hostname_label,
 )
+from .priority import Priority
 from .updater import installed_version
 
 log = logging.getLogger(__name__)
@@ -396,8 +396,7 @@ WS_MAX_SIZE = HORN_MAX_BYTES * 4 // 3 + 4096
 
 @dataclasses.dataclass(frozen=True)
 class _FieldSpec:
-    #: "bool" | "str" | "float" | "int" | "select" | "teams" (hockey abbreviations) |
-    #: "football_team" (one football abbreviation, or empty) | "football_teams" (a list of them)
+    #: "bool" | "str" | "float" | "int" | "select"
     kind: str
     choices: tuple[str, ...] = ()
     #: Mirrors status_server.py's own per-field flag (#178 story 7) -- a
@@ -427,9 +426,6 @@ _AUDIO_FIELDS: dict[str, _FieldSpec] = {
 
 #: Mirrors ScoreboardConfig's own fields (config.py), same convention.
 _SCOREBOARD_FIELDS: dict[str, _FieldSpec] = {
-    "sport": _FieldSpec("select", choices=SPORT_CHOICES),
-    "favourite_team": _FieldSpec("str"),
-    "also_follow": _FieldSpec("teams"),
     "timezone": _FieldSpec("str"),
     "rotate_seconds": _FieldSpec("float"),
     "poll_seconds": _FieldSpec("float"),
@@ -467,13 +463,6 @@ _STATUS_FIELDS: dict[str, _FieldSpec] = {
 #: it's informational only, the driver never reads it (CLAUDE.md). The
 #: five brightness-related fields hot-apply; every other field here is
 #: restart_required, since it's baked into the constructed RGBMatrix.
-#: ``[football]`` (#348): the football favourite and followed teams, validated against the football
-#: table, not the hockey one (abbreviations like BUF overlap but mean different teams).
-_FOOTBALL_FIELDS: dict[str, _FieldSpec] = {
-    "favourite_team": _FieldSpec("football_team"),
-    "also_follow": _FieldSpec("football_teams"),
-}
-
 _PANEL_FIELDS: dict[str, _FieldSpec] = {
     "brightness": _FieldSpec("int"),
     "auto_brightness": _FieldSpec("bool"),
@@ -590,24 +579,6 @@ def _holiday_payload(settings: Settings) -> dict[str, object]:
         "frequencies": [
             {"name": name, "label": f.label, "description": f.description}
             for name, f in FLYBY_FREQUENCIES.items()
-        ],
-    }
-
-
-def _football_payload(settings: Settings) -> dict[str, object]:
-    """``[football]`` plus the 32 teams it picks from (#348).
-
-    ``available`` comes from the football table itself, so the page has no second copy of the
-    team list to drift out of date (the hockey picker still has one, in ``App.tsx``).
-    """
-    cfg = settings.football
-    return {
-        "type": "config",
-        "section": "football",
-        "data": {"favourite_team": cfg.favourite_team, "also_follow": list(cfg.also_follow)},
-        "available": [
-            {"abbrev": t.abbrev, "name": f"{t.city} {t.nickname}"}
-            for t in sorted(football_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
         ],
     }
 
@@ -929,13 +900,6 @@ async def _send_wifi_config(connection: ServerConnection, settings: Settings | N
     await connection.send(json.dumps(_wifi_payload(settings)))
 
 
-async def _send_football_config(
-    connection: ServerConnection, settings: Settings | None = None
-) -> None:
-    settings = settings or Settings.load(CONFIG_PATH)
-    await connection.send(json.dumps(_football_payload(settings)))
-
-
 async def _send_football_rotation_config(
     connection: ServerConnection, settings: Settings | None = None
 ) -> None:
@@ -1073,7 +1037,8 @@ def _test_horn() -> tuple[bool, str]:
     horn = _current_horn(settings)
     if horn.enabled:
         horn.apply_volume()
-    played = horn.play(settings.scoreboard.favourite_team)
+    # The horn is the top-ranked hockey team's (epic #470); a stand-in when none is ranked.
+    played = horn.play(Priority(settings.teams).lead("hockey") or "NSH")
     return played, horn.last_error
 
 
@@ -1358,19 +1323,6 @@ def _coerce_scalar_fields(data: object, fields: dict[str, _FieldSpec]) -> dict[s
             errors[key] = "must be a whole number"
         elif spec.kind == "select" and value not in spec.choices:
             errors[key] = f"must be one of {', '.join(spec.choices)}"
-        elif spec.kind == "teams" and (
-            not isinstance(value, list) or not all(t in TEAM_COLORS for t in value)
-        ):
-            errors[key] = "must be a list of team abbreviations"
-        elif spec.kind == "football_team" and (
-            not isinstance(value, str) or (value != "" and not football_teams.is_team(value))
-        ):
-            errors[key] = "must be a football team abbreviation, or empty for none"
-        elif spec.kind == "football_teams" and (
-            not isinstance(value, list)
-            or not all(isinstance(t, str) and football_teams.is_team(t) for t in value)
-        ):
-            errors[key] = "must be a list of football team abbreviations"
         elif spec.kind in ("float", "int") and (
             (spec.minimum is not None and value < spec.minimum)
             or (spec.maximum is not None and value > spec.maximum)
@@ -1538,7 +1490,6 @@ _SEND_AFTER_SAVE = {
     "rotation": _send_rotation_config,
     "holiday": _send_holiday_config,
     "update": _send_update_config,
-    "football": _send_football_config,
     "football_rotation": _send_football_rotation_config,
     "teams": _send_teams_config,
 }
@@ -1627,8 +1578,6 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_holiday(message.get("data"))
         elif section == "update":
             values = _coerce_update(message.get("data"))
-        elif section == "football":
-            values = _coerce_scalar_fields(message.get("data"), _FOOTBALL_FIELDS)
         elif section == "football_rotation":
             values = _coerce_football_rotation(message.get("data"))
         elif section == "teams":
@@ -1675,7 +1624,6 @@ async def _handle(connection: ServerConnection) -> None:
         # keeps working unchanged.
         await _send_holiday_config(connection, settings)
         # After holiday for the same reason: nothing that counts the earlier messages moves.
-        await _send_football_config(connection, settings)
         await _send_football_rotation_config(connection, settings)
         # And the ranked team list (epic #470) after that.
         await _send_teams_config(connection, settings)

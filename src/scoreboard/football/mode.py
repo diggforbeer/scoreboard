@@ -598,9 +598,11 @@ def _has_clock(cfg: FootballConfig) -> bool:
 
 
 def _no_football() -> FootballConfig:
+    """Football's settings when nothing was passed in: the defaults, with nobody followed."""
     from ..config import FootballConfig
+    from ..priority import TeamView
 
-    return FootballConfig()
+    return TeamView(FootballConfig(), "", [], "")  # type: ignore[return-value]
 
 
 def _keep_participants(site: Sequence[Play], before: Sequence[Play]) -> list[Play]:

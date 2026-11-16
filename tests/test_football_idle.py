@@ -10,12 +10,12 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from scoreboard.config import FootballConfig
 from scoreboard.football import idle
 from scoreboard.football.api import STANDINGS_URL, FootballClient
 from scoreboard.football.mode import FootballMode
 from scoreboard.football.models import FbGame
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 from test_football_plays import FakeResponse, FakeSession
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
@@ -345,7 +345,7 @@ def live(game_id=2):
 
 
 def make_mode(feed, clock, favourite="NYG", follow=()):
-    cfg = FootballConfig(favourite_team=favourite, also_follow=list(follow))
+    cfg = fcfg(favourite_team=favourite, also_follow=list(follow))
     return FootballMode(client_factory=lambda: feed, monotonic=clock, football=lambda: cfg)
 
 
@@ -432,7 +432,7 @@ def test_a_client_without_the_idle_endpoints_is_simply_skipped():
 
     clock = Clock()
     mode = FootballMode(client_factory=lambda: Feed([pregame()]), monotonic=clock,
-                   football=lambda: FootballConfig(favourite_team="NYG"))  # fmt: skip
+                   football=lambda: fcfg(favourite_team="NYG"))  # fmt: skip
     mode.worker.poll_once()
     assert mode.snapshot.games and mode.snapshot.idle.scoreboard is None
     assert mode.snapshot.idle.schedules == {}

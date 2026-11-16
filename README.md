@@ -134,13 +134,13 @@ source .venv/bin/activate
 scoreboard --dump
 
 # Run the board in the emulator, then open http://localhost:8888
-# (edit scoreboard.local.toml first for favourite_team etc.)
+# (edit scoreboard.local.toml first: add your teams under [[teams]])
 scoreboard --backend RGBMatrixEmulator -c scoreboard.local.toml
 
 # Loop every scene (live, goal, PP/EN, standings, ...) with made-up games,
 # ~4s each, until Ctrl-C -- also works on the real panel with no network
 scoreboard --demo --backend RGBMatrixEmulator -c scoreboard.local.toml
-# (with sport = "football" in the config it loops the football screens instead; never any sound)
+# (with --sport football it loops the football screens instead; never any sound)
 
 # Print frames as ASCII art - fastest way to iterate on layout
 python scripts/preview.py --team NSH
@@ -157,9 +157,18 @@ The running image reads `/boot/firmware/scoreboard.toml`. Because the boot
 partition is FAT32, you can edit it from any computer after flashing the card.
 
 ```toml
+# Your teams, in priority order, hockey and football mixed (also editable on the admin page).
+# Rank 1 is "the favourite" when it plays; lower ranks are followed. With none, every live game
+# takes a turn.
+[[teams]]
+sport = "hockey"
+team = "NSH"
+
+[[teams]]
+sport = "hockey"
+team = "DAL"                # followed: their live games take turns on screen, goals jump in
+
 [scoreboard]
-favourite_team = "NSH"      # "" rotates every game in the league instead
-also_follow = ["DAL"]       # more teams: their live games take turns on screen, goals jump in
 prefer_favourite = true     # with no live/held favourite game, still show it first when rotating
 countdown_hours = 2         # preview becomes a countdown this close to puck drop
 final_hold_minutes = 30     # how long a final stays up before the next preview
@@ -195,7 +204,7 @@ scores_grid = false         # with no favourite game up, show today's games four
 enabled = true
 device = ""                 # ALSA device, e.g. "plughw:1,0"; empty = aplay's default
 horn_dir = ""                # override the search path for {ABBR}.wav horn files
-ding = true                  # "ding" when a team you follow (also_follow) scores in a live game
+ding = true                  # "ding" when one of your lower-ranked teams scores in a live game
 wah_wah = false              # sad-trombone "wah wah" when the other team scores (live game, favourite only)
 
 [wifi]
@@ -259,7 +268,8 @@ same way a router's printed default password is. The account can `sudo`
 
 Every screen, with pictures, is in the [screen guide](screens.md).
 
-With a `favourite_team` set (the default, `NSH`), the board follows your team's day:
+With your teams ranked in `[[teams]]` (on the admin page: **My teams**), the board follows the day of the
+highest-ranked team that has something on, your "favourite" of the moment:
 
 | When | Board shows |
 |---|---|
@@ -280,13 +290,13 @@ clock**. By default each stays up for `rotate_seconds`; add `[[rotation]]`
 entries to `scoreboard.toml` to reorder them, drop one, or give each its
 own duration instead (see [Configuration](#configuration)) -- a screen with
 nothing to show right now is skipped, not shown blank. With no
-`favourite_team` set (or nothing left for it to show), the board instead
+team ranked (or nothing left for it to show), the board instead
 rotates through every game in the league today, `rotate_seconds` each,
 favourite first (`prefer_favourite`) -- or, with `scores_grid` on, four at
 a time (two on a single 64×32 panel), one compact column per game. The
 same grid can also join the idle rotation as a `"scores_grid"` entry.
 
-**Following more teams.** `also_follow` lists extra teams. While your
+**Following more teams.** Rank more teams in `[[teams]]`: the other ranked hockey teams are followed. While your
 favourite is live and the puck is in play, its game holds the screen and
 the others only appear when they score. During your favourite's
 intermission (or while its final is held), the other live followed games

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from scoreboard.config import FootballConfig
 from scoreboard.display import football_idle
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.football.idle import IdleSnapshot
 from scoreboard.football.idle_screens import IDLE_SCREENS, IdleContext
 from scoreboard.football.models import FbGame
+from teamcfg import fcfg
 from test_football_scenes import H, check_snapshot, raw_game, renderer
 
 KICKOFF = datetime(2026, 11, 22, 18, 0, tzinfo=UTC)
@@ -118,7 +118,7 @@ def test_a_64px_panel_is_never_asked_for_it():
 
 def test_the_screen_shows_for_a_favourite_pregame_only():
     show = IDLE_SCREENS["fb_countdown"]
-    cfg = FootballConfig(favourite_team="NYG")
+    cfg = fcfg(favourite_team="NYG")
 
     def ctx(games):
         return IdleContext(0.0, KICKOFF, games, IdleSnapshot(), cfg)
@@ -127,7 +127,7 @@ def test_the_screen_shows_for_a_favourite_pregame_only():
     assert not show(ctx([make_game(state="in")]))
     assert not show(ctx([make_game(start="")]))
     assert not show(ctx([]))
-    assert not show(IdleContext(0.0, KICKOFF, [make_game()], IdleSnapshot(), FootballConfig()))
+    assert not show(IdleContext(0.0, KICKOFF, [make_game()], IdleSnapshot(), fcfg()))
 
 
 from test_football_scenes import _pixels, app  # noqa: E402,F401  (the real-app fixture)

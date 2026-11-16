@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sport",
         choices=["hockey", "football"],
-        help="Which sport --dump prints (default: the configured [scoreboard] sport)",
+        help="Which sport --dump prints, or --demo shows (default: your top-ranked team's sport)",
     )
     parser.add_argument("--log-level", default="INFO", help="DEBUG, INFO, WARNING, ERROR")
     return parser
@@ -74,7 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.dump_plays:
         return _dump_plays(args.dump_plays)
     if args.dump:
-        if (args.sport or settings.scoreboard.sport) == "football":
+        top = settings.teams[0].sport if settings.teams else "hockey"
+        if (args.sport or top) == "football":
             return _dump_football(settings)
         return _dump(settings)
 
@@ -95,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
         app.alias_publisher = AliasPublisher()
     app.install_signal_handlers()
     if args.demo:
+        if args.sport and args.sport != app.current_mode():
+            app._switch_sport(args.sport)
         app.run_demo()
         return 0
     app.run()

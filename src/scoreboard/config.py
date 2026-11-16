@@ -211,25 +211,10 @@ def next_hardware_mapping(current: str) -> str:
     return PANEL_HARDWARE_MAPPING_CHOICES[(index + 1) % len(PANEL_HARDWARE_MAPPING_CHOICES)]
 
 
-#: ``[scoreboard] sport`` choices; the first is the default.
-SPORT_CHOICES = ("hockey", "football")
-
-
 @dataclass(slots=True)
 class ScoreboardConfig:
     """Behaviour of the scoreboard itself."""
 
-    #: Which sport the board runs: "hockey" or "football". Anything else is warned
-    #: about and treated as "hockey". Nothing acts on it yet (football #345).
-    sport: str = "hockey"
-    #: Pinned to the front of the rotation and eligible for the special-teams
-    #: indicator. Nashville unless the boot-partition config says otherwise.
-    favourite_team: str = "NSH"
-    #: More teams to follow (#260): their live games take turns on screen
-    #: with the favourite's, and their goals interrupt that cycle (silently;
-    #: the horn stays the favourite's). Everything else -- standings,
-    #: leaders, matchup, three stars, the countdown -- stays favourite-only.
-    also_follow: list[str] = field(default_factory=list)
     timezone: str = DEFAULT_TIMEZONE
     rotate_seconds: float = 8.0
     poll_seconds: float = 60.0
@@ -276,24 +261,6 @@ class ScoreboardConfig:
     scores_grid: bool = False
 
     def __post_init__(self) -> None:
-        sport = str(self.sport).strip().lower()
-        if sport not in SPORT_CHOICES:
-            log.warning(
-                "scoreboard.sport %r is not one of %s; using hockey", self.sport, SPORT_CHOICES
-            )
-            sport = "hockey"
-        self.sport = sport
-        self.favourite_team = self.favourite_team.strip().upper()
-        if isinstance(self.also_follow, str):
-            self.also_follow = [self.also_follow]
-        follow: list[str] = []
-        for raw in self.also_follow:
-            team = str(raw).strip().upper()
-            if team not in TEAM_COLORS:
-                log.warning("Ignoring unknown scoreboard.also_follow team %r", raw)
-            elif team != self.favourite_team and team not in follow:
-                follow.append(team)
-        self.also_follow = follow
         self.logo_variant = self.logo_variant.strip().lower() or "dark"
         self.poll_seconds = _clamp_interval("scoreboard", "poll_seconds", self.poll_seconds)
         self.live_poll_seconds = _clamp_interval(
@@ -313,11 +280,6 @@ class ScoreboardConfig:
                 flash,
             )
             self.goal_flash_seconds = flash
-
-    @property
-    def followed_teams(self) -> list[str]:
-        """The favourite (if any) first, then ``also_follow``."""
-        return [self.favourite_team, *self.also_follow] if self.favourite_team else self.also_follow
 
 
 #: The only screens ``_rotate_idle_scenes`` (app.py) knows how to show.
@@ -459,8 +421,8 @@ class AudioConfig:
     #: Play a sad-trombone "wah wah" when the opponent scores in the
     #: favourite's live game (#307). Off by default: not everyone wants it.
     wah_wah: bool = False
-    #: Play a "ding" when a followed (also_follow) team scores in a live game
-    #: (#311). On by default: it does nothing without also_follow.
+    #: Play a "ding" when a followed (a lower-ranked) team scores in a live game
+    #: (#311). On by default: it does nothing without a second ranked team.
     ding: bool = True
 
     def __post_init__(self) -> None:
@@ -540,22 +502,13 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
 
 @dataclass(slots=True)
 class FootballConfig:
-    """Which football teams the board follows in football mode (#348).
+    """Football mode's settings: the idle rotation, the screen lengths and the screen toggles.
 
-    Kept apart from ``[scoreboard]`` (the hockey favourite and followed teams) because
-    abbreviations overlap between the leagues (``BUF``, ``CAR``, ``DAL``, ``DET``,
-    ``MIN`` ...) and mean different teams: sharing one list would make a hockey
-    abbreviation silently select a football team. Switching sport and back keeps each
-    sport's choices.
-
-    There is no default favourite: the hockey side defaults to Nashville, but nothing
-    obvious plays that role for the football, so it starts empty and the board shows
-    every game until one is chosen.
+    Which teams the board follows is not here: the ranked ``[[teams]]`` list holds both sports'
+    teams (epic #470) and the priority layer decides the favourite, the followed teams and the
+    horn team, which the football code reads through ``priority.TeamView``.
     """
 
-    favourite_team: str = ""
-    #: More football teams to follow, like ``scoreboard.also_follow``.
-    also_follow: list[str] = field(default_factory=list)
     #: Football mode's idle rotation (``[[football.rotation]]``, #422): football screen names only.
     #: Empty means ``DEFAULT_FOOTBALL_ROTATION``; read it through ``idle_rotation``.
     rotation: list[Any] = field(default_factory=list)
@@ -610,25 +563,6 @@ class FootballConfig:
         self.countdown_minutes = _positive_minutes(
             self.countdown_minutes, 60.0, "football.countdown_minutes"
         )
-        favourite = str(self.favourite_team).strip().upper()
-        if favourite and not football_team_exists(favourite):
-            log.warning("Ignoring unknown football.favourite_team %r", self.favourite_team)
-            favourite = ""
-        self.favourite_team = favourite
-        raw_follow = [self.also_follow] if isinstance(self.also_follow, str) else self.also_follow
-        follow: list[str] = []
-        for raw in raw_follow if isinstance(raw_follow, list) else []:
-            team = str(raw).strip().upper()
-            if not football_team_exists(team):
-                log.warning("Ignoring unknown football.also_follow team %r", raw)
-            elif team != self.favourite_team and team not in follow:
-                follow.append(team)
-        self.also_follow = follow
-
-    @property
-    def followed_teams(self) -> list[str]:
-        """The favourite (if any) first, then ``also_follow``."""
-        return [self.favourite_team, *self.also_follow] if self.favourite_team else self.also_follow
 
     @property
     def idle_rotation(self) -> list[RotationEntry]:
@@ -953,7 +887,7 @@ class Settings:
     def from_dict(cls, raw: dict[str, Any]) -> Settings:
         return cls(
             panel=_build(PanelConfig, raw.get("panel", {})),
-            scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {})),
+            scoreboard=_build(ScoreboardConfig, raw.get("scoreboard", {}), "scoreboard"),
             football=_build(FootballConfig, raw.get("football", {}), "football"),
             teams=_parse_teams(raw.get("teams", [])),
             rotation=_parse_rotation(raw.get("rotation", [])),
@@ -982,7 +916,7 @@ class Settings:
         """Write ``updates`` into the source file, in place, keeping everything else.
 
         ``updates`` is normally ``{section: {key: value}}``, e.g.
-        ``{"scoreboard": {"favourite_team": "TOR"}, "panel": {"brightness": 80}}``
+        ``{"scoreboard": {"rotate_seconds": 10}, "panel": {"brightness": 80}}``
         -- only those keys are touched, parsed and re-emitted with
         ``tomlkit`` rather than ``tomllib`` + a plain writer, so every
         comment in the heavily-annotated boot-partition template survives
@@ -1081,6 +1015,15 @@ class Settings:
 #: logged once per process instead of warned about on every read, and
 #: ``Settings.save`` drops them the next time their section is saved.
 RETIRED_KEYS: dict[str, dict[str, str]] = {
+    "scoreboard": {
+        "sport": "replaced by the ranked [[teams]] list (the sport follows your top team)",
+        "favourite_team": "replaced by the ranked [[teams]] list (add your team on the admin page)",
+        "also_follow": "replaced by the ranked [[teams]] list (add your teams on the admin page)",
+    },
+    "football": {
+        "favourite_team": "replaced by the ranked [[teams]] list (add your team on the admin page)",
+        "also_follow": "replaced by the ranked [[teams]] list (add your teams on the admin page)",
+    },
     "holiday": {
         "flyby_min_minutes": "replaced by flyby_frequency",
         "flyby_max_minutes": "replaced by flyby_frequency",
@@ -1109,7 +1052,9 @@ def _build(cls: type, raw: dict[str, Any], section: str = "") -> Any:
         elif key in retired:
             if (section, key) not in _retired_logged:
                 _retired_logged.add((section, key))
-                log.info(
+                # The team settings are the ones an owner will miss, so those say so loudly.
+                level = log.warning if "[[teams]]" in retired[key] else log.info
+                level(
                     "Ignoring retired config key %r in [%s] (%s); safe to delete, "
                     "and removed the next time [%s] is saved",
                     key,

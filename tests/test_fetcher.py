@@ -19,6 +19,7 @@ from scoreboard.display.matrix import Backend
 from scoreboard.fetcher import InlineFetcher, ThreadedFetcher
 from scoreboard.hockey.api import HockeyApiError
 from scoreboard.hockey.models import PlayerSeasonDetail
+from teamcfg import set_favourite
 from test_app import FakeGraphics, FakeMatrix, FakeOptions
 from test_flow import FAV, PUCK_DROP, Clock, FlowClient, game, goal_event, make_app
 
@@ -311,7 +312,7 @@ def test_a_schedule_for_the_old_favourite_is_dropped_after_a_switch(fake_backend
     app, _clock = threaded_app(fake_backend, client)
     try:
         app.next_favourite_game()  # in flight for NSH
-        app.settings.scoreboard.favourite_team = "DAL"
+        set_favourite(app.settings, "DAL")
         client.release.set()
         settle(app)
         assert app._schedule is None, "the old team's schedule must not land under the new one"

@@ -22,6 +22,7 @@ from scoreboard.football.events import EventDetector, Scope
 from scoreboard.football.models import FbGame, Play, PlayKind
 from scoreboard.football.queue import PlayQueue, Shown
 from scoreboard.football.teams import TEAMS
+from teamcfg import fcfg
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
 BASE = datetime(2026, 11, 15, 18, 0, tzinfo=UTC)
@@ -75,7 +76,7 @@ SCORING = {"scoringPlay": True}
 
 
 def detector(favourite="NYG", follow=(), seeded=True, game=None):
-    cfg = FootballConfig(favourite_team=favourite, also_follow=list(follow))
+    cfg = fcfg(favourite_team=favourite, also_follow=list(follow))
     det = EventDetector(lambda: cfg)
     game = game or make_game()
     if seeded:
@@ -478,7 +479,7 @@ def test_events_come_out_in_play_order():
 
 
 def test_changing_the_followed_teams_applies_to_the_very_next_play():
-    cfg = FootballConfig(favourite_team="NYG")
+    cfg = fcfg(favourite_team="NYG")
     det = EventDetector(lambda: cfg)
     game = make_game("KC", "DAL")
     det.seed(game.id, None)

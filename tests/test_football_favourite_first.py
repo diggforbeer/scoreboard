@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from scoreboard.config import FootballConfig
 from scoreboard.football import director as dr
 from scoreboard.football.director import Director
 from scoreboard.football.mode import FootballMode
 from scoreboard.football.teams import TEAMS
 from scoreboard.football.worker import FeedSnapshot
+from teamcfg import fcfg
 from test_football_events import make_game, make_play
 from test_football_idle_selection import (
     BASE,
@@ -43,7 +43,7 @@ class Rig:
 
     def __init__(self, hold=True, favourite="NYG", follow=("DAL",)):
         self.clock = Clock()
-        self.cfg = FootballConfig(favourite_team=favourite, also_follow=list(follow))
+        self.cfg = fcfg(favourite_team=favourite, also_follow=list(follow))
         self.hold = hold
         self.director = Director(lambda: self.cfg, self.clock, lambda: 0.0, self.clock.utc)
         self.fav_plays: list = []
@@ -261,7 +261,7 @@ def test_the_favourites_own_live_game_beats_the_countdown_of_nothing_else():
 
 def build_mode(games, follow=(), utc=None):
     clock = Clock(BASE)
-    config = FootballConfig(favourite_team="NYG", also_follow=list(follow))
+    config = fcfg(favourite_team="NYG", also_follow=list(follow))
     feed = IdleFeed(games)
     mode = FootballMode(
         client_factory=lambda: feed,
@@ -291,7 +291,7 @@ def test_a_followed_teams_touchdown_breaks_in_over_the_favourites_countdown():
     clock = Clock(BASE)
     feed = PlaysFeed([nyg_game("pre"), followed_live()])
     feed.followed_plays = [make_play(1, "rush", off="LV")]
-    config = FootballConfig(favourite_team="NYG", also_follow=["KC"])
+    config = fcfg(favourite_team="NYG", also_follow=["KC"])
     mode = FootballMode(
         client_factory=lambda: feed, monotonic=clock, football=lambda: config, utc_now=utc
     )
@@ -323,7 +323,7 @@ def test_a_red_zone_alert_shows_over_the_favourites_countdown_after_any_score_ba
     out = with_situation(followed_live(), KC_ID, red=False)
     feed = PlaysFeed([nyg_game("pre"), out])
     feed.followed_plays = [make_play(1, "rush", off="LV")]
-    config = FootballConfig(favourite_team="NYG", also_follow=["KC"])
+    config = fcfg(favourite_team="NYG", also_follow=["KC"])
     mode = FootballMode(
         client_factory=lambda: feed, monotonic=clock, football=lambda: config, utc_now=utc
     )
