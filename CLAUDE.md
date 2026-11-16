@@ -889,14 +889,60 @@ exit; with `show_logos = false` every step is just text.
 - Team logo URLs are per-team in the score payload; the pattern is
   `assets.nhle.com/logos/nhl/svg/{ABBR}_{light|dark}.svg`.
 - Game states seen: `FUT PRE LIVE CRIT FINAL OFF`.
-- **Every fetch blocks the render loop**, so a slow API freezes the panel
-  (clock, animations, button, goal flash) for as long as the request
-  takes. Seen on a real board, 2026-10-10: `score/now` read timeouts at
-  10s with three retries each froze it ~44s per poll, ~2.5 min across
-  three back-to-back polls. `nhl/api.py`'s `TIMEOUT` is now `(5, 5)` and a
-  timed-out connect or read is retried once (quick 429/5xx answers keep
-  three), so one stalled poll costs ~10s. Moving fetches off the render
-  thread would remove the stall entirely; not done, not yet needed.
+- **Fetches run on one worker thread, not the render loop (#267).** They
+  used to block it, so a slow API froze the panel (clock, animations,
+  button, goal flash) for as long as the request took: seen on a real
+  board, 2026-10-10, `score/now` read timeouts froze it ~44s per poll.
+  `nhl/api.py`'s `TIMEOUT` is `(5, 5)` with one retry on a timeout (quick
+  429/5xx answers keep three), so one stalled request now costs the worker
+  ~10s and the panel nothing. `fetcher.py` is the whole mechanism:
+  `ScoreboardApp.fetcher.submit(key, work, done)` runs `work()` (a bare
+  client call, **nothing else**: it is on the worker thread) and `done(result,
+  error)` runs later on the render thread, from `fetcher.drain()` at the top of
+  each `run()` tick. All state changes (`self.situations`, goal detection,
+  `ended_at`, shootout arrival stamps, the delay queue) therefore stay on the
+  render thread, the same rule as `button.py` and `admin_server.py`; the
+  per-feature schedules (`live_poll_seconds`, the TTLs, backoff) are still
+  decided on the render thread at submit time. Rules that matter:
+  - **One worker, FIFO**, so a stuck request delays the others by at most its
+    own timeout. A thread pool would need a lock on every cache.
+  - **A key is in flight at most once**: re-submitting a queued or running key
+    is dropped (`submit` returns `False`; `pending(key)` asks), so a hung
+    request cannot build a backlog and callers can submit every tick.
+  - **Scene selection never waits.** The TTL caches (schedule, standings,
+    season series, club stats) submit a refresh and answer from the cache, so a
+    scene is skipped (as it already was before a first fetch) until data lands.
+  - **A result for the wrong favourite is dropped** (`_on_schedule`,
+    `_on_club_stats` compare with the live setting), so a switch mid-request
+    can't repopulate a cache the switch just cleared. Keys include the team.
+  - **The staleness guard is unchanged**: `last_success` is only set when a
+    score result is *applied*, so a hung worker trips `no_data` after
+    `STALE_AFTER_SECONDS` like a failing API does.
+  - **The roster for a scorer screen is fetched by the same worker job as the
+    scoring array** (`_fetch_goal_events`), still lazily (only for a goal not
+    yet shown, and only if that team's roster is stale); `_team_roster` reads
+    the cache only.
+  - **Tests and `--demo` use `InlineFetcher`** (the default): `submit` runs
+    `work` and `done` on the calling thread, so `test_flow.py`'s clock-driven
+    game days stay synchronous. Only `__main__` installs `ThreadedFetcher`;
+    `tests/test_fetcher.py` covers it, including a hung `scores()` while
+    `run()` keeps drawing (mutation-checked against inline fetching).
+  - **A slow request is logged, not felt.** The panel no longer freezes, so
+    nothing else would show a slow API: any request over `SLOW_FETCH_SECONDS`
+    (3, the football worker's bar) is logged at WARNING with its key
+    (`situation 3`, `scores`), faster ones at DEBUG. Look in the journal first.
+  - **The status box shows the worker** (`ScoreboardApp._fetch_status`, from
+    `fetcher.stats()`, read-only so the admin server's thread can call it):
+    `nhl fetch worker` (`idle`, `busy: N in flight, oldest Ns`, or `inline`),
+    `last nhl fetch` (key, seconds, ok/failed) and `nhl fetch totals` (done,
+    failed, slow). A stuck worker reads "busy ... oldest 300s" while the panel
+    carries on, which is the thing to look for before staleness trips. The
+    football worker keeps similar numbers in its snapshot but the NHL status
+    keys are not shown in football mode.
+  - A request that never returns (a DNS hang past the client's timeouts) is not
+    abandoned: the worker stays stuck and the staleness guard is the backstop.
+    Not verified on hardware (#4): block `api-web.nhle.com` mid-game and check
+    that the clock and animations keep running.
 - **One `gamecenter/{id}/landing` request per game per poll (#263).**
   `situation()`, `goal_scoring()` and `three_stars()` all read that URL,
   and the run loop calls them back to back; `NHLClient._landing` reuses a
@@ -2031,7 +2077,13 @@ can never rename it (avahi's own clash rename isn't remembered).
   script *ignores* an invalid one. `apply_hostname()` (admin save) and
   `scoreboard-provision` (boot) both write `/etc/hostname`, `/etc/hosts` and
   the state file, then restart avahi, so the MAC name is never re-derived over
-  the owner's choice.
+  the owner's choice. `apply_hostname()` re-validates the label itself (a
+  newline in it would add lines to `/etc/hosts`) and sets the live name with
+  `socket.sethostname`, not by running `hostname <name>` (code scanning alert
+  32, `py/command-line-injection`); the only command it runs is a constant
+  `systemctl restart avahi-daemon.service`. Tests must pass `set_hostname=`,
+  or the real call renames the machine when run as root. `scoreboard-provision`
+  keeps its own copy of the `hostname` call, behind its own validation.
 - **`scoreboard.local` alias:** `[status] local_alias` (default on).
   `AliasPublisher` runs `avahi-publish-address scoreboard.local <ip>` (package
   `avahi-utils`); without `-R` it probes and exits if another board has the
