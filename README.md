@@ -53,13 +53,13 @@
 | src/nhl\_scoreboard/football/\_\_init\_\_.py           |        0 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/api.py                    |      156 |        0 |       38 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/demo.py                   |      181 |        0 |        8 |        0 |    100% |           |
-| src/nhl\_scoreboard/football/director.py               |      196 |        7 |       70 |        9 |     94% |187, 202, 235, 238-\>exit, 248-\>250, 254-\>250, 262, 314, 328, 350 |
+| src/nhl\_scoreboard/football/director.py               |      228 |        9 |       84 |       11 |     94% |191, 206, 251, 266, 273, 276-\>exit, 286-\>288, 292-\>288, 300, 376, 390, 412 |
 | src/nhl\_scoreboard/football/events.py                 |      208 |        8 |       82 |        5 |     96% |269, 296, 305, 349, 353-356 |
 | src/nhl\_scoreboard/football/geometry.py               |       91 |        0 |       16 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/idle.py                   |      238 |        7 |       38 |        4 |     96% |52-54, 113, 323-\>314, 338, 347-348 |
 | src/nhl\_scoreboard/football/idle\_screens.py          |       45 |        0 |        0 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/idle\_views.py            |      219 |        2 |       68 |        0 |     99% |   253-254 |
-| src/nhl\_scoreboard/football/mode.py                   |      287 |        3 |       98 |        5 |     98% |83-85, 178-\>180, 189-\>191, 232-\>227, 531 |
+| src/nhl\_scoreboard/football/mode.py                   |      304 |        3 |      104 |        5 |     98% |83-85, 178-\>180, 189-\>191, 232-\>227, 564 |
 | src/nhl\_scoreboard/football/models.py                 |      299 |        2 |       36 |        3 |     99% |33, 224-\>222, 253 |
 | src/nhl\_scoreboard/football/pacing.py                 |       42 |        0 |        2 |        0 |    100% |           |
 | src/nhl\_scoreboard/football/people.py                 |      135 |        0 |       36 |        0 |    100% |           |
@@ -82,7 +82,7 @@
 | src/nhl\_scoreboard/updater.py                         |      287 |       28 |       78 |       10 |     90% |115-116, 134, 154, 172-176, 180-185, 231-\>241, 251-253, 277, 313-318, 322-328, 339, 406-\>408, 433-\>435, 456-\>459, 461, 465 |
 | src/nhl\_scoreboard/wifi.py                            |      140 |      109 |       28 |        0 |     18% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/nhl\_scoreboard/wifi\_join.py                      |       86 |        7 |       10 |        0 |     93% |112-114, 117-118, 201-202 |
-| **TOTAL**                                              | **12323** |  **419** | **3504** |  **177** | **96%** |           |
+| **TOTAL**                                              | **12372** |  **421** | **3524** |  **179** | **96%** |           |
 
 
 ## Setup coverage badge
