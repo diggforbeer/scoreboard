@@ -519,3 +519,63 @@ def test_football_mode_has_its_own_idle_rotation_card(admin_page):
             assert page.input_value('[aria-label="football rotation screen 1"]') == "fb_week"
         finally:
             browser.close()
+
+
+def test_my_teams_card_adds_reorders_and_removes_teams_and_marks_the_horn_teams(admin_page):
+    """Epic #470 (#473): one ranked list for both sports. The first team of each sport carries the
+    horn mark, the first row the top-priority mark, and both follow the order; every change saves
+    to ``[[teams]]`` in order and survives a reload."""
+    from playwright.sync_api import sync_playwright
+
+    def saved():
+        return [(t["sport"], t["team"]) for t in admin_page.config().get("teams", [])]
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#teams-add", timeout=15000)
+            assert page.locator("#teams-empty").is_visible(), "an empty list prompts for a team"
+
+            for choice in ("hockey:NSH", "football:TEN", "hockey:TOR"):
+                page.select_option("#teams-add", choice)
+                page.click("#teams-add-button")
+            page.wait_for_selector("#teams-list li[data-team='TOR']")
+            assert not page.locator("#teams-empty").count()
+            _wait_until(
+                lambda: saved() == [("hockey", "NSH"), ("football", "TEN"), ("hockey", "TOR")]
+            )
+
+            def horn(team):
+                return page.locator(f"#teams-list li[data-team='{team}'] .teams-horn").count()
+
+            # NSH leads hockey and TEN leads football; TOR is second in hockey.
+            assert (horn("NSH"), horn("TEN"), horn("TOR")) == (1, 1, 0)
+            assert page.locator("#teams-list li[data-team='NSH'] .teams-top").count() == 1
+
+            # A ranked team is no longer offered; the same abbreviation in the other sport still is.
+            assert page.locator("#teams-add option[value='hockey:NSH']").count() == 0
+            assert page.locator("#teams-add option[value='football:NYG']").count() == 1
+
+            # Move Toronto above Nashville: the horn and the top mark move with the order.
+            for _ in range(2):
+                page.get_by_role("button", name="Move Toronto Maple Leafs up").click()
+            _wait_until(
+                lambda: saved() == [("hockey", "TOR"), ("hockey", "NSH"), ("football", "TEN")]
+            )
+            assert (horn("TOR"), horn("NSH"), horn("TEN")) == (1, 0, 1)
+            assert page.locator("#teams-list li[data-team='TOR'] .teams-top").count() == 1
+            assert page.locator("#teams-list li").first.get_attribute("data-team") == "TOR"
+
+            page.reload()
+            page.wait_for_selector("#teams-list li[data-team='TEN']", timeout=15000)
+            order = [li.get_attribute("data-team") for li in page.locator("#teams-list li").all()]
+            assert order == ["TOR", "NSH", "TEN"]
+
+            # Removing the lead gives the horn back to the next hockey team.
+            page.get_by_role("button", name="Remove Toronto Maple Leafs").click()
+            _wait_until(lambda: saved() == [("hockey", "NSH"), ("football", "TEN")])
+            assert page.locator("#teams-list li[data-team='NSH'] .teams-horn").count() == 1
+        finally:
+            browser.close()
