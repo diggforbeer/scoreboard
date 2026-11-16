@@ -21,6 +21,7 @@ from test_football_idle_selection import (
     Utc,
     nyg_game,
     register,
+    stand_ins,  # noqa: F401 - the autouse fixture that puts the idle screens back after each test
 )
 from test_football_scenes import game, renderer
 
