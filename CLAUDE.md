@@ -927,6 +927,18 @@ exit; with `show_logos = false` every step is just text.
     game days stay synchronous. Only `__main__` installs `ThreadedFetcher`;
     `tests/test_fetcher.py` covers it, including a hung `scores()` while
     `run()` keeps drawing (mutation-checked against inline fetching).
+  - **A slow request is logged, not felt.** The panel no longer freezes, so
+    nothing else would show a slow API: any request over `SLOW_FETCH_SECONDS`
+    (3, the football worker's bar) is logged at WARNING with its key
+    (`situation 3`, `scores`), faster ones at DEBUG. Look in the journal first.
+  - **The status box shows the worker** (`ScoreboardApp._fetch_status`, from
+    `fetcher.stats()`, read-only so the admin server's thread can call it):
+    `nhl fetch worker` (`idle`, `busy: N in flight, oldest Ns`, or `inline`),
+    `last nhl fetch` (key, seconds, ok/failed) and `nhl fetch totals` (done,
+    failed, slow). A stuck worker reads "busy ... oldest 300s" while the panel
+    carries on, which is the thing to look for before staleness trips. The
+    football worker keeps similar numbers in its snapshot but the NHL status
+    keys are not shown in football mode.
   - A request that never returns (a DNS hang past the client's timeouts) is not
     abandoned: the worker stays stuck and the staleness guard is the backstop.
     Not verified on hardware (#4): block `api-web.nhle.com` mid-game and check

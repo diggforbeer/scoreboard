@@ -27,8 +27,10 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from collections import deque
 from collections.abc import Callable, Hashable
+from dataclasses import dataclass
 from typing import Any
 
 from .nhl.api import NHLApiError
@@ -41,6 +43,37 @@ Done = Callable[[Any, "Exception | None"], None]
 #: How long ``close()`` waits for the worker. A request in flight is not
 #: interrupted (the client's own timeout ends it); the thread is a daemon.
 CLOSE_JOIN_SECONDS = 2.0
+
+#: A request slower than this is logged at WARNING, so a slow API shows in the
+#: journal even though the panel no longer freezes to say so. Same bar as the
+#: football feed worker.
+SLOW_FETCH_SECONDS = 3.0
+
+
+@dataclass(frozen=True, slots=True)
+class FetchStats:
+    """What the status page shows about the worker. Read-only, safe from any thread."""
+
+    #: ``False`` for the inline fetcher: there is no worker to report on.
+    threaded: bool = False
+    #: Keys queued or running, and how long the oldest has been waiting.
+    in_flight: int = 0
+    oldest_age: float | None = None
+    #: The most recent request to finish: what it was, how long it took, whether it worked.
+    last_label: str = ""
+    last_seconds: float | None = None
+    last_ok: bool = True
+    #: Totals since start.
+    completed: int = 0
+    failed: int = 0
+    slow: int = 0
+
+
+def label(key: Hashable) -> str:
+    """``("situation", 3)`` -> ``situation 3``; a plain key is its own label."""
+    if isinstance(key, tuple):
+        return " ".join(str(part) for part in key)
+    return str(key)
 
 
 class InlineFetcher:
@@ -63,6 +96,9 @@ class InlineFetcher:
     def drain(self) -> None:
         """Nothing is ever queued."""
 
+    def stats(self) -> FetchStats:
+        return FetchStats()
+
     def close(self) -> None:
         """Nothing to stop."""
 
@@ -72,15 +108,23 @@ class ThreadedFetcher:
 
     threaded = True
 
-    def __init__(self) -> None:
+    def __init__(self, monotonic: Callable[[], float] = time.monotonic) -> None:
+        self._monotonic = monotonic
         self._work: queue.Queue[tuple[Hashable, Callable[[], Any], Done] | None] = queue.Queue()
         #: Finished results, appended by the worker, consumed by ``drain``.
         self._results: deque[tuple[Hashable, Done, Any, Exception | None]] = deque()
-        #: Keys queued or running. Touched only by the thread that submits and
-        #: drains (the render loop), so it needs no lock.
-        self._pending: set[Hashable] = set()
+        #: Keys queued or running, with when each was submitted. Only the thread
+        #: that submits and drains (the render loop) changes it, so it needs no
+        #: lock; ``stats()`` copies the values from another thread.
+        self._pending: dict[Hashable, float] = {}
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        #: Written only by the worker thread (a tuple is replaced whole, so a
+        #: reader never sees half of one), read by ``stats()``.
+        self._last: tuple[str, float, bool] | None = None
+        self._completed = 0
+        self._failed = 0
+        self._slow = 0
 
     # -- render thread ----------------------------------------------------
 
@@ -89,7 +133,7 @@ class ThreadedFetcher:
         if key in self._pending:
             return False
         self._start()
-        self._pending.add(key)
+        self._pending[key] = self._monotonic()
         self._work.put((key, work, done))
         return True
 
@@ -103,8 +147,24 @@ class ThreadedFetcher:
                 key, done, result, error = self._results.popleft()
             except IndexError:
                 return
-            self._pending.discard(key)
+            self._pending.pop(key, None)
             done(result, error)
+
+    def stats(self) -> FetchStats:
+        """The worker's health, for the status page. Reads only; callable from any thread."""
+        submitted = list(self._pending.values())
+        last = self._last
+        return FetchStats(
+            threaded=True,
+            in_flight=len(submitted),
+            oldest_age=self._monotonic() - min(submitted) if submitted else None,
+            last_label=last[0] if last else "",
+            last_seconds=last[1] if last else None,
+            last_ok=last[2] if last else True,
+            completed=self._completed,
+            failed=self._failed,
+            slow=self._slow,
+        )
 
     def close(self) -> None:
         """Stop the worker. Idempotent, and bounded in time."""
@@ -135,13 +195,24 @@ class ThreadedFetcher:
             key, work, done = item
             result: Any = None
             error: Exception | None = None
+            started = self._monotonic()
             try:
                 result = work()
             except NHLApiError as exc:
                 error = exc
             except Exception as exc:  # the thread must survive whatever a parse does
-                log.warning("NHL fetch %r raised %s: %s", key, type(exc).__name__, exc)
+                log.warning("NHL fetch %s raised %s: %s", label(key), type(exc).__name__, exc)
                 error = exc
+            took = max(0.0, self._monotonic() - started)
+            if took > SLOW_FETCH_SECONDS:
+                self._slow += 1
+                log.warning("NHL fetch %s was slow: %.1fs", label(key), took)
+            else:
+                log.debug("NHL fetch %s took %.2fs", label(key), took)
+            self._completed += 1
+            if error is not None:
+                self._failed += 1
+            self._last = (label(key), took, error is None)
             self._results.append((key, done, result, error))
             self._work.task_done()
 

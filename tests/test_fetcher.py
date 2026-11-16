@@ -409,3 +409,111 @@ def test_a_failed_roster_fetch_still_shows_the_scorer(fake_backend):
     shown = app._goal_detail
     assert shown is not None and shown[2].scorer_name == "F. FORSBERG"
     assert shown[2].scorer_sweater_number is None
+
+
+# -- visibility: slow-fetch warning and worker health (#267) ----------------
+
+
+class FakeTime:
+    """A clock the work itself can advance, so 'slow' needs no sleeping."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_a_slow_fetch_is_logged_at_warning_and_counted(caplog):
+    clock = FakeTime()
+    worker = ThreadedFetcher(monotonic=clock)
+    try:
+        with caplog.at_level("DEBUG", logger="nhl_scoreboard.fetcher"):
+            worker.submit(
+                ("situation", 3), lambda: setattr(clock, "now", clock.now + 5), Collected()
+            )
+            worker.submit("scores", lambda: setattr(clock, "now", clock.now + 0.2), Collected())
+            assert worker.wait_idle()
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "situation 3" in warnings[0].getMessage() and "slow" in warnings[0].getMessage()
+        assert worker.stats().slow == 1, "only the 5s one is slow, not the 0.2s one"
+    finally:
+        worker.close()
+
+
+def test_stats_show_what_is_waiting_how_long_and_how_the_last_one_went():
+    clock = FakeTime()
+    worker = ThreadedFetcher(monotonic=clock)
+    release = threading.Event()
+    try:
+        assert worker.stats().in_flight == 0 and worker.stats().oldest_age is None
+        assert worker.stats().last_seconds is None
+
+        worker.submit("scores", lambda: release.wait(5), Collected())
+        clock.now += 7
+        stats = worker.stats()
+        assert (stats.in_flight, stats.oldest_age) == (1, 7.0)
+
+        release.set()
+        assert worker.wait_idle()
+        assert worker.stats().in_flight == 1, "still counted until its result is applied"
+        worker.drain()
+        stats = worker.stats()
+        assert stats.in_flight == 0 and stats.oldest_age is None
+        assert (stats.last_label, stats.last_ok, stats.completed, stats.failed) == (
+            "scores",
+            True,
+            1,
+            0,
+        )
+
+        def api_down():
+            raise NHLApiError("503")
+
+        worker.submit(("shootout", 9), api_down, Collected())
+        assert worker.wait_idle()
+        worker.drain()
+        stats = worker.stats()
+        assert (stats.last_label, stats.last_ok) == ("shootout 9", False)
+        assert (stats.completed, stats.failed) == (2, 1)
+    finally:
+        release.set()
+        worker.close()
+
+
+def test_the_inline_fetcher_reports_no_worker():
+    stats = InlineFetcher().stats()
+    assert stats.threaded is False and stats.in_flight == 0
+
+
+def test_the_status_box_says_when_there_is_no_worker(fake_backend):
+    client = HangingClient()
+    clock = Clock(PUCK_DROP - timedelta(hours=2))
+    app = make_app(fake_backend, clock, client)  # the default, inline fetcher
+    assert app.status_snapshot()["nhl fetch worker"] == "inline (no worker)"
+
+
+def test_the_status_box_shows_a_hung_worker_and_then_a_healthy_one(fake_backend):
+    client = HangingClient()
+    client.today = [game(1, "TBL", FAV, PUCK_DROP)]
+    client.hang_scores = True
+    app, _clock = threaded_app(fake_backend, client)
+    try:
+        app.refresh()
+        assert client.entered.wait(2)
+        status = app.status_snapshot()
+        assert status["nhl fetch worker"].startswith("busy: 1 in flight, oldest ")
+        assert status["last nhl fetch"] == "(none yet)"
+
+        client.release.set()
+        settle(app)
+        status = app.status_snapshot()
+        assert status["nhl fetch worker"] == "idle"
+        assert status["last nhl fetch"].startswith("scores, ") and status[
+            "last nhl fetch"
+        ].endswith(", ok")
+        assert status["nhl fetch totals"] == "1 done, 0 failed, 0 slow (over 3s)"
+    finally:
+        client.release.set()
+        app.fetcher.close()

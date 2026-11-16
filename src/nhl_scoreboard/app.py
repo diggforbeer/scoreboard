@@ -52,7 +52,7 @@ from .display.logos import LogoLibrary, LogoSet
 from .display.matrix import Backend, create_matrix, load_backend
 from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
-from .fetcher import InlineFetcher, ThreadedFetcher
+from .fetcher import SLOW_FETCH_SECONDS, InlineFetcher, ThreadedFetcher
 from .football.events import Event as FbEvent
 from .football.mode import FootballMode
 from .football.models import FbGame, Play
@@ -2988,6 +2988,30 @@ class ScoreboardApp:
             "last successful poll": self._format_time(self.last_success_at),
             "last error": self.last_error or "(none)",
             "last error at": self._error_time_label(),
+            **self._fetch_status(),
+        }
+
+    def _fetch_status(self) -> dict[str, str]:
+        """The fetch worker's health (#267): a slow or hung API shows up here."""
+        stats = self.fetcher.stats()
+        if not stats.threaded:
+            return {"nhl fetch worker": "inline (no worker)"}
+        if stats.in_flight and stats.oldest_age is not None:
+            worker = f"busy: {stats.in_flight} in flight, oldest {stats.oldest_age:.0f}s"
+        else:
+            worker = "idle"
+        if stats.last_seconds is None:
+            last = "(none yet)"
+        else:
+            outcome = "ok" if stats.last_ok else "failed"
+            last = f"{stats.last_label}, {stats.last_seconds:.1f}s, {outcome}"
+        return {
+            "nhl fetch worker": worker,
+            "last nhl fetch": last,
+            "nhl fetch totals": (
+                f"{stats.completed} done, {stats.failed} failed, "
+                f"{stats.slow} slow (over {SLOW_FETCH_SECONDS:.0f}s)"
+            ),
         }
 
     def _football_status(self, scene: Scene) -> dict[str, str]:
