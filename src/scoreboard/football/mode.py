@@ -112,14 +112,8 @@ class FootballMode:
         #: Each watched game's team stats (shown over an official timeout). The feed worker's
         #: thread swaps in a new dict; the render loop only reads the reference.
         self._stats: Mapping[int, GameStats] = {}
-        self.director = Director(
-            football or _no_football,
-            monotonic,
-            delay_seconds,
-            utc_now,
-            timings,
-            stats=self._stats_for,
-        )
+        self._director_args = (football or _no_football, monotonic, delay_seconds, utc_now, timings)
+        self.director = self._make_director()
         self._core_sync = CoreSync()
         #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
         self.redzone = RedZoneWatcher(monotonic)
@@ -128,6 +122,38 @@ class FootballMode:
         #: owns it: it must not be used from the render loop.
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
+
+    def _make_director(self) -> Director:
+        return Director(*self._director_args, stats=self._stats_for)
+
+    def reset_screens(self) -> None:
+        """Start the screens afresh, keeping the feed running (epic #470).
+
+        When football becomes the sport on screen after another sport had it, the plays that
+        happened meanwhile must not be animated or celebrated late: the director and the red zone
+        watcher start empty and baseline on the next poll, as a sport switch always has. What the
+        board knows about the games themselves (which were seen live, when each final appeared) is
+        kept, and so are the worker, rosters and idle data.
+        """
+        self.director = self._make_director()
+        self.redzone.clear()
+        self._slot_fraction = 0.0
+
+    def track(self) -> None:
+        """Note which games were seen live and when each final first appeared, from the latest
+        snapshot. ``scene`` does this as it draws; the app calls it too while another sport has
+        the screen, so a final can still be held when football takes the board back."""
+        now = self._monotonic()
+        for game in self.snapshot.games or ():
+            if game.is_live:
+                self._seen_live.add(game.id)
+            elif game.is_final and game.id in self._seen_live:
+                self._final_since.setdefault(game.id, now)
+
+    def final_ages(self) -> dict[int, float]:
+        """Seconds since each final was first seen ending (only games seen live)."""
+        now = self._monotonic()
+        return {game_id: now - since for game_id, since in self._final_since.items()}
 
     def _stats_for(self, game_id: int) -> GameStats | None:
         """A game's team stats, for the stats screen; 128px panels only (it is a split table)."""
