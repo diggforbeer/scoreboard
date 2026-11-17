@@ -69,8 +69,9 @@ SHOOTOUT_SETTLED_SECONDS = 2.0
 GOAL_STILL_SECONDS = 3.3
 #: Past the penalty screen's entrance, so the still is the settled frame.
 PENALTY_STILL_SECONDS = 3.0
-#: Into a Christmas tree egg (#509): the squirrel is out and looking left; the quote is up.
-TREE_EGG_STILL_SECONDS = 2.0
+#: Into a Christmas tree egg (#509): the squirrel is out and looking left, the quote is up, the
+#: tree is a fireball.
+TREE_EGG_STILL_SECONDS = {"quote": 2.0, "squirrel": 2.0, "fire": 4.5}
 
 CELL = 8  # output pixels per LED
 UNLIT = (14, 14, 14)
@@ -150,7 +151,7 @@ def capture(app: ScoreboardApp, step) -> Frame:
     app._start_demo_penalty(step)
     app._start_demo_tree_egg(step)
     if step.tree_egg:
-        app._now[0] += TREE_EGG_STILL_SECONDS
+        app._now[0] += TREE_EGG_STILL_SECONDS[step.tree_egg]
     if step.animate_penalty:
         app._now[0] += PENALTY_STILL_SECONDS
     if step.animate_goal:
@@ -172,7 +173,7 @@ def capture(app: ScoreboardApp, step) -> Frame:
     app.draw_scene(scene)
     frame = app.mirror.latest()
     if step.tree_egg:
-        app._now[0] -= TREE_EGG_STILL_SECONDS
+        app._now[0] -= TREE_EGG_STILL_SECONDS[step.tree_egg]
     if step.animate_penalty:
         # Give the time back: the shared clock also times the later holiday steps.
         app._now[0] -= PENALTY_STILL_SECONDS

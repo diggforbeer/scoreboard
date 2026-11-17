@@ -991,6 +991,7 @@ def test_tree_egg_roll_is_a_pure_function_of_the_clock():
     # Roughly 1 in 120 and 1 in 240 windows; generous bounds, the seeds are fixed.
     assert 20 <= kinds.count("quote") <= 70
     assert 8 <= kinds.count("squirrel") <= 40
+    assert kinds.count("fire") <= 12, "the fire is the rarest"
 
 
 def test_tree_egg_only_plays_for_its_length_from_the_top_of_a_window():
@@ -1023,13 +1024,25 @@ def test_squirrel_rises_looks_left_then_right_then_sinks():
     assert squirrel_pose(dict((k, s) for k, _o, s in TREE_EGGS)["squirrel"]) is None
 
 
-def test_only_the_squirrel_holds_the_fast_loop(holiday_app):
+def test_the_fire_script_is_one_function_of_age():
+    from scoreboard.display.holiday import FIRE_SECONDS, TREE_EGGS, TREE_SKELETON, fire_colour
+
+    assert dict((k, s) for k, _o, s in TREE_EGGS)["fire"] == FIRE_SECONDS
+    assert fire_colour(0.0) == (90, 0, 0) and fire_colour(1.0) == (255, 255, 200)
+    assert fire_colour(-5) == fire_colour(0.0) and fire_colour(9) == fire_colour(1.0)
+    assert len(TREE_SKELETON) > 60, "a trunk and a good many twigs"
+
+
+def test_only_the_squirrel_and_fire_hold_the_fast_loop(holiday_app):
     from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
 
     app, src, now = holiday_app
     now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
     scene = Scene("christmas_tree")
     app._demo_tree_egg = ("squirrel", src.monotonic())
+    app.draw_scene(scene)
+    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
+    app._demo_tree_egg = ("fire", src.monotonic())
     app.draw_scene(scene)
     assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
     app._demo_tree_egg = ("quote", src.monotonic())

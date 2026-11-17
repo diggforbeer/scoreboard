@@ -357,6 +357,7 @@ nothing needs configuring:
 |---|---|---|
 | ![Quote](docs/screens/christmas_tree_quote.png) the quote | about once an hour on the screen | "VERY FULL, / LOTS OF SAP" for 6 seconds in place of the countdown (not on a single 64px panel) |
 | ![Squirrel](docs/screens/christmas_tree_squirrel.png) the squirrel | about once every two hours | pops out of the lower right of the tree, looks left, then right, and ducks back in over 5 seconds |
+| ![Fire](docs/screens/christmas_tree_fire.png) the fire | about once every 12 hours on the screen | a spark at the foot, flames climbing the tree, a fireball, then the flames die down to a bare trunk and twigs, and the tree grows back (12 seconds) |
 
 - **Controls:** opt-in: `holiday` in `[[rotation]]`, and Christmas must be
   ticked under `[holiday]`. Skipped otherwise.

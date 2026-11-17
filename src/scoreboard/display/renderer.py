@@ -1217,12 +1217,14 @@ class Renderer:
         the favourite's colours on the left, the countdown to the 25th right.
 
         ``egg`` is a very rare extra (#509), ``(kind, age)`` from ``holiday.tree_egg``: the
-        ``quote`` replaces the countdown's words, the ``squirrel`` pops out of the tree.
+        ``quote`` replaces the countdown's words, the ``squirrel`` pops out of the tree and the
+        ``fire`` burns it down to twigs.
         """
         from .holiday import (
             TREE_QUOTE,
             TREE_WIDTH,
             christmas_countdown,
+            draw_burning_tree,
             draw_christmas_tree,
             draw_tree_squirrel,
         )
@@ -1242,7 +1244,10 @@ class Renderer:
             x = (self.width - TREE_WIDTH) // 2
             draw_christmas_tree(canvas, x, 1, tick, favourite, self.width, self.height)
             return
-        draw_christmas_tree(canvas, 3, 1, tick, favourite, self.width, self.height)
+        if egg is not None and egg[0] == "fire":
+            draw_burning_tree(canvas, 3, 1, egg[1], tick, favourite, self.width, self.height)
+        else:
+            draw_christmas_tree(canvas, 3, 1, tick, favourite, self.width, self.height)
         if egg is not None and egg[0] == "squirrel":
             draw_tree_squirrel(canvas, 3, 1, egg[1], self.width, self.height)
         top, bottom = lines

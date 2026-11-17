@@ -1332,12 +1332,20 @@ TREE_WIDTH = len(CHRISTMAS_TREE[0])
 
 
 def draw_christmas_tree(
-    canvas: Any, x: int, y: int, tick: int, favourite: str, width: int, height: int
+    canvas: Any,
+    x: int,
+    y: int,
+    tick: int,
+    favourite: str,
+    width: int,
+    height: int,
+    only: Callable[[int, int], bool] | None = None,
 ) -> None:
     """The tree at (x, y); ``tick`` (half-seconds) steps the lights and star.
 
     Twinkles at the normal 2fps -- like the snow, a whole screen of it never
-    needs the fast animation loop.
+    needs the fast animation loop. ``only(dx, dy)`` limits which tree cells are drawn
+    (the fire uses it for the part not yet burning, and for the tree growing back).
     """
     ornament = team_color(favourite) if favourite else (220, 0, 30)
     second = team_secondary_color(favourite) if favourite else (255, 210, 0)
@@ -1345,7 +1353,7 @@ def draw_christmas_tree(
     star = TREE_STAR if tick % 2 == 0 else FLAG_WHITE
     for dy, row in enumerate(CHRISTMAS_TREE):
         for dx, ch in enumerate(row):
-            if ch == ".":
+            if ch == "." or (only is not None and not only(dx, dy)):
                 continue
             if ch == "*":
                 colour = TREE_LIGHTS[(tick + dx + 2 * dy) % len(TREE_LIGHTS)]
@@ -1373,12 +1381,15 @@ def christmas_countdown(day: date) -> tuple[str, str] | None:
 # ``tree_egg`` says which is playing and how far in it is. Deterministic, so it can be tested and
 # never needs state; the board only drops into the fast loop while the squirrel moves.
 
+#: How long the fire plays, in seconds.
+FIRE_SECONDS = 12.0
 #: Length of one roll window. Odds are "1 in N windows", so 120 windows is about an hour.
 TREE_EGG_WINDOW_SECONDS = 30
 #: (kind, odds, seconds it plays); the earlier kind wins a window both rolled.
-TREE_EGGS = (("quote", 120, 6.0), ("squirrel", 240, 5.0))
+TREE_EGGS = (("quote", 120, 6.0), ("squirrel", 240, 5.0), ("fire", 1440, FIRE_SECONDS))
 #: The countdown's two lines, replaced for the quote's few seconds.
 TREE_QUOTE = ("VERY FULL,", "LOTS OF SAP")
+
 
 SQUIRREL_FUR = (170, 105, 50)
 SQUIRREL_TAIL = (205, 135, 65)
@@ -1417,6 +1428,156 @@ SQUIRREL_COLUMN = 15
 _SQUIRREL_RISE_SECONDS = 0.8
 _SQUIRREL_LOOK_RIGHT_AT = 2.5
 _SQUIRREL_SINK_AT = 4.2
+
+
+# The fire (#512): a spark at the foot, flames climbing the tree, a fireball, the flames dying to
+# a bare trunk and twigs, then the tree growing back. Every phase is a function of age.
+_FIRE_SPARK_END = 1.0
+_FIRE_CLIMB_END = 3.5
+_FIRE_BLAZE_END = 5.5
+_FIRE_DYING_END = 8.0
+_FIRE_CHARRED_END = 10.5
+#: Flame colours from the dark red edge to the white-hot core.
+FIRE_PALETTE = (
+    (90, 0, 0),
+    (200, 20, 0),
+    (255, 90, 0),
+    (255, 170, 0),
+    (255, 230, 60),
+    (255, 255, 200),
+)
+CHARRED_TRUNK = (70, 40, 15)
+CHARRED_TWIG = (105, 60, 22)
+EMBER = (255, 70, 0)
+
+
+def _hash01(a: int, b: int, c: int = 0) -> float:
+    """A fixed pseudo-random number in [0, 1] for three integers (no state, no RNG object)."""
+    n = (a * 374761393 + b * 668265263 + c * 2147483647) & 0xFFFFFFFF
+    n = ((n ^ (n >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((n ^ (n >> 16)) & 0xFFFF) / 65535
+
+
+def fire_colour(heat: float) -> RGB:
+    """The flame colour at ``heat`` 0 (dark red) to 1 (white-hot)."""
+    scaled = max(0.0, min(1.0, heat)) * (len(FIRE_PALETTE) - 1)
+    i = min(int(scaled), len(FIRE_PALETTE) - 2)
+    frac = scaled - i
+    lo, hi = FIRE_PALETTE[i], FIRE_PALETTE[i + 1]
+    return (
+        round(lo[0] + (hi[0] - lo[0]) * frac),
+        round(lo[1] + (hi[1] - lo[1]) * frac),
+        round(lo[2] + (hi[2] - lo[2]) * frac),
+    )
+
+
+def _build_skeleton() -> frozenset[tuple[int, int]]:
+    """What is left of the tree: the trunk's line up the middle and drooping twigs."""
+    c = TREE_WIDTH // 2
+    cells: set[tuple[int, int]] = set()
+    for dy, row in enumerate(CHRISTMAS_TREE):
+        if row[c] != ".":
+            cells.add((c, dy))
+        if dy in (7, 10, 13, 16, 19, 22, 25):
+            reach = sum(1 for ch in row if ch not in ".K") // 2
+            for side in (-1, 1):
+                for i in range(1, reach + 1):
+                    cells.add((c + side * i, dy + i // 3))
+    return frozenset(cell for cell in cells if cell[1] < len(CHRISTMAS_TREE))
+
+
+TREE_SKELETON = _build_skeleton()
+_TREE_CELLS = tuple(
+    (dx, dy) for dy, row in enumerate(CHRISTMAS_TREE) for dx, ch in enumerate(row) if ch != "."
+)
+
+
+def _charred(dx: int, dy: int) -> RGB | None:
+    """The burnt tree's colour at a cell: the trunk block, a twig, or nothing."""
+    if CHRISTMAS_TREE[dy][dx] == "K":
+        return CHARRED_TRUNK
+    if (dx, dy) in TREE_SKELETON:
+        return CHARRED_TWIG if dx != TREE_WIDTH // 2 else CHARRED_TRUNK
+    return None
+
+
+def draw_burning_tree(
+    canvas: Any,
+    x: int,
+    y: int,
+    age: float,
+    tick: int,
+    favourite: str,
+    width: int,
+    height: int,
+) -> None:
+    """The tree at (x, y) ``age`` seconds into catching fire (see ``FIRE_SECONDS``)."""
+    rows = len(CHRISTMAS_TREE)
+    c = TREE_WIDTH // 2
+    flicker = int(age * 12)
+
+    def flame(dx: int, dy: int, heat: float) -> None:
+        wobble = (_hash01(dx, dy, flicker) - 0.5) * 0.35
+        _set(canvas, x + dx, y + dy, fire_colour(heat + wobble), width, height)
+
+    def burnt(dx: int, dy: int) -> None:
+        colour = _charred(dx, dy)
+        if colour is not None:
+            _set(canvas, x + dx, y + dy, colour, width, height)
+
+    if age < _FIRE_SPARK_END:
+        draw_christmas_tree(canvas, x, y, tick, favourite, width, height)
+        # An ember at the foot of the tree that flares and spreads into a few flames.
+        spread = age / _FIRE_SPARK_END
+        for dy in range(rows - 5 - round(3 * spread), rows - 4):
+            for dx in (c + 3, c + 4):
+                if _hash01(dx, dy, flicker) < 0.35 + 0.5 * spread:
+                    flame(dx, dy, 0.55 + 0.4 * _hash01(dy, dx, flicker + 7))
+        return
+    if age < _FIRE_CLIMB_END:
+        front = (rows - 1) - (age - _FIRE_SPARK_END) / (_FIRE_CLIMB_END - _FIRE_SPARK_END) * (
+            rows + 2
+        )
+        draw_christmas_tree(
+            canvas, x, y, tick, favourite, width, height, only=lambda _dx, dy: dy < front - 3
+        )
+        for dx, dy in _TREE_CELLS:
+            below = dy - front
+            if below >= 0:
+                heat = 0.12 + min(1.0, below / 7) * 0.3 + 0.12 * (1 - abs(dx - c) / c)
+                heat += 0.2 * (_hash01(dx, 0, flicker // 2) - 0.5)  # streaks
+                flame(dx, dy, heat)
+            elif below > -4 and _hash01(dx, dy, flicker) < 0.35 + 0.15 * below:
+                flame(dx, dy, 0.25 + 0.1 * _hash01(dy, dx, flicker))  # tongues licking ahead
+        return
+    if age < _FIRE_BLAZE_END:
+        for dx, dy in _TREE_CELLS:
+            core = 1 - abs(dx - c) / (c + 1)
+            streak = 0.25 * (_hash01(dx, 1, flicker // 2) - 0.5)
+            flame(dx, dy, 0.2 + 0.3 * core + 0.2 * dy / rows + streak)
+        return
+    if age < _FIRE_CHARRED_END:
+        dying = min(1.0, (age - _FIRE_BLAZE_END) / (_FIRE_DYING_END - _FIRE_BLAZE_END))
+        for dx, dy in _TREE_CELLS:
+            # The tips go out first, the trunk's foot last.
+            out_at = 0.55 * _hash01(dx, dy) + 0.45 * (dy / rows)
+            if out_at > dying:
+                flame(dx, dy, (0.4 + 0.15 * dy / rows) * (1 - dying) + 0.03)
+                continue
+            burnt(dx, dy)
+        if dying >= 1.0 or age > _FIRE_DYING_END:
+            # A few embers glow on in the bare branches.
+            for dx, dy in TREE_SKELETON:
+                if _hash01(dx, dy, flicker // 3) > 0.93:
+                    _set(canvas, x + dx, y + dy, EMBER, width, height)
+        return
+    # Growing back: the bare tree, with the real one dissolving in over it.
+    back = (age - _FIRE_CHARRED_END) / (FIRE_SECONDS - _FIRE_CHARRED_END)
+    for dx, dy in _TREE_CELLS:
+        burnt(dx, dy)
+    draw_christmas_tree(
+        canvas, x, y, tick, favourite, width, height, only=lambda dx, dy: _hash01(dx, dy, 99) < back
+    )
 
 
 def tree_egg(timestamp: float) -> tuple[str, float] | None:

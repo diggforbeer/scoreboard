@@ -2312,6 +2312,46 @@ def test_christmas_tree_squirrel_is_gone_before_and_after_its_script():
         assert c.pixels == plain.pixels, age
 
 
+@pytest.mark.parametrize(
+    ("age", "name"),
+    [(0.6, "spark"), (2.0, "climbing"), (4.5, "fireball"), (7.2, "dying"), (9.0, "bare")],
+)
+def test_christmas_tree_fire(age, name, update_snapshots):
+    from scoreboard.display.holiday import TREE_GREEN, TREE_WIDTH
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("fire", age))
+    art = show(f"christmas tree screen, fire {name}", c)
+
+    assert not c.out_of_bounds
+    right = (TREE_WIDTH + 6, 0, W - 1, H - 1)
+    assert c.lit(*right) == plain.lit(*right), "the countdown is untouched"
+    tree = plain.bbox(0, 0, TREE_WIDTH + 3)
+    burning = c.bbox(0, 0, TREE_WIDTH + 3)
+    assert burning is not None and tree is not None
+    assert burning.x0 >= tree.x0 and burning.x1 <= tree.x1, "never wider than the tree"
+    assert burning.y0 >= tree.y0 and burning.y1 <= tree.y1, "never taller than the tree"
+    if name in ("fireball", "dying", "bare"):
+        assert TREE_GREEN not in c.colors(0, 0, TREE_WIDTH + 3), "no needles left"
+    if name == "bare":
+        assert len(c.colors(0, 0, TREE_WIDTH + 3)) <= 4, "just the burnt browns and an ember"
+    check_snapshot(f"christmas_tree_fire_{name}", art, update_snapshots)
+
+
+def test_christmas_tree_fire_grows_back_to_the_plain_tree():
+    from scoreboard.display.holiday import FIRE_SECONDS
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("fire", FIRE_SECONDS))
+    assert c.pixels == plain.pixels, "past its script the egg draws nothing of its own"
+
+
 def test_christmas_tree_quote_is_skipped_where_the_countdown_does_not_fit():
     # A single 64px panel shows just the tree; the quote must not squeeze in beside it.
     when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)

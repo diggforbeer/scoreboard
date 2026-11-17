@@ -3769,8 +3769,8 @@ class ScoreboardApp:
         elif scene.kind == "christmas_tree":
             sport, abbrev = self._colour_scheme(favourite)
             egg = self._tree_egg()
-            # Only the squirrel moves; the quote is static text and the tree twinkles at 2fps.
-            self._egg_animating = egg is not None and egg[0] == "squirrel"
+            # The squirrel and fire move; the quote is static text (the tree twinkles at 2fps).
+            self._egg_animating = egg is not None and egg[0] in ("squirrel", "fire")
             with use_sport(sport):
                 r.draw_christmas_tree(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "thanksgiving":
