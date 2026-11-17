@@ -138,7 +138,9 @@ def test_only_watched_games_have_their_plays_fetched(rig):
     assert {c[1] for c in espn.calls if c[0] in ("plays", "core")} == {1}
 
 
-def test_with_nobody_in_play_the_first_live_game_is_watched(rig):
+def test_a_followed_team_not_playing_never_pulls_in_someone_elses_live_game(rig):
+    """Monday night football between two teams nobody follows must not take over the board:
+    its plays would be animated over the idle rotation, replayed from the coin toss."""
     app, espn, _ = rig
     app.settings.teams = [TeamEntry("football", "SEA")]
     espn.slate = [
@@ -146,7 +148,30 @@ def test_with_nobody_in_play_the_first_live_game_is_watched(rig):
         game("KC", "BUF", "in", 0, 0, game_id=3),
     ]
     land(app, espn)
+    assert [c for c in espn.calls if c[0] in ("plays", "core")] == []
+    assert app._football.snapshot.plays == {}
+
+
+def test_a_followed_team_that_is_playing_is_still_watched_beside_other_live_games(rig):
+    app, espn, _ = rig
+    app.settings.teams = [TeamEntry("football", "PHI")]
+    espn.slate = [
+        game("DAL", "PHI", "in", 0, 0, game_id=2),
+        game("KC", "BUF", "in", 0, 0, game_id=3),
+    ]
+    land(app, espn)
     assert {c[1] for c in espn.calls if c[0] == "plays"} == {2}
+
+
+def test_with_nobody_followed_at_all_the_first_live_game_is_still_watched(rig):
+    """A football-only board that follows no team keeps its old behaviour: always something on."""
+    app, _espn, _ = rig
+    games = [
+        game("DAL", "PHI", "in", 0, 0, game_id=2),
+        game("KC", "BUF", "in", 0, 0, game_id=3),
+    ]
+    app.settings.teams = []
+    assert [g.id for g in app._football.watched(games)] == [2]
 
 
 def test_a_game_about_to_kick_off_is_watched_so_the_opening_kickoff_is_not_missed(rig):
