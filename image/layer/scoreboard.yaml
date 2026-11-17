@@ -261,6 +261,13 @@ mmdebstrap:
       install -m 0644 "$IGconf_sb_assetdir/avahi/scoreboard.service" \
         "$1/etc/avahi/services/"
 
+    # ---- keep the journal small on the SD card -------------------------
+    - |-
+      set -eu
+      install -d -m 0755 "$1/etc/systemd/journald.conf.d"
+      install -m 0644 "$IGconf_sb_assetdir/journald/scoreboard.conf" \
+        "$1/etc/systemd/journald.conf.d/"
+
     # ---- app self-update (#32) -----------------------------------------
     # The timer only *checks*; installing is the admin page's button, via
     # scoreboard-update-apply.service. The driver commit is recorded so

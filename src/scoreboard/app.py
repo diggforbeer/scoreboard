@@ -1123,7 +1123,15 @@ class ScoreboardApp:
         or sounds on the first frame after a switch. The button mute is the
         owner's, not the sport's, so it survives.
         """
-        log.info("Switching sport %s -> %s", self._sport, sport)
+        # The idle rotation passing between the sports happens every few seconds and says nothing
+        # new, so it is DEBUG; a switch caused by a game, or by editing the list, stays INFO.
+        idle_alternation = self._owner is None and not force_clean
+        log.log(
+            logging.DEBUG if idle_alternation else logging.INFO,
+            "Switching sport %s -> %s",
+            self._sport,
+            sport,
+        )
         if self._sport == "hockey" and self.games:
             self._hockey_lite = list(self.games)  # the priority layer keeps seeing hockey's slate
             self._hockey_lite_at = self.last_success
