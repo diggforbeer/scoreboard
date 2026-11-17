@@ -113,11 +113,15 @@ def is_team(abbrev: str) -> bool:
     return str(abbrev).strip().upper() in TEAMS
 
 
-#: The night games a ranked list can follow as if they were teams: ``SNF`` is every game kicking
-#: off on a Sunday evening Eastern time, ``MNF`` every one on a Monday evening. They are not in
+#: The night games a ranked list can follow as if they were teams: ``TNF``, ``SNF`` and ``MNF`` are
+#: every game kicking off on a Thursday, Sunday or Monday evening Eastern time. They are not in
 #: ``TEAMS`` (which is pinned to the 32 clubs); the abbreviations are what ``[[teams]]`` stores.
-NIGHT_SLOTS: dict[str, str] = {"SNF": "Sunday Night Football", "MNF": "Monday Night Football"}
-_SLOT_DAY = {"SNF": 6, "MNF": 0}  # Python weekday: Monday 0 ... Sunday 6
+NIGHT_SLOTS: dict[str, str] = {
+    "TNF": "Thursday Night Football",
+    "SNF": "Sunday Night Football",
+    "MNF": "Monday Night Football",
+}
+_SLOT_DAY = {"TNF": 3, "SNF": 6, "MNF": 0}  # Python weekday: Monday 0 ... Sunday 6
 #: The league schedules its night games in Eastern time; "evening" is 7pm on.
 _SLOT_ZONE = "America/New_York"
 _EVENING_HOUR = 19

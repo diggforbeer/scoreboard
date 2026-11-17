@@ -356,7 +356,7 @@ class FbGame:
         return key in (self.away.abbrev, self.home.abbrev)
 
     def in_slot(self, slot: str) -> bool:
-        """Whether this is a Sunday or Monday night game (``SNF`` / ``MNF``), by its kick-off."""
+        """Whether this is a Thursday, Sunday or Monday night game (``TNF``/``SNF``/``MNF``)."""
         return in_night_slot(slot, self.start_utc)
 
     def team(self, abbrev: str) -> FbTeam | None:

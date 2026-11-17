@@ -314,7 +314,7 @@ class Priority:
 
 
 def _is_slot(entry: TeamEntry) -> bool:
-    """A night-game slot (``SNF`` / ``MNF``) rather than a team."""
+    """A night-game slot (``TNF`` / ``SNF`` / ``MNF``) rather than a team."""
     return entry.sport == "football" and entry.team in NIGHT_SLOTS
 
 

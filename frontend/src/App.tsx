@@ -398,7 +398,7 @@ function teamName(abbrev: string) {
 // The ranked list of teams (epic #470): one list for both sports, best first. The first team of
 // each sport is its lead: it gets the horn and the idle screens, so it is marked.
 // The night-game entries of the football list: not clubs, but every Sunday / Monday night game.
-const NIGHT_SLOTS = ['SNF', 'MNF']
+const NIGHT_SLOTS = ['TNF', 'SNF', 'MNF']
 const isSlot = (row: TeamRow) => row.sport === 'football' && NIGHT_SLOTS.includes(row.team)
 
 function teamLabel(row: TeamRow, available: TeamsAvailable): string {
@@ -447,8 +447,8 @@ function TeamsCard({
       <p className="text-body-secondary small">
         Your teams in priority order, hockey and football together. The highest-ranked team that is
         playing gets the screen. The first team of each sport (marked with a horn) gets the goal or
-        touchdown horn and the screens between games. Sunday or Monday Night Football (in the
-        football list) follows that night&apos;s games, whoever plays, when nothing ranked above
+        touchdown horn and the screens between games. Thursday, Sunday or Monday Night Football (in
+        the football list) follows that night&apos;s games, whoever plays, when nothing ranked above
         it is on.
       </p>
       {teams.length === 0 && (

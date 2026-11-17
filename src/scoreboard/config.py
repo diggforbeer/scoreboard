@@ -795,7 +795,9 @@ def team_exists(sport: str, team: str) -> bool:
     """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports)."""
     if sport == "hockey":
         return team in TEAM_COLORS
-    return football_team_exists(team) or team in NIGHT_SLOTS  # SNF / MNF follow a night's games
+    return (
+        football_team_exists(team) or team in NIGHT_SLOTS
+    )  # TNF / SNF / MNF follow a night's games
 
 
 def _parse_teams(raw: Any) -> list[TeamEntry]:

@@ -491,9 +491,27 @@ def test_slots_are_valid_in_the_football_list_only(tmp_path):
     from scoreboard.config import team_exists
 
     assert team_exists("football", "SNF") and team_exists("football", "MNF")
-    assert not team_exists("hockey", "SNF") and not team_exists("football", "TNF")
+    assert not team_exists("hockey", "SNF") and not team_exists("football", "XNF")
     path = tmp_path / "c.toml"
     path.write_text(
         '[[teams]]\nsport = "football"\nteam = "snf"\n\n[[teams]]\nsport = "hockey"\nteam = "SNF"\n'
     )
     assert Settings.load(path).teams == [TeamEntry("football", "SNF")]
+
+
+def test_the_thursday_slot_is_a_thursday_evening_and_not_a_thanksgiving_afternoon():
+    from scoreboard.football.teams import in_night_slot
+
+    assert in_night_slot("TNF", _at(2026, 11, 12, 20, 15))  # an ordinary Thursday night
+    assert not in_night_slot("TNF", SUN_NIGHT) and not in_night_slot("TNF", MON_NIGHT)
+    assert not in_night_slot("SNF", _at(2026, 11, 12, 20, 15))
+    assert not in_night_slot("TNF", _at(2026, 11, 26, 12, 30)), "Thanksgiving's early game"
+    assert not in_night_slot("TNF", _at(2026, 11, 26, 16, 30)), "and its afternoon game"
+    assert in_night_slot("TNF", _at(2026, 11, 26, 20, 20)), "but its night game is Thursday night"
+
+
+def test_a_ranked_thursday_slot_shows_that_nights_game():
+    game = N(1, "DAL", "NYG", "live", _at(2026, 11, 12, 20, 15))
+    moment = board(("football", "TNF")).owner({"football": [game]}, game.start_utc, WINDOWS)
+    assert moment is not None and moment.kind is Kind.LIVE
+    assert board(("football", "SNF")).owner({"football": [game]}, game.start_utc, WINDOWS) is None

@@ -261,9 +261,9 @@ dropped on the next save; there is no migration). The admin page's "My teams" ca
   (`priority.idle_segments` / `segment_at`, pure functions of the clock; a segment's rows start at its
   top). Rows of a sport with an empty slate are skipped. With no `[[rotation]]` each sport's default is
   used, in the order of the lead teams' ranks (one segment per sport, as before).
-- **Night-game slots**: `SNF` and `MNF` can be ranked in the football list like teams
-  (`football/teams.py` `NIGHT_SLOTS`, `in_night_slot`: kick-off on a Sunday / Monday from 7pm
-  Eastern, the league's own zone). A slot gives a moment for every game in it, so it shows that
+- **Night-game slots**: `TNF`, `SNF` and `MNF` can be ranked in the football list like teams
+  (`football/teams.py` `NIGHT_SLOTS`, `in_night_slot`: kick-off on a Thursday / Sunday / Monday
+  from 7pm Eastern, the league's own zone). A slot gives a moment for every game in it, so it shows that
   night's game when nothing ranked above it is on (live, countdown, held final, as for a team). It
   is not a team: no horn, no idle screens, no colours (`lead`, `teams_for` and `colour_team` skip
   it). The moment's team is a ranked team in the game, else the home side, so the screens have a
