@@ -848,7 +848,7 @@ _DEFAULT_PANEL_SAVE_DATA = {
     "chain_length": 2,
     "parallel": 1,
     "hardware_mapping": "regular",
-    "rgb_sequence": "RGB",
+    "rgb_sequence": "RBG",
     "gpio_slowdown": 4,
     "pwm_bits": 11,
     "pwm_lsb_nanoseconds": 130,

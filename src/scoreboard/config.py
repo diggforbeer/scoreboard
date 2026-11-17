@@ -111,15 +111,13 @@ class PanelConfig:
     pitch_mm: float = 2.5
     hardware_mapping: str = "regular"
     #: rpi-rgb-led-matrix's --led-rgb-sequence equivalent: the order the
-    #: three colour wires are actually driven in, e.g. "RBG" for a panel
-    #: whose green/blue wires are swapped from the driver's "RGB" default.
-    #: Verified live (2026-09-25) on the project's own reference panel:
-    #: with the default "RGB", yellow rendered pink and blue rendered
-    #: green -- both symptoms of a G/B swap -- and "RBG" fixed it. Default
-    #: stays at the library's own "RGB" here since this is a per-panel
-    #: wiring property, not something safe to assume for every board;
-    #: override in scoreboard.toml if your panel shows the same swap.
-    rgb_sequence: str = "RGB"
+    #: three colour wires are actually driven in. Verified live (2026-09-25)
+    #: on the project's own reference panel (and the P2.5 panels this
+    #: project is built for): with the library's "RGB", yellow rendered pink
+    #: and blue rendered green -- both symptoms of a G/B swap -- and "RBG"
+    #: fixed it, so "RBG" is the default. A panel wired the driver's way
+    #: sets "RGB" in scoreboard.toml (or on the admin page's Panel card).
+    rgb_sequence: str = "RBG"
     gpio_slowdown: int = 4
     pwm_bits: int = 11
     pwm_lsb_nanoseconds: int = 130
