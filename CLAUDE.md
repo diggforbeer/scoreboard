@@ -1784,7 +1784,7 @@ when it was written; that history is left as-is rather than rewritten.
 - **Tabs (#449): Home | Display | Audio | Holiday Cheer | Setup | Logs.**
   Split by how often a person touches a setting, not by feature. Home: status,
   Live view, My teams, idle rotation. Display: screens/logos, game timing,
-  brightness, night mode. Setup (set once): Panel hardware,
+  football between-game settings, brightness, night mode. Setup (set once): Panel hardware,
   time zone, status page, Wi-Fi, update, reboot. The old Scoreboard card is now
   several cards sharing one `scoreboardSave` hook. Brightness is a slice of
   `[panel]` shown on Display with its own Save (`saveBrightness`): it sends only
