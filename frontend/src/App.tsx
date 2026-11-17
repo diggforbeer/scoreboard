@@ -1354,6 +1354,206 @@ function App() {
       </div>
       <div className="col-lg-6">
 
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Idle rotation</h2>
+          {rotation ? (
+            <form onSubmit={flushOnSubmit(rotationSave)}>
+              <p className="text-body-secondary small">
+                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
+                Consecutive rows of one sport show together, then the board moves to the other
+                sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
+                Empty falls back to each sport's built-in default.
+              </p>
+              {rotation.map((row, i) => (
+                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
+                  <select
+                    className="form-select"
+                    style={{ width: 'auto' }}
+                    aria-label={`rotation screen ${i + 1}`}
+                    value={row.screen}
+                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
+                  >
+                    <optgroup label="Hockey">
+                      {ROTATION_SCREENS.filter((screen) => screen !== 'clock').map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Football">
+                      {FOOTBALL_ROTATION_SCREENS.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="clock">clock</option>
+                  </select>
+                  <input
+                    className="form-control"
+                    style={{ width: '6rem' }}
+                    type="number"
+                    step="any"
+                    min="0"
+                    aria-label={`rotation seconds ${i + 1}`}
+                    value={row.seconds}
+                    onChange={(e) =>
+                      numberEdit(
+                        rotationSave,
+                        e,
+                        rotation.map((r, j) =>
+                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                        ),
+                        `rotation-seconds-${i}`,
+                      )
+                    }
+                    onBlur={rotationSave.flush}
+                  />
+                  <span className="text-body-secondary small">seconds</span>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, -1)}
+                    disabled={i === 0}
+                    aria-label="Move up"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, 1)}
+                    disabled={i === rotation.length - 1}
+                    aria-label="Move down"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm"
+                    onClick={() => removeRow(i)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={addRow}
+                  disabled={rotation.length >= ROTATION_MAX_ROWS}
+                >
+                  Add row
+                </button>
+              </div>
+              {showsFootball && footballRotation && (
+                <div className="mt-4 pt-3 border-top">
+                  <h3 className="h6">Football between games</h3>
+                  <p className="text-body-secondary small">
+                    The countdown, the final and the bye-week screen join the rotation by themselves
+                    when they apply (128px panels only). How long they wait and last:
+                  </p>
+                <div className="row g-3">
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-final-hold">
+                      Hold the final for (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-final-hold"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={footballRotation.final_hold_minutes}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          final_hold_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-countdown-window">
+                      Countdown starts before kickoff (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-countdown-window"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={footballRotation.countdown_minutes}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          countdown_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                    <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-page-seconds">
+                      Seconds per page, standings and week (0 = split the row&apos;s seconds)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-page-seconds"
+                      type="number"
+                      step="any"
+                      min="0"
+                      max="60"
+                      value={footballRotation.page_seconds}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          page_seconds: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                </div>
+                </div>
+                <div className="mt-3">
+                  {(
+                    [
+                      ['show_countdown', 'Countdown before kickoff'],
+                      ['show_bye', 'Bye-week screen'],
+                      ['show_final', 'Hold the final after a game'],
+                      ['show_redzone', 'Red zone alert over the idle screens'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <div className="form-check" key={key}>
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id={`football-${key}`}
+                        checked={footballRotation[key]}
+                        onChange={(e) =>
+                          footballRotationSave.edit({ ...footballRotation, [key]: e.target.checked })
+                        }
+                      />
+                      <label className="form-check-label" htmlFor={`football-${key}`}>
+                        {label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                </div>
+              )}
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
       </div>
       </div>
         </>
@@ -1605,206 +1805,6 @@ function App() {
           </div>
         </div>
       )}
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Idle rotation</h2>
-          {rotation ? (
-            <form onSubmit={flushOnSubmit(rotationSave)}>
-              <p className="text-body-secondary small">
-                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
-                Consecutive rows of one sport show together, then the board moves to the other
-                sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
-                Empty falls back to each sport's built-in default.
-              </p>
-              {rotation.map((row, i) => (
-                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
-                  <select
-                    className="form-select"
-                    style={{ width: 'auto' }}
-                    aria-label={`rotation screen ${i + 1}`}
-                    value={row.screen}
-                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
-                  >
-                    <optgroup label="Hockey">
-                      {ROTATION_SCREENS.filter((screen) => screen !== 'clock').map((screen) => (
-                        <option key={screen} value={screen}>
-                          {screen}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Football">
-                      {FOOTBALL_ROTATION_SCREENS.map((screen) => (
-                        <option key={screen} value={screen}>
-                          {screen}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <option value="clock">clock</option>
-                  </select>
-                  <input
-                    className="form-control"
-                    style={{ width: '6rem' }}
-                    type="number"
-                    step="any"
-                    min="0"
-                    aria-label={`rotation seconds ${i + 1}`}
-                    value={row.seconds}
-                    onChange={(e) =>
-                      numberEdit(
-                        rotationSave,
-                        e,
-                        rotation.map((r, j) =>
-                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
-                        ),
-                        `rotation-seconds-${i}`,
-                      )
-                    }
-                    onBlur={rotationSave.flush}
-                  />
-                  <span className="text-body-secondary small">seconds</span>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, -1)}
-                    disabled={i === 0}
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, 1)}
-                    disabled={i === rotation.length - 1}
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => removeRow(i)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={addRow}
-                  disabled={rotation.length >= ROTATION_MAX_ROWS}
-                >
-                  Add row
-                </button>
-              </div>
-              {showsFootball && footballRotation && (
-                <div className="mt-4 pt-3 border-top">
-                  <h3 className="h6">Football between games</h3>
-                  <p className="text-body-secondary small">
-                    The countdown, the final and the bye-week screen join the rotation by themselves
-                    when they apply (128px panels only). How long they wait and last:
-                  </p>
-                <div className="row g-3">
-                  <div className="col-sm-6">
-                    <label className="form-label" htmlFor="football-final-hold">
-                      Hold the final for (minutes)
-                    </label>
-                    <input
-                      className="form-control"
-                      id="football-final-hold"
-                      type="number"
-                      step="any"
-                      min="1"
-                      max="720"
-                      value={footballRotation.final_hold_minutes}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          final_hold_minutes: Number(e.target.value),
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                  </div>
-                  <div className="col-sm-6">
-                    <label className="form-label" htmlFor="football-countdown-window">
-                      Countdown starts before kickoff (minutes)
-                    </label>
-                    <input
-                      className="form-control"
-                      id="football-countdown-window"
-                      type="number"
-                      step="any"
-                      min="1"
-                      max="720"
-                      value={footballRotation.countdown_minutes}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          countdown_minutes: Number(e.target.value),
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                    <div className="col-sm-6">
-                    <label className="form-label" htmlFor="football-page-seconds">
-                      Seconds per page, standings and week (0 = split the row&apos;s seconds)
-                    </label>
-                    <input
-                      className="form-control"
-                      id="football-page-seconds"
-                      type="number"
-                      step="any"
-                      min="0"
-                      max="60"
-                      value={footballRotation.page_seconds}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          page_seconds: Number(e.target.value),
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                  </div>
-                </div>
-                </div>
-                <div className="mt-3">
-                  {(
-                    [
-                      ['show_countdown', 'Countdown before kickoff'],
-                      ['show_bye', 'Bye-week screen'],
-                      ['show_final', 'Hold the final after a game'],
-                      ['show_redzone', 'Red zone alert over the idle screens'],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <div className="form-check" key={key}>
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        id={`football-${key}`}
-                        checked={footballRotation[key]}
-                        onChange={(e) =>
-                          footballRotationSave.edit({ ...footballRotation, [key]: e.target.checked })
-                        }
-                      />
-                      <label className="form-check-label" htmlFor={`football-${key}`}>
-                        {label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-                </div>
-              )}
-            </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
 
       <div className="card mb-4">
         <div className="card-body">

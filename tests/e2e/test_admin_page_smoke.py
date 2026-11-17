@@ -427,21 +427,15 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             page.wait_for_selector("#teams-add", timeout=15000)
             football = page.get_by_role("heading", name="Football between games")
             rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
-            page.get_by_role("button", name="Display", exact=True).click()
-            rotation.wait_for(timeout=15000)
-            assert football.count() == 1, "nothing ranked: football's card shows"
+            rotation.wait_for(timeout=15000)  # the Idle rotation card is on the Home tab
+            assert football.count() == 1, "nothing ranked: football's section shows"
 
-            page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#teams-add", "hockey:NSH")
             page.click("#teams-add-button")
-            page.get_by_role("button", name="Display", exact=True).click()
-            rotation.wait_for(timeout=15000)
-            assert football.count() == 0, "only a hockey team is ranked"
+            _wait_until(lambda: football.count() == 0)  # only a hockey team is ranked
 
-            page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#teams-add", "football:TEN")
             page.click("#teams-add-button")
-            page.get_by_role("button", name="Display", exact=True).click()
             football.wait_for(timeout=15000)
 
             # One list, both sports: a hockey row, a football row, the clock.
@@ -465,16 +459,19 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             # Football's own card still saves its lengths and toggles under [football].
             page.fill("#football-final-hold", "45")
             page.fill("#football-page-seconds", "4")
-            page.fill("#football-timing-score", "10")
             page.uncheck("#football-show_bye")
             page.keyboard.press("Tab")
+            # The in-game screen lengths stay on the Display tab.
+            page.get_by_role("button", name="Display", exact=True).click()
+            page.fill("#football-timing-score", "10")
+            page.keyboard.press("Tab")
+            page.get_by_role("button", name="Home", exact=True).click()
             _wait_until(lambda: admin_page.config()["football"].get("final_hold_minutes") == 45)
             _wait_until(lambda: admin_page.config()["football"].get("show_bye") is False)
             _wait_until(lambda: admin_page.config()["football"].get("page_seconds") == 4)
             _wait_until(lambda: admin_page.config()["football"].get("score_seconds") == 10)
 
             page.reload()
-            page.get_by_role("button", name="Display", exact=True).click()
             page.wait_for_selector("#football-final-hold", timeout=15000)
             assert page.input_value("#football-final-hold") == "45"
             assert page.input_value('[aria-label="rotation screen 2"]') == "fb_week"
