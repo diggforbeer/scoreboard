@@ -1033,21 +1033,49 @@ def test_the_fire_script_is_one_function_of_age():
     assert len(TREE_SKELETON) > 60, "a trunk and a good many twigs"
 
 
-def test_only_the_squirrel_and_fire_hold_the_fast_loop(holiday_app):
+def test_only_the_squirrel_and_fire_hold_the_fast_loop(holiday_app, monkeypatch):
+    from scoreboard import app as app_module
     from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
 
-    app, src, now = holiday_app
+    app, _src, now = holiday_app
     now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
     scene = Scene("christmas_tree")
-    app._demo_tree_egg = ("squirrel", src.monotonic())
-    app.draw_scene(scene)
-    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
-    app._demo_tree_egg = ("fire", src.monotonic())
-    app.draw_scene(scene)
-    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
-    app._demo_tree_egg = ("quote", src.monotonic())
-    app.draw_scene(scene)
-    assert app.frame_interval() == FRAME_INTERVAL, "static text: the normal 2fps loop"
-    app._demo_tree_egg = None
+    for egg, fast in ((("squirrel", 1.0), True), (("fire", 1.0), True), (("quote", 1.0), False)):
+        monkeypatch.setattr(app_module, "tree_egg", lambda _ts, egg=egg: egg)
+        app.draw_scene(scene)
+        expected = ANIMATION_FRAME_INTERVAL if fast else FRAME_INTERVAL
+        assert app.frame_interval() == expected, egg
+    monkeypatch.setattr(app_module, "tree_egg", lambda _ts: None)
     app.draw_scene(scene)
     assert app.frame_interval() == FRAME_INTERVAL
+
+
+def test_demo_mode_never_plays_a_tree_egg(holiday_app, monkeypatch):
+    from scoreboard import app as app_module
+
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(app_module, "tree_egg", lambda _ts: ("fire", 1.0))
+    assert app._tree_egg() == ("fire", 1.0)
+    app._demo_drawing = True
+    assert app._tree_egg() is None
+
+
+# The eggs are a surprise (owner's call), same family as the blowout (#326): kept out of the
+# README, the screen guide and the demo. These fail if a later pass "completes" the guide.
+@pytest.mark.parametrize("path", ["README.md", "screens.md", "src/scoreboard/demo.py"])
+def test_tree_eggs_are_kept_out_of_the_guide_readme_and_demo(path):
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parent.parent / path).read_text().lower()
+    for word in ("squirrel", "lots of sap", "griswold", "tree_egg"):
+        assert word not in text, f"{word!r} must not appear in {path}"
+
+
+def test_no_tree_egg_pictures_in_the_screen_guide():
+    from pathlib import Path
+
+    docs = Path(__file__).resolve().parent.parent / "docs" / "screens"
+    assert not list(docs.glob("christmas_tree_*.png")) or all(
+        p.name == "christmas_tree.png" for p in docs.glob("christmas_tree_*.png")
+    )

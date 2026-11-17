@@ -103,8 +103,6 @@ class DemoStep(NamedTuple):
     animate_goal: bool = False
     #: Play the penalty screen's entrance from the start of the step (#340).
     animate_penalty: bool = False
-    #: Play a Christmas tree Easter egg (#509): ``quote``, ``squirrel`` or ``fire``.
-    tree_egg: str = ""
     #: Scroll the scene's table over this many seconds (``conference_leaders``).
     scroll_seconds: float = 0.0
     #: A unique, file-safe name (``game_live``, ``game_live_text``), which
@@ -333,9 +331,6 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ("clock_canada_day", Scene("clock"), {"holiday": "canada_day"}),
         ("clock_july_4th", Scene("clock"), {"holiday": "july_4th"}),
         ("christmas_tree", Scene("christmas_tree"), {}),
-        ("christmas_tree_quote", Scene("christmas_tree"), {"tree_egg": "quote"}),
-        ("christmas_tree_squirrel", Scene("christmas_tree"), {"tree_egg": "squirrel"}),
-        ("christmas_tree_fire", Scene("christmas_tree"), {"tree_egg": "fire"}),
         ("thanksgiving", Scene("thanksgiving"), {}),
         ("no_games", Scene("no_games"), {}),
         ("no_data", Scene("no_data"), {}),

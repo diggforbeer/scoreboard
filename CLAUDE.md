@@ -926,6 +926,16 @@ pass to "complete" the screen guide or make it cover every scene kind (its
 `tests/test_blowout.py` pins this; if one of its fence tests fails, the fix is
 never to document it.
 
+The **Christmas tree eggs** (#509: the "Very full, lots of sap." quote, a squirrel, the tree on
+fire; `display/holiday.py`, `tree_egg()`, drawn by `Renderer.draw_christmas_tree(..., egg)`) are the
+same family and the same rule: **never documented user-facing** (README.md, `screens.md`, demo
+mode, rendered images), by the owner's call; `test_holiday.py`'s fence tests pin it. Each is a pure
+function of the wall clock: 30s windows, a seeded roll per kind (quote 1 in 120, squirrel 1 in 240,
+fire 1 in 1440 windows), playing from the window's top for its own length, so there is no state and
+no setting. Only the squirrel and the fire hold the fast animation loop (`_egg_animating`). Tests
+draw them with an explicit `egg=` and assert structure only (no snapshots, again like the blowout).
+Hardware cost at 20fps on a Pi 4 is unverified (#4).
+
 Demo mode (#47, `scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
 like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`

@@ -510,8 +510,6 @@ class ScoreboardApp:
         self._demo_shootout_started: float | None = None
         #: Demo only: when the current step's goal light "started".
         self._demo_goal_started: float | None = None
-        #: A demo step's tree Easter egg (#509): its kind and the monotonic start.
-        self._demo_tree_egg: tuple[str, float] | None = None
         self._egg_animating = False
         #: The favourite's goal light is on screen (fast loop); _goal_building
         #: is its first BUILD_SECONDS, which a live-view snapshot waits out.
@@ -772,7 +770,6 @@ class ScoreboardApp:
                 self._start_demo_shootout(step)
                 self._start_demo_goal(step)
                 self._start_demo_penalty(step)
-                self._start_demo_tree_egg(step)
                 if step.scroll_seconds:
                     self._play_scrolling_demo_step(step.scene, step.scroll_seconds)
                     continue
@@ -781,7 +778,6 @@ class ScoreboardApp:
                     or step.animate_shootout
                     or step.animate_goal
                     or step.animate_penalty
-                    or step.tree_egg
                 ):
                     self._play_animated_demo_step(step.scene)
                     continue
@@ -823,15 +819,10 @@ class ScoreboardApp:
         """Start a step's goal light as the step starts."""
         self._demo_goal_started = self.monotonic() if step.animate_goal else None
 
-    def _start_demo_tree_egg(self, step: DemoStep) -> None:
-        """Start a step's Christmas tree Easter egg as the step starts."""
-        self._demo_tree_egg = (step.tree_egg, self.monotonic()) if step.tree_egg else None
-
     def _tree_egg(self) -> tuple[str, float] | None:
-        """The Christmas tree egg playing now and its age: a demo step's, else the clock's roll."""
-        if self._demo_tree_egg is not None:
-            kind, started = self._demo_tree_egg
-            return kind, self.monotonic() - started
+        """The Christmas tree Easter egg playing now and its age (#509); never in demo mode."""
+        if self._demo_drawing:
+            return None
         return tree_egg(self.clock().timestamp())
 
     def _start_demo_penalty(self, step: DemoStep) -> None:
@@ -1243,7 +1234,6 @@ class ScoreboardApp:
         self._overlay_animating = False
         self._demo_shootout_started = None
         self._demo_goal_started = None
-        self._demo_tree_egg = None
         self._egg_animating = False
         self._mirror_key = None
         self.mirror.requested = True

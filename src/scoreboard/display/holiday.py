@@ -1379,7 +1379,9 @@ def christmas_countdown(day: date) -> tuple[str, str] | None:
 # Very rare extras on the tree screen. Each is a pure function of the clock: time is cut into
 # windows, a seeded roll per window and kind decides whether one starts at the window's top, and
 # ``tree_egg`` says which is playing and how far in it is. Deterministic, so it can be tested and
-# never needs state; the board only drops into the fast loop while the squirrel moves.
+# never needs state; the board only drops into the fast loop while the squirrel or fire moves.
+# Deliberately kept out of README.md, screens.md, demo mode and the rendered snapshots (owner's
+# call): the joke is finding them. ``test_holiday.py`` pins that, as ``test_blowout.py`` does.
 
 #: How long the fire plays, in seconds.
 FIRE_SECONDS = 12.0

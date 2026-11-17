@@ -2260,7 +2260,7 @@ def test_christmas_tree_screen(day, name, update_snapshots):
     check_snapshot(f"christmas_tree_{name}", art, update_snapshots)
 
 
-def test_christmas_tree_quote_replaces_the_countdown(update_snapshots):
+def test_christmas_tree_quote_replaces_the_countdown():
     from scoreboard.display.holiday import TREE_QUOTE, TREE_WIDTH
 
     when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
@@ -2268,7 +2268,7 @@ def test_christmas_tree_quote_replaces_the_countdown(update_snapshots):
     make_renderer().draw_christmas_tree(plain, when, "NSH")
     c = canvas()
     make_renderer().draw_christmas_tree(c, when, "NSH", ("quote", 1.0))
-    art = show("christmas tree screen, quote", c)
+    show("christmas tree screen, quote", c)
 
     assert not c.out_of_bounds
     assert TREE_QUOTE == ("VERY FULL,", "LOTS OF SAP")
@@ -2278,11 +2278,10 @@ def test_christmas_tree_quote_replaces_the_countdown(update_snapshots):
     text = c.bbox(TREE_WIDTH + 6, 0)
     assert text is not None and text.x1 <= W - 1
     assert team_color("NSH") in c.colors(TREE_WIDTH + 6, 0), "top line in team colour"
-    check_snapshot("christmas_tree_quote", art, update_snapshots)
 
 
 @pytest.mark.parametrize(("age", "name"), [(0.4, "rising"), (2.0, "left"), (3.2, "right")])
-def test_christmas_tree_squirrel(age, name, update_snapshots):
+def test_christmas_tree_squirrel(age, name):
     from scoreboard.display.holiday import SQUIRREL_BELLY, TREE_WIDTH
 
     when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
@@ -2290,7 +2289,7 @@ def test_christmas_tree_squirrel(age, name, update_snapshots):
     make_renderer().draw_christmas_tree(plain, when, "NSH")
     c = canvas()
     make_renderer().draw_christmas_tree(c, when, "NSH", ("squirrel", age))
-    art = show(f"christmas tree screen, squirrel {name}", c)
+    show(f"christmas tree screen, squirrel {name}", c)
 
     assert not c.out_of_bounds
     assert c.lit(TREE_WIDTH + 6, 0, W - 1, H - 1) == plain.lit(TREE_WIDTH + 6, 0, W - 1, H - 1), (
@@ -2299,7 +2298,6 @@ def test_christmas_tree_squirrel(age, name, update_snapshots):
     assert c.pixels != plain.pixels, "a squirrel is out"
     if name != "rising":
         assert SQUIRREL_BELLY in c.colors(0, 0, TREE_WIDTH + 3)
-    check_snapshot(f"christmas_tree_squirrel_{name}", art, update_snapshots)
 
 
 def test_christmas_tree_squirrel_is_gone_before_and_after_its_script():
@@ -2316,7 +2314,7 @@ def test_christmas_tree_squirrel_is_gone_before_and_after_its_script():
     ("age", "name"),
     [(0.6, "spark"), (2.0, "climbing"), (4.5, "fireball"), (7.2, "dying"), (9.0, "bare")],
 )
-def test_christmas_tree_fire(age, name, update_snapshots):
+def test_christmas_tree_fire(age, name):
     from scoreboard.display.holiday import TREE_GREEN, TREE_WIDTH
 
     when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
@@ -2324,7 +2322,7 @@ def test_christmas_tree_fire(age, name, update_snapshots):
     make_renderer().draw_christmas_tree(plain, when, "NSH")
     c = canvas()
     make_renderer().draw_christmas_tree(c, when, "NSH", ("fire", age))
-    art = show(f"christmas tree screen, fire {name}", c)
+    show(f"christmas tree screen, fire {name}", c)
 
     assert not c.out_of_bounds
     right = (TREE_WIDTH + 6, 0, W - 1, H - 1)
@@ -2338,7 +2336,6 @@ def test_christmas_tree_fire(age, name, update_snapshots):
         assert TREE_GREEN not in c.colors(0, 0, TREE_WIDTH + 3), "no needles left"
     if name == "bare":
         assert len(c.colors(0, 0, TREE_WIDTH + 3)) <= 4, "just the burnt browns and an ember"
-    check_snapshot(f"christmas_tree_fire_{name}", art, update_snapshots)
 
 
 def test_christmas_tree_fire_grows_back_to_the_plain_tree():
