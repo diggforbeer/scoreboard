@@ -193,8 +193,12 @@ play text`, then the board returns to `fb_scores` (the resting field arrives wit
   followed team's touchdown is not lost because another game was on screen. While the favourite
   holds the screen the other games are reduced to their news: see "Several games at once".
 - **Which games are fetched:** only live (or about-to-start, within 20 minutes) games the
-  favourite or a followed team is in; with none of those, the first live game. Never the whole
-  slate. The core feed (jersey numbers, the toss) is fetched when the site feed shows a new play.
+  favourite or a followed team is in. Only a board that follows **no** football team falls back
+  to the first live game (so it always has something on); with teams followed and none playing,
+  nothing is watched, so a game between two other teams never takes over the idle rotation.
+  Never the whole slate. The core feed (jersey numbers, the toss) is fetched when the site feed
+  shows a new play; a play older than the one the queue started from (the toss, which only the
+  core feed lists) is dropped, not replayed.
 - **Lengths** (`director.Timings`, the proposed values of "Timing", held to sane ranges;
   settings come with the settings story): play 3s, play text 5s, score 6s, detail 8s,
   quick 4s, missed field goal 3s, turnover 4s, reversal 5s, coin toss 6s.
