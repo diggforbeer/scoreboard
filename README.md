@@ -57,10 +57,10 @@
 | src/scoreboard/football/director.py               |      228 |        9 |     96% |191, 206, 251, 266, 273, 300, 376, 390, 412 |
 | src/scoreboard/football/events.py                 |      211 |        9 |     96% |270, 297, 306, 350, 354-357, 412 |
 | src/scoreboard/football/geometry.py               |       91 |        0 |    100% |           |
-| src/scoreboard/football/idle.py                   |      238 |        7 |     97% |52-54, 113, 338, 347-348 |
+| src/scoreboard/football/idle.py                   |      238 |        7 |     97% |53-55, 114, 339, 348-349 |
 | src/scoreboard/football/idle\_screens.py          |       45 |        0 |    100% |           |
 | src/scoreboard/football/idle\_views.py            |      219 |        2 |     99% |   253-254 |
-| src/scoreboard/football/mode.py                   |      328 |        1 |     99% |       610 |
+| src/scoreboard/football/mode.py                   |      328 |        1 |     99% |       613 |
 | src/scoreboard/football/models.py                 |      299 |        2 |     99% |   33, 253 |
 | src/scoreboard/football/pacing.py                 |       42 |        0 |    100% |           |
 | src/scoreboard/football/people.py                 |      135 |        0 |    100% |           |
