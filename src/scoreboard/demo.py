@@ -331,6 +331,7 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ("clock_canada_day", Scene("clock"), {"holiday": "canada_day"}),
         ("clock_july_4th", Scene("clock"), {"holiday": "july_4th"}),
         ("christmas_tree", Scene("christmas_tree"), {}),
+        ("thanksgiving", Scene("thanksgiving"), {}),
         ("no_games", Scene("no_games"), {}),
         ("no_data", Scene("no_data"), {}),
         (

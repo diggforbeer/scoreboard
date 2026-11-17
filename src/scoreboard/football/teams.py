@@ -15,6 +15,8 @@ brighter accent or a lifted shade of the same hue.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 RGB = tuple[int, int, int]
 
@@ -109,6 +111,33 @@ class UnknownTeamError(KeyError):
 
 def is_team(abbrev: str) -> bool:
     return str(abbrev).strip().upper() in TEAMS
+
+
+#: The night games a ranked list can follow as if they were teams: ``TNF``, ``SNF`` and ``MNF`` are
+#: every game kicking off on a Thursday, Sunday or Monday evening Eastern time. They are not in
+#: ``TEAMS`` (which is pinned to the 32 clubs); the abbreviations are what ``[[teams]]`` stores.
+NIGHT_SLOTS: dict[str, str] = {
+    "TNF": "Thursday Night Football",
+    "SNF": "Sunday Night Football",
+    "MNF": "Monday Night Football",
+}
+_SLOT_DAY = {"TNF": 3, "SNF": 6, "MNF": 0}  # Python weekday: Monday 0 ... Sunday 6
+#: The league schedules its night games in Eastern time; "evening" is 7pm on.
+_SLOT_ZONE = "America/New_York"
+_EVENING_HOUR = 19
+
+
+def is_slot(abbrev: str) -> bool:
+    return str(abbrev).strip().upper() in NIGHT_SLOTS
+
+
+def in_night_slot(slot: str, start_utc: datetime | None) -> bool:
+    """Whether a game kicking off at ``start_utc`` is in the ``SNF`` / ``MNF`` slot."""
+    key = str(slot).strip().upper()
+    if key not in _SLOT_DAY or start_utc is None:
+        return False
+    local = start_utc.astimezone(ZoneInfo(_SLOT_ZONE))
+    return local.weekday() == _SLOT_DAY[key] and local.hour >= _EVENING_HOUR
 
 
 def team(abbrev: str) -> FootballTeam:

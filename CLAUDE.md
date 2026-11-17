@@ -261,6 +261,13 @@ dropped on the next save; there is no migration). The admin page's "My teams" ca
   (`priority.idle_segments` / `segment_at`, pure functions of the clock; a segment's rows start at its
   top). Rows of a sport with an empty slate are skipped. With no `[[rotation]]` each sport's default is
   used, in the order of the lead teams' ranks (one segment per sport, as before).
+- **Night-game slots**: `TNF`, `SNF` and `MNF` can be ranked in the football list like teams
+  (`football/teams.py` `NIGHT_SLOTS`, `in_night_slot`: kick-off on a Thursday / Sunday / Monday
+  from 7pm Eastern, the league's own zone). A slot gives a moment for every game in it, so it shows that
+  night's game when nothing ranked above it is on (live, countdown, held final, as for a team). It
+  is not a team: no horn, no idle screens, no colours (`lead`, `teams_for` and `colour_team` skip
+  it). The moment's team is a ranked team in the game, else the home side, so the screens have a
+  side to favour. A slot alone still starts the football feed.
 - **The screens read the favourite through `priority.TeamView`**: `ScoreboardApp._hockey_cfg()` and
   `_football_cfg()` wrap `[scoreboard]` / `[football]` and supply `favourite_team`, `followed_teams`
   and `horn_team`. Prose below that says "the favourite" or "followed teams" means those.
@@ -882,13 +889,20 @@ colours) plus a flag either side of the clock -- July is the off-season,
 so the clock is where they're actually seen. Holiday *screens* (#243) are
 a separate, opt-in `[[rotation]]` entry, `"holiday"` (absent from
 `_default_rotation`, like matchup/leaders), resolved by
-`_holiday_screen_scene()` to the active holiday's own scene -- only
-Christmas has one: `christmas_tree`, Dec 1-25, gated on the same
-`[holiday]` switches as its overlay, skipped (never blank) otherwise.
-`Renderer.draw_christmas_tree` draws a twinkling tree in the favourite's
-colours (2fps, no fast loop) beside a countdown to the 25th ("MERRY
-CHRISTMAS" on the day), and just the tree, centred, when the countdown
-doesn't fit (a single 64px panel). Groundhog Day (#247, Feb 2) adds a third
+`_holiday_screen_scene()` to the active holiday's own scene -- two have
+one, and their windows never overlap (a test walks Nov 1-Dec 31), so the one
+row serves both: `thanksgiving`, Nov 1 through US Thanksgiving Day (the 4th
+Thursday, the day the overlay theme ends), and `christmas_tree`, Dec 1-25.
+Each is gated on the same `[holiday]` switches as its overlay (Holiday Cheer on
+and its own theme ticked), skipped (never blank) otherwise. Canadian
+Thanksgiving has no screen. `Renderer.draw_christmas_tree` draws a twinkling
+tree in the favourite's colours (2fps, no fast loop) beside a countdown to the
+25th ("MERRY CHRISTMAS" on the day), and just the tree, centred, when the
+countdown doesn't fit (a single 64px panel). `Renderer.draw_thanksgiving` is
+the same layout with the fly-by turkey drawn at 2x (28x26, its legs swapping at
+2 fps) and a countdown ("7 DAYS" / "TO THANKSGIVING", "HAPPY" / "THANKSGIVING"
+on the day; the longest line is 90px against 92px of room, so a longer string
+would silently drop the countdown and show the bare turkey). Groundhog Day (#247, Feb 2) adds a third
 mover kind, `Popup` (rises out of a mound, looks left/right, then either
 startles at a dark silhouette and ducks, or stays and sinks), and is the
 one holiday that needs the date: shadow-or-not is `random.Random(year)`,

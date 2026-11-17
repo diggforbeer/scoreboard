@@ -32,6 +32,7 @@ EVERY_KIND = {
     "leaders",
     "scores",
     "christmas_tree",
+    "thanksgiving",
     "clock",
     "address",
     "no_games",
@@ -174,6 +175,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_clock(c, NOW)
         elif scene.kind == "christmas_tree":
             r.draw_christmas_tree(c, NOW, "NSH")
+        elif scene.kind == "thanksgiving":
+            r.draw_thanksgiving(c, datetime(2026, 11, 19, 23, 0, tzinfo=UTC), "NSH")
         else:
             r.draw_message(c, scene.kind.upper())
         # A scrolling table is clipped by the panel at the foot (as on

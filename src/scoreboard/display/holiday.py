@@ -1366,6 +1366,54 @@ def christmas_countdown(day: date) -> tuple[str, str] | None:
     return f"{left} DAY{'S' if left > 1 else ''}", "TO CHRISTMAS"
 
 
+# -- The Thanksgiving countdown screen ----------------------------------------
+
+
+def _enlarged(rows: Sequence[str], factor: int = 2) -> tuple[str, ...]:
+    """Every pixel of ``rows`` drawn ``factor`` times as wide and tall."""
+    return tuple("".join(ch * factor for ch in row) for row in rows for _ in range(factor))
+
+
+#: The fly-by turkey at twice the size, one frame per leg position: standing on the spot, it
+#: steps at the screen's 2 fps like the tree twinkles, with no fast animation loop.
+THANKSGIVING_TURKEY = tuple(_enlarged(frame) for frame in TURKEY_FRAMES)
+TURKEY_SCREEN_WIDTH = len(THANKSGIVING_TURKEY[0][0])
+TURKEY_SCREEN_HEIGHT = len(THANKSGIVING_TURKEY[0])
+#: The wording's colour under the team-coloured top line.
+THANKSGIVING_TEXT = FEATHER_ORANGE
+
+
+def draw_thanksgiving_turkey(
+    canvas: Any, x: int, y: int, tick: int, width: int, height: int
+) -> None:
+    """The big turkey at (x, y); ``tick`` (half-seconds) swaps its legs."""
+    draw_sprite(
+        canvas,
+        THANKSGIVING_TURKEY[tick % len(THANKSGIVING_TURKEY)],
+        dict(TURKEY.palette),
+        x,
+        y,
+        width,
+        height,
+    )
+
+
+def thanksgiving_countdown(day: date) -> tuple[str, str] | None:
+    """The turkey screen's two lines, or None outside Nov 1 through Thanksgiving Day.
+
+    US Thanksgiving, the 4th Thursday of November (the same day the ``thanksgiving`` overlay
+    theme ends on).
+    """
+    if day.month != 11:
+        return None
+    left = (nth_weekday(day.year, 11, 3, 4) - day).days
+    if left < 0:
+        return None
+    if left == 0:
+        return "HAPPY", "THANKSGIVING"
+    return f"{left} DAY{'S' if left > 1 else ''}", "TO THANKSGIVING"
+
+
 #: In calendar order: also the order of the admin page's checkboxes.
 HOLIDAYS: dict[str, Holiday] = {
     "halloween": Holiday(

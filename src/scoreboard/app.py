@@ -49,6 +49,7 @@ from .display.holiday import (
     HolidayOverlay,
     active_holiday,
     christmas_countdown,
+    thanksgiving_countdown,
     use_sport,
 )
 from .display.logos import LogoLibrary, LogoSet
@@ -247,7 +248,7 @@ class Scene:
     ``goal_detail``, ``penalty``, ``three_stars``, ``intermission``, ``countdown``, ``preview``,
     ``standings``,
     ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
-    ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``no_games``,
+    ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``thanksgiving``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
 
     Football mode (football) adds the ``fb_`` kinds listed in ``football.mode.FB_SCENE_KINDS``,
@@ -981,8 +982,8 @@ class ScoreboardApp:
         """
         if favourite == april_fools.PRANK_AS:
             return "hockey", favourite  # the April Fools prank recolours everything, as ever
-        if self.settings.teams:
-            first = self.settings.teams[0]
+        first = self._priority().colour_team()
+        if first is not None:
             return first.sport, first.team
         return "hockey", ""
 
@@ -2498,14 +2499,19 @@ class ScoreboardApp:
     def _holiday_screen_scene(self) -> Scene | None:
         """The active holiday's own screen (#243), or None to skip the slot.
 
-        Only Christmas has one: the tree, Dec 1-25, and only with Holiday
-        Cheer on and Christmas ticked -- the same switches as its overlay.
+        Two have one: the turkey, Nov 1 through US Thanksgiving Day, and the tree, Dec 1-25.
+        Each needs Holiday Cheer on and its own theme ticked -- the same switches as its
+        overlay -- and the two windows never overlap.
         """
         cfg = self.settings.holiday
-        if not cfg.enabled or "christmas" not in cfg.themes:
+        if not cfg.enabled:
             return None
         today = self.clock().astimezone(self.tz).date()
-        return Scene("christmas_tree") if christmas_countdown(today) else None
+        if "thanksgiving" in cfg.themes and thanksgiving_countdown(today):
+            return Scene("thanksgiving")
+        if "christmas" in cfg.themes and christmas_countdown(today):
+            return Scene("christmas_tree")
+        return None
 
     def _rotate_idle_scenes(
         self, upcoming: Game | None, standings: Scene | None, *, allow_fetch: bool = True
@@ -3717,6 +3723,10 @@ class ScoreboardApp:
             sport, abbrev = self._colour_scheme(favourite)
             with use_sport(sport):
                 r.draw_christmas_tree(self.canvas, self.clock(), abbrev)
+        elif scene.kind == "thanksgiving":
+            sport, abbrev = self._colour_scheme(favourite)
+            with use_sport(sport):
+                r.draw_thanksgiving(self.canvas, self.clock(), abbrev)
         elif scene.kind == "address":
             r.draw_address(
                 self.canvas,

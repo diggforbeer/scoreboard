@@ -2521,7 +2521,9 @@ def test_sends_the_ranked_teams_last_with_what_the_page_may_offer(app_dir, confi
     }
     assert "NSH" in message["available"]["hockey"] and len(message["available"]["hockey"]) == 32
     football = {t["abbrev"]: t["name"] for t in message["available"]["football"]}
-    assert football["TEN"] == "Tennessee Titans" and len(football) == 32
+    assert football["TEN"] == "Tennessee Titans" and len(football) == 35
+    assert football["SNF"] == "Sunday Night Football" and football["MNF"] == "Monday Night Football"
+    assert football["TNF"] == "Thursday Night Football"
     assert message["max"] == 12
 
 
