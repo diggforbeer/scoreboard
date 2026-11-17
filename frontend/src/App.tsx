@@ -54,6 +54,25 @@ const ROTATION_SCREENS = [
 ] as const
 // The football screens the same list can hold (config.py's FOOTBALL_SCREENS); the clock is shared.
 const FOOTBALL_ROTATION_SCREENS = ['fb_preview', 'fb_standings', 'fb_week', 'fb_schedule'] as const
+// One cached thing on the Cache tab (cache_view.py): what it is, how old, and its data.
+interface CacheItem {
+  key: string
+  sport: 'hockey' | 'football'
+  label: string
+  age_seconds: number | null
+  summary: string
+  data: string
+  truncated: boolean
+  clearable: boolean
+}
+
+function ageLabel(seconds: number | null): string {
+  if (seconds === null) return 'live'
+  if (seconds < 90) return `${Math.round(seconds)}s old`
+  if (seconds < 5400) return `${Math.round(seconds / 60)} min old`
+  return `${(seconds / 3600).toFixed(1)} h old`
+}
+
 const ROTATION_MAX_ROWS = 20
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
 const HORN_MAX_BYTES = 2 * 1024 * 1024
@@ -337,6 +356,8 @@ type ServerMessage =
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'snapshot'; data: SnapshotData }
   | { type: 'logs'; backlog?: boolean; entries: LogEntry[] }
+  | { type: 'cache'; items: CacheItem[] }
+  | { type: 'cache_cleared'; scope: string }
   | { type: 'saved'; section: string }
   | { type: 'error'; section?: string; message: string }
   | { type: 'checking' }
@@ -643,7 +664,10 @@ function App() {
   const [pageVisible, setPageVisible] = useState(!document.hidden)
 
   // Two pages don't justify a router (#193): plain view state.
-  const [page, setPage] = useState<'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'logs'>('home')
+  const [page, setPage] = useState<
+    'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'cache' | 'logs'
+  >('home')
+  const [cacheItems, setCacheItems] = useState<CacheItem[] | null>(null)
   const [logLines, setLogLines] = useState<LogEntry[]>([])
   const [logError, setLogError] = useState<string | null>(null)
   const logBoxRef = useRef<HTMLPreElement | null>(null)
@@ -741,6 +765,12 @@ function App() {
             break
           case 'frame':
             setFrame(message)
+            break
+          case 'cache':
+            setCacheItems(message.items)
+            break
+          case 'cache_cleared':
+            socketRef.current?.send(JSON.stringify({ type: 'cache_get' }))
             break
           case 'logs':
             setLogError(null)
@@ -903,6 +933,23 @@ function App() {
     rotationSave,
     holidaySave,
   ])
+
+  // The Cache tab asks for what is cached when it opens and every few seconds while it is up.
+  useEffect(() => {
+    if (page !== 'cache' || connection !== 'open') return
+    const ask = () => {
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: 'cache_get' }))
+      }
+    }
+    ask()
+    const timer = window.setInterval(ask, 5000)
+    return () => window.clearInterval(timer)
+  }, [page, connection])
+
+  function clearCache(scope: string) {
+    socketRef.current?.send(JSON.stringify({ type: 'cache_clear', scope }))
+  }
 
   // Logs are opt-in (#197): subscribe only while the tab is showing, and
   // again after a reconnect (`connection` flips back to 'open').
@@ -1249,7 +1296,7 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'display', 'audio', 'holidays', 'setup', 'logs'] as const).map((name) => (
+        {(['home', 'display', 'audio', 'holidays', 'setup', 'cache', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
@@ -1263,6 +1310,7 @@ function App() {
                   audio: 'Audio',
                   holidays: 'Holiday Cheer',
                   setup: 'Setup',
+                  cache: 'Cache',
                   logs: 'Logs',
                 }[name]
               }
@@ -2711,6 +2759,73 @@ function App() {
             ) : (
               <p className="text-body-secondary mb-0">waiting for server...</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {page === 'cache' && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Cached data</h2>
+            <p className="text-body-secondary small">
+              What the board has fetched and keeps (refreshed every few seconds while this tab is
+              open). Clearing makes it fetch again; while a game of a team you follow is live, football's
+              idle data waits until it ends.
+            </p>
+            <div className="d-flex gap-2 mb-3">
+              {(['all', 'hockey', 'football'] as const).map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  className="btn btn-outline-danger btn-sm"
+                  onClick={() => clearCache(scope)}
+                >
+                  Clear {scope === 'all' ? 'everything' : scope}
+                </button>
+              ))}
+            </div>
+            {cacheItems === null && <p className="text-body-secondary mb-0">waiting for server...</p>}
+            {cacheItems !== null && cacheItems.length === 0 && (
+              <p className="text-body-secondary mb-0">Nothing cached right now.</p>
+            )}
+            {(['hockey', 'football'] as const).map((sport) => {
+              const rows = (cacheItems ?? []).filter((c) => c.sport === sport)
+              if (!rows.length) return null
+              return (
+                <div key={sport} className="mb-3">
+                  <h3 className="h6 text-capitalize">{sport}</h3>
+                  <ul className="list-group">
+                    {rows.map((c) => (
+                      <li className="list-group-item" key={c.key} data-cache-key={c.key}>
+                        <div className="d-flex align-items-center gap-2">
+                          <span className="flex-grow-1">
+                            {c.label} <span className="text-body-secondary small">{c.summary}</span>{' '}
+                            <span className="badge text-bg-secondary">{ageLabel(c.age_seconds)}</span>
+                          </span>
+                          {c.clearable && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              aria-label={`Clear ${c.label}`}
+                              onClick={() => clearCache(c.key)}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <details className="mt-1">
+                          <summary className="small">data</summary>
+                          <pre className="bg-body-tertiary border rounded p-2 mb-0 small" style={{ maxHeight: '16rem', overflow: 'auto' }}>
+                            {c.data}
+                            {c.truncated ? '\n... (cut)' : ''}
+                          </pre>
+                        </details>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
