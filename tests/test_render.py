@@ -2260,6 +2260,172 @@ def test_christmas_tree_screen(day, name, update_snapshots):
     check_snapshot(f"christmas_tree_{name}", art, update_snapshots)
 
 
+def test_christmas_tree_quote_replaces_the_countdown():
+    from scoreboard.display.holiday import TREE_QUOTE, TREE_WIDTH
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("quote", 1.0))
+    show("christmas tree screen, quote", c)
+
+    assert not c.out_of_bounds
+    assert TREE_QUOTE == ("VERY FULL,", "LOTS OF SAP")
+    # The tree is untouched; only the words change, and they stay beside it.
+    assert c.lit(0, 0, TREE_WIDTH + 3, H - 1) == plain.lit(0, 0, TREE_WIDTH + 3, H - 1)
+    assert c.lit(TREE_WIDTH + 6, 0, W - 1, H - 1) != plain.lit(TREE_WIDTH + 6, 0, W - 1, H - 1)
+    text = c.bbox(TREE_WIDTH + 6, 0)
+    assert text is not None and text.x1 <= W - 1
+    assert team_color("NSH") in c.colors(TREE_WIDTH + 6, 0), "top line in team colour"
+
+
+@pytest.mark.parametrize(("age", "name"), [(0.4, "rising"), (2.0, "left"), (3.2, "right")])
+def test_christmas_tree_squirrel(age, name):
+    from scoreboard.display.holiday import SQUIRREL_BELLY, TREE_WIDTH
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("squirrel", age))
+    show(f"christmas tree screen, squirrel {name}", c)
+
+    assert not c.out_of_bounds
+    assert c.lit(TREE_WIDTH + 6, 0, W - 1, H - 1) == plain.lit(TREE_WIDTH + 6, 0, W - 1, H - 1), (
+        "the countdown is untouched"
+    )
+    assert c.pixels != plain.pixels, "a squirrel is out"
+    if name != "rising":
+        assert SQUIRREL_BELLY in c.colors(0, 0, TREE_WIDTH + 3)
+
+
+def test_christmas_tree_squirrel_is_gone_before_and_after_its_script():
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    for age in (0.0, 5.0, 9.0):
+        c = canvas()
+        make_renderer().draw_christmas_tree(c, when, "NSH", ("squirrel", age))
+        assert c.pixels == plain.pixels, age
+
+
+@pytest.mark.parametrize(
+    ("age", "name"),
+    [(0.6, "spark"), (2.0, "climbing"), (4.5, "fireball"), (7.2, "dying"), (9.0, "bare")],
+)
+def test_christmas_tree_fire(age, name):
+    from scoreboard.display.holiday import TREE_GREEN, TREE_WIDTH
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("fire", age))
+    show(f"christmas tree screen, fire {name}", c)
+
+    assert not c.out_of_bounds
+    right = (TREE_WIDTH + 6, 0, W - 1, H - 1)
+    assert c.lit(*right) == plain.lit(*right), "the countdown is untouched"
+    tree = plain.bbox(0, 0, TREE_WIDTH + 3)
+    burning = c.bbox(0, 0, TREE_WIDTH + 3)
+    assert burning is not None and tree is not None
+    assert burning.x0 >= tree.x0 and burning.x1 <= tree.x1, "never wider than the tree"
+    assert burning.y0 >= tree.y0 and burning.y1 <= tree.y1, "never taller than the tree"
+    if name in ("fireball", "dying", "bare"):
+        assert TREE_GREEN not in c.colors(0, 0, TREE_WIDTH + 3), "no needles left"
+    if name == "bare":
+        assert len(c.colors(0, 0, TREE_WIDTH + 3)) <= 4, "just the burnt browns and an ember"
+
+
+def test_christmas_tree_fire_grows_back_to_the_plain_tree():
+    from scoreboard.display.holiday import FIRE_SECONDS
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("fire", FIRE_SECONDS))
+    assert c.pixels == plain.pixels, "past its script the egg draws nothing of its own"
+
+
+THANKSGIVING_DAY = datetime(2026, 11, 19, 23, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "age", [0.3, 0.9, 1.5, 2.0, 2.6, 3.0, 3.6, 5.0, 6.5, 7.9], ids=lambda a: f"{a}s"
+)
+def test_thanksgiving_turkey_run_stays_on_the_panel(age):
+    c = canvas()
+    make_renderer().draw_thanksgiving(c, THANKSGIVING_DAY, "NSH", ("turkey", age))
+    show(f"thanksgiving screen, turkey run {age}s", c)
+
+    assert not c.out_of_bounds
+
+
+def test_thanksgiving_turkey_leaves_the_panel_and_comes_back():
+    from scoreboard.display.holiday import THANKSGIVING_TURKEY, TURKEY_FACING_RIGHT
+
+    plain = canvas()
+    make_renderer().draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    gone = canvas()
+    make_renderer().draw_thanksgiving(gone, THANKSGIVING_DAY, "NSH", ("turkey", 3.0))
+    from scoreboard.display.holiday import TURKEY_BODY
+
+    assert TURKEY_BODY in plain.colors(0, 0, 31), "the plain screen has the turkey on its spot"
+    assert TURKEY_BODY not in gone.colors(0, 0, 31), (
+        "the spot it left has no turkey (feathers fall)"
+    )
+    # Facing right as it bolts, left as it wanders back.
+    assert THANKSGIVING_TURKEY[0] != TURKEY_FACING_RIGHT[0]
+
+
+def test_thanksgiving_turkey_run_messes_up_the_lettering_then_heals_it():
+    from scoreboard.display.holiday import TURKEY_SCREEN_WIDTH
+
+    text = (TURKEY_SCREEN_WIDTH + 6, 0, W - 1, H - 1)
+    plain = canvas()
+    make_renderer().draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    messy = canvas()
+    make_renderer().draw_thanksgiving(messy, THANKSGIVING_DAY, "NSH", ("turkey", 2.8))
+    healed = canvas()
+    make_renderer().draw_thanksgiving(healed, THANKSGIVING_DAY, "NSH", ("turkey", 7.5))
+
+    assert messy.lit(*text) != plain.lit(*text), "the words are knocked about"
+    assert len(messy.lit(*text)) < len(plain.lit(*text)), "and some of it is blanked out"
+    assert healed.pixels == plain.pixels, "back on its spot, the lettering whole again"
+
+
+def test_thanksgiving_turkey_run_is_gone_past_its_script():
+    from scoreboard.display.holiday import TURKEY_RUN_SECONDS
+
+    plain = canvas()
+    make_renderer().draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    after = canvas()
+    make_renderer().draw_thanksgiving(
+        after, THANKSGIVING_DAY, "NSH", ("turkey", TURKEY_RUN_SECONDS)
+    )
+    assert after.pixels == plain.pixels
+
+
+def test_thanksgiving_turkey_run_is_skipped_where_the_countdown_does_not_fit():
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ, logos=None)
+    plain, run = AsciiCanvas(64, H), AsciiCanvas(64, H)
+    r.draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    r.draw_thanksgiving(run, THANKSGIVING_DAY, "NSH", ("turkey", 1.5))
+    assert run.pixels == plain.pixels and not run.out_of_bounds
+
+
+def test_christmas_tree_quote_is_skipped_where_the_countdown_does_not_fit():
+    # A single 64px panel shows just the tree; the quote must not squeeze in beside it.
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ, logos=None)
+    plain, quoted = AsciiCanvas(64, H), AsciiCanvas(64, H)
+    r.draw_christmas_tree(plain, when, "NSH")
+    r.draw_christmas_tree(quoted, when, "NSH", ("quote", 1.0))
+    assert quoted.pixels == plain.pixels and not quoted.out_of_bounds
+
+
 @pytest.mark.parametrize(("day", "name"), [(19, "countdown"), (26, "happy")])
 def test_thanksgiving_screen(day, name, update_snapshots):
     from scoreboard.display.holiday import (

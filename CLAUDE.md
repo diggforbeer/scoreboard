@@ -939,6 +939,32 @@ pass to "complete" the screen guide or make it cover every scene kind (its
 `tests/test_blowout.py` pins this; if one of its fence tests fails, the fix is
 never to document it.
 
+The **Christmas tree eggs** (#509: the "Very full, lots of sap." quote, a squirrel, the tree on
+fire; `display/holiday.py`, `tree_egg()`, drawn by `Renderer.draw_christmas_tree(..., egg)`) are the
+same family and the same rule: **never documented user-facing** (README.md, `screens.md`, demo
+mode, rendered images), by the owner's call; `test_holiday.py`'s fence tests pin it. Each is a pure
+function of the wall clock: 30s windows, a seeded roll per kind (quote 1 in 120, squirrel 1 in 240,
+fire 1 in 1440 windows), playing from the window's top for its own length, so there is no state and
+no setting. Only the squirrel and the fire hold the fast animation loop (`_egg_animating`). Tests
+draw them with an explicit `egg=` and assert structure only (no snapshots, again like the blowout).
+Hardware cost at 20fps on a Pi 4 is unverified (#4).
+The **Thanksgiving turkey run** (#516) is the same family on the `thanksgiving` screen:
+`holiday.turkey_egg()` (1 in 360 windows, 8 s), `turkey_pose`/`turkey_patches`/`turkey_feathers`/
+`turkey_text_shake`, drawn by `Renderer.draw_thanksgiving(..., egg)`. The turkey is startled, bolts
+right across the countdown (shaking the lettering, blanking 4x5 patches of it, shedding feathers) and
+wanders back from the right; each patch heals at its own time. The lettering is *overdrawn* (black
+patches), not recorded, because the real binding's `DrawText` never reaches Python `SetPixel`.
+Skipped on a single 64px panel. Same fences and no-snapshots rule as the tree eggs.
+
+**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools|turkey]`** (`eggs.py`,
+`ScoreboardApp.run_eggs`): a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and
+`screens.md`) that loops every egg on the real panel, or plays just the one named. Each is a `plan()`
+of `Phase`s (a calm moment, the egg, a calm moment). The tree eggs hold the tree screen's date in
+December (the turkey's in November) and override `_tree_egg()` with `_egg_show`, so the normal roll is untouched; the blowout is
+a synthetic final; April Fools shows the live game and the standings plain, then relabelled NSH ->
+MIL by forcing `april_fools_active` for those phases. The holiday fly-bys are documented features,
+already in `--demo`, so they are not in the tour.
+
 Demo mode (#47, `scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
 like the tests) at `DEMO_SCENE_SECONDS` each, until Ctrl-C. `run_demo()`

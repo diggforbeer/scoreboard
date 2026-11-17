@@ -32,6 +32,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--eggs",
+        nargs="?",
+        const="all",
+        choices=["all", "quote", "squirrel", "fire", "blowout", "april_fools", "turkey"],
+        help=argparse.SUPPRESS,  # an Easter egg tour: deliberately not documented (eggs.py)
+    )
+    parser.add_argument(
         "--dump-plays",
         metavar="EVENT_ID",
         help="Print every play of a football game (ESPN event id) in order and exit",
@@ -88,13 +95,18 @@ def main(argv: list[str] | None = None) -> int:
     # The real board fetches on a worker thread so a slow API never freezes the
     # panel (#267); the demo fetches nothing, and tests keep the inline default.
     backend = load_backend(args.backend)
-    if args.demo:
+    if args.demo or args.eggs:
         app = ScoreboardApp(settings, backend=backend)
     else:
         app = ScoreboardApp(settings, backend=backend, fetcher=ThreadedFetcher())
-    if not args.demo:
+    if not (args.demo or args.eggs):
         app.alias_publisher = AliasPublisher()
     app.install_signal_handlers()
+    if args.eggs:
+        from . import eggs
+
+        app.run_eggs(eggs.NAMES if args.eggs == "all" else (args.eggs,))
+        return 0
     if args.demo:
         if args.sport and args.sport != app.current_mode():
             app._switch_sport(args.sport, force_clean=True)
