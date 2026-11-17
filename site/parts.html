@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parts and wait-list — Scoreboard</title>
+<meta name="description" content="What goes into the Scoreboard LED matrix, how to build your own, and a wait-list for a parts kit or a printed case.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero slim"><div class="wrap">
+  <h1>Parts and wait-list</h1>
+  <p class="lead">What's inside, in case you want to build one yourself, and how to ask for a kit or a printed case.</p>
+  <a class="btn" href="#waitlist">Join the wait-list</a> <a class="btn alt" href="index.html">Back to the board</a>
+</div></header>
+
+<main class="wrap">
+<section id="parts">
+  <h2>What it's made of</h2>
+  <p>This is information only: no prices and no shop links yet. The software is free and open source, so you can build it all yourself from this list.</p>
+  <div class="grid">
+    <div class="card"><h3>Computer</h3><p>Raspberry Pi 4. A Pi 3B+ also works (there is a case variant for each).</p></div>
+    <div class="card"><h3>Display</h3><p>Two 64×32 <strong>P2.5</strong> HUB75 LED panels, daisy-chained to 128×32 (320 × 80 mm). Look for 1/16 scan, 1R1G1B.</p></div>
+    <div class="card"><h3>Adapter board</h3><p>A Seengreat-style RGB matrix adapter (also sold as XICOOLEE or WatangTech). The software is set for it, and for the Adafruit RGB Matrix Bonnet or HAT with one setting.</p></div>
+    <div class="card"><h3>Power</h3><p>One 5 V supply rated <strong>6 A or better</strong> into the adapter's barrel jack (5.5 × 2.1 mm). It feeds the panels and powers the Pi.</p></div>
+  </div>
+  <p class="warn"><strong>Power with one supply only.</strong> Don't also plug a USB-C supply into the Pi: two supplies on the same 5 V rail can damage one of them.</p>
+
+  <h3>Optional</h3>
+  <div class="grid">
+    <div class="card"><h3>Goal horn</h3><p>A USB speaker or a USB audio adapter. Not the 3.5 mm jack: it conflicts with the panel driver.</p></div>
+    <div class="card"><h3>Auto-dimming</h3><p>A BH1750 light sensor breakout on the Pi's I2C pins.</p></div>
+    <div class="card"><h3>Mute button</h3><p>A momentary push-button between GPIO 26 and ground: tap to mute the horn, hold to skip to the next game.</p></div>
+    <div class="card"><h3>SD card</h3><p>A microSD card to flash the software image onto.</p></div>
+  </div>
+
+  <h2>Putting it together</h2>
+  <ol>
+    <li>Chain the two panels, plug the first into the adapter board, and fit the adapter on the Pi's header.</li>
+    <li>Flash the image with the Raspberry Pi Imager and power on. The board makes its own Wi-Fi network.</li>
+    <li>Join it from your phone, pick your home Wi-Fi and choose your teams.</li>
+  </ol>
+  <p>The full instructions, wiring notes and settings are in the <a href="https://github.com/diggforbeer/scoreboard#readme">README</a> on GitHub.</p>
+</section>
+
+<section id="case">
+  <h2>The case</h2>
+  <img src="img/case.png" alt="Render of the 3D-printable scoreboard case" width="600">
+  <p>A two-part case for the Pi and both panels: the panels hold on with their own magnetic screws, and it has a power-jack hole, a light-sensor and speaker grille, and vents. The files are free to download and print yourself from the <a href="https://github.com/diggforbeer/scoreboard/tree/main/enclosure">repository</a>.</p>
+</section>
+
+<section id="waitlist">
+  <h2>Wait-list</h2>
+  <p>Ordering isn't open yet. Tell me what you'd like and I'll get in touch when I have something to offer. There's no obligation and no payment now.</p>
+  <div class="grid">
+    <div class="card"><h3>A parts kit</h3><p>The parts above, ready to assemble. What's included is still being decided: tell me what you'd want in it.</p></div>
+    <div class="card"><h3>A printed case, separately</h3><p>For people building their own: I can print the case and mail it to you. Pricing to be announced.</p></div>
+  </div>
+  <p><a class="btn" id="waitlist-link" href="WAITLIST_FORM_URL" rel="noopener">Join the wait-list</a></p>
+  <p class="small">The form asks for your name, email, which you want (a kit, a printed case, or both), and where you are, so I know about shipping. It's used only to contact you about this.</p>
+</section>
+</main>
+
+<footer><div class="wrap">
+  Not affiliated with or endorsed by the National Hockey League, the National Football League, or any NHL or NFL club.
+  NHL, NFL and team names and marks belong to their owners. Sold as hardware only.
+  · <a href="https://github.com/diggforbeer/scoreboard">Source</a>
+</div></footer>
+</body>
+</html>
