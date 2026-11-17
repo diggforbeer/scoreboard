@@ -24,3 +24,7 @@ figcaption{color:var(--mute);font-size:.9rem;margin-top:.3rem}
 .btn.alt{background:transparent;color:var(--accent);border:2px solid var(--accent);margin-left:.5rem}
 h3{margin:1.5rem 0 .5rem;font-size:1.15rem}
 .card h3{margin:0 0 .4rem}
+header.hero.slim{padding:3rem 0 2rem}
+.warn{background:#2a2110;border-left:4px solid var(--accent);padding:.75rem 1rem;border-radius:.3rem}
+.small{color:var(--mute);font-size:.9rem}
+.grid + h2,.grid + p + h2{margin-top:2rem}
