@@ -927,6 +927,9 @@ def _teams_payload(settings: Settings) -> dict[str, object]:
         "available": {
             "hockey": sorted(TEAM_COLORS),
             "football": [
+                {"abbrev": a, "name": name} for a, name in football_teams.NIGHT_SLOTS.items()
+            ]
+            + [
                 {"abbrev": t.abbrev, "name": f"{t.city} {t.nickname}"}
                 for t in sorted(football_teams.TEAMS.values(), key=lambda t: (t.city, t.nickname))
             ],

@@ -271,6 +271,9 @@ Every screen, with pictures, is in the [screen guide](screens.md).
 With your teams ranked in `[[teams]]` (on the admin page: **My teams**), the board follows the day of the
 highest-ranked team that has something on, your "favourite" of the moment:
 
+In the football list you can also rank **Thursday**, **Sunday** and **Monday Night Football**: they follow that
+night's games, whoever plays, and show them when nothing ranked above them is on.
+
 | When | Board shows |
 |---|---|
 | Morning of a game (or no game today) | **Preview** — logos, `TONIGHT` / `TOMORROW` / `SAT OCT 4`, start time |

@@ -694,6 +694,48 @@ def test_a_demo_can_ask_for_football_on_a_board_that_ranks_only_hockey(backend):
     assert rig.app.current_mode() == "football" and rig.app._football is not None
 
 
+# -- the night-game slots (SNF / MNF) -----------------------------------------------------------
+
+
+def snf_live():
+    """A game kicking off at 8:20pm Eastern on Sunday 2026-11-15 (START's own day), live."""
+    return football_game(
+        "DAL", "NYG", "in", 7, 10, game_id=40, start="2026-11-16T01:20Z", short="x"
+    )
+
+
+def test_a_ranked_night_slot_puts_that_nights_live_game_on_the_board(backend):
+    rig = Rig(backend, [("football", "SNF")])
+    rig.hockey.today, rig.football.games = [nsh_far()], [snf_live()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "football"
+    assert rig.app._football_cfg().favourite_team == "NYG", "home side stands in as the favourite"
+
+
+def test_a_team_ranked_above_the_night_slot_keeps_the_board_in_its_own_game(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", "SNF")])
+    rig.hockey.today, rig.football.games = [nsh_live()], [snf_live()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "hockey"
+    rig.hockey.today = [nsh_far()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert rig.sport == "football", "nothing above it is on, so the night game gets the board"
+
+
+def test_the_other_nights_slot_shows_nothing(backend):
+    rig = Rig(backend, [("football", "MNF")])
+    rig.hockey.today, rig.football.games = [nsh_far()], [snf_live()]
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    assert (
+        rig.app._priority().owner(
+            {"football": rig.app._football.snapshot.games},
+            rig.clock.now,
+            rig.app._priority_windows(),
+        )
+        is None
+    )
+
+
 # -- the idle alternation must not wipe hockey's state -------------------------------------------
 
 
