@@ -214,8 +214,9 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
 - **Cadences:** a team's schedule **daily**, the standings **hourly**, the week's games every
   **5 minutes**; each only when due. The schedule is fetched for the favourite and the followed teams
   (Football teams only), the standings only when someone is followed, the week whenever the board is idle.
-- **Nothing is fetched while any game is live**; the last data is kept, and the week, byes and calendar
-  from the poll the worker makes anyway still update.
+- **Nothing is fetched while a followed team's game is live**; the last data is kept, and the week, byes
+  and calendar from the poll the worker makes anyway still update. A live game nobody follows does not
+  pause it: the idle screens are up through it, so their data must load.
 - **A failed fetch keeps the last good data** and is retried after 60 seconds, not every frame; data older
   than **twice its window is stale** and the snapshot's accessors (`schedule(team_id, now)`,
   `standings(now)`, `week(now)`) return `None` rather than present it as fresh.
