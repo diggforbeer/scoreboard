@@ -13,9 +13,10 @@ Rules, from the design:
   after ``RETRY_SECONDS``, not every frame.
 * Data older than twice its window is **stale**, and the snapshot's accessors then return ``None``
   rather than pass it off as fresh.
-* **Nothing is fetched while a game is live** (the live poll is busy and the idle screens are not
-  showing); the last data is kept, and the scoreboard's own week, byes and calendar still update
-  (they arrive on the poll the worker makes anyway).
+* **Nothing is fetched while a followed team's game is live** (the live poll is busy and the idle
+  screens are not showing); the last data is kept, and the scoreboard's own week, byes and calendar
+  still update (they arrive on the poll the worker makes anyway). A live game nobody follows does
+  not pause it: the idle screens are up through it.
 """
 
 from __future__ import annotations
