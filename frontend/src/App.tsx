@@ -52,7 +52,9 @@ const ROTATION_SCREENS = [
   'scores_grid',
   'address',
 ] as const
-const ROTATION_MAX_ROWS = 8
+// The football screens the same list can hold (config.py's FOOTBALL_SCREENS); the clock is shared.
+const FOOTBALL_ROTATION_SCREENS = ['fb_preview', 'fb_standings', 'fb_week', 'fb_schedule'] as const
+const ROTATION_MAX_ROWS = 20
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
 const HORN_MAX_BYTES = 2 * 1024 * 1024
 
@@ -153,7 +155,6 @@ interface ScoreboardConfig {
 }
 
 interface FootballRotationConfig {
-  rotation: RotationRow[]
   final_hold_minutes: number
   countdown_minutes: number
   page_seconds: number
@@ -324,9 +325,7 @@ type ServerMessage =
       type: 'config'
       section: 'football_rotation'
       data: FootballRotationConfig
-      defaults: RotationRow[]
       timing_ranges: Record<string, [number, number, number]>
-      screens: string[]
     }
   | {
       type: 'config'
@@ -581,10 +580,9 @@ function App() {
   )
   const [teamsAvailable, setTeamsAvailable] = useState<TeamsAvailable>({ hockey: [], football: [] })
   const [teamsMax, setTeamsMax] = useState(12)
-  // Which sports' per-sport cards (idle rotation, screen lengths) to show: a sport with a ranked
-  // team, and both while nothing is ranked yet.
+  // Whether football's own card (screen lengths and toggles) shows: a football team is ranked
+  // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
-  const showsHockey = rankedSports.length === 0 || rankedSports.includes('hockey')
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
@@ -615,8 +613,6 @@ function App() {
     NOT_CONNECTED_ERROR,
   )
   const footballRotation = footballRotationState.value
-  const [footballRotationDefaults, setFootballRotationDefaults] = useState<RotationRow[]>([])
-  const [footballRotationScreens, setFootballRotationScreens] = useState<string[]>([])
   const [footballTimingRanges, setFootballTimingRanges] = useState<Record<string, [number, number, number]>>({})
 
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
@@ -729,8 +725,6 @@ function App() {
             else if (message.section === 'rotation') rotationSave.receiveConfig(message.data)
             else if (message.section === 'football_rotation') {
               footballRotationSave.receiveConfig(message.data)
-              setFootballRotationDefaults(message.defaults)
-              setFootballRotationScreens(message.screens)
               setFootballTimingRanges(message.timing_ranges)
             }
             else if (message.section === 'holiday') {
@@ -1072,26 +1066,6 @@ function App() {
     const next = [...rotation]
     ;[next[index], next[target]] = [next[target], next[index]]
     rotationSave.edit(next)
-  }
-
-  function setFootballRows(rows: RotationRow[]) {
-    if (!footballRotation) return
-    footballRotationSave.edit({ ...footballRotation, rotation: rows })
-  }
-
-  function addFootballRow() {
-    if (!footballRotation || footballRotation.rotation.length >= ROTATION_MAX_ROWS) return
-    const screen = footballRotationScreens[0] ?? 'fb_preview'
-    setFootballRows([...footballRotation.rotation, { screen, seconds: 8 }])
-  }
-
-  function moveFootballRow(index: number, delta: -1 | 1) {
-    if (!footballRotation) return
-    const target = index + delta
-    const rows = [...footballRotation.rotation]
-    if (target < 0 || target >= rows.length) return
-    ;[rows[index], rows[target]] = [rows[target], rows[index]]
-    setFootballRows(rows)
   }
 
   function checkForUpdate() {
@@ -1582,97 +1556,14 @@ function App() {
       {showsFootball && (
         <div className="card mb-4">
           <div className="card-body">
-            <h2 className="card-title h5">Football idle rotation</h2>
+            <h2 className="card-title h5">Football screens</h2>
             {footballRotation ? (
               <form onSubmit={flushOnSubmit(footballRotationSave)}>
                 <p className="text-body-secondary small">
-                  Screens shown between your favourite team&apos;s games, in this order (128px panels
-                  only). The countdown, the final and the bye-week screen join by themselves when they
-                  apply. Up to {ROTATION_MAX_ROWS} rows. Empty uses the built-in default:{' '}
-                  {footballRotationDefaults.map((d) => `${d.screen} ${d.seconds}s`).join(', ')}.
+                  Which football screens show between games, and for how long each, is the Idle
+                  rotation card (128px panels only). The countdown, the final and the bye-week screen
+                  join by themselves when they apply. This card sets how long they wait and last.
                 </p>
-                {footballRotation.rotation.map((row, i) => (
-                  <div className="d-flex align-items-center gap-2 mb-2" key={i}>
-                    <select
-                      className="form-select"
-                      style={{ width: 'auto' }}
-                      aria-label={`football rotation screen ${i + 1}`}
-                      value={row.screen}
-                      onChange={(e) =>
-                        setFootballRows(
-                          footballRotation.rotation.map((r, j) =>
-                            j === i ? { ...row, screen: e.target.value } : r,
-                          ),
-                        )
-                      }
-                    >
-                      {footballRotationScreens.map((screen) => (
-                        <option key={screen} value={screen}>
-                          {screen}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="form-control"
-                      style={{ width: '6rem' }}
-                      type="number"
-                      step="any"
-                      min="0"
-                      aria-label={`football rotation seconds ${i + 1}`}
-                      value={row.seconds}
-                      onChange={(e) =>
-                        numberEdit(
-                          footballRotationSave,
-                          e,
-                          {
-                            ...footballRotation,
-                            rotation: footballRotation.rotation.map((r, j) =>
-                              j === i ? { ...row, seconds: Number(e.target.value) } : r,
-                            ),
-                          },
-                          `football-rotation-seconds-${i}`,
-                        )
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                    <span className="text-body-secondary small">seconds</span>
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={() => moveFootballRow(i, -1)}
-                      disabled={i === 0}
-                      aria-label="Move football row up"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={() => moveFootballRow(i, 1)}
-                      disabled={i === footballRotation.rotation.length - 1}
-                      aria-label="Move football row down"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-outline-danger btn-sm"
-                      onClick={() => setFootballRows(footballRotation.rotation.filter((_, j) => j !== i))}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                <div className="d-flex align-items-center gap-3 mt-3 mb-3">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={addFootballRow}
-                    disabled={footballRotation.rotation.length >= ROTATION_MAX_ROWS}
-                  >
-                    Add row
-                  </button>
-                </div>
                 <div className="row g-3">
                   <div className="col-sm-6">
                     <label className="form-label" htmlFor="football-final-hold">
@@ -1824,30 +1715,41 @@ function App() {
         </div>
       )}
 
-      {showsHockey && (
       <div className="card mb-4">
         <div className="card-body">
           <h2 className="card-title h5">Idle rotation</h2>
           {rotation ? (
             <form onSubmit={flushOnSubmit(rotationSave)}>
               <p className="text-body-secondary small">
-                Screens shown when the favourite is not live, in this order. Up to{' '}
-                {ROTATION_MAX_ROWS} rows. Empty falls back to the built-in default
-                (countdown/preview, standings, clock).
+                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
+                Consecutive rows of one sport show together, then the board moves to the other
+                sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
+                Empty falls back to each sport's built-in default.
               </p>
               {rotation.map((row, i) => (
                 <div className="d-flex align-items-center gap-2 mb-2" key={i}>
                   <select
                     className="form-select"
                     style={{ width: 'auto' }}
+                    aria-label={`rotation screen ${i + 1}`}
                     value={row.screen}
                     onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
                   >
-                    {ROTATION_SCREENS.map((screen) => (
-                      <option key={screen} value={screen}>
-                        {screen}
-                      </option>
-                    ))}
+                    <optgroup label="Hockey">
+                      {ROTATION_SCREENS.filter((screen) => screen !== 'clock').map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Football">
+                      {FOOTBALL_ROTATION_SCREENS.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="clock">clock</option>
                   </select>
                   <input
                     className="form-control"
@@ -1855,6 +1757,7 @@ function App() {
                     type="number"
                     step="any"
                     min="0"
+                    aria-label={`rotation seconds ${i + 1}`}
                     value={row.seconds}
                     onChange={(e) =>
                       numberEdit(
@@ -1912,7 +1815,6 @@ function App() {
           )}
         </div>
       </div>
-      )}
 
       <div className="card mb-4">
         <div className="card-body">
@@ -2852,7 +2754,7 @@ function App() {
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
           { label: 'My teams', state: teamsState, onUndo: teamsSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
-          { label: 'Football idle rotation', state: footballRotationState, onUndo: footballRotationSave.undo },
+          { label: 'Football screens', state: footballRotationState, onUndo: footballRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
           { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },
           { label: 'Audio', state: audioState, onUndo: audioSave.undo },

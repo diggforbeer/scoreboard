@@ -290,9 +290,7 @@ from .audio import (
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
-    DEFAULT_FOOTBALL_ROTATION,
     FLYBY_FREQUENCIES,
-    FOOTBALL_ROTATION_SCREENS,
     FOOTBALL_TIMING_RANGES,
     GOAL_FLASH_MAX_SECONDS,
     GOAL_FLASH_MIN_SECONDS,
@@ -342,7 +340,7 @@ ADMIN_DIR = Path(os.environ.get("SCOREBOARD_ADMIN_DIR", "/usr/share/scoreboard/a
 #: generous but finite, so an unbounded list doesn't need its own
 #: pagination story. Enforced server-side here too, not just by the
 #: frontend disabling its own "Add row" button at this count.
-ROTATION_MAX_ROWS = 8
+ROTATION_MAX_ROWS = 20
 #: How often to check updater.STATE_FILE for a change while a check/apply
 #: might be running. Overridable so tests don't wait a real second.
 UPDATE_POLL_SECONDS = float(os.environ.get("SCOREBOARD_ADMIN_UPDATE_POLL", "1"))
@@ -584,17 +582,14 @@ def _holiday_payload(settings: Settings) -> dict[str, object]:
 
 
 def _football_rotation_payload(settings: Settings) -> dict[str, object]:
-    """Football mode's idle rotation (``[[football.rotation]]``) and its two timers (#422).
-
-    ``defaults`` is what the board rotates through when the list is empty, so the page can show
-    it as the starting point rather than a blank list.
-    """
+    """Football's own settings: its two timers, the page length, the screen lengths and the
+    toggles (#422, #443 to #445). Which screens football shows between games is the one mixed
+    ``[[rotation]]`` list now (epic #470), saved through the ``rotation`` section."""
     cfg = settings.football
     return {
         "type": "config",
         "section": "football_rotation",
         "data": {
-            "rotation": [dataclasses.asdict(entry) for entry in cfg.rotation],
             "final_hold_minutes": cfg.final_hold_minutes,
             "countdown_minutes": cfg.countdown_minutes,
             "page_seconds": cfg.page_seconds,
@@ -604,8 +599,6 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "show_final": cfg.show_final,
             "show_redzone": cfg.show_redzone,
         },
-        "defaults": [{"screen": s, "seconds": sec} for s, sec in DEFAULT_FOOTBALL_ROTATION],
-        "screens": list(FOOTBALL_ROTATION_SCREENS),
         "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
 
@@ -1380,30 +1373,11 @@ _FOOTBALL_TOGGLES = ("show_countdown", "show_bye", "show_final", "show_redzone")
 
 
 def _coerce_football_rotation(data: object) -> dict[str, object]:
-    """Validate a ``football_rotation`` save: the rows (rejected whole on the first bad one, like
-    ``_coerce_rotation``) and the two timers. A missing key is left alone."""
+    """Validate a ``football_rotation`` save: the two timers, the page length, the screen lengths
+    and the toggles. A missing key is left alone."""
     if not isinstance(data, dict):
         raise ValueError(json.dumps({"football_rotation": "must be an object"}))
     values: dict[str, object] = {}
-    if "rotation" in data:
-        rows = data["rotation"]
-        if not isinstance(rows, list):
-            raise ValueError(json.dumps({"rotation": "must be a list"}))
-        if len(rows) > ROTATION_MAX_ROWS:
-            raise ValueError(json.dumps({"rotation": f"at most {ROTATION_MAX_ROWS} rows"}))
-        entries: list[dict[str, object]] = []
-        for i, item in enumerate(rows):
-            if not isinstance(item, dict):
-                raise ValueError(json.dumps({f"row {i + 1}": "must be an object"}))
-            screen = item.get("screen")
-            if screen not in FOOTBALL_ROTATION_SCREENS:
-                choices = ", ".join(FOOTBALL_ROTATION_SCREENS)
-                raise ValueError(json.dumps({f"row {i + 1}": f"screen must be one of {choices}"}))
-            seconds = item.get("seconds")
-            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0:
-                raise ValueError(json.dumps({f"row {i + 1}": "seconds must be a positive number"}))
-            entries.append({"screen": screen, "seconds": float(seconds)})
-        values["rotation"] = entries
     for key, (low, high) in _FOOTBALL_MINUTES.items():
         if key not in data:
             continue
@@ -1586,7 +1560,7 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
             return
-        # The football rotation lives in ``[football]``; it has its own page section only.
+        # football_rotation is football's own settings: it is written to ``[football]``.
         Settings.load(CONFIG_PATH).save(
             {"football" if section == "football_rotation" else section: values}
         )

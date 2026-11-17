@@ -116,7 +116,11 @@ scores_grid = false
 # screen its own duration instead, uncomment and edit an explicit list
 # below; once any [[rotation]] table is present, rotate_seconds/
 # show_standings/show_clock_between_games above are no longer read for this
-# purpose. screen is one of "countdown_preview", "standings", "clock",
+# purpose. The one list holds hockey and football screens together (up to 20 rows): consecutive
+# rows of one sport show together, then the board moves to the other sport's, and a sport with
+# nothing to show is skipped. The football screens are "fb_preview", "fb_standings", "fb_week"
+# and "fb_schedule"; with no list at all each sport shows its own default.
+# screen is one of "countdown_preview", "standings", "clock",
 # "matchup", "top_west", "top_east", "division", "leaders", "holiday", "scores_grid", "address".
 # "matchup" (your team's head-to-head record this season against its next
 # opponent, then the scores of the meetings so far for the second half of
@@ -147,7 +151,7 @@ scores_grid = false
 # seconds = 8
 
 [football]
-# Football's own settings: the idle rotation, the screen lengths and the toggles (all also on the
+# Football's own settings: the screen lengths and the toggles (all also on the
 # admin page). Which football teams you follow is the [[teams]] list at the top.
 # (The old favourite_team and also_follow keys here are ignored.)
 

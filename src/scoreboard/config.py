@@ -304,16 +304,33 @@ VALID_ROTATION_SCREENS = (
     "holiday",
     "scores_grid",
     "address",
+    "fb_preview",
+    "fb_standings",
+    "fb_week",
+    "fb_schedule",
 )
 
 #: Rotation screen names a release renamed: still accepted in a saved config, mapped to the
 #: current name at load (the admin page names the screen after what it shows, #269 follow-up).
 ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 
-#: The screens football mode's idle rotation (``[[football.rotation]]``, #422) can list. ``fb_bye``,
-#: ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself when they
-#: apply (a bye week, the kickoff window, the hold after a game).
-FOOTBALL_ROTATION_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock")
+#: The football screens the one idle rotation (``[[rotation]]``) can list (#422, epic #470).
+#: ``fb_bye``, ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself
+#: when they apply (a bye week, the kickoff window, the hold after a game).
+FOOTBALL_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule")
+#: Football's screens plus the clock, which both sports draw: what football's default rotation is
+#: made of.
+FOOTBALL_ROTATION_SCREENS = (*FOOTBALL_SCREENS, "clock")
+
+
+def screen_sport(screen: str) -> str:
+    """Which sport shows a rotation screen: ``football``, ``hockey``, or ``shared`` (the clock,
+    which either sport draws and which takes the sport of the rows around it)."""
+    if screen in FOOTBALL_SCREENS:
+        return "football"
+    return "shared" if screen == "clock" else "hockey"
+
+
 #: The in-game screen lengths (#445): name -> (default, lowest, highest) seconds. The defaults are
 #: the proposed values in ``football_screen.md`` and the ranges are ``football.director.Timings``'s
 #: own; a test keeps the two in step. Each is the ``[football]`` key ``<name>_seconds``.
@@ -330,7 +347,7 @@ FOOTBALL_TIMING_RANGES: dict[str, tuple[float, float, float]] = {
     "stats": (12.0, 3.0, 40.0),
     "redzone": (6.0, 3.0, 15.0),
 }
-#: What football mode rotates through when ``[[football.rotation]]`` is absent or empty (decided).
+#: What football's part of the idle rotation is when ``[[rotation]]`` is absent or empty (decided).
 DEFAULT_FOOTBALL_ROTATION: tuple[tuple[str, float], ...] = (
     ("fb_preview", 8.0),
     ("fb_standings", 8.0),
@@ -360,8 +377,7 @@ def _parse_rotation(
 ) -> list[RotationEntry]:
     """Parse ``[[rotation]]`` (an array of tables), dropping invalid entries.
 
-    ``valid`` and ``label`` let football mode's own list (``[[football.rotation]]``, #422) use the
-    same rules with its own screen names.
+    ``valid`` and ``label`` let a caller use the same rules with its own screen names.
 
     Per #150's decision 3, an invalid entry is never displayed on the panel
     but is not fatal either -- logged as a warning and skipped, same
@@ -509,9 +525,6 @@ class FootballConfig:
     horn team, which the football code reads through ``priority.TeamView``.
     """
 
-    #: Football mode's idle rotation (``[[football.rotation]]``, #422): football screen names only.
-    #: Empty means ``DEFAULT_FOOTBALL_ROTATION``; read it through ``idle_rotation``.
-    rotation: list[Any] = field(default_factory=list)
     #: How long the favourite's final stays up before the idle rotation resumes (decided: 60).
     final_hold_minutes: float = 60.0
     #: The kickoff window: how long before kickoff the favourite's game shows its countdown.
@@ -552,24 +565,12 @@ class FootballConfig:
         self.show_bye = bool(self.show_bye)
         self.show_final = bool(self.show_final)
         self.show_redzone = bool(self.show_redzone)
-        self.rotation = _parse_rotation(
-            self.rotation if isinstance(self.rotation, list) else [],
-            FOOTBALL_ROTATION_SCREENS,
-            "[[football.rotation]]",
-        )
         self.final_hold_minutes = _positive_minutes(
             self.final_hold_minutes, 60.0, "football.final_hold_minutes"
         )
         self.countdown_minutes = _positive_minutes(
             self.countdown_minutes, 60.0, "football.countdown_minutes"
         )
-
-    @property
-    def idle_rotation(self) -> list[RotationEntry]:
-        """The idle rotation in force: the configured list, else the built-in default."""
-        if self.rotation:
-            return list(self.rotation)
-        return [RotationEntry(screen, seconds) for screen, seconds in DEFAULT_FOOTBALL_ROTATION]
 
 
 @dataclass(slots=True)
@@ -972,16 +973,6 @@ class Settings:
                 table = tomlkit.table()
                 doc[section] = table
             for key, value in values.items():
-                if section == "football" and key == "rotation":
-                    # ``[[football.rotation]]``: a sequence of tables, replaced whole (#422).
-                    aot = tomlkit.aot()
-                    for entry in value:
-                        row = tomlkit.table()
-                        row["screen"] = entry["screen"]
-                        row["seconds"] = entry["seconds"]
-                        aot.append(row)
-                    table[key] = aot
-                    continue
                 table[key] = value
             for key in RETIRED_KEYS.get(section, {}):
                 if key in table:
@@ -1021,6 +1012,7 @@ RETIRED_KEYS: dict[str, dict[str, str]] = {
         "also_follow": "replaced by the ranked [[teams]] list (add your teams on the admin page)",
     },
     "football": {
+        "rotation": "merged into the one [[rotation]] list, which now takes football screens too",
         "favourite_team": "replaced by the ranked [[teams]] list (add your team on the admin page)",
         "also_follow": "replaced by the ranked [[teams]] list (add your teams on the admin page)",
     },
@@ -1053,7 +1045,8 @@ def _build(cls: type, raw: dict[str, Any], section: str = "") -> Any:
             if (section, key) not in _retired_logged:
                 _retired_logged.add((section, key))
                 # The team settings are the ones an owner will miss, so those say so loudly.
-                level = log.warning if "[[teams]]" in retired[key] else log.info
+                loud = "[[teams]]" in retired[key] or "[[rotation]]" in retired[key]
+                level = log.warning if loud else log.info
                 level(
                     "Ignoring retired config key %r in [%s] (%s); safe to delete, "
                     "and removed the next time [%s] is saved",

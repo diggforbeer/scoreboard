@@ -110,8 +110,10 @@ with `scripts/render-screens.py --sport football`, and retire its mockup (see `f
 **Adding a football idle screen** (#423-#429): register it in `football/idle_screens.py` with
 `@idle_screen("fb_...")`, a `should_show(IdleContext)` that is false when its data is missing, and draw
 it in the app's `fb_*` dispatch. `FootballMode._idle_kind` picks the screen (live game, countdown, final
-hold, the `[[football.rotation]]` list, the clock); the idle screens are 128px only. The rotation and
-its two timers are `[football]` settings with their own admin-page section, `football_rotation`.
+hold, football's rows of the one `[[rotation]]` list, the clock); the idle screens are 128px only. The
+rotation rows come to football through its settings view (`TeamView.idle_rotation`); its two timers,
+page length, screen lengths and toggles are `[football]` settings with their own admin-page section,
+`football_rotation` (the old `[[football.rotation]]` list was merged into `[[rotation]]`).
 The holiday overlay is sport-aware (`display/holiday.use_sport`): in football mode a **game screen**
 (`app.FOOTBALL_GAME_SCENES`) is decorated only on a Thanksgiving or Christmas game
 (`football/idle_views.game_holiday`, the game's own date in the board's zone) and only if that theme
@@ -252,8 +254,13 @@ dropped on the next save; there is no migration). The admin page's "My teams" ca
   is the favourite for the idle screens.
 - **Both feeds run** when a team of each sport is ranked (or none is); the app runs one sport's
   machinery at a time (`ScoreboardApp._choose_sport`, never twice within 15 s) and polls the other
-  lightly. With nothing on the sports **alternate**, each showing its idle rotation for its lead team
-  (`Priority.idle_sport`, a pure function of the clock; rotations start at the top of their turn).
+  lightly. With nothing on there is **one idle rotation**: the `[[rotation]]` list holds screens of
+  either sport (hockey's, `fb_preview`/`fb_standings`/`fb_week`/`fb_schedule`, and the clock), up to 20
+  rows. Consecutive rows of a sport form a *segment* (the clock joins the run it sits in) and the board
+  alternates between segments, the sport of the segment having the board, each for its lead team
+  (`priority.idle_segments` / `segment_at`, pure functions of the clock; a segment's rows start at its
+  top). Rows of a sport with an empty slate are skipped. With no `[[rotation]]` each sport's default is
+  used, in the order of the lead teams' ranks (one segment per sport, as before).
 - **The screens read the favourite through `priority.TeamView`**: `ScoreboardApp._hockey_cfg()` and
   `_football_cfg()` wrap `[scoreboard]` / `[football]` and supply `favourite_team`, `followed_teams`
   and `horn_team`. Prose below that says "the favourite" or "followed teams" means those.
@@ -1550,7 +1557,7 @@ when it was written; that history is left as-is rather than rewritten.
   person editing this page should see exactly what's wrong, unlike a
   hand-edited boot TOML where a typo must not stop the board booting.
   Also enforces the same row cap `status_server.py`'s HTML version
-  recommended (`ROTATION_MAX_ROWS = 8`), server-side, not just via the
+  recommended (`ROTATION_MAX_ROWS = 20`), server-side, not just via the
   frontend disabling its own button. **The numeric "order" field and the
   full-page-round-trip add/remove buttons in the HTML version existed
   specifically to work around having no client-side JS (#151) -- gone

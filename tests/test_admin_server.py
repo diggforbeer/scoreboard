@@ -2338,7 +2338,7 @@ async def _next(client, timeout=5):
     return json.loads(await asyncio.wait_for(client.recv(), timeout))
 
 
-# -- [[football.rotation]]: Football idle rotation (#422) ---------------------------------
+# -- [football]: football's own settings (#422); its screens are in the one [[rotation]] list --
 
 
 async def _save_football_rotation(client, data):
@@ -2347,7 +2347,7 @@ async def _save_football_rotation(client, data):
     return await _next(client)
 
 
-def test_sends_the_football_rotation_last_with_the_defaults_and_screens(app_dir, config_path):
+def test_sends_football_s_own_settings_without_a_rotation_of_its_own(app_dir, config_path):
     config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
 
     async def scenario(client):
@@ -2357,7 +2357,6 @@ def test_sends_the_football_rotation_last_with_the_defaults_and_screens(app_dir,
     message = asyncio.run(_serve_and_run(scenario))
     assert message["section"] == "football_rotation"
     assert message["data"] == {
-        "rotation": [],
         "final_hold_minutes": 30.0,
         "countdown_minutes": 60.0,
         "page_seconds": 0.0,
@@ -2379,47 +2378,65 @@ def test_sends_the_football_rotation_last_with_the_defaults_and_screens(app_dir,
         "show_final": True,
         "show_redzone": True,
     }
-    assert [d["screen"] for d in message["defaults"]] == [
-        "fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock",
-    ]  # fmt: skip
-    assert message["screens"] == ["fb_preview", "fb_standings", "fb_week", "fb_schedule", "clock"]
+    assert "defaults" not in message and "screens" not in message
 
 
-def test_saving_the_football_rotation_writes_football_rotation_tables(app_dir, config_path):
+def test_saving_football_s_settings_writes_the_football_section(app_dir, config_path):
     config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
 
     async def scenario(client):
         await _skip_initial(client, n=14)
-        saved = await _save_football_rotation(
-            client,
-            {
-                "rotation": [
-                    {"screen": "fb_week", "seconds": 12},
-                    {"screen": "clock", "seconds": 4},
-                ],
-                "final_hold_minutes": 45,
-            },
-        )
+        saved = await _save_football_rotation(client, {"final_hold_minutes": 45})
         return saved, await _next(client)
 
     saved, echo = asyncio.run(_serve_and_run(scenario))
     assert saved == {"type": "saved", "section": "football_rotation"}
-    assert echo["data"]["rotation"] == [
-        {"screen": "fb_week", "seconds": 12.0}, {"screen": "clock", "seconds": 4.0},
-    ]  # fmt: skip
-    assert "[[football.rotation]]" in config_path.read_text()
-    football = Settings.load(config_path).football
-    assert football.final_hold_minutes == 45.0
+    assert echo["data"]["final_hold_minutes"] == 45.0 and "rotation" not in echo["data"]
+    assert "football.rotation" not in config_path.read_text()
+    assert Settings.load(config_path).football.final_hold_minutes == 45.0
+
+
+def test_football_screens_save_through_the_one_rotation_list_mixed_with_hockeys(
+    app_dir, config_path
+):
+    rows = [
+        {"screen": "standings", "seconds": 8},
+        {"screen": "fb_week", "seconds": 12},
+        {"screen": "countdown_preview", "seconds": 8},
+        {"screen": "fb_schedule", "seconds": 6},
+        {"screen": "clock", "seconds": 4},
+    ]
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
+        saved = await _next(client)
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "rotation"}
+    assert [(r["screen"], r["seconds"]) for r in echo["data"]] == [
+        (r["screen"], float(r["seconds"])) for r in rows
+    ]
+    text = config_path.read_text()
+    assert text.count("[[rotation]]") == 5 and "football.rotation" not in text
+    assert [e.screen for e in Settings.load(config_path).rotation] == [r["screen"] for r in rows]
+
+
+def test_the_rotation_still_rejects_a_screen_that_belongs_to_neither_sport(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        data = [{"screen": "fb_bye", "seconds": 5}]  # added by the board itself, never listed
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": data}))
+        return await _next(client)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and "fb_bye" not in config_path.read_text()
 
 
 @pytest.mark.parametrize(
     "data",
     [
-        {"rotation": "fb_week"},
-        {"rotation": [{"screen": "scores_grid", "seconds": 5}]},
-        {"rotation": [{"screen": "fb_week", "seconds": 0}]},
-        {"rotation": [{"screen": "fb_week", "seconds": True}]},
-        {"rotation": [{"screen": "fb_week", "seconds": 5}] * 9},
         {"final_hold_minutes": 0},
         {"countdown_minutes": 99999},
         {"final_hold_minutes": "soon"},

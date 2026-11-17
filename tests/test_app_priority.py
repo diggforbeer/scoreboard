@@ -503,7 +503,7 @@ def test_with_nothing_on_the_sports_take_turns_each_for_its_rotation(backend):
     rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
     rig.poll(1)
     hockey_turn = sum(e.seconds for e in rig.app._effective_rotation())
-    football_turn = sum(e.seconds for e in rig.settings.football.idle_rotation)
+    football_turn = sum(e.seconds for e in rig.app._football._entries())
     runs = idle_runs(rig, seconds=3 * (hockey_turn + football_turn))
     sports = [s for s, _ in runs]
     assert set(sports) == {"hockey", "football"} and all(a != b for a, b in pairwise(sports))
@@ -526,18 +526,90 @@ def test_when_neither_sport_has_games_the_top_teams_sport_keeps_the_board(backen
     assert rig.app._idle_origin == 0.0
 
 
-def test_a_sport_s_rotation_starts_at_the_top_of_its_turn(backend):
-    """The turn began ``fraction`` of its length ago, so a sport's rotation clock reads that."""
+def test_a_segment_s_rows_start_at_the_top_of_its_turn(backend):
+    """The segment began ``fraction`` of its length ago: its sport times its rows from there."""
+    from scoreboard.priority import idle_segments, segment_at
+
     rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
     rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
     for _ in range(60):
         rig.poll(7)
-        turns = rig.app._idle_turns()
-        slot = rig.app._priority().idle_sport(rig.app.monotonic(), turns)
-        sport, fraction = slot
+        segments = idle_segments(rig.app._unified_rotation(), rig.app._idle_available())
+        index, fraction = segment_at(segments, rig.app.monotonic())
         position = rig.app.monotonic() - rig.app._idle_origin
-        assert abs(position - fraction * turns[sport]) < 1e-6
+        assert abs(position - fraction * segments[index].seconds) < 1e-6
     assert rig.app._football.idle_origin == rig.app._idle_origin
+
+
+# -- one mixed rotation list (the combined idle rotation) ----------------------------------------
+
+
+def mixed(rig, *pairs):
+    from scoreboard.config import RotationEntry
+
+    rig.settings.rotation = [RotationEntry(s, float(sec)) for s, sec in pairs]
+
+
+def test_the_default_rotation_is_each_sports_default_in_the_order_of_their_lead_ranks(backend):
+    hockey_first = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    screens = [e.screen for e in hockey_first.app._unified_rotation()]
+    assert screens[0] == "countdown_preview" and "fb_preview" in screens
+    assert screens.index("countdown_preview") < screens.index("fb_preview")
+    football_first = Rig(backend, [("football", TEN), ("hockey", NSH)])
+    screens = [e.screen for e in football_first.app._unified_rotation()]
+    assert screens.index("fb_preview") < screens.index("countdown_preview")
+    only_hockey = Rig(backend, [("hockey", NSH)])
+    assert not any(e.screen.startswith("fb_") for e in only_hockey.app._unified_rotation())
+
+
+def test_a_mixed_list_interleaves_the_sports_row_by_row(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    mixed(rig, ("standings", 20), ("fb_week", 20), ("countdown_preview", 20))
+    rig.poll(1)
+    runs = idle_runs(rig, seconds=300, step=5.0)
+    sports = [s for s, _ in runs]
+    assert set(sports) == {"hockey", "football"}
+    assert all(a != b for a, b in pairwise(sports)), "it never stays on one sport twice in a row"
+    # The list is hockey 20 s, football 20 s, hockey 20 s, round again: so football holds 20 s and
+    # hockey 40 s (its last row joins the first of the next round).
+    for sport, length in runs[1:-1]:
+        assert abs(length - (20.0 if sport == "football" else 40.0)) <= 10.0, (sport, length)
+
+
+def test_each_sport_shows_only_its_rows_of_the_segment_that_is_up(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    mixed(rig, ("standings", 20), ("fb_week", 20), ("countdown_preview", 20), ("fb_schedule", 20))
+    seen = {"hockey": set(), "football": set()}
+    for _ in range(100):
+        rig.poll(5)
+        rows = rig.app._sport_rotation(rig.sport)
+        seen[rig.sport] |= {e.screen for e in rows}
+    assert seen["hockey"] <= {"standings", "countdown_preview", "clock"}
+    assert seen["football"] <= {"fb_week", "fb_schedule", "clock"}
+    assert seen["hockey"] and seen["football"]
+
+
+def test_footballs_rows_come_to_it_through_its_settings_view(backend):
+    rig = Rig(backend, [("football", TEN)])
+    mixed(rig, ("standings", 20), ("fb_week", 20), ("fb_preview", 10))
+    rows = [e.screen for e in rig.app._football_cfg().idle_rotation]
+    assert rows == ["fb_week", "fb_preview"], "hockey's standings row is not football's"
+    assert [e.screen for e in rig.app._football._entries()] == rows
+
+
+def test_a_hockey_only_list_ignores_football_rows_and_the_reverse(backend):
+    rig = Rig(backend, [("hockey", NSH)])
+    mixed(rig, ("standings", 20), ("fb_week", 20), ("countdown_preview", 20))
+    assert [e.screen for e in rig.app._effective_rotation()] == ["standings", "countdown_preview"]
+
+
+def test_rows_for_a_sport_with_no_games_are_skipped(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], []
+    mixed(rig, ("standings", 20), ("fb_week", 20), ("countdown_preview", 20))
+    assert {s for s, _ in idle_runs(rig, seconds=200)} == {"hockey"}
 
 
 def test_an_owner_interrupts_the_alternation_and_hands_back(backend):

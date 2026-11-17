@@ -411,10 +411,12 @@ def _wait_until(condition, timeout=15.0):
     raise AssertionError("condition never became true")
 
 
-def test_each_sports_idle_rotation_card_shows_for_the_sports_that_have_a_ranked_team(admin_page):
-    """#422 and epic #470: the football idle rotation card (and the hockey one) appear for a sport
-    with a ranked team, both while nothing is ranked; the football card saves
-    ``[[football.rotation]]`` and the timers and leaves the hockey ``[[rotation]]`` alone."""
+def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_its_own_card(
+    admin_page,
+):
+    """Epic #470: the one Idle rotation card takes hockey, football and clock rows (saved as
+    ``[[rotation]]``, nothing under ``[football]``); football's own card (lengths and toggles)
+    shows once a football team is ranked or while nothing is."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
@@ -423,17 +425,17 @@ def test_each_sports_idle_rotation_card_shows_for_the_sports_that_have_a_ranked_
             page = browser.new_page()
             page.goto(admin_page.url)
             page.wait_for_selector("#teams-add", timeout=15000)
-            football = page.get_by_role("heading", name="Football idle rotation")
-            hockey = page.get_by_role("heading", name="Idle rotation", exact=True)
+            football = page.get_by_role("heading", name="Football screens")
+            rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
             page.get_by_role("button", name="Display", exact=True).click()
-            football.wait_for(timeout=15000)
-            assert football.count() == 1 and hockey.count() == 1, "nothing ranked: both show"
+            rotation.wait_for(timeout=15000)
+            assert football.count() == 1, "nothing ranked: football's card shows"
 
             page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#teams-add", "hockey:NSH")
             page.click("#teams-add-button")
             page.get_by_role("button", name="Display", exact=True).click()
-            hockey.wait_for(timeout=15000)
+            rotation.wait_for(timeout=15000)
             assert football.count() == 0, "only a hockey team is ranked"
 
             page.get_by_role("button", name="Home", exact=True).click()
@@ -441,36 +443,41 @@ def test_each_sports_idle_rotation_card_shows_for_the_sports_that_have_a_ranked_
             page.click("#teams-add-button")
             page.get_by_role("button", name="Display", exact=True).click()
             football.wait_for(timeout=15000)
-            assert hockey.count() == 1, "both sports have a ranked team"
 
-            card = football.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
-            card.get_by_role("button", name="Add row").click()
-            page.select_option('[aria-label="football rotation screen 1"]', "fb_week")
-            page.fill('[aria-label="football rotation seconds 1"]', "12")
+            # One list, both sports: a hockey row, a football row, the clock.
+            card = rotation.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
+            for _ in range(3):
+                card.get_by_role("button", name="Add row").click()
+            page.select_option('[aria-label="rotation screen 1"]', "standings")
+            page.select_option('[aria-label="rotation screen 2"]', "fb_week")
+            page.fill('[aria-label="rotation seconds 2"]', "12")
+            page.select_option('[aria-label="rotation screen 3"]', "clock")
+            page.keyboard.press("Tab")
+            _wait_until(
+                lambda: (
+                    [r["screen"] for r in admin_page.config().get("rotation", [])]
+                    == ["standings", "fb_week", "clock"]
+                )
+            )
+            assert admin_page.config()["rotation"][1]["seconds"] == 12
+            assert "rotation" not in admin_page.config().get("football", {})
+
+            # Football's own card still saves its lengths and toggles under [football].
             page.fill("#football-final-hold", "45")
             page.fill("#football-page-seconds", "4")
             page.fill("#football-timing-score", "10")
             page.uncheck("#football-show_bye")
             page.keyboard.press("Tab")
-            _wait_until(
-                lambda: (
-                    admin_page.config().get("football", {}).get("rotation")
-                    == [{"screen": "fb_week", "seconds": 12}]
-                )
-            )
             _wait_until(lambda: admin_page.config()["football"].get("final_hold_minutes") == 45)
             _wait_until(lambda: admin_page.config()["football"].get("show_bye") is False)
             _wait_until(lambda: admin_page.config()["football"].get("page_seconds") == 4)
             _wait_until(lambda: admin_page.config()["football"].get("score_seconds") == 10)
-            assert "rotation" not in admin_page.config() or admin_page.config()["rotation"] != [
-                {"screen": "fb_week", "seconds": 12}
-            ]
 
             page.reload()
             page.get_by_role("button", name="Display", exact=True).click()
             page.wait_for_selector("#football-final-hold", timeout=15000)
             assert page.input_value("#football-final-hold") == "45"
-            assert page.input_value('[aria-label="football rotation screen 1"]') == "fb_week"
+            assert page.input_value('[aria-label="rotation screen 2"]') == "fb_week"
         finally:
             browser.close()
 

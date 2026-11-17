@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from scoreboard.config import Settings, TeamEntry
-from scoreboard.priority import Kind, Priority, Windows
+from scoreboard.priority import Kind, Priority, Windows, idle_segments, segment_at
 
 NOW = datetime(2026, 11, 22, 17, 0, tzinfo=UTC)
 WINDOWS = {
@@ -213,58 +213,107 @@ def test_a_missing_start_time_or_window_is_not_a_countdown():
     assert no_window == []
 
 
-# -- nothing on: the idle screens ----------------------------------------------------------------
+# -- nothing on: the one mixed idle rotation ------------------------------------------------------
 
 
-def test_idle_screens_alternate_between_sports_in_lead_rank_order():
-    turns = {"hockey": 24.0, "football": 36.0}
-    assert LIST.idle_sport(0.0, turns) == ("hockey", 0.0)
-    assert LIST.idle_sport(12.0, turns) == ("hockey", 0.5)
-    assert LIST.idle_sport(24.0, turns) == ("football", 0.0)
-    assert LIST.idle_sport(42.0, turns) == ("football", 0.5)
-    assert LIST.idle_sport(60.0, turns) == ("hockey", 0.0), "and round again"
+@dataclass(frozen=True)
+class Row:
+    """A rotation row, as the priority layer sees one."""
+
+    screen: str
+    seconds: float
 
 
-def test_the_football_lead_first_when_it_is_ranked_above_the_hockey_lead():
-    priority = board(("football", "TEN"), ("hockey", "NSH"))
-    assert priority.idle_sport(0.0, {"hockey": 10.0, "football": 10.0})[0] == "football"
-    assert priority.idle_sport(10.0, {"hockey": 10.0, "football": 10.0})[0] == "hockey"
+H, F = "hockey", "football"
 
 
-def test_a_sport_with_nothing_to_show_is_skipped():
-    assert LIST.idle_sport(5.0, {"hockey": None, "football": 30.0}) == ("football", 5 / 30)
-    assert LIST.idle_sport(35.0, {"hockey": 0.0, "football": 30.0}) == ("football", 5 / 30)
-    assert LIST.idle_sport(0.0, {"hockey": None, "football": None}) is None
+def rows(*pairs):
+    return [Row(s, sec) for s, sec in pairs]
 
 
-def test_a_sport_without_a_ranked_team_never_takes_a_turn():
-    only_hockey = board(("hockey", "NSH"))
-    assert only_hockey.idle_sport(7.0, {"hockey": 10.0, "football": 10.0}) == ("hockey", 0.7)
-    assert board().idle_sport(0.0, {"hockey": 10.0, "football": 10.0}) is None
+def seg(entries, available=(H, F)):
+    return idle_segments(entries, list(available))
 
 
-def test_one_sport_alone_is_unchanged_from_today():
-    only_football = board(("football", "TEN"), ("football", "NYG"))
-    for clock in (0.0, 9.9, 10.0, 123.4):
-        assert only_football.idle_sport(clock, {"football": 10.0})[0] == "football"
+def shape(segments):
+    return [(s.sport, [e.screen for e in s.entries], s.seconds) for s in segments]
+
+
+def test_consecutive_rows_of_a_sport_form_a_segment_and_the_clock_joins_the_run_before_it():
+    entries = rows(("standings", 8), ("countdown_preview", 8), ("fb_week", 10), ("clock", 6))
+    assert shape(seg(entries)) == [
+        (H, ["standings", "countdown_preview"], 16),
+        (F, ["fb_week", "clock"], 16),
+    ]
+
+
+def test_rows_can_interleave_the_sports_freely():
+    entries = rows(("standings", 8), ("fb_week", 10), ("countdown_preview", 8), ("fb_preview", 5))
+    assert [s.sport for s in seg(entries)] == [H, F, H, F]
+
+
+def test_a_clock_that_comes_first_takes_the_sport_of_the_rows_after_it():
+    assert shape(seg(rows(("clock", 4), ("fb_week", 10)))) == [(F, ["clock", "fb_week"], 14)]
+    assert shape(seg(rows(("clock", 4), ("standings", 8)))) == [(H, ["clock", "standings"], 12)]
+
+
+def test_a_lone_clock_belongs_to_the_first_available_sport():
+    assert shape(seg(rows(("clock", 4)), available=(F, H))) == [(F, ["clock"], 4)]
+    assert seg(rows(("clock", 4)), available=()) == []
+
+
+def test_a_sport_with_nothing_to_show_has_its_rows_skipped_and_neighbours_merge():
+    entries = rows(("standings", 8), ("fb_week", 10), ("countdown_preview", 8))
+    assert shape(seg(entries, available=(H,))) == [(H, ["standings", "countdown_preview"], 16)]
+    assert shape(seg(entries, available=(F,))) == [(F, ["fb_week"], 10)]
+    assert seg(entries, available=()) == []
+
+
+def test_every_hockey_screen_is_hockeys_and_every_football_screen_footballs():
+    from scoreboard.config import FOOTBALL_SCREENS, VALID_ROTATION_SCREENS, screen_sport
+
+    for screen in VALID_ROTATION_SCREENS:
+        expected = F if screen in FOOTBALL_SCREENS else ("shared" if screen == "clock" else H)
+        assert screen_sport(screen) == expected, screen
+    assert set(FOOTBALL_SCREENS) <= set(VALID_ROTATION_SCREENS)
+
+
+def test_the_segment_at_a_time_is_found_and_wraps_round():
+    segments = seg(rows(("standings", 24), ("fb_week", 36)))
+    assert segment_at(segments, 0.0) == (0, 0.0)
+    assert segment_at(segments, 12.0) == (0, 0.5)
+    assert segment_at(segments, 24.0) == (1, 0.0)
+    assert segment_at(segments, 42.0) == (1, 0.5)
+    assert segment_at(segments, 60.0) == (0, 0.0), "and round again"
+    assert segment_at([], 5.0) is None
 
 
 @pytest.mark.parametrize("clock", [0.0, 1.0, 23.9, 24.0, 59.9, 60.0, 1234.5])
-def test_the_alternation_is_a_pure_function_of_the_clock(clock):
-    turns = {"hockey": 24.0, "football": 36.0}
-    assert LIST.idle_sport(clock, turns) == LIST.idle_sport(clock, turns)
-    sport, fraction = LIST.idle_sport(clock, turns)
-    assert 0.0 <= fraction <= 1.0 and sport in ("hockey", "football")
+def test_the_segment_is_a_pure_function_of_the_clock(clock):
+    segments = seg(rows(("standings", 24), ("fb_week", 36)))
+    assert segment_at(segments, clock) == segment_at(segments, clock)
+    index, fraction = segment_at(segments, clock)
+    assert index in (0, 1) and 0.0 <= fraction <= 1.0
 
 
-def test_a_sport_holds_its_whole_turn_so_the_board_cannot_flicker():
-    turns = {"hockey": 24.0, "football": 36.0}
-    seen = [LIST.idle_sport(t / 2, turns)[0] for t in range(0, 120)]  # a minute, every half second
+def test_a_segment_holds_its_whole_length_so_the_board_cannot_flicker():
+    segments = seg(rows(("standings", 24), ("fb_week", 36)))
+    seen = [segment_at(segments, t / 2)[0] for t in range(0, 120)]  # a minute, every half second
     runs = [seen[0]]
-    for sport in seen[1:]:
-        if sport != runs[-1]:
-            runs.append(sport)
-    assert runs == ["hockey", "football"], "one switch per turn, never back and forth"
+    for index in seen[1:]:
+        if index != runs[-1]:
+            runs.append(index)
+    assert runs == [0, 1], "one switch per segment, never back and forth"
+
+
+def test_the_default_one_per_sport_rotation_gives_two_segments_in_lead_rank_order():
+    from scoreboard.config import DEFAULT_FOOTBALL_ROTATION
+
+    football_rows = [Row(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+    hockey_rows = rows(("countdown_preview", 8), ("standings", 8), ("clock", 8))
+    both = seg(hockey_rows + football_rows)
+    assert [s.sport for s in both] == [H, F]
+    assert [s.sport for s in seg(football_rows + hockey_rows)] == [F, H]
 
 
 # -- nothing ranked: the empty list --------------------------------------------------------------
@@ -343,4 +392,4 @@ def test_the_view_is_read_through_so_it_follows_the_real_settings_live():
     view = board(("football", "TEN")).view("football", base, None)
     base.final_hold_minutes = 7.0
     assert view.final_hold_minutes == 7.0
-    assert view.idle_rotation == base.idle_rotation
+    assert [e.screen for e in view.idle_rotation][:2] == ["fb_preview", "fb_standings"]
