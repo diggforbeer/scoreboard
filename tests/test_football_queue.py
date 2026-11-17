@@ -310,11 +310,19 @@ def test_every_play_logs_its_depth_lag_speed_and_how_long_it_ran(caplog):
     assert first.lag_seconds == pytest.approx(12.0)
 
 
-def test_the_baseline_is_logged_so_a_mid_game_start_is_visible(caplog):
+def test_the_baseline_is_logged_so_a_mid_game_start_is_visible_when_debugging(caplog):
+    queue, _ = make_queue()
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.football.queue"):
+        queue.offer([play(n) for n in range(1, 4)])
+    assert any("baseline: 3 plays" in r.getMessage() for r in caplog.records)
+
+
+def test_the_baseline_line_is_not_info_so_it_does_not_fill_the_journal(caplog):
+    """The queue is rebuilt each time football takes the board back, about every 30 s."""
     queue, _ = make_queue()
     with caplog.at_level(logging.INFO, logger="scoreboard.football.queue"):
         queue.offer([play(n) for n in range(1, 4)])
-    assert any("baseline: 3 plays" in r.getMessage() for r in caplog.records)
+    assert not [r for r in caplog.records if "baseline" in r.getMessage()]
 
 
 # -- the broadcast delay -----------------------------------------------------------------
