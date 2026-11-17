@@ -618,6 +618,8 @@ class ScoreboardApp:
         #: Today's hockey games as the lite poll saw them while football has the screen (the full
         #: hockey machinery only runs for the sport on screen); the priority layer reads these.
         self._hockey_lite: list[Game] = []
+        #: When the light poll last succeeded (monotonic), so hockey is not stale on return.
+        self._hockey_lite_at: float | None = None
         #: The priority layer's current owner (the favourite of the moment), set each loop.
         self._owner: Moment | None = None
         #: When the idle rotation began (monotonic): the sports alternate, and this puts the sport
@@ -1084,7 +1086,7 @@ class ScoreboardApp:
             self._football.stop()  # its feed thread must not outlive the mode
             self._football = None
             if self._sport == "football":
-                self._switch_sport("hockey")
+                self._switch_sport("hockey", force_clean=True)
         self._reset_favourite_caches()
         # _goal_events counts only followed teams' goals, so a team added mid-game would read as its
         # whole tally scoring at once. Forget them; the next poll re-baselines without firing.
@@ -1105,9 +1107,11 @@ class ScoreboardApp:
             self._reset_favourite_caches()
         dwelt = self.monotonic() - self._sport_since >= SPORT_MIN_DWELL_SECONDS
         if wanted != self._sport and (force or dwelt):
-            self._switch_sport(wanted)
+            # An edit of the list (``force``) starts the new sport from a clean slate; only the idle
+            # rotation's own alternation keeps hockey's state.
+            self._switch_sport(wanted, force_clean=force)
 
-    def _switch_sport(self, sport: str) -> None:
+    def _switch_sport(self, sport: str, *, force_clean: bool = False) -> None:
         """Swap the running sport live, from a clean slate (#346).
 
         Drops everything the old sport held -- cached data, remembered scores,
@@ -1119,6 +1123,7 @@ class ScoreboardApp:
         log.info("Switching sport %s -> %s", self._sport, sport)
         if self._sport == "hockey" and self.games:
             self._hockey_lite = list(self.games)  # the priority layer keeps seeing hockey's slate
+            self._hockey_lite_at = self.last_success
         # Both feeds keep running: football's mode stays up and only starts its screens afresh when
         # it takes the board.
         if self._football is None:
@@ -1133,6 +1138,20 @@ class ScoreboardApp:
         self._sport = sport
         self._sport_since = self.monotonic()
         self._poll_asap = True
+        if self._owner is None and not force_clean:
+            # Nothing ranked is on, so this is only the idle rotation passing between the sports,
+            # which happens every few seconds. Wiping hockey's state each time put CONNECTING on
+            # the panel at every return and emptied its standings, schedule and leaders caches.
+            # Keep it all; hockey comes back on its light poll's last answer, and the next poll
+            # catches up. Scores are re-baselined so a goal scored while away does not celebrate.
+            if sport == "hockey":
+                if self._hockey_lite:
+                    self.games = list(self._hockey_lite)
+                    self.last_success = self._hockey_lite_at or self.last_success
+                self._known_scores = {}
+            self._mirror_key = None
+            self.mirror.requested = True
+            return
         self.games = []
         self.index = 0
         self._delay = DelayQueue(self.monotonic)
@@ -1194,6 +1213,7 @@ class ScoreboardApp:
             log.debug("Hockey lite poll failed: %s", error)
             return
         self._hockey_lite = list(games)
+        self._hockey_lite_at = self.monotonic()
 
     def _on_scores(self, games: list[Game] | None, error: Exception | None) -> None:
         """A score fetch finished (on the render thread): apply it, or record the failure."""
