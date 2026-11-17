@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -34,7 +35,7 @@ from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
 from .redzone import RedZoneWatcher
 from .stats import GameStats
-from .teams import is_team, team
+from .teams import is_team, team, team_by_id
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -104,6 +105,8 @@ class FootballMode:
         self._final_since: dict[int, float] = {}
         #: The idle screens' data cache (#421): the feed worker's thread owns it.
         self._idle_cache = IdleCache(monotonic)
+        #: Scopes the admin page asked to clear, applied on the worker's thread (it owns the cache).
+        self._clear_requests: set[str] = set()
         self.worker = FeedWorker(
             client_factory,
             self._interval,
@@ -130,6 +133,85 @@ class FootballMode:
 
     def _make_director(self) -> Director:
         return Director(*self._director_args, stats=self._stats_for)
+
+    def request_clear(self, scope: str) -> None:
+        """Ask for the idle data (and rosters) to be forgotten: ``football`` or ``football:<item>``
+        (``schedule``, ``standings``, ``week``, ``rosters``). The worker owns that cache, so this
+        only leaves a note; the next poll does it, and fetches afresh."""
+        self._clear_requests.add(":".join(scope.split(":")[:2]))  # a team's item clears its kind
+
+    def cache_items(self) -> list[dict[str, Any]]:
+        """What football has cached, for the admin page's Cache tab (read-only; any thread)."""
+        from ..cache_view import item
+
+        now = self._monotonic()
+        idle = self.snapshot.idle
+        out: list[dict[str, Any]] = []
+        for team_id, cached in sorted(dict(idle.schedules).items()):
+            club = team_by_id(team_id)
+            name = club.abbrev if club else str(team_id)
+            games = getattr(cached.value, "games", ())
+            out.append(
+                item(
+                    f"football:schedule:{name}",
+                    "football",
+                    f"{name} schedule",
+                    cached.age(now),
+                    f"{len(games)} games",
+                    cached.value,
+                )
+            )
+        if idle.standings_cached is not None:
+            out.append(
+                item(
+                    "football:standings",
+                    "football",
+                    "Standings",
+                    idle.standings_cached.age(now),
+                    "both conferences",
+                    idle.standings_cached.value,
+                )
+            )
+        if idle.week_cached is not None:
+            week = idle.week_cached.value
+            out.append(
+                item(
+                    "football:week",
+                    "football",
+                    "The week's games",
+                    idle.week_cached.age(now),
+                    f"week {getattr(week, 'week', '?')}, {len(getattr(week, 'games', ()))} games",
+                    week,
+                )
+            )
+        if idle.scoreboard is not None:
+            sb = idle.scoreboard
+            byes = ", ".join(getattr(sb, "teams_on_bye", ()) or ()) or "none"
+            out.append(
+                item(
+                    "football:scoreboard",
+                    "football",
+                    "Scoreboard extras (week, byes)",
+                    None,
+                    f"week {sb.week}, byes: {byes}",
+                    sb,
+                    clear=False,
+                )
+            )
+        for team_id, (fetched_at, players) in sorted(self.rosters.snapshot().items()):
+            club = team_by_id(team_id)
+            name = club.abbrev if club else str(team_id)
+            out.append(
+                item(
+                    f"football:rosters:{name}",
+                    "football",
+                    f"{name} roster",
+                    now - fetched_at,
+                    f"{len(players)} players",
+                    players,
+                )
+            )
+        return out
 
     def reset_screens(self) -> None:
         """Start the screens afresh, keeping the feed running (epic #470).
@@ -253,6 +335,8 @@ class FootballMode:
         the standings until the game ended). A failed fetch keeps the last good value
         (``IdleCache``), and a client without these methods (a test fake) is simply skipped.
         """
+        if self._clear_requests:
+            prev = self._apply_clears(prev)
         snap = with_scoreboard(prev, scoreboard)
         cfg = self._football() if self._football else None
         mine = ([cfg.favourite_team] if cfg and cfg.favourite_team else []) + (
@@ -287,6 +371,28 @@ class FootballMode:
             standings_cached=standings,
             week_cached=week_item,
         )
+
+    def _apply_clears(self, prev: IdleSnapshot) -> IdleSnapshot:
+        """Forget what the admin page asked to clear (on the worker's thread, which owns it)."""
+        from ..cache_view import matches
+
+        requests, self._clear_requests = set(self._clear_requests), set()
+
+        def wanted(key: str) -> bool:
+            return any(matches(scope, key) for scope in requests)
+
+        if wanted("football:schedule"):
+            self._idle_cache.forget(lambda k: not (isinstance(k, tuple) and k[0] == "schedule"))
+            prev = replace(prev, schedules={})
+        if wanted("football:standings"):
+            self._idle_cache.forget(lambda k: k != ("standings",))
+            prev = replace(prev, standings_cached=None)
+        if wanted("football:week"):
+            self._idle_cache.forget(lambda k: not (isinstance(k, tuple) and k[0] == "week"))
+            prev = replace(prev, week_cached=None)
+        if wanted("football:rosters"):
+            self.rosters.clear()
+        return prev
 
     def _fetch_roster(self, team_id: int) -> dict[int, RosterPlayer] | None:
         if self._roster_client is None:

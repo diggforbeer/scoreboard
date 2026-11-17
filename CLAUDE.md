@@ -1794,7 +1794,7 @@ when it was written; that history is left as-is rather than rewritten.
   updated by the in-app update, since that doesn't install these files;
   only a reflash replaces it. The "unknown" notice repeats for each
   release rather than being shown once. Not verified on hardware (#4).
-- **Tabs (#449): Home | Display | Audio | Holiday Cheer | Setup | Logs.**
+- **Tabs (#449): Home | Display | Audio | Holiday Cheer | Setup | Cache | Logs.**
   Split by how often a person touches a setting, not by feature. Home: status,
   Live view, My teams, idle rotation. Display: screens/logos, game timing,
   football between-game settings, brightness, night mode. Setup (set once): Panel hardware,
@@ -1805,6 +1805,14 @@ when it was written; that history is left as-is rather than rewritten.
   along; a server echo of `[panel]` does replace that unsaved Setup draft.
   The planned Sports tab (hockey | Football pills) and the decisions it waits on are
   in #449.
+- **Cache tab.** Lists what the board has fetched and keeps (hockey's standings, schedule,
+  season series, leaders, rosters; football's schedules, standings, week, rosters) with each
+  item's age, a summary and its data (`cache_view.py`, cut to 8000 chars), and clears by scope:
+  `all`, a sport or one item. `cache_get` / `cache_clear` over the websocket; the admin thread only
+  leaves a note (`ScoreboardApp.request_cache_clear`): hockey's caches are cleared by the render
+  loop, football's by its feed worker, which owns them (`FootballMode.request_clear`). The data
+  refetches by itself, but football's idle data is not fetched while a followed team's game is
+  live.
 - **Autosave + Undo (#273).** Every section except Panel and Status saves
   itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
   the Save buttons are gone). One `AutosaveToast` bar pinned to the

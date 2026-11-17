@@ -273,6 +273,7 @@ import threading
 from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
+from typing import Any
 
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
@@ -382,6 +383,9 @@ _frame_subscribers: set[ServerConnection] = set()
 _last_frame_sent = 0
 #: Turns the live demo (#204) on/off on the running ScoreboardApp; None with no live app.
 DEMO_SETTER: Callable[[bool], None] | None = None
+#: The Cache tab's two hooks (see ``cache_view``): what is cached, and clearing a scope of it.
+CACHE_ITEMS: Callable[[], list[dict[str, Any]]] | None = None
+CACHE_CLEARER: Callable[[str], bool] | None = None
 #: A goal horn is a few seconds long; 2 MB is generous for that and still
 #: protects the SD card from an accidental multi-minute file (#193).
 HORN_MAX_BYTES = 2 * 1024 * 1024
@@ -641,6 +645,15 @@ def _update_payload(settings: Settings | None = None) -> dict[str, object]:
 
 def _horn_list_payload() -> dict[str, object]:
     return {"type": "horn_list", "horns": _list_uploaded_horns()}
+
+
+def _cache_payload() -> dict[str, object]:
+    """What the board has cached (``cache_view``), read-only, for the Cache tab."""
+    try:
+        items = CACHE_ITEMS() if CACHE_ITEMS is not None else []
+    except RuntimeError:  # a dict changed size while it was copied: the next ask will do
+        items = []
+    return {"type": "cache", "items": items}
 
 
 def _snapshot_payload() -> dict[str, object]:
@@ -1698,6 +1711,18 @@ async def _handle(connection: ServerConnection) -> None:
                 _unsubscribe_frames(connection)
             elif msg_type == "frame_refresh":
                 _refresh_frame()
+            elif msg_type == "cache_get":
+                await connection.send(json.dumps(_cache_payload()))
+            elif msg_type == "cache_clear":
+                scope = message.get("scope")
+                if CACHE_CLEARER is None:
+                    error = {"type": "error", "section": "cache", "message": "no live scoreboard"}
+                    await connection.send(json.dumps(error))
+                elif not CACHE_CLEARER(scope if isinstance(scope, str) else ""):
+                    error = {"type": "error", "section": "cache", "message": "unknown cache scope"}
+                    await connection.send(json.dumps(error))
+                else:
+                    await connection.send(json.dumps({"type": "cache_cleared", "scope": scope}))
             elif msg_type == "demo_mode":
                 enabled = message.get("enabled")
                 if not isinstance(enabled, bool):
@@ -1843,6 +1868,8 @@ class AdminServer:
         mirror: Mirror | None = None,
         host: str = "0.0.0.0",  # intentional: a LAN admin page, see module docstring
         alias_port: int = 0,
+        cache_items: Callable[[], list[dict[str, Any]]] | None = None,
+        cache_clearer: Callable[[str], bool] | None = None,
     ) -> None:
         self._config_path = config_path
         self._port = port
@@ -1852,6 +1879,8 @@ class AdminServer:
         self._snapshot = snapshot
         self._demo_setter = demo_setter
         self._mirror = mirror
+        self._cache_items = cache_items
+        self._cache_clearer = cache_clearer
         self._host = host
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -1864,7 +1893,9 @@ class AdminServer:
         return self._bound_port if self._bound_port is not None else self._port
 
     def start(self) -> None:
-        global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER, MIRROR
+        global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER, MIRROR, CACHE_ITEMS, CACHE_CLEARER
+        CACHE_ITEMS = self._cache_items
+        CACHE_CLEARER = self._cache_clearer
         CONFIG_PATH = self._config_path
         SNAPSHOT_PROVIDER = self._snapshot
         DEMO_SETTER = self._demo_setter

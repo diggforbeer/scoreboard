@@ -542,3 +542,24 @@ def test_my_teams_card_adds_reorders_and_removes_teams_and_marks_the_horn_teams(
             assert page.locator("#teams-list li[data-team='NSH'] .teams-horn").count() == 1
         finally:
             browser.close()
+
+
+def test_the_cache_tab_opens_and_offers_to_clear(admin_page):
+    """The Cache tab asks the board what it has cached; a bare admin server has nothing, so it says
+    so, and the clear buttons are there (clearing itself is covered by unit tests)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#teams-add", timeout=15000)
+            page.get_by_role("button", name="Cache", exact=True).click()
+            page.get_by_role("heading", name="Cached data").wait_for(timeout=15000)
+            page.get_by_text("Nothing cached right now.").wait_for(timeout=15000)
+            assert page.get_by_role("button", name="Clear everything").count() == 1
+            assert page.get_by_role("button", name="Clear hockey").count() == 1
+            assert page.get_by_role("button", name="Clear football").count() == 1
+        finally:
+            browser.close()
