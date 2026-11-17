@@ -68,6 +68,14 @@ def test_a_tree_egg_plays_between_plain_tree_frames(name):
     assert {f["month"] for f in frames} == {12}, "held in December for the countdown"
 
 
+def test_the_turkey_plays_on_its_own_screen_in_november():
+    frames = tour(("turkey",), total("turkey") - 0.5)
+    assert {f["kind"] for f in frames} == {"thanksgiving"}
+    assert {f["month"] for f in frames} == {11}, "held in November for its countdown"
+    assert any(f["egg"] == "turkey" for f in frames)
+    assert frames[0]["egg"] is None and frames[-1]["egg"] is None
+
+
 def test_the_blowout_plays_its_own_scene():
     frames = tour(("blowout",), total("blowout") - 0.5)
     assert {"christmas_tree", "blowout"} <= {f["kind"] for f in frames}
@@ -90,7 +98,7 @@ def test_the_tour_loops_through_every_egg_in_order():
         egg = egg or ("april_fools" if f["prank"] else None)
         if egg and (not played or played[-1] != egg):
             played.append(egg)
-    assert played[:5] == ["quote", "squirrel", "fire", "blowout", "april_fools"]
+    assert played[:6] == ["quote", "squirrel", "fire", "blowout", "april_fools", "turkey"]
     assert played.count("quote") >= 2, "it goes round again"
 
 
@@ -109,6 +117,7 @@ def test_the_flag_parses_but_is_not_in_help(capsys):
     parser = cli.build_parser()
     assert parser.parse_args(["--eggs"]).eggs == "all"
     assert parser.parse_args(["--eggs", "fire"]).eggs == "fire"
+    assert parser.parse_args(["--eggs", "turkey"]).eggs == "turkey"
     with pytest.raises(SystemExit):
         parser.parse_args(["--eggs", "dragon"])
     capsys.readouterr()

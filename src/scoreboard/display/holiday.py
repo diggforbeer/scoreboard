@@ -1582,14 +1582,20 @@ def draw_burning_tree(
     )
 
 
-def tree_egg(timestamp: float) -> tuple[str, float] | None:
-    """The egg playing at ``timestamp`` (seconds since the epoch) and its age, else ``None``."""
+def _roll_egg(
+    timestamp: float, table: tuple[tuple[str, int, float], ...], salt: str
+) -> tuple[str, float] | None:
     window = int(timestamp // TREE_EGG_WINDOW_SECONDS)
     age = timestamp - window * TREE_EGG_WINDOW_SECONDS
-    for kind, odds, seconds in TREE_EGGS:
-        if age < seconds and random.Random(f"tree-egg:{kind}:{window}").randrange(odds) == 0:
+    for kind, odds, seconds in table:
+        if age < seconds and random.Random(f"{salt}:{kind}:{window}").randrange(odds) == 0:
             return kind, age
     return None
+
+
+def tree_egg(timestamp: float) -> tuple[str, float] | None:
+    """The egg playing at ``timestamp`` (seconds since the epoch) and its age, else ``None``."""
+    return _roll_egg(timestamp, TREE_EGGS, "tree-egg")
 
 
 def squirrel_pose(age: float) -> tuple[int, int] | None:
@@ -1677,6 +1683,129 @@ def thanksgiving_countdown(day: date) -> tuple[str, str] | None:
     if left == 0:
         return "HAPPY", "THANKSGIVING"
     return f"{left} DAY{'S' if left > 1 else ''}", "TO THANKSGIVING"
+
+
+# -- Thanksgiving turkey egg (#516) ---------------------------------------------
+#
+# Very rarely the turkey is startled and bolts right across the countdown, shaking the lettering
+# and blanking patches of it as it passes, shedding feathers that drift down over the words; the
+# patches repair themselves, and it wanders back in from the right, sheepish. A pure function of
+# age like the tree eggs (see above), and kept a surprise the same way.
+
+TURKEY_RUN_SECONDS = 8.0
+#: ``kind, odds (1 in N 30s windows), seconds``: about once in three hours of the screen.
+TURKEY_EGGS = (("turkey", 360, TURKEY_RUN_SECONDS),)
+_TR_STARTLE = 0.6
+_TR_RUN_END = 2.4
+_TR_RETURN = 3.4
+_TR_RETURN_END = 7.2
+#: The text column the lettering sits in (matches ``Renderer.draw_thanksgiving``).
+TURKEY_TEXT_LEFT = TURKEY_SCREEN_WIDTH + 6
+TURKEY_HOME_X = 3
+TURKEY_FACING_RIGHT = tuple(tuple(row[::-1] for row in frame) for frame in THANKSGIVING_TURKEY)
+_PATCHES = 30
+_FEATHERS = 13
+_EXCLAIM = ("YY", "YY", "YY", "..", "YY")
+
+
+def turkey_egg(timestamp: float) -> tuple[str, float] | None:
+    """The turkey egg playing at ``timestamp`` and its age, else ``None``."""
+    return _roll_egg(timestamp, TURKEY_EGGS, "turkey-egg")
+
+
+def _run_front(age: float, width: int) -> int:
+    """How far right the bolting turkey's left edge has got (it speeds up as it goes)."""
+    if age < _TR_STARTLE:
+        return TURKEY_HOME_X
+    progress = min(1.0, (age - _TR_STARTLE) / (_TR_RUN_END - _TR_STARTLE))
+    return TURKEY_HOME_X + round((width + 2 - TURKEY_HOME_X) * progress**1.6)
+
+
+def turkey_pose(age: float, width: int) -> tuple[int, bool, int, int | None] | None:
+    """The turkey ``age`` seconds in: (left edge x, facing right, hop in px, leg frame).
+
+    The leg frame is ``None`` while it is back on its spot (the screen's own 2 fps steps take
+    over); the whole result is ``None`` while it is off the panel.
+    """
+    leg = int(age * 8) % 2
+    if age < _TR_STARTLE:
+        hop = round(3 * math.sin(math.pi * age / _TR_STARTLE))  # a startled jump
+        return TURKEY_HOME_X, False, hop, 0
+    if age < _TR_RUN_END:
+        return _run_front(age, width), True, 0, leg
+    if age < _TR_RETURN:
+        return None
+    if age < _TR_RETURN_END:
+        progress = (age - _TR_RETURN) / (_TR_RETURN_END - _TR_RETURN)
+        return round(width - (width - TURKEY_HOME_X) * progress), False, 0, leg
+    return TURKEY_HOME_X, False, 0, None
+
+
+def turkey_text_shake(age: float) -> tuple[int, int]:
+    """How far the lettering is jolted (a pixel either way) while the turkey tears past."""
+    if not _TR_STARTLE <= age < 3.0:
+        return 0, 0
+    step = int(age * 30)
+    return step % 3 - 1, step // 3 % 3 - 1
+
+
+def turkey_patches(age: float, width: int) -> list[tuple[int, int]]:
+    """Top-left corners of the 4x5 blocks of lettering blanked out, each repairing itself.
+
+    A block goes the moment the turkey has passed it and comes back at its own time, so the
+    words heal piece by piece rather than all at once.
+    """
+    if age < _TR_STARTLE:
+        return []
+    front = _run_front(age, width)
+    span = width - TURKEY_TEXT_LEFT - 6
+    out = []
+    for i in range(_PATCHES):
+        x = TURKEY_TEXT_LEFT + int(_hash01(i, 1) * span)
+        y = 2 + int(_hash01(i, 2) * 24)
+        if front >= x and age < 3.2 + 3.0 * _hash01(i, 3):
+            out.append((x, y))
+    return out
+
+
+def turkey_feathers(
+    age: float, width: int, height: int, top: int
+) -> list[tuple[int, int, RGB, int]]:
+    """The feathers in the air: (x, y, colour, tilt), shed by the turkey as it runs."""
+    colours = (FEATHER_RED, FEATHER_ORANGE, FEATHER_GOLD)
+    out = []
+    for i in range(_FEATHERS):
+        released = _TR_STARTLE + 0.1 + i * 0.13
+        life = age - released
+        if not 0 <= life < 3.2:
+            continue
+        x = _run_front(released, width) + 12 + 3 * math.sin(life * 3 + i)
+        y = top + 6 + 10 * _hash01(i, 4) + life * 9
+        if 0 <= y < height:
+            out.append((round(x), round(y), colours[i % 3], int(life * 4 + i) % 2))
+    return out
+
+
+def draw_turkey_run(canvas: Any, age: float, tick: int, top: int, width: int, height: int) -> None:
+    """The turkey, its exclamation mark and its feathers, over the lettering."""
+    pose = turkey_pose(age, width)
+    if pose is not None:
+        x, right, hop, leg = pose
+        frames = TURKEY_FACING_RIGHT if right else THANKSGIVING_TURKEY
+        draw_sprite(
+            canvas,
+            frames[tick % 2 if leg is None else leg],
+            dict(TURKEY.palette),
+            x,
+            top - hop,
+            width,
+            height,
+        )
+    if age < _TR_STARTLE + 0.2:
+        draw_sprite(canvas, _EXCLAIM, {"Y": FEATHER_GOLD}, TURKEY_HOME_X + 3, 1, width, height)
+    for fx, fy, colour, tilt in turkey_feathers(age, width, height, top):
+        rows = ("FF.", ".FF") if tilt else (".FF", "FF.")
+        draw_sprite(canvas, rows, {"F": colour}, fx, fy, width, height)
 
 
 #: In calendar order: also the order of the admin page's checkboxes.

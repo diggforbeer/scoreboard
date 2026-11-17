@@ -1,9 +1,10 @@
 """The Easter egg tour (#509): ``scoreboard --eggs [name]``, a hidden way to see them.
 
-The tree screen's quote, squirrel and fire, the blowout flash and April Fools' Admirals are all
-rare by design (the tree ones only exist in December, April Fools on one day, the blowout needs
-a five-goal loss), so waiting for one on a real board is not a plan. The flag plays each in turn
-on the real panel, in a loop (Ctrl-C to stop), or just the one named.
+The tree screen's quote, squirrel and fire, the Thanksgiving turkey's run, the blowout flash and
+April Fools' Admirals are all rare by design: the tree ones only exist in December, the turkey in
+November, April Fools on one day, and the blowout needs a five-goal loss. Waiting for one on a
+real board is not a plan, so the flag plays each in turn on the real panel, in a loop (Ctrl-C to
+stop), or just the one named.
 
 Like the eggs themselves this is kept out of ``--help``, the README, ``screens.md`` and demo
 mode (owner's call); ``tests/test_eggs.py`` pins that. The holiday fly-bys are documented
@@ -18,14 +19,16 @@ from typing import NamedTuple
 from . import blowout
 from .app import Scene
 from .demo import demo_steps
-from .display.holiday import TREE_EGGS
+from .display.holiday import TREE_EGGS, TURKEY_RUN_SECONDS
 
 #: The tour's items, in order.
-NAMES = ("quote", "squirrel", "fire", "blowout", "april_fools")
+NAMES = ("quote", "squirrel", "fire", "blowout", "april_fools", "turkey")
 #: A calm moment of the plain screen before and after each, so the start and end are seen.
 PAUSE_SECONDS = 2.0
 #: Where the tree screen's date is held, so its countdown shows whatever the real date is.
 TOUR_DAY = (12, 13)
+#: The turkey's screen only exists in November: the tour holds the date here for it.
+THANKSGIVING_DAY = (11, 19)
 #: How long each April Fools screen is shown relabelled.
 PRANK_SECONDS = 4.0
 
@@ -39,6 +42,8 @@ class Phase(NamedTuple):
     egg: str | None = None
     #: Draw as April Fools' Day on a Preds board (NSH shown as MIL).
     prank: bool = False
+    #: (month, day) to hold the clock at for this phase; default ``TOUR_DAY``.
+    day: tuple[int, int] | None = None
 
 
 def _demo_scene(name: str) -> Scene:
@@ -60,6 +65,13 @@ def plan(name: str) -> list[Phase]:
             Phase(tree, PAUSE_SECONDS),
             Phase(tree, length, egg=name),
             Phase(tree, PAUSE_SECONDS),
+        ]
+    if name == "turkey":
+        screen = Scene("thanksgiving")
+        return [
+            Phase(screen, PAUSE_SECONDS, day=THANKSGIVING_DAY),
+            Phase(screen, TURKEY_RUN_SECONDS, egg="turkey", day=THANKSGIVING_DAY),
+            Phase(screen, PAUSE_SECONDS, day=THANKSGIVING_DAY),
         ]
     if name == "blowout":
         final = next(

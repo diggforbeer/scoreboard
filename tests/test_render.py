@@ -2349,6 +2349,73 @@ def test_christmas_tree_fire_grows_back_to_the_plain_tree():
     assert c.pixels == plain.pixels, "past its script the egg draws nothing of its own"
 
 
+THANKSGIVING_DAY = datetime(2026, 11, 19, 23, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "age", [0.3, 0.9, 1.5, 2.0, 2.6, 3.0, 3.6, 5.0, 6.5, 7.9], ids=lambda a: f"{a}s"
+)
+def test_thanksgiving_turkey_run_stays_on_the_panel(age):
+    c = canvas()
+    make_renderer().draw_thanksgiving(c, THANKSGIVING_DAY, "NSH", ("turkey", age))
+    show(f"thanksgiving screen, turkey run {age}s", c)
+
+    assert not c.out_of_bounds
+
+
+def test_thanksgiving_turkey_leaves_the_panel_and_comes_back():
+    from scoreboard.display.holiday import THANKSGIVING_TURKEY, TURKEY_FACING_RIGHT
+
+    plain = canvas()
+    make_renderer().draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    gone = canvas()
+    make_renderer().draw_thanksgiving(gone, THANKSGIVING_DAY, "NSH", ("turkey", 3.0))
+    from scoreboard.display.holiday import TURKEY_BODY
+
+    assert TURKEY_BODY in plain.colors(0, 0, 31), "the plain screen has the turkey on its spot"
+    assert TURKEY_BODY not in gone.colors(0, 0, 31), (
+        "the spot it left has no turkey (feathers fall)"
+    )
+    # Facing right as it bolts, left as it wanders back.
+    assert THANKSGIVING_TURKEY[0] != TURKEY_FACING_RIGHT[0]
+
+
+def test_thanksgiving_turkey_run_messes_up_the_lettering_then_heals_it():
+    from scoreboard.display.holiday import TURKEY_SCREEN_WIDTH
+
+    text = (TURKEY_SCREEN_WIDTH + 6, 0, W - 1, H - 1)
+    plain = canvas()
+    make_renderer().draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    messy = canvas()
+    make_renderer().draw_thanksgiving(messy, THANKSGIVING_DAY, "NSH", ("turkey", 2.8))
+    healed = canvas()
+    make_renderer().draw_thanksgiving(healed, THANKSGIVING_DAY, "NSH", ("turkey", 7.5))
+
+    assert messy.lit(*text) != plain.lit(*text), "the words are knocked about"
+    assert len(messy.lit(*text)) < len(plain.lit(*text)), "and some of it is blanked out"
+    assert healed.pixels == plain.pixels, "back on its spot, the lettering whole again"
+
+
+def test_thanksgiving_turkey_run_is_gone_past_its_script():
+    from scoreboard.display.holiday import TURKEY_RUN_SECONDS
+
+    plain = canvas()
+    make_renderer().draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    after = canvas()
+    make_renderer().draw_thanksgiving(
+        after, THANKSGIVING_DAY, "NSH", ("turkey", TURKEY_RUN_SECONDS)
+    )
+    assert after.pixels == plain.pixels
+
+
+def test_thanksgiving_turkey_run_is_skipped_where_the_countdown_does_not_fit():
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ, logos=None)
+    plain, run = AsciiCanvas(64, H), AsciiCanvas(64, H)
+    r.draw_thanksgiving(plain, THANKSGIVING_DAY, "NSH")
+    r.draw_thanksgiving(run, THANKSGIVING_DAY, "NSH", ("turkey", 1.5))
+    assert run.pixels == plain.pixels and not run.out_of_bounds
+
+
 def test_christmas_tree_quote_is_skipped_where_the_countdown_does_not_fit():
     # A single 64px panel shows just the tree; the quote must not squeeze in beside it.
     when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)

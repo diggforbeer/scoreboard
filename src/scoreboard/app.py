@@ -51,6 +51,7 @@ from .display.holiday import (
     christmas_countdown,
     thanksgiving_countdown,
     tree_egg,
+    turkey_egg,
     use_sport,
 )
 from .display.logos import LogoLibrary, LogoSet
@@ -796,29 +797,32 @@ class ScoreboardApp:
         """Play the named Easter eggs in a loop until stopped (``--eggs``, see eggs.py).
 
         Like ``run_demo`` it bypasses the state machine and hands scenes to ``draw_scene``. The
-        clock is held in December so the tree screen has its countdown whatever the real date.
+        clock is held on a date the screen's countdown works for, whatever the real date.
         """
         from . import eggs
 
         self._running = True
         self._demo_drawing = True
         real_clock = self.clock
-        now = real_clock()
-        offset = now.replace(month=eggs.TOUR_DAY[0], day=eggs.TOUR_DAY[1], hour=18) - now
-        self.clock = lambda: real_clock() + offset
         try:
             while self._running:
                 for name in names:
                     for phase in eggs.plan(name):
-                        self._play_egg_phase(phase)
+                        self._play_egg_phase(phase, real_clock)
         finally:
             self._egg_show = None
             self.clock = real_clock
             self._demo_drawing = False
         self.shutdown()
 
-    def _play_egg_phase(self, phase: Any) -> None:
-        """Draw one stretch of the egg tour (an ``eggs.Phase``)."""
+    def _play_egg_phase(self, phase: Any, real_clock: Any) -> None:
+        """Draw one stretch of the egg tour (an ``eggs.Phase``), the clock held on its day."""
+        from . import eggs
+
+        month, day = phase.day or eggs.TOUR_DAY
+        now = real_clock()
+        offset = now.replace(month=month, day=day, hour=18) - now
+        self.clock = lambda: real_clock() + offset
         started = self.monotonic()
         self._egg_show = (phase.egg, started) if phase.egg else None
         if phase.prank:
@@ -861,11 +865,20 @@ class ScoreboardApp:
         """Start a step's goal light as the step starts."""
         self._demo_goal_started = self.monotonic() if step.animate_goal else None
 
+    def _turkey_egg(self) -> tuple[str, float] | None:
+        """The Thanksgiving turkey egg playing now and its age (#516); never in demo mode."""
+        if self._egg_show is not None:
+            kind, started = self._egg_show
+            return (kind, self.monotonic() - started) if kind == "turkey" else None
+        if self._demo_drawing:
+            return None
+        return turkey_egg(self.clock().timestamp())
+
     def _tree_egg(self) -> tuple[str, float] | None:
         """The Christmas tree Easter egg playing now and its age (#509); never in demo mode."""
         if self._egg_show is not None:
             kind, started = self._egg_show
-            return kind, self.monotonic() - started
+            return (kind, self.monotonic() - started) if kind != "turkey" else None
         if self._demo_drawing:
             return None
         return tree_egg(self.clock().timestamp())
@@ -3810,8 +3823,10 @@ class ScoreboardApp:
                 r.draw_christmas_tree(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "thanksgiving":
             sport, abbrev = self._colour_scheme(favourite)
+            egg = self._turkey_egg()
+            self._egg_animating = egg is not None
             with use_sport(sport):
-                r.draw_thanksgiving(self.canvas, self.clock(), abbrev)
+                r.draw_thanksgiving(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "address":
             r.draw_address(
                 self.canvas,

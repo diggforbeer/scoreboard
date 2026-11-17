@@ -1033,6 +1033,69 @@ def test_the_fire_script_is_one_function_of_age():
     assert len(TREE_SKELETON) > 60, "a trunk and a good many twigs"
 
 
+def test_the_turkey_roll_is_a_pure_function_of_the_clock():
+    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, turkey_egg
+
+    start = 1_800_000_000.0
+    rolls = [turkey_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    assert rolls == [turkey_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    hits = [r for r in rolls if r]
+    assert 5 <= len(hits) <= 40, "about 1 in 360 windows"
+    assert {kind for kind, _age in hits} == {"turkey"}
+
+
+def test_the_turkey_bolts_right_then_wanders_back_left():
+    from scoreboard.display.holiday import TURKEY_HOME_X, TURKEY_RUN_SECONDS, turkey_pose
+
+    assert turkey_pose(0.0, 128) == (TURKEY_HOME_X, False, 0, 0)
+    startled = turkey_pose(0.3, 128)
+    assert startled is not None and startled[2] > 0, "a startled hop"
+    xs = [turkey_pose(t / 10, 128) for t in range(6, 24)]
+    assert all(p is not None and p[1] for p in xs), "facing right while it runs"
+    run_x = [p[0] for p in xs]
+    assert run_x == sorted(run_x) and run_x[-1] > 100, "running off the right edge"
+    exit_pose = turkey_pose(2.39, 128)
+    assert exit_pose is not None and exit_pose[0] >= 126, "off the right edge as the run ends"
+    assert turkey_pose(3.0, 128) is None, "off the panel"
+    back = [turkey_pose(t / 10, 128) for t in range(34, 72)]
+    assert all(p is not None and not p[1] for p in back), "facing left on the way back"
+    back_x = [p[0] for p in back]
+    assert back_x == sorted(back_x, reverse=True) and back_x[0] >= 126
+    assert turkey_pose(TURKEY_RUN_SECONDS - 0.2, 128) == (TURKEY_HOME_X, False, 0, None)
+
+
+def test_the_turkey_sheds_feathers_and_the_lettering_heals():
+    from scoreboard.display.holiday import turkey_feathers, turkey_patches, turkey_text_shake
+
+    assert turkey_feathers(0.2, 128, 32, 3) == [], "none before it runs"
+    assert len(turkey_feathers(1.8, 128, 32, 3)) > 3, "a trail of them"
+    assert turkey_feathers(7.0, 128, 32, 3) == [], "all down again"
+    assert turkey_patches(0.3, 128) == []
+    assert len(turkey_patches(2.6, 128)) > 5, "the words are blanked once it has passed"
+    assert turkey_patches(6.5, 128) == [], "and every patch has repaired"
+    assert turkey_text_shake(0.2) == (0, 0) and turkey_text_shake(5.0) == (0, 0)
+    assert any(turkey_text_shake(t / 30) != (0, 0) for t in range(20, 80))
+
+
+def test_the_turkey_run_holds_the_fast_loop_but_only_on_its_own_screen(holiday_app, monkeypatch):
+    from scoreboard import app as app_module
+    from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
+
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(app_module, "turkey_egg", lambda _ts: ("turkey", 1.0))
+    app.draw_scene(Scene("thanksgiving"))
+    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
+    monkeypatch.setattr(app_module, "turkey_egg", lambda _ts: None)
+    app.draw_scene(Scene("thanksgiving"))
+    assert app.frame_interval() == FRAME_INTERVAL
+    # A tour phase for one egg never leaks into the other screen.
+    app._egg_show = ("turkey", app.monotonic())
+    assert app._tree_egg() is None
+    app._egg_show = ("fire", app.monotonic())
+    assert app._turkey_egg() is None
+
+
 def test_only_the_squirrel_and_fire_hold_the_fast_loop(holiday_app, monkeypatch):
     from scoreboard import app as app_module
     from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
@@ -1068,7 +1131,7 @@ def test_tree_eggs_are_kept_out_of_the_guide_readme_and_demo(path):
     from pathlib import Path
 
     text = (Path(__file__).resolve().parent.parent / path).read_text().lower()
-    for word in ("squirrel", "lots of sap", "griswold", "tree_egg"):
+    for word in ("squirrel", "lots of sap", "griswold", "tree_egg", "turkey_egg", "turkey_pose"):
         assert word not in text, f"{word!r} must not appear in {path}"
 
 
