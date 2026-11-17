@@ -357,29 +357,37 @@ def in_play(games: list[Game]) -> list[Game]:
     return [dataclasses.replace(g, in_intermission=False) if g.is_live else g for g in games]
 
 
-def test_situations_fetched_only_for_favourite_and_on_screen(fake_backend, games):
-    """The on-screen game is always a second situation target; nothing else is."""
+def test_situations_fetched_only_for_followed_when_a_favourite_flow_owns_the_screen(
+    fake_backend, games
+):
+    """The favourite flow never reads ``index``, so stepping it must not add fetch targets."""
     games = in_play(games)  # three live games: SEA@CGY, CAR@FLA, UTA@COL
     app = build_app(fake_backend, games, favourite_team="CGY")
     app.refresh()
     favourite_game = next(g for g in app.games if g.involves("CGY"))
-    assert app.games[app.index] == favourite_game, "favourite is pinned first: targets coincide"
 
     app.refresh_situations()
     assert app.client.situation_calls == [favourite_game.id]
 
-    # Rotate: the newly on-screen live game joins the favourite as a target.
     app.advance()
     app.refresh_situations()
-    now_showing = app.games[app.index]
-    assert now_showing.is_live and now_showing.id != favourite_game.id
-    assert set(app.client.situation_calls) == {favourite_game.id, now_showing.id}
+    assert set(app.client.situation_calls) == {favourite_game.id}
 
-    # The third live game is never on screen and never the favourite: never fetched.
-    live_ids = {g.id for g in app.games if g.is_live}
-    assert len(live_ids) == 3
-    assert live_ids - {favourite_game.id, now_showing.id}, "a live game must remain unfetched"
-    assert not (live_ids - {favourite_game.id, now_showing.id}) & set(app.client.situation_calls)
+
+def test_situations_include_the_on_screen_game_in_the_fallback(fake_backend, games):
+    """With no favourite the board cycles every game, so the on-screen one is a target."""
+    games = in_play(games)
+    app = build_app(fake_backend, games, favourite_team="", scores_grid=False)
+    app.refresh()
+    app.refresh_situations()
+    first = app.games[app.index]
+    assert first.is_live and app.client.situation_calls == [first.id]
+
+    app.advance()
+    app.refresh_situations()
+    second = app.games[app.index]
+    assert second.is_live and second.id != first.id
+    assert set(app.client.situation_calls) == {first.id, second.id}
 
 
 def test_situation_not_refetched_within_live_interval(fake_backend, games):
@@ -584,20 +592,20 @@ def test_admin_server_not_built_when_disabled(fake_backend, games):
 
 def test_status_snapshot_reflects_last_success_and_error(fake_backend, games):
     app = build_app(fake_backend, games, favourite_team="TOR")
-    assert app.status_snapshot()["last successful poll"] == "never"
-    assert app.status_snapshot()["last error"] == "(none)"
+    assert app.status_snapshot()["Hockey last successful poll"] == "never"
+    assert app.status_snapshot()["Hockey last error"] == "(none)"
 
     app.refresh()
     snapshot = app.status_snapshot()
-    assert snapshot["favourite team"] == "TOR"
-    assert snapshot["last successful poll"] != "never"
+    assert snapshot["Hockey favourite team"] == "TOR"
+    assert snapshot["Hockey last successful poll"] != "never"
     assert snapshot["scene"]
 
     app.client.fail = True
     app.refresh()
     snapshot = app.status_snapshot()
-    assert "score refresh" in snapshot["last error"]
-    assert snapshot["last error at"] != ""
+    assert "score refresh" in snapshot["Hockey last error"]
+    assert snapshot["Hockey last error at"] != ""
 
 
 def test_status_snapshot_marks_a_score_error_recovered(fake_backend, games):
@@ -605,24 +613,24 @@ def test_status_snapshot_marks_a_score_error_recovered(fake_backend, games):
     app = build_app(fake_backend, games, favourite_team="TOR")
     app.client.fail = True
     app.refresh()
-    assert "recovered" not in app.status_snapshot()["last error at"]
+    assert "recovered" not in app.status_snapshot()["Hockey last error at"]
 
     app.client.fail = False
     app.refresh()
     snapshot = app.status_snapshot()
-    assert "score refresh" in snapshot["last error"], "the error itself is still shown"
-    assert "(recovered " in snapshot["last error at"]
+    assert "score refresh" in snapshot["Hockey last error"], "the error itself is still shown"
+    assert "(recovered " in snapshot["Hockey last error at"]
 
     app.client.fail = True
     app.refresh()
-    assert "recovered" not in app.status_snapshot()["last error at"], "a new error resets it"
+    assert "recovered" not in app.status_snapshot()["Hockey last error at"], "a new error resets it"
 
 
 def test_a_good_score_poll_does_not_mark_another_fetch_recovered(fake_backend, games):
     app = build_app(fake_backend, games, favourite_team="TOR")
     app._record_error("standings fetch: boom")
     app.refresh()
-    assert "recovered" not in app.status_snapshot()["last error at"]
+    assert "recovered" not in app.status_snapshot()["Hockey last error at"]
 
 
 def test_status_snapshot_shows_the_installed_version(fake_backend, games, tmp_path, monkeypatch):

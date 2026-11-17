@@ -492,7 +492,7 @@ def test_the_status_box_says_when_there_is_no_worker(fake_backend):
     client = HangingClient()
     clock = Clock(PUCK_DROP - timedelta(hours=2))
     app = make_app(fake_backend, clock, client)  # the default, inline fetcher
-    assert app.status_snapshot()["hockey fetch worker"] == "inline (no worker)"
+    assert app.status_snapshot()["Hockey fetch worker"] == "inline (no worker)"
 
 
 def test_the_status_box_shows_a_hung_worker_and_then_a_healthy_one(fake_backend):
@@ -504,17 +504,17 @@ def test_the_status_box_shows_a_hung_worker_and_then_a_healthy_one(fake_backend)
         app.refresh()
         assert client.entered.wait(2)
         status = app.status_snapshot()
-        assert status["hockey fetch worker"].startswith("busy: 1 in flight, oldest ")
-        assert status["last hockey fetch"] == "(none yet)"
+        assert status["Hockey fetch worker"].startswith("busy: 1 in flight, oldest ")
+        assert status["Hockey last fetch"] == "(none yet)"
 
         client.release.set()
         settle(app)
         status = app.status_snapshot()
-        assert status["hockey fetch worker"] == "idle"
-        assert status["last hockey fetch"].startswith("scores, ") and status[
-            "last hockey fetch"
+        assert status["Hockey fetch worker"] == "idle"
+        assert status["Hockey last fetch"].startswith("scores, ") and status[
+            "Hockey last fetch"
         ].endswith(", ok")
-        assert status["hockey fetch totals"] == "1 done, 0 failed, 0 slow (over 3s)"
+        assert status["Hockey fetch totals"] == "1 done, 0 failed, 0 slow (over 3s)"
     finally:
         client.release.set()
         app.fetcher.close()

@@ -3102,12 +3102,22 @@ class ScoreboardApp:
         hammering the landing endpoint once per live game every poll.
         """
         targets = [g for g in self._api_games() if g.is_live and self._is_followed(g)]
-        if self.games and not self._scores_grid_fallback():
-            # The grid draws no situation, so it has no "on-screen" game to poll for.
+        if self._index_game_on_screen():
             current = self._api_game(self.games[self.index])
             if current.is_live and current not in targets:
                 targets.append(current)
         return targets
+
+    def _index_game_on_screen(self) -> bool:
+        """Whether ``games[index]`` is the game being drawn (the one-at-a-time fallback).
+
+        Not when the grid shows (no per-game situation), nor while a
+        favourite/followed flow or the idle rotation owns the screen: those
+        never read ``index``, so polling for it is wasted NHL traffic.
+        """
+        if not self.games or self._scores_grid_fallback():
+            return False
+        return self._favourite_scene(allow_fetch=False) is None
 
     def _api_game(self, game: Game) -> Game:
         """The API's current view of a (possibly delayed) game."""
@@ -3160,7 +3170,7 @@ class ScoreboardApp:
         deciding shot rather than the last poll before the final horn.
         """
         candidates = [g for g in self._api_games() if self._is_followed(g)]
-        if self.games and not self._scores_grid_fallback():
+        if self._index_game_on_screen():
             candidates.append(self._api_game(self.games[self.index]))
         targets: list[Game] = []
         for game in candidates:
@@ -3432,20 +3442,25 @@ class ScoreboardApp:
         the two threads must not race into duplicate fetches.
         """
         scene = self.select_scene(allow_fetch=False)
-        if self._sport == "football" and self._football is not None:
-            return self._football_status(scene)
-        cfg = self._hockey_cfg()
         return {
             "version": installed_version() or "unknown (factory image)",
             "address": self._board_name() or "(unknown)",
             "demo mode": "on" if self._demo_mode else "off",
             "scene": "demo" if self._demo_mode else scene.kind,
             "current game": self._scene_game_label(scene),
-            "favourite team": cfg.favourite_team or "(none)",
-            "also following": ", ".join(cfg.also_follow) or "(none)",
-            "last successful poll": self._format_time(self.last_success_at),
-            "last error": self.last_error or "(none)",
-            "last error at": self._error_time_label(),
+            **self._hockey_status(),
+            **self._football_status(),
+        }
+
+    def _hockey_status(self) -> dict[str, str]:
+        """The hockey half of the status box, always shown and labelled."""
+        cfg = self._hockey_cfg()
+        return {
+            "Hockey favourite team": cfg.favourite_team or "(none)",
+            "Hockey also following": ", ".join(cfg.also_follow) or "(none)",
+            "Hockey last successful poll": self._format_time(self.last_success_at),
+            "Hockey last error": self.last_error or "(none)",
+            "Hockey last error at": self._error_time_label() or "(none)",
             **self._fetch_status(),
         }
 
@@ -3453,7 +3468,7 @@ class ScoreboardApp:
         """The fetch worker's health (#267): a slow or hung API shows up here."""
         stats = self.fetcher.stats()
         if not stats.threaded:
-            return {"hockey fetch worker": "inline (no worker)"}
+            return {"Hockey fetch worker": "inline (no worker)"}
         if stats.in_flight and stats.oldest_age is not None:
             worker = f"busy: {stats.in_flight} in flight, oldest {stats.oldest_age:.0f}s"
         else:
@@ -3464,21 +3479,35 @@ class ScoreboardApp:
             outcome = "ok" if stats.last_ok else "failed"
             last = f"{stats.last_label}, {stats.last_seconds:.1f}s, {outcome}"
         return {
-            "hockey fetch worker": worker,
-            "last hockey fetch": last,
-            "hockey fetch totals": (
+            "Hockey fetch worker": worker,
+            "Hockey last fetch": last,
+            "Hockey fetch totals": (
                 f"{stats.completed} done, {stats.failed} failed, "
                 f"{stats.slow} slow (over {SLOW_FETCH_SECONDS:.0f}s)"
             ),
         }
 
-    def _football_status(self, scene: Scene) -> dict[str, str]:
-        """The status box in football mode (#352): the worker's snapshot, in the hockey keys' place.
+    def _football_status(self) -> dict[str, str]:
+        """The football half of the status box, always shown and labelled (#352).
 
-        The snapshot's times are monotonic, so they are turned into wall-clock times here.
+        The worker's snapshot times are monotonic, so they are turned into wall-clock times here.
+        Before football's mode exists (no football team ranked on a hockey-only board) the
+        feed fields say so rather than vanish.
         """
-        snap = self._football.snapshot if self._football is not None else None
         cfg = self._football_cfg()
+        base = {
+            "Football favourite team": cfg.favourite_team or "(none)",
+            "Football also following": ", ".join(cfg.also_follow) or "(none)",
+        }
+        if self._football is None:
+            off = "(football not running)"
+            return {
+                **base,
+                "Football last successful poll": off,
+                "Football last error": off,
+                "Football last error at": off,
+            }
+        snap = self._football.snapshot
 
         def wall(mono: float | None) -> datetime | None:
             if mono is None:
@@ -3487,16 +3516,12 @@ class ScoreboardApp:
 
         failed_at = wall(snap.last_error_at) if snap is not None else None
         return {
-            "version": installed_version() or "unknown (factory image)",
-            "address": self._board_name() or "(unknown)",
-            "demo mode": "on" if self._demo_mode else "off",
-            "scene": "demo" if self._demo_mode else scene.kind,
-            "current game": self._scene_game_label(scene),
-            "favourite team": cfg.favourite_team or "(none)",
-            "also following": ", ".join(cfg.also_follow) or "(none)",
-            "last successful poll": self._format_time(wall(snap.fetched_at) if snap else None),
-            "last error": (snap.last_error if snap else "") or "(none)",
-            "last error at": self._format_time(failed_at) if failed_at else "(none)",
+            **base,
+            "Football last successful poll": self._format_time(
+                wall(snap.fetched_at) if snap else None
+            ),
+            "Football last error": (snap.last_error if snap else "") or "(none)",
+            "Football last error at": self._format_time(failed_at) if failed_at else "(none)",
         }
 
     def _error_time_label(self) -> str:
