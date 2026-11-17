@@ -415,7 +415,7 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
     admin_page,
 ):
     """Epic #470: the one Idle rotation card takes hockey, football and clock rows (saved as
-    ``[[rotation]]``, nothing under ``[football]``); football's own card (lengths and toggles)
+    ``[[rotation]]``, nothing under ``[football]``); football's section of that card (hold times and toggles)
     shows once a football team is ranked or while nothing is."""
     from playwright.sync_api import sync_playwright
 
@@ -425,7 +425,7 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             page = browser.new_page()
             page.goto(admin_page.url)
             page.wait_for_selector("#teams-add", timeout=15000)
-            football = page.get_by_role("heading", name="Football screens")
+            football = page.get_by_role("heading", name="Football between games")
             rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
             page.get_by_role("button", name="Display", exact=True).click()
             rotation.wait_for(timeout=15000)

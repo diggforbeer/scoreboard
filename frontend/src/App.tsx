@@ -580,7 +580,7 @@ function App() {
   )
   const [teamsAvailable, setTeamsAvailable] = useState<TeamsAvailable>({ hockey: [], football: [] })
   const [teamsMax, setTeamsMax] = useState(12)
-  // Whether football's own card (screen lengths and toggles) shows: a football team is ranked
+  // Whether football's section of the Idle rotation card shows: a football team is ranked
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
@@ -1553,115 +1553,6 @@ function App() {
       </div>
       <div className="col-lg-6">
 
-      {showsFootball && (
-        <div className="card mb-4">
-          <div className="card-body">
-            <h2 className="card-title h5">Football screens</h2>
-            {footballRotation ? (
-              <form onSubmit={flushOnSubmit(footballRotationSave)}>
-                <p className="text-body-secondary small">
-                  Which football screens show between games, and for how long each, is the Idle
-                  rotation card (128px panels only). The countdown, the final and the bye-week screen
-                  join by themselves when they apply. This card sets how long they wait and last.
-                </p>
-                <div className="row g-3">
-                  <div className="col-sm-6">
-                    <label className="form-label" htmlFor="football-final-hold">
-                      Hold the final for (minutes)
-                    </label>
-                    <input
-                      className="form-control"
-                      id="football-final-hold"
-                      type="number"
-                      step="any"
-                      min="1"
-                      max="720"
-                      value={footballRotation.final_hold_minutes}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          final_hold_minutes: Number(e.target.value),
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                  </div>
-                  <div className="col-sm-6">
-                    <label className="form-label" htmlFor="football-countdown-window">
-                      Countdown starts before kickoff (minutes)
-                    </label>
-                    <input
-                      className="form-control"
-                      id="football-countdown-window"
-                      type="number"
-                      step="any"
-                      min="1"
-                      max="720"
-                      value={footballRotation.countdown_minutes}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          countdown_minutes: Number(e.target.value),
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                    <div className="col-sm-6">
-                    <label className="form-label" htmlFor="football-page-seconds">
-                      Seconds per page, standings and week (0 = split the row&apos;s seconds)
-                    </label>
-                    <input
-                      className="form-control"
-                      id="football-page-seconds"
-                      type="number"
-                      step="any"
-                      min="0"
-                      max="60"
-                      value={footballRotation.page_seconds}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          page_seconds: Number(e.target.value),
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                  </div>
-                </div>
-                </div>
-                <div className="mt-3">
-                  {(
-                    [
-                      ['show_countdown', 'Countdown before kickoff'],
-                      ['show_bye', 'Bye-week screen'],
-                      ['show_final', 'Hold the final after a game'],
-                      ['show_redzone', 'Red zone alert over the idle screens'],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <div className="form-check" key={key}>
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        id={`football-${key}`}
-                        checked={footballRotation[key]}
-                        onChange={(e) =>
-                          footballRotationSave.edit({ ...footballRotation, [key]: e.target.checked })
-                        }
-                      />
-                      <label className="form-check-label" htmlFor={`football-${key}`}>
-                        {label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </form>
-            ) : (
-              <p className="text-body-secondary mb-0">waiting for server...</p>
-            )}
-          </div>
-        </div>
-      )}
-
       {showsFootball && footballRotation && (
         <div className="card mb-4">
           <div className="card-body">
@@ -1809,6 +1700,105 @@ function App() {
                   Add row
                 </button>
               </div>
+              {showsFootball && footballRotation && (
+                <div className="mt-4 pt-3 border-top">
+                  <h3 className="h6">Football between games</h3>
+                  <p className="text-body-secondary small">
+                    The countdown, the final and the bye-week screen join the rotation by themselves
+                    when they apply (128px panels only). How long they wait and last:
+                  </p>
+                <div className="row g-3">
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-final-hold">
+                      Hold the final for (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-final-hold"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={footballRotation.final_hold_minutes}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          final_hold_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                  <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-countdown-window">
+                      Countdown starts before kickoff (minutes)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-countdown-window"
+                      type="number"
+                      step="any"
+                      min="1"
+                      max="720"
+                      value={footballRotation.countdown_minutes}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          countdown_minutes: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                    <div className="col-sm-6">
+                    <label className="form-label" htmlFor="football-page-seconds">
+                      Seconds per page, standings and week (0 = split the row&apos;s seconds)
+                    </label>
+                    <input
+                      className="form-control"
+                      id="football-page-seconds"
+                      type="number"
+                      step="any"
+                      min="0"
+                      max="60"
+                      value={footballRotation.page_seconds}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          page_seconds: Number(e.target.value),
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                </div>
+                </div>
+                <div className="mt-3">
+                  {(
+                    [
+                      ['show_countdown', 'Countdown before kickoff'],
+                      ['show_bye', 'Bye-week screen'],
+                      ['show_final', 'Hold the final after a game'],
+                      ['show_redzone', 'Red zone alert over the idle screens'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <div className="form-check" key={key}>
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id={`football-${key}`}
+                        checked={footballRotation[key]}
+                        onChange={(e) =>
+                          footballRotationSave.edit({ ...footballRotation, [key]: e.target.checked })
+                        }
+                      />
+                      <label className="form-check-label" htmlFor={`football-${key}`}>
+                        {label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                </div>
+              )}
             </form>
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
@@ -2754,7 +2744,7 @@ function App() {
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
           { label: 'My teams', state: teamsState, onUndo: teamsSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
-          { label: 'Football screens', state: footballRotationState, onUndo: footballRotationSave.undo },
+          { label: 'Football', state: footballRotationState, onUndo: footballRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },
           { label: 'Wi-Fi', state: wifiState, onUndo: wifiSave.undo },
           { label: 'Audio', state: audioState, onUndo: audioSave.undo },
