@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from scoreboard.config import FootballConfig, ScoreboardConfig, Settings, TeamEntry
+from scoreboard.config import FootballConfig, RotationEntry, ScoreboardConfig, Settings, TeamEntry
 from scoreboard.priority import TeamView
 
 
@@ -29,14 +29,21 @@ def fcfg(
     favourite_team: str | None = "",
     also_follow: Sequence[Any] | str | None = (),
     horn_team: str | None = None,
+    rotation: Sequence[Any] | None = None,
     **settings: Any,
 ) -> TeamView:
-    """Football's settings (``FootballConfig(**settings)``) with a favourite, followed teams and a
-    horn team (the favourite unless given)."""
+    """Football's settings (``FootballConfig(**settings)``) with a favourite, followed teams, a
+    horn team (the favourite unless given) and idle rotation rows (``{"screen", "seconds"}`` dicts
+    or ``RotationEntry``; football's default unless given)."""
     fav, follow = _clean(favourite_team, also_follow)
-    return TeamView(
-        FootballConfig(**settings), fav, follow, fav if horn_team is None else horn_team
-    )
+    rows = None
+    if rotation:  # an empty list means the default, as it always has
+        rows = [
+            e if isinstance(e, RotationEntry) else RotationEntry(e["screen"], float(e["seconds"]))
+            for e in rotation
+        ]
+    horn = fav if horn_team is None else horn_team
+    return TeamView(FootballConfig(**settings), fav, follow, horn, rows)
 
 
 def hcfg(

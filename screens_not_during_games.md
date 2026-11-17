@@ -250,7 +250,8 @@ now its games), `week(number, season_type)` (a whole week in one request), `sche
 - [x] **The default football idle rotation:** `fb_preview` 8s, `fb_standings` 8s (the division, then the
       conference), `fb_week` 10s, `fb_schedule` 8s, then the clock 6s. A screen with nothing to show is
       skipped. `fb_bye` joins the loop on a bye week and `fb_final` holds for its 60 minutes after a
-      game. All are settings under `[football]` and the admin page's football rotation card.
+      game. The screens are rows of the one `[[rotation]]` list (the admin page's Idle rotation card, mixed with
+      hockey's); the rest are settings under `[football]` and the admin page's Idle rotation card's football section.
 
 ## Open questions
 

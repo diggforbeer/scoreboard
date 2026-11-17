@@ -29,6 +29,7 @@ from .brightness import lux_to_brightness
 from .button import Button
 from .config import (
     DEFAULT_CONFIG_PATHS,
+    DEFAULT_FOOTBALL_ROTATION,
     PANEL_HARDWARE_MAPPING_CHOICES,
     ConfigWriteError,
     RotationEntry,
@@ -36,6 +37,7 @@ from .config import (
     TeamEntry,
     next_hardware_mapping,
     resolve_timezone,
+    screen_sport,
 )
 from .delay import DelayQueue
 from .display import goal_light
@@ -85,7 +87,7 @@ from .hockey.models import (
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
 from .light_sensor import LightSensor
 from .network import default_route_ip
-from .priority import Moment, Priority, Windows
+from .priority import Moment, Priority, Windows, idle_segments, segment_at
 from .setup_server import SetupServer
 from .updater import installed_version
 from .wifi_join import WifiJoinAttempt
@@ -621,6 +623,8 @@ class ScoreboardApp:
         #: When the idle rotation began (monotonic): the sports alternate, and this puts the sport
         #: that has the turn at the top of its rotation.
         self._idle_origin = 0.0
+        #: The rows of the idle segment now up, by sport (empty unless the sports alternate).
+        self._segment_rows: dict[str, list[RotationEntry]] = {}
         self._priority_cache: tuple[tuple[TeamEntry, ...], Priority] | None = None
         #: The hockey favourite the caches were fetched for, to notice the owner changing it.
         self._hockey_favourite = self._hockey_cfg().favourite_team
@@ -971,7 +975,9 @@ class ScoreboardApp:
         """Football's settings as its screens read them: ``[football]`` seen through
         the priority layer (the owner is the favourite, the other ranked football teams are
         followed, the lead team has the horn; with no team ranked, nobody is)."""
-        return self._priority().view("football", self.settings.football, self._owner)
+        return self._priority().view(
+            "football", self.settings.football, self._owner, self._sport_rotation("football")
+        )
 
     def _hockey_cfg(self) -> Any:
         """Hockey's settings as its screens read them: ``[scoreboard]`` seen through
@@ -1021,6 +1027,7 @@ class ScoreboardApp:
         )
         self._owner = owner
         if owner is not None:
+            self._segment_rows = {}
             return owner.sport
         if priority.empty:
             self._idle_origin = 0.0
@@ -1034,36 +1041,35 @@ class ScoreboardApp:
         the next poll, so the light poll's last answer covers that gap."""
         return (self.games if self._sport == "hockey" else None) or self._hockey_lite
 
-    def _idle_turns(self) -> dict[str, float | None]:
-        """How long each sport's idle rotation is, or ``None`` for a sport with nothing to show
-        (no games on its slate: the offseason, or its feed is down). A rotation's length is its
-        configured entries' seconds; an entry skipped for lack of data only shortens it."""
-        hockey_games = self._hockey_priority_games()
+    def _idle_available(self) -> list[str]:
+        """The sports with something to show now, best-ranked lead first: a sport whose slate is
+        empty (the offseason, or its feed is down) sits out of the idle rotation."""
         football_games = self._football.snapshot.games if self._football is not None else None
-        return {
-            "hockey": sum(e.seconds for e in self._effective_rotation()) if hockey_games else None,
-            "football": (
-                sum(e.seconds for e in self.settings.football.idle_rotation)
-                if football_games
-                else None
-            ),
-        }
+        have = {"hockey": bool(self._hockey_priority_games()), "football": bool(football_games)}
+        order = self._priority().sports() or ["hockey", "football"]
+        return [sport for sport in order if have.get(sport)]
 
     def _idle_sport(self, priority: Priority) -> str:
-        """With nothing ranked on, the sports take turns, each showing its rotation for its lead
-        team (epic #470). Falls back to the top-ranked team's sport when no sport has anything."""
-        turns = self._idle_turns()
+        """With nothing ranked on, the one idle rotation runs across both sports: its rows are
+        grouped into per-sport segments and the board alternates between them (epic #470). Falls
+        back to the top-ranked team's sport when no sport has anything to show."""
+        segments = idle_segments(self._unified_rotation(), self._idle_available())
         now = self.monotonic()
-        slot = priority.idle_sport(now, turns)
+        slot = segment_at(segments, now)
+        self._segment_rows = {}
         if slot is None:
             self._idle_origin = 0.0
+            if self._football is not None:
+                self._football.idle_origin = 0.0
             return priority.sports()[0]
-        sport, fraction = slot
-        # The turn began ``fraction`` of its length ago: both sports time their rotation from there.
-        self._idle_origin = now - fraction * (turns[sport] or 0.0)
+        index, fraction = slot
+        segment = segments[index]
+        # The segment began ``fraction`` of its length ago: its sport times its rows from there.
+        self._idle_origin = now - fraction * segment.seconds
+        self._segment_rows = {segment.sport: list(segment.entries)}
         if self._football is not None:
             self._football.idle_origin = self._idle_origin
-        return sport
+        return segment.sport
 
     def _apply_teams_change(self, new_settings: Settings) -> None:
         """The ranked list was edited: start or stop football's feed as it is wanted, forget what
@@ -2315,8 +2321,37 @@ class ScoreboardApp:
             entries.append(RotationEntry("clock", cfg.rotate_seconds))
         return entries
 
+    def _unified_rotation(self) -> list[RotationEntry]:
+        """The one idle rotation, both sports' screens: the configured ``[[rotation]]`` list, else
+        each sport's default in the order of the lead teams' ranks."""
+        if self.settings.rotation:
+            return list(self.settings.rotation)
+        order = self._priority().sports() or ["hockey", "football"]
+        rows: list[RotationEntry] = []
+        for sport in order:
+            if sport == "hockey":
+                rows += self._default_rotation()
+            else:
+                rows += [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+        return rows
+
+    def _sport_rotation(self, sport: str) -> list[RotationEntry]:
+        """The rows ``sport`` shows: its current segment's while the sports alternate, else its own
+        screens (and the clock) of the one list, else its default."""
+        if sport in self._segment_rows:
+            return list(self._segment_rows[sport])
+        if self.settings.rotation:
+            rows = [
+                e for e in self.settings.rotation if screen_sport(e.screen) in (sport, "shared")
+            ]
+            if rows:
+                return rows
+        if sport == "hockey":
+            return self._default_rotation()
+        return [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+
     def _effective_rotation(self) -> list[RotationEntry]:
-        return self.settings.rotation or self._default_rotation()
+        return self._sport_rotation("hockey")
 
     def _rotation_screen_scene(
         self,

@@ -12,10 +12,11 @@ The rules (decided in the epic):
   most recent one does.
 * **The lead team of a sport** is its highest-ranked team: it gets the horn and the idle screens
   (``lead``), whether or not it is playing.
-* **Idle screens alternate between sports** (``idle_sport``): when nothing ranked is on, each
-  sport that has a ranked team and something to show takes a turn, in the order of their lead
-  teams' ranks. It is a pure function of the clock, so it never flickers: a sport holds its whole
-  turn.
+* **One idle rotation, mixed** (``idle_segments`` / ``segment_at``): the one ``[[rotation]]`` list
+  holds screens of either sport. Consecutive rows of the same sport form a *segment* (the clock
+  takes the sport of the rows around it) and the board alternates between segments, the sport
+  of the segment having the board. Rows of a sport with nothing to show are skipped. It is a pure
+  function of the clock, so it never flickers: a segment holds its whole length.
 * **An empty list** keeps the old "nobody followed" behaviour per sport (``empty_list_sport``):
   a live game of either sport takes the board, hockey before football.
 * **Colours** (the clock, the holidays) follow the overall rank 1 (``colour_team``), so they do not
@@ -68,6 +69,65 @@ class Windows:
 
 
 @dataclass(frozen=True, slots=True)
+class Segment:
+    """A run of consecutive idle-rotation rows that one sport shows."""
+
+    sport: str
+    #: The rows (``RotationEntry``-like: ``screen`` and ``seconds``), in order.
+    entries: tuple[Any, ...]
+
+    @property
+    def seconds(self) -> float:
+        return sum(e.seconds for e in self.entries)
+
+
+def idle_segments(entries: Sequence[Any], available: Sequence[str]) -> list[Segment]:
+    """Group the one idle rotation into per-sport segments.
+
+    ``entries`` is the rotation in order; ``available`` the sports that have something to show
+    (rows of any other sport are skipped). The clock belongs to no sport: it joins the run before
+    it, or the one after it when it comes first, or the first available sport when it is alone.
+    """
+    from .config import screen_sport
+
+    kept: list[tuple[Any, str | None]] = []
+    for entry in entries:
+        sport = screen_sport(entry.screen)
+        if sport == "shared":
+            kept.append((entry, None))
+        elif sport in available:
+            kept.append((entry, sport))
+    firsts = [s for _, s in kept if s is not None]
+    if not firsts:
+        if not kept or not available:
+            return []
+        firsts = [available[0]]
+    current = firsts[0]
+    out: list[Segment] = []
+    for entry, sport in kept:
+        current = sport or current
+        if out and out[-1].sport == current:
+            out[-1] = Segment(current, (*out[-1].entries, entry))
+        else:
+            out.append(Segment(current, (entry,)))
+    return out
+
+
+def segment_at(segments: Sequence[Segment], clock: float) -> tuple[int, float] | None:
+    """Which segment is up at ``clock`` seconds and how far through it (0 to 1), or ``None``
+    if there are none. A pure function of ``clock``."""
+    total = sum(s.seconds for s in segments)
+    if not segments or total <= 0:
+        return None
+    at = clock % total
+    for index, segment in enumerate(segments):
+        if at < segment.seconds:
+            return index, at / segment.seconds
+        at -= segment.seconds
+    return len(segments) - 1, 1.0
+
+
+@dataclass(frozen=True, slots=True)
 class Moment:
     """One ranked team with a game that matters now."""
 
@@ -92,9 +152,23 @@ class TeamView:
     """
 
     def __init__(
-        self, base: Any, favourite: str, also_follow: Sequence[str], horn_team: str
+        self,
+        base: Any,
+        favourite: str,
+        also_follow: Sequence[str],
+        horn_team: str,
+        idle_rotation: Sequence[Any] | None = None,
     ) -> None:
+        from .config import DEFAULT_FOOTBALL_ROTATION, RotationEntry
+
         self._base = base
+        #: The idle rotation's rows this sport shows (football reads it; the app puts football's
+        #: share of the one mixed ``[[rotation]]`` list here), else football's built-in default.
+        self.idle_rotation: list[Any] = (
+            list(idle_rotation)
+            if idle_rotation is not None
+            else [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+        )
         self.favourite_team = favourite
         self.also_follow = list(also_follow)
         self.horn_team = horn_team
@@ -133,7 +207,13 @@ class Priority:
         """The ranked teams of ``sport``, best first."""
         return [e.team for e in self.teams if e.sport == sport]
 
-    def view(self, sport: str, base: Any, owner: Moment | None) -> TeamView:
+    def view(
+        self,
+        sport: str,
+        base: Any,
+        owner: Moment | None,
+        idle_rotation: Sequence[Any] | None = None,
+    ) -> TeamView:
         """``sport``'s settings (``base``) with the favourite, followed teams and horn team the
         ranked list gives: the favourite is the owner when it is this sport's, else the lead
         team."""
@@ -141,7 +221,11 @@ class Priority:
         favourite = owner.team if owner is not None and owner.sport == sport else ""
         favourite = favourite or (teams[0] if teams else "")
         return TeamView(
-            base, favourite, [t for t in teams if t != favourite], teams[0] if teams else ""
+            base,
+            favourite,
+            [t for t in teams if t != favourite],
+            teams[0] if teams else "",
+            idle_rotation,
         )
 
     def sports(self) -> list[str]:
@@ -203,30 +287,6 @@ class Priority:
         return moments[0] if moments else None
 
     # -- nothing on --------------------------------------------------------------------------
-
-    def idle_sport(
-        self, clock: float, turns: Mapping[str, float | None]
-    ) -> tuple[str, float] | None:
-        """Which sport's idle screens are up at ``clock`` seconds, and how far through its turn
-        (0 to 1), or ``None`` if no sport has anything to show.
-
-        ``turns`` gives each sport's turn length (its whole idle rotation, in seconds), or ``None``
-        for a sport with nothing to show (an offseason, no data). Only sports with a ranked team
-        take turns, in the order of their lead teams' ranks. A pure function of ``clock``: a sport
-        holds its whole turn, so the board cannot flicker between sports.
-        """
-        slots = [(s, turns[s]) for s in self.sports() if turns.get(s)]
-        total = sum(length for _, length in slots if length)
-        if not slots or total <= 0:
-            return None
-        at = clock % total
-        for sport, length in slots:
-            assert length is not None
-            if at < length:
-                return sport, at / length
-            at -= length
-        sport, _ = slots[-1]
-        return sport, 1.0
 
     def empty_list_sport(self, games: Mapping[str, Sequence[GameLike]]) -> str | None:
         """With no team ranked: the sport whose live game takes the board (hockey before

@@ -91,7 +91,7 @@ def nyg_game(state="pre", **kw):
 
 
 def test_the_default_rotation_is_preview_standings_week_schedule_clock():
-    cfg = FootballConfig()
+    cfg = fcfg()
     assert [(e.screen, e.seconds) for e in cfg.idle_rotation] == [
         ("fb_preview", 8.0), ("fb_standings", 8.0), ("fb_week", 10.0),
         ("fb_schedule", 8.0), ("clock", 6.0),
@@ -221,25 +221,44 @@ def test_a_live_game_nobody_follows_does_not_stop_the_idle_rotation():
     assert mode.scene().kind == "fb_preview"
 
 
-def test_the_football_rotation_round_trips_through_the_config_file(tmp_path):
+def test_football_screens_live_in_the_one_rotation_list_and_round_trip_through_the_file(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text("[football]\nshow_bye = false\n")
     Settings.load(path).save(
-        {"football": {"rotation": [{"screen": "fb_week", "seconds": 5}], "final_hold_minutes": 30}}
+        {
+            "rotation": [
+                {"screen": "fb_week", "seconds": 5},
+                {"screen": "standings", "seconds": 8},
+                {"screen": "clock", "seconds": 4},
+            ],
+            "football": {"final_hold_minutes": 30},
+        }
     )
-    cfg = Settings.load(path).football
-    assert cfg.rotation == [RotationEntry("fb_week", 5.0)]
-    assert (cfg.final_hold_minutes, cfg.show_bye) == (30.0, False)
-    assert "[[football.rotation]]" in path.read_text()
+    settings = Settings.load(path)
+    assert settings.rotation == [
+        RotationEntry("fb_week", 5.0),
+        RotationEntry("standings", 8.0),
+        RotationEntry("clock", 4.0),
+    ]
+    assert (settings.football.final_hold_minutes, settings.football.show_bye) == (30.0, False)
+    assert "[[rotation]]" in path.read_text() and "football.rotation" not in path.read_text()
 
 
-def test_bad_rotation_entries_and_minutes_fall_back():
-    cfg = FootballConfig(
-        rotation=[{"screen": "scores_grid", "seconds": 5}, {"screen": "fb_week", "seconds": -1}],
-        final_hold_minutes=-5,
-        countdown_minutes="soon",
+def test_the_old_football_rotation_list_is_retired_with_a_warning(tmp_path, caplog):
+    import logging
+
+    path = tmp_path / "c.toml"
+    path.write_text('[[football.rotation]]\nscreen = "fb_week"\nseconds = 5\n')
+    with caplog.at_level(logging.WARNING):
+        settings = Settings.load(path)
+    assert settings.rotation == []
+    assert any(
+        "rotation" in r.getMessage() and "[[rotation]]" in r.getMessage() for r in caplog.records
     )
-    assert cfg.rotation == []
+
+
+def test_bad_minutes_fall_back():
+    cfg = FootballConfig(final_hold_minutes=-5, countdown_minutes="soon")
     assert (cfg.final_hold_minutes, cfg.countdown_minutes) == (60.0, 60.0)
     assert idle  # the module under test imports cleanly
 

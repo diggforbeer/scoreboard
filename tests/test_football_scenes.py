@@ -17,7 +17,7 @@ import pytest
 from RGBMatrixEmulator import graphics
 
 from scoreboard.app import Scene, ScoreboardApp
-from scoreboard.config import FootballConfig, ScoreboardConfig, Settings, TeamEntry
+from scoreboard.config import RotationEntry, ScoreboardConfig, Settings, TeamEntry
 from scoreboard.display import football_scenes as fs
 from scoreboard.display.ascii import AsciiCanvas
 from scoreboard.display.fonts import FontSet
@@ -469,7 +469,7 @@ def app(tmp_path) -> ScoreboardApp:
     settings.status.enabled = False
     settings.teams = [TeamEntry("football", "NYG")]  # the favourite; football is the only sport
     # Only the clock in the idle rotation: these tests are about the plain game-day scenes.
-    settings.football = FootballConfig(rotation=[{"screen": "clock", "seconds": 6}])
+    settings.rotation = [RotationEntry("clock", 6.0)]
     feed = Feed([])
     app = ScoreboardApp(
         settings,

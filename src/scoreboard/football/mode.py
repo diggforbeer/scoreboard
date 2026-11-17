@@ -78,7 +78,9 @@ class FootballMode:
     ) -> None:
         """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
         settings (read at each poll and each frame, so an admin-page change applies without a
-        restart); ``client_factory`` makes the feed client (a fake in tests)."""
+        restart); ``client_factory`` makes the feed client (a fake in tests). The settings carry the
+        idle rotation's rows as ``idle_rotation`` (football's share of the one mixed
+        ``[[rotation]]`` list, epic #470)."""
         if client_factory is None:
             from .api import FootballClient
 
@@ -424,7 +426,7 @@ class FootballMode:
         )
         wide = self._wide()
         if not wide:
-            return None if others_live else ("clock" if not games and _has_clock(cfg) else None)
+            return None if others_live else ("clock" if not games and self._has_clock() else None)
         ctx = self._idle_context(games, snap, now, cfg)
         if (
             mine is not None
@@ -449,7 +451,7 @@ class FootballMode:
                 screen, self._slot_fraction = _slot_at(slots, now - self.idle_origin)
                 return screen
         if not games:
-            return "clock" if _has_clock(cfg) else None
+            return "clock" if self._has_clock() else None
         return None
 
     def _in_countdown(self, game: FbGame, cfg: FootballConfig) -> bool:
@@ -457,6 +459,15 @@ class FootballMode:
             return False
         until = game.start_utc - self._utc_now()
         return timedelta(0) <= until <= timedelta(minutes=cfg.countdown_minutes)
+
+    def _entries(self) -> Sequence[Any]:
+        """The idle rotation's rows for football: the settings view's (the app puts football's
+        share of the one ``[[rotation]]`` list there), else the built-in default."""
+        cfg = self._football() if self._football else _no_football()
+        return cfg.idle_rotation
+
+    def _has_clock(self) -> bool:
+        return any(entry.screen == "clock" for entry in self._entries())
 
     def _rotation(self, cfg: FootballConfig, ctx: Any, favourite: str) -> list[tuple[str, float]]:
         """The rotation's slots that can show right now, as (screen, seconds).
@@ -469,7 +480,7 @@ class FootballMode:
 
         slots: list[tuple[str, float]] = []
         clock: list[tuple[str, float]] = []
-        for entry in cfg.idle_rotation:
+        for entry in self._entries():
             if entry.screen == "clock":
                 clock.append((entry.screen, entry.seconds))
             elif entry.screen in IDLE_SCREENS:
@@ -591,10 +602,6 @@ def _slot_at(slots: Sequence[tuple[str, float]], now: float) -> tuple[str, float
             return screen, at / seconds
         at -= seconds
     return slots[-1][0], 0.0
-
-
-def _has_clock(cfg: FootballConfig) -> bool:
-    return any(entry.screen == "clock" for entry in cfg.idle_rotation)
 
 
 def _no_football() -> FootballConfig:
