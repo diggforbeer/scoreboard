@@ -1206,11 +1206,26 @@ class Renderer:
             local.strftime("%a %b %-d").upper(),
         )
 
-    def draw_christmas_tree(self, canvas: Any, now: datetime, favourite: str) -> None:
+    def draw_christmas_tree(
+        self,
+        canvas: Any,
+        now: datetime,
+        favourite: str,
+        egg: tuple[str, float] | None = None,
+    ) -> None:
         """The holiday rotation screen in December (#243): a twinkling tree in
         the favourite's colours on the left, the countdown to the 25th right.
+
+        ``egg`` is a very rare extra (#509), ``(kind, age)`` from ``holiday.tree_egg``: the
+        ``quote`` replaces the countdown's words, the ``squirrel`` pops out of the tree.
         """
-        from .holiday import TREE_WIDTH, christmas_countdown, draw_christmas_tree
+        from .holiday import (
+            TREE_QUOTE,
+            TREE_WIDTH,
+            christmas_countdown,
+            draw_christmas_tree,
+            draw_tree_squirrel,
+        )
 
         canvas.Clear()
         local = now.astimezone(self.tz)
@@ -1228,7 +1243,16 @@ class Renderer:
             draw_christmas_tree(canvas, x, 1, tick, favourite, self.width, self.height)
             return
         draw_christmas_tree(canvas, 3, 1, tick, favourite, self.width, self.height)
+        if egg is not None and egg[0] == "squirrel":
+            draw_tree_squirrel(canvas, 3, 1, egg[1], self.width, self.height)
         top, bottom = lines
+        if egg is not None and egg[0] == "quote":
+            quote = (
+                text_width(self.fonts.large, TREE_QUOTE[0]) <= room
+                and text_width(self.fonts.medium, TREE_QUOTE[1]) <= room
+            )
+            if quote:
+                top, bottom = TREE_QUOTE
         centre = (left + self.width) // 2
         top_colour = team_color(favourite) if favourite else (220, 0, 30)
         self.text_center(canvas, self.fonts.large, centre, 14, top_colour, top)

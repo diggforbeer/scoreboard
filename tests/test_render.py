@@ -2260,6 +2260,68 @@ def test_christmas_tree_screen(day, name, update_snapshots):
     check_snapshot(f"christmas_tree_{name}", art, update_snapshots)
 
 
+def test_christmas_tree_quote_replaces_the_countdown(update_snapshots):
+    from scoreboard.display.holiday import TREE_QUOTE, TREE_WIDTH
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("quote", 1.0))
+    art = show("christmas tree screen, quote", c)
+
+    assert not c.out_of_bounds
+    assert TREE_QUOTE == ("VERY FULL,", "LOTS OF SAP")
+    # The tree is untouched; only the words change, and they stay beside it.
+    assert c.lit(0, 0, TREE_WIDTH + 3, H - 1) == plain.lit(0, 0, TREE_WIDTH + 3, H - 1)
+    assert c.lit(TREE_WIDTH + 6, 0, W - 1, H - 1) != plain.lit(TREE_WIDTH + 6, 0, W - 1, H - 1)
+    text = c.bbox(TREE_WIDTH + 6, 0)
+    assert text is not None and text.x1 <= W - 1
+    assert team_color("NSH") in c.colors(TREE_WIDTH + 6, 0), "top line in team colour"
+    check_snapshot("christmas_tree_quote", art, update_snapshots)
+
+
+@pytest.mark.parametrize(("age", "name"), [(0.4, "rising"), (2.0, "left"), (3.2, "right")])
+def test_christmas_tree_squirrel(age, name, update_snapshots):
+    from scoreboard.display.holiday import SQUIRREL_BELLY, TREE_WIDTH
+
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    c = canvas()
+    make_renderer().draw_christmas_tree(c, when, "NSH", ("squirrel", age))
+    art = show(f"christmas tree screen, squirrel {name}", c)
+
+    assert not c.out_of_bounds
+    assert c.lit(TREE_WIDTH + 6, 0, W - 1, H - 1) == plain.lit(TREE_WIDTH + 6, 0, W - 1, H - 1), (
+        "the countdown is untouched"
+    )
+    assert c.pixels != plain.pixels, "a squirrel is out"
+    if name != "rising":
+        assert SQUIRREL_BELLY in c.colors(0, 0, TREE_WIDTH + 3)
+    check_snapshot(f"christmas_tree_squirrel_{name}", art, update_snapshots)
+
+
+def test_christmas_tree_squirrel_is_gone_before_and_after_its_script():
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    plain = canvas()
+    make_renderer().draw_christmas_tree(plain, when, "NSH")
+    for age in (0.0, 5.0, 9.0):
+        c = canvas()
+        make_renderer().draw_christmas_tree(c, when, "NSH", ("squirrel", age))
+        assert c.pixels == plain.pixels, age
+
+
+def test_christmas_tree_quote_is_skipped_where_the_countdown_does_not_fit():
+    # A single 64px panel shows just the tree; the quote must not squeeze in beside it.
+    when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ, logos=None)
+    plain, quoted = AsciiCanvas(64, H), AsciiCanvas(64, H)
+    r.draw_christmas_tree(plain, when, "NSH")
+    r.draw_christmas_tree(quoted, when, "NSH", ("quote", 1.0))
+    assert quoted.pixels == plain.pixels and not quoted.out_of_bounds
+
+
 @pytest.mark.parametrize(("day", "name"), [(19, "countdown"), (26, "happy")])
 def test_thanksgiving_screen(day, name, update_snapshots):
     from scoreboard.display.holiday import (

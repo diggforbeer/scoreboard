@@ -1366,6 +1366,108 @@ def christmas_countdown(day: date) -> tuple[str, str] | None:
     return f"{left} DAY{'S' if left > 1 else ''}", "TO CHRISTMAS"
 
 
+# -- Christmas tree Easter eggs (#509) -----------------------------------------
+#
+# Very rare extras on the tree screen. Each is a pure function of the clock: time is cut into
+# windows, a seeded roll per window and kind decides whether one starts at the window's top, and
+# ``tree_egg`` says which is playing and how far in it is. Deterministic, so it can be tested and
+# never needs state; the board only drops into the fast loop while the squirrel moves.
+
+#: Length of one roll window. Odds are "1 in N windows", so 120 windows is about an hour.
+TREE_EGG_WINDOW_SECONDS = 30
+#: (kind, odds, seconds it plays); the earlier kind wins a window both rolled.
+TREE_EGGS = (("quote", 120, 6.0), ("squirrel", 240, 5.0))
+#: The countdown's two lines, replaced for the quote's few seconds.
+TREE_QUOTE = ("VERY FULL,", "LOTS OF SAP")
+
+SQUIRREL_FUR = (170, 105, 50)
+SQUIRREL_TAIL = (205, 135, 65)
+SQUIRREL_BELLY = (235, 195, 140)
+SQUIRREL_NOSE = (60, 30, 15)
+SQUIRREL_EYE = (0, 0, 0)
+#: Facing left, tail on the right; the other way is the same rows mirrored.
+_SQUIRREL_LEFT = (
+    "..B.B..T.",
+    "..BBB.TTT",
+    ".NKBBBTTT",
+    "..BBBBTT.",
+    "..LBBBT..",
+    "..LLBBT..",
+    "..LLBBT..",
+    "..BBBB...",
+    "..B..B...",
+)
+SQUIRREL_FRAMES = (
+    _SQUIRREL_LEFT,
+    tuple(row[::-1] for row in _SQUIRREL_LEFT),
+)
+SQUIRREL_PALETTE = {
+    "B": SQUIRREL_FUR,
+    "T": SQUIRREL_TAIL,
+    "L": SQUIRREL_BELLY,
+    "N": SQUIRREL_NOSE,
+    "K": SQUIRREL_EYE,
+}
+SQUIRREL_HEIGHT = len(_SQUIRREL_LEFT)
+SQUIRREL_WIDTH = len(_SQUIRREL_LEFT[0])
+#: Where it pops out: the bottom edge of its sprite sits on this tree row, its left edge on this
+#: tree column (the lower right of the foliage).
+SQUIRREL_HOLE_ROW = 25
+SQUIRREL_COLUMN = 15
+_SQUIRREL_RISE_SECONDS = 0.8
+_SQUIRREL_LOOK_RIGHT_AT = 2.5
+_SQUIRREL_SINK_AT = 4.2
+
+
+def tree_egg(timestamp: float) -> tuple[str, float] | None:
+    """The egg playing at ``timestamp`` (seconds since the epoch) and its age, else ``None``."""
+    window = int(timestamp // TREE_EGG_WINDOW_SECONDS)
+    age = timestamp - window * TREE_EGG_WINDOW_SECONDS
+    for kind, odds, seconds in TREE_EGGS:
+        if age < seconds and random.Random(f"tree-egg:{kind}:{window}").randrange(odds) == 0:
+            return kind, age
+    return None
+
+
+def squirrel_pose(age: float) -> tuple[int, int] | None:
+    """The squirrel at ``age`` seconds: (frame index, rows showing), or ``None`` out of sight.
+
+    It rises out of the foliage, looks left, looks right, then sinks back in.
+    """
+    seconds = dict((kind, s) for kind, _odds, s in TREE_EGGS)["squirrel"]
+    if not 0 <= age < seconds:
+        return None
+    if age < _SQUIRREL_RISE_SECONDS:
+        shown = age / _SQUIRREL_RISE_SECONDS
+    elif age < _SQUIRREL_SINK_AT:
+        shown = 1.0
+    else:
+        shown = 1.0 - (age - _SQUIRREL_SINK_AT) / (seconds - _SQUIRREL_SINK_AT)
+    rows = round(SQUIRREL_HEIGHT * max(0.0, min(1.0, shown)))
+    if rows == 0:
+        return None
+    return (1 if age >= _SQUIRREL_LOOK_RIGHT_AT else 0), rows
+
+
+def draw_tree_squirrel(
+    canvas: Any, tree_x: int, tree_y: int, age: float, width: int, height: int
+) -> None:
+    """The squirrel over a tree drawn at (tree_x, tree_y); it grows out of one fixed row."""
+    pose = squirrel_pose(age)
+    if pose is None:
+        return
+    frame, rows = pose
+    draw_sprite(
+        canvas,
+        SQUIRREL_FRAMES[frame][:rows],
+        SQUIRREL_PALETTE,
+        tree_x + SQUIRREL_COLUMN,
+        tree_y + SQUIRREL_HOLE_ROW - rows,
+        width,
+        height,
+    )
+
+
 # -- The Thanksgiving countdown screen ----------------------------------------
 
 

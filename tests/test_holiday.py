@@ -975,3 +975,66 @@ def test_holiday_is_an_opt_in_rotation_screen():
     settings = Settings.from_dict({"rotation": [{"screen": "holiday", "seconds": 10}]})
     assert [e.screen for e in settings.rotation] == ["holiday"]
     assert "holiday" in VALID_ROTATION_SCREENS
+
+
+# -- Christmas tree Easter eggs (#509) -----------------------------------------
+
+
+def test_tree_egg_roll_is_a_pure_function_of_the_clock():
+    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, tree_egg
+
+    start = 1_800_000_000.0
+    first = [tree_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    again = [tree_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    assert first == again
+    kinds = [egg[0] for egg in first if egg]
+    # Roughly 1 in 120 and 1 in 240 windows; generous bounds, the seeds are fixed.
+    assert 20 <= kinds.count("quote") <= 70
+    assert 8 <= kinds.count("squirrel") <= 40
+
+
+def test_tree_egg_only_plays_for_its_length_from_the_top_of_a_window():
+    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, TREE_EGGS, tree_egg
+
+    seconds = {kind: s for kind, _odds, s in TREE_EGGS}
+    start = 1_800_000_000.0
+    hit = next(
+        (start + i * TREE_EGG_WINDOW_SECONDS, tree_egg(start + i * TREE_EGG_WINDOW_SECONDS))
+        for i in range(5000)
+        if tree_egg(start + i * TREE_EGG_WINDOW_SECONDS)
+    )
+    top, egg = hit
+    kind, age = egg
+    assert age == pytest.approx(0.0, abs=1e-6)
+    assert tree_egg(top + seconds[kind] - 0.01) == (kind, pytest.approx(seconds[kind] - 0.01))
+    assert tree_egg(top + seconds[kind] + 0.01) is None
+
+
+def test_squirrel_rises_looks_left_then_right_then_sinks():
+    from scoreboard.display.holiday import SQUIRREL_HEIGHT, TREE_EGGS, squirrel_pose
+
+    assert squirrel_pose(0.0) is None
+    frame, rows = squirrel_pose(0.4)
+    assert frame == 0 and 0 < rows < SQUIRREL_HEIGHT, "half out, looking left"
+    assert squirrel_pose(1.5) == (0, SQUIRREL_HEIGHT)
+    assert squirrel_pose(3.0) == (1, SQUIRREL_HEIGHT), "looking right"
+    sinking = squirrel_pose(4.6)
+    assert sinking is not None and sinking[1] < SQUIRREL_HEIGHT
+    assert squirrel_pose(dict((k, s) for k, _o, s in TREE_EGGS)["squirrel"]) is None
+
+
+def test_only_the_squirrel_holds_the_fast_loop(holiday_app):
+    from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
+
+    app, src, now = holiday_app
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    scene = Scene("christmas_tree")
+    app._demo_tree_egg = ("squirrel", src.monotonic())
+    app.draw_scene(scene)
+    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
+    app._demo_tree_egg = ("quote", src.monotonic())
+    app.draw_scene(scene)
+    assert app.frame_interval() == FRAME_INTERVAL, "static text: the normal 2fps loop"
+    app._demo_tree_egg = None
+    app.draw_scene(scene)
+    assert app.frame_interval() == FRAME_INTERVAL

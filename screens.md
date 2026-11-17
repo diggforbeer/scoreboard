@@ -350,6 +350,14 @@ A twinkling tree in the favourite's colours beside a countdown to the 25th
 (`MERRY CHRISTMAS` on the day), or just the tree when the countdown doesn't
 fit on a single 64px panel. Dec 1-25.
 
+Very rarely the screen does something extra (#509), each a function of the clock so
+nothing needs configuring:
+
+| Extra | How often | What it does |
+|---|---|---|
+| ![Quote](docs/screens/christmas_tree_quote.png) the quote | about once an hour on the screen | "VERY FULL, / LOTS OF SAP" for 6 seconds in place of the countdown (not on a single 64px panel) |
+| ![Squirrel](docs/screens/christmas_tree_squirrel.png) the squirrel | about once every two hours | pops out of the lower right of the tree, looks left, then right, and ducks back in over 5 seconds |
+
 - **Controls:** opt-in: `holiday` in `[[rotation]]`, and Christmas must be
   ticked under `[holiday]`. Skipped otherwise.
 

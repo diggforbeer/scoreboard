@@ -50,6 +50,7 @@ from .display.holiday import (
     active_holiday,
     christmas_countdown,
     thanksgiving_countdown,
+    tree_egg,
     use_sport,
 )
 from .display.logos import LogoLibrary, LogoSet
@@ -509,6 +510,9 @@ class ScoreboardApp:
         self._demo_shootout_started: float | None = None
         #: Demo only: when the current step's goal light "started".
         self._demo_goal_started: float | None = None
+        #: A demo step's tree Easter egg (#509): its kind and the monotonic start.
+        self._demo_tree_egg: tuple[str, float] | None = None
+        self._egg_animating = False
         #: The favourite's goal light is on screen (fast loop); _goal_building
         #: is its first BUILD_SECONDS, which a live-view snapshot waits out.
         self._goal_animating = False
@@ -739,6 +743,7 @@ class ScoreboardApp:
             or self._goal_animating
             or self._fb_animating
             or self._penalty_animating
+            or self._egg_animating
         )
         return ANIMATION_FRAME_INTERVAL if animating else FRAME_INTERVAL
 
@@ -767,6 +772,7 @@ class ScoreboardApp:
                 self._start_demo_shootout(step)
                 self._start_demo_goal(step)
                 self._start_demo_penalty(step)
+                self._start_demo_tree_egg(step)
                 if step.scroll_seconds:
                     self._play_scrolling_demo_step(step.scene, step.scroll_seconds)
                     continue
@@ -775,6 +781,7 @@ class ScoreboardApp:
                     or step.animate_shootout
                     or step.animate_goal
                     or step.animate_penalty
+                    or step.tree_egg
                 ):
                     self._play_animated_demo_step(step.scene)
                     continue
@@ -815,6 +822,17 @@ class ScoreboardApp:
     def _start_demo_goal(self, step: DemoStep) -> None:
         """Start a step's goal light as the step starts."""
         self._demo_goal_started = self.monotonic() if step.animate_goal else None
+
+    def _start_demo_tree_egg(self, step: DemoStep) -> None:
+        """Start a step's Christmas tree Easter egg as the step starts."""
+        self._demo_tree_egg = (step.tree_egg, self.monotonic()) if step.tree_egg else None
+
+    def _tree_egg(self) -> tuple[str, float] | None:
+        """The Christmas tree egg playing now and its age: a demo step's, else the clock's roll."""
+        if self._demo_tree_egg is not None:
+            kind, started = self._demo_tree_egg
+            return kind, self.monotonic() - started
+        return tree_egg(self.clock().timestamp())
 
     def _start_demo_penalty(self, step: DemoStep) -> None:
         """Start a step's penalty screen as the step starts."""
@@ -1225,6 +1243,8 @@ class ScoreboardApp:
         self._overlay_animating = False
         self._demo_shootout_started = None
         self._demo_goal_started = None
+        self._demo_tree_egg = None
+        self._egg_animating = False
         self._mirror_key = None
         self.mirror.requested = True
 
@@ -3559,6 +3579,7 @@ class ScoreboardApp:
             self._shootout_animating = False
             self._goal_animating = self._goal_building = self._fb_animating = False
             self._penalty_animating = self._penalty_building = False
+            self._egg_animating = False
             return
         if self._demo_mode:
             if not self._demo_was_on:
@@ -3636,6 +3657,7 @@ class ScoreboardApp:
     def draw_scene(self, scene: Scene) -> None:
         r = self.renderer
         self._shootout_animating = False
+        self._egg_animating = False
         self._scroll_animating = scene.scrolling
         self._fb_animating = scene.animating
         goal_age = self._goal_age(scene)
@@ -3746,8 +3768,11 @@ class ScoreboardApp:
                 r.draw_clock(self.canvas, self.clock(), abbrev)
         elif scene.kind == "christmas_tree":
             sport, abbrev = self._colour_scheme(favourite)
+            egg = self._tree_egg()
+            # Only the squirrel moves; the quote is static text and the tree twinkles at 2fps.
+            self._egg_animating = egg is not None and egg[0] == "squirrel"
             with use_sport(sport):
-                r.draw_christmas_tree(self.canvas, self.clock(), abbrev)
+                r.draw_christmas_tree(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "thanksgiving":
             sport, abbrev = self._colour_scheme(favourite)
             with use_sport(sport):
