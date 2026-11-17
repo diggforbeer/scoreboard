@@ -261,6 +261,10 @@ class RosterCache:
         entry = self._entries.get(team_id)
         return None if entry is None else self._monotonic() - entry[0]
 
+    def snapshot(self) -> dict[int, tuple[float, dict[int, RosterPlayer]]]:
+        """A copy of what is cached, (fetched at, players) per team id, for the admin page."""
+        return dict(self._entries)
+
     def clear(self) -> None:
         self._entries.clear()
         self._retry_after.clear()

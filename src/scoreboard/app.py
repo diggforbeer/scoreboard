@@ -540,6 +540,8 @@ class ScoreboardApp:
         #: TTL instead of flickering each frame.
         self._leaders: tuple[str, float, TeamLeaders | None] | None = None
         self._leaders_retry_after: float = 0.0
+        #: Scopes the admin page's Cache tab asked to clear; applied on the render thread.
+        self._cache_clears: set[str] = set()
         self._rng = random.Random()
         #: (game id, followed team) -> that team's own score last seen in that
         #: game, so a goal can be detected as an increase. Set on first
@@ -618,6 +620,8 @@ class ScoreboardApp:
         #: Today's hockey games as the lite poll saw them while football has the screen (the full
         #: hockey machinery only runs for the sport on screen); the priority layer reads these.
         self._hockey_lite: list[Game] = []
+        #: When the light poll last succeeded (monotonic), so hockey is not stale on return.
+        self._hockey_lite_at: float | None = None
         #: The priority layer's current owner (the favourite of the moment), set each loop.
         self._owner: Moment | None = None
         #: When the idle rotation began (monotonic): the sports alternate, and this puts the sport
@@ -679,6 +683,7 @@ class ScoreboardApp:
             now = self.monotonic()
             self.reload_config_if_changed()
             self.handle_button()
+            self._apply_cache_clears()
             self.fetcher.drain()
             if self._poll_asap:
                 self._poll_asap = False
@@ -1084,7 +1089,7 @@ class ScoreboardApp:
             self._football.stop()  # its feed thread must not outlive the mode
             self._football = None
             if self._sport == "football":
-                self._switch_sport("hockey")
+                self._switch_sport("hockey", force_clean=True)
         self._reset_favourite_caches()
         # _goal_events counts only followed teams' goals, so a team added mid-game would read as its
         # whole tally scoring at once. Forget them; the next poll re-baselines without firing.
@@ -1105,9 +1110,11 @@ class ScoreboardApp:
             self._reset_favourite_caches()
         dwelt = self.monotonic() - self._sport_since >= SPORT_MIN_DWELL_SECONDS
         if wanted != self._sport and (force or dwelt):
-            self._switch_sport(wanted)
+            # An edit of the list (``force``) starts the new sport from a clean slate; only the idle
+            # rotation's own alternation keeps hockey's state.
+            self._switch_sport(wanted, force_clean=force)
 
-    def _switch_sport(self, sport: str) -> None:
+    def _switch_sport(self, sport: str, *, force_clean: bool = False) -> None:
         """Swap the running sport live, from a clean slate (#346).
 
         Drops everything the old sport held -- cached data, remembered scores,
@@ -1116,9 +1123,18 @@ class ScoreboardApp:
         or sounds on the first frame after a switch. The button mute is the
         owner's, not the sport's, so it survives.
         """
-        log.info("Switching sport %s -> %s", self._sport, sport)
+        # The idle rotation passing between the sports happens every few seconds and says nothing
+        # new, so it is DEBUG; a switch caused by a game, or by editing the list, stays INFO.
+        idle_alternation = self._owner is None and not force_clean
+        log.log(
+            logging.DEBUG if idle_alternation else logging.INFO,
+            "Switching sport %s -> %s",
+            self._sport,
+            sport,
+        )
         if self._sport == "hockey" and self.games:
             self._hockey_lite = list(self.games)  # the priority layer keeps seeing hockey's slate
+            self._hockey_lite_at = self.last_success
         # Both feeds keep running: football's mode stays up and only starts its screens afresh when
         # it takes the board.
         if self._football is None:
@@ -1133,6 +1149,20 @@ class ScoreboardApp:
         self._sport = sport
         self._sport_since = self.monotonic()
         self._poll_asap = True
+        if self._owner is None and not force_clean:
+            # Nothing ranked is on, so this is only the idle rotation passing between the sports,
+            # which happens every few seconds. Wiping hockey's state each time put CONNECTING on
+            # the panel at every return and emptied its standings, schedule and leaders caches.
+            # Keep it all; hockey comes back on its light poll's last answer, and the next poll
+            # catches up. Scores are re-baselined so a goal scored while away does not celebrate.
+            if sport == "hockey":
+                if self._hockey_lite:
+                    self.games = list(self._hockey_lite)
+                    self.last_success = self._hockey_lite_at or self.last_success
+                self._known_scores = {}
+            self._mirror_key = None
+            self.mirror.requested = True
+            return
         self.games = []
         self.index = 0
         self._delay = DelayQueue(self.monotonic)
@@ -1194,6 +1224,7 @@ class ScoreboardApp:
             log.debug("Hockey lite poll failed: %s", error)
             return
         self._hockey_lite = list(games)
+        self._hockey_lite_at = self.monotonic()
 
     def _on_scores(self, games: list[Game] | None, error: Exception | None) -> None:
         """A score fetch finished (on the render thread): apply it, or record the failure."""
@@ -2572,6 +2603,8 @@ class ScoreboardApp:
             demo_setter=self.set_demo_mode,
             mirror=self.mirror,
             alias_port=alias,
+            cache_items=self.cache_items,
+            cache_clearer=self.request_cache_clear,
         )
 
     def _set_admin_yield(self, yielded: bool) -> None:
@@ -3195,6 +3228,116 @@ class ScoreboardApp:
         return (self.monotonic() - self.last_success) > STALE_AFTER_SECONDS
 
     # -- status page (#48) ------------------------------------------------
+
+    # -- the admin page's Cache tab ----------------------------------------------------
+
+    def cache_items(self) -> list[dict[str, Any]]:
+        """Everything cached, hockey's and football's, for the admin page to show (read-only; it
+        runs on the admin thread, so it only copies what is already in memory)."""
+        from .cache_view import item
+
+        now = self.monotonic()
+        out: list[dict[str, Any]] = []
+        if self._standings is not None:
+            at, rows = self._standings
+            out.append(
+                item(
+                    "hockey:standings", "hockey", "Standings", now - at, f"{len(rows)} teams", rows
+                )
+            )
+        if self._schedule is not None:
+            at, games = self._schedule
+            out.append(
+                item(
+                    "hockey:schedule",
+                    "hockey",
+                    f"{self._hockey_cfg().favourite_team or 'favourite'} season schedule",
+                    now - at,
+                    f"{len(games)} games",
+                    games,
+                )
+            )
+        for game_id, (at, record) in sorted(dict(self._season_series).items()):
+            out.append(
+                item(
+                    f"hockey:season_series:{game_id}",
+                    "hockey",
+                    f"Season series, game {game_id}",
+                    now - at,
+                    "no tally" if record is None else "head-to-head tally",
+                    record,
+                )
+            )
+        if self._leaders is not None:
+            team, at, leaders = self._leaders
+            out.append(
+                item(
+                    "hockey:leaders",
+                    "hockey",
+                    f"{team} leaders",
+                    now - at,
+                    "none" if leaders is None else "goals, points, goalies",
+                    leaders,
+                )
+            )
+        for team, (at, roster) in sorted(dict(self._team_rosters).items()):
+            out.append(
+                item(
+                    f"hockey:rosters:{team}",
+                    "hockey",
+                    f"{team} roster",
+                    now - at,
+                    f"{len(roster)} players",
+                    roster,
+                )
+            )
+        if self._football is not None:
+            out += self._football.cache_items()
+        return out
+
+    def request_cache_clear(self, scope: str) -> bool:
+        """Clear a scope of the cache (``all``, ``hockey``, ``football`` or one item's key).
+
+        Called from the admin thread, so it only leaves a note: hockey's caches are cleared by the
+        render thread, football's by its feed worker (which owns them). Returns whether the scope
+        is one this board has."""
+        from .cache_view import valid_scope
+
+        keys = [i["key"] for i in self.cache_items()]
+        if not valid_scope(scope, keys):
+            return False
+        self._cache_clears.add(scope)
+        return True
+
+    def _apply_cache_clears(self) -> None:
+        if not self._cache_clears:
+            return
+        from .cache_view import matches
+
+        scopes, self._cache_clears = set(self._cache_clears), set()
+
+        def wanted(key: str) -> bool:
+            return any(matches(s, key) for s in scopes)
+
+        # An item key names one thing; clearing it clears its kind (a team's roster, say).
+        def kind(prefix: str) -> bool:
+            return wanted(prefix) or any(s.startswith(prefix + ":") for s in scopes)
+
+        if kind("hockey:standings"):
+            self._standings, self._standings_retry_after = None, 0.0
+        if kind("hockey:schedule"):
+            self._schedule, self._schedule_retry_after = None, 0.0
+        if kind("hockey:season_series"):
+            self._season_series, self._season_series_retry_after = {}, {}
+        if kind("hockey:leaders"):
+            self._leaders, self._leaders_retry_after = None, 0.0
+        if kind("hockey:rosters"):
+            self._team_rosters = {}
+        log.info("Cache cleared: %s", ", ".join(sorted(scopes)))
+        if self._football is not None:
+            for scope in scopes:
+                if scope in ("all", "football") or scope.startswith("football:"):
+                    self._football.request_clear(scope)
 
     def status_snapshot(self) -> dict[str, str]:
         """Everything the admin page's status box shows -- state already

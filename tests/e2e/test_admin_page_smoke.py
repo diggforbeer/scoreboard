@@ -427,22 +427,20 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             page.wait_for_selector("#teams-add", timeout=15000)
             football = page.get_by_role("heading", name="Football between games")
             rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
+            rotation.wait_for(timeout=15000)  # the Idle rotation card is on the Home tab
             page.get_by_role("button", name="Display", exact=True).click()
-            rotation.wait_for(timeout=15000)
+            football.wait_for(timeout=15000)
             assert football.count() == 1, "nothing ranked: football's card shows"
 
             page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#teams-add", "hockey:NSH")
             page.click("#teams-add-button")
             page.get_by_role("button", name="Display", exact=True).click()
-            rotation.wait_for(timeout=15000)
-            assert football.count() == 0, "only a hockey team is ranked"
+            _wait_until(lambda: football.count() == 0)  # only a hockey team is ranked
 
             page.get_by_role("button", name="Home", exact=True).click()
             page.select_option("#teams-add", "football:TEN")
             page.click("#teams-add-button")
-            page.get_by_role("button", name="Display", exact=True).click()
-            football.wait_for(timeout=15000)
 
             # One list, both sports: a hockey row, a football row, the clock.
             card = rotation.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
@@ -462,11 +460,14 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             assert admin_page.config()["rotation"][1]["seconds"] == 12
             assert "rotation" not in admin_page.config().get("football", {})
 
-            # Football's own card still saves its lengths and toggles under [football].
+            # Football's own card (Display tab) saves its lengths and toggles under [football].
+            page.get_by_role("button", name="Display", exact=True).click()
+            football.wait_for(timeout=15000)
             page.fill("#football-final-hold", "45")
             page.fill("#football-page-seconds", "4")
-            page.fill("#football-timing-score", "10")
             page.uncheck("#football-show_bye")
+            page.keyboard.press("Tab")
+            page.fill("#football-timing-score", "10")
             page.keyboard.press("Tab")
             _wait_until(lambda: admin_page.config()["football"].get("final_hold_minutes") == 45)
             _wait_until(lambda: admin_page.config()["football"].get("show_bye") is False)
@@ -474,10 +475,11 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             _wait_until(lambda: admin_page.config()["football"].get("score_seconds") == 10)
 
             page.reload()
+            page.wait_for_selector('[aria-label="rotation screen 2"]', timeout=15000)
+            assert page.input_value('[aria-label="rotation screen 2"]') == "fb_week"
             page.get_by_role("button", name="Display", exact=True).click()
             page.wait_for_selector("#football-final-hold", timeout=15000)
             assert page.input_value("#football-final-hold") == "45"
-            assert page.input_value('[aria-label="rotation screen 2"]') == "fb_week"
         finally:
             browser.close()
 
@@ -538,5 +540,26 @@ def test_my_teams_card_adds_reorders_and_removes_teams_and_marks_the_horn_teams(
             page.get_by_role("button", name="Remove Toronto Maple Leafs").click()
             _wait_until(lambda: saved() == [("hockey", "NSH"), ("football", "TEN")])
             assert page.locator("#teams-list li[data-team='NSH'] .teams-horn").count() == 1
+        finally:
+            browser.close()
+
+
+def test_the_cache_tab_opens_and_offers_to_clear(admin_page):
+    """The Cache tab asks the board what it has cached; a bare admin server has nothing, so it says
+    so, and the clear buttons are there (clearing itself is covered by unit tests)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#teams-add", timeout=15000)
+            page.get_by_role("button", name="Cache", exact=True).click()
+            page.get_by_role("heading", name="Cached data").wait_for(timeout=15000)
+            page.get_by_text("Nothing cached right now.").wait_for(timeout=15000)
+            assert page.get_by_role("button", name="Clear everything").count() == 1
+            assert page.get_by_role("button", name="Clear hockey").count() == 1
+            assert page.get_by_role("button", name="Clear football").count() == 1
         finally:
             browser.close()

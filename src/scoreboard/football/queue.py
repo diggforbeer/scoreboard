@@ -120,7 +120,9 @@ class PlayQueue:
             self.latest = batch[-1] if batch else None
             self.baseline = self.latest
             if batch:
-                log.info(
+                # DEBUG: the queue is rebuilt every time football takes the board back from
+                # hockey, so this repeated every ~30 s on a two-sport board.
+                log.debug(
                     "%sbaseline: %d plays already played, not animated", self._tag(), len(batch)
                 )
             return []
@@ -131,14 +133,23 @@ class PlayQueue:
             self._seen.add(play.id)
             if self.latest is None or play.sort_key() > self.latest.sort_key():
                 self.latest = play
-            if self._last_shown_key is not None and play.sort_key() < self._last_shown_key:
-                # Arrived after the board moved past it: the field has moved on.
+            floor = self._floor()
+            if floor is not None and play.sort_key() < floor:
+                # Arrived after the board moved past it: the field has moved on. That includes a
+                # play older than the baseline, such as the coin toss the core feed adds after
+                # the site feed's first poll: it happened before we started watching.
                 log.info("%sdropping a late play %s (seq %d)", self._tag(), play.id, play.sequence)
                 continue
             self._pending.append(play)
             added.append(play)
         self._pending.sort(key=Play.sort_key)
         return added
+
+    def _floor(self) -> tuple | None:
+        """The sort key nothing older may be shown after: the newest play shown, or else the
+        baseline's. ``None`` for a game watched from before its first play."""
+        keys = [k for k in (self._last_shown_key, self.baseline and self.baseline.sort_key()) if k]
+        return max(keys) if keys else None
 
     # -- output ----------------------------------------------------------
 

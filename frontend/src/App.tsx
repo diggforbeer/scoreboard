@@ -54,6 +54,25 @@ const ROTATION_SCREENS = [
 ] as const
 // The football screens the same list can hold (config.py's FOOTBALL_SCREENS); the clock is shared.
 const FOOTBALL_ROTATION_SCREENS = ['fb_preview', 'fb_standings', 'fb_week', 'fb_schedule'] as const
+// One cached thing on the Cache tab (cache_view.py): what it is, how old, and its data.
+interface CacheItem {
+  key: string
+  sport: 'hockey' | 'football'
+  label: string
+  age_seconds: number | null
+  summary: string
+  data: string
+  truncated: boolean
+  clearable: boolean
+}
+
+function ageLabel(seconds: number | null): string {
+  if (seconds === null) return 'live'
+  if (seconds < 90) return `${Math.round(seconds)}s old`
+  if (seconds < 5400) return `${Math.round(seconds / 60)} min old`
+  return `${(seconds / 3600).toFixed(1)} h old`
+}
+
 const ROTATION_MAX_ROWS = 20
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
 const HORN_MAX_BYTES = 2 * 1024 * 1024
@@ -337,6 +356,8 @@ type ServerMessage =
   | { type: 'config'; section: 'update'; data: UpdateConfig }
   | { type: 'snapshot'; data: SnapshotData }
   | { type: 'logs'; backlog?: boolean; entries: LogEntry[] }
+  | { type: 'cache'; items: CacheItem[] }
+  | { type: 'cache_cleared'; scope: string }
   | { type: 'saved'; section: string }
   | { type: 'error'; section?: string; message: string }
   | { type: 'checking' }
@@ -658,7 +679,10 @@ function App() {
   const [pageVisible, setPageVisible] = useState(!document.hidden)
 
   // Two pages don't justify a router (#193): plain view state.
-  const [page, setPage] = useState<'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'logs'>('home')
+  const [page, setPage] = useState<
+    'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'cache' | 'logs'
+  >('home')
+  const [cacheItems, setCacheItems] = useState<CacheItem[] | null>(null)
   const [logLines, setLogLines] = useState<LogEntry[]>([])
   const [logError, setLogError] = useState<string | null>(null)
   const logBoxRef = useRef<HTMLPreElement | null>(null)
@@ -756,6 +780,12 @@ function App() {
             break
           case 'frame':
             setFrame(message)
+            break
+          case 'cache':
+            setCacheItems(message.items)
+            break
+          case 'cache_cleared':
+            socketRef.current?.send(JSON.stringify({ type: 'cache_get' }))
             break
           case 'logs':
             setLogError(null)
@@ -918,6 +948,23 @@ function App() {
     rotationSave,
     holidaySave,
   ])
+
+  // The Cache tab asks for what is cached when it opens and every few seconds while it is up.
+  useEffect(() => {
+    if (page !== 'cache' || connection !== 'open') return
+    const ask = () => {
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: 'cache_get' }))
+      }
+    }
+    ask()
+    const timer = window.setInterval(ask, 5000)
+    return () => window.clearInterval(timer)
+  }, [page, connection])
+
+  function clearCache(scope: string) {
+    socketRef.current?.send(JSON.stringify({ type: 'cache_clear', scope }))
+  }
 
   // Logs are opt-in (#197): subscribe only while the tab is showing, and
   // again after a reconnect (`connection` flips back to 'open').
@@ -1264,7 +1311,7 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'display', 'audio', 'holidays', 'setup', 'logs'] as const).map((name) => (
+        {(['home', 'display', 'audio', 'holidays', 'setup', 'cache', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
@@ -1278,6 +1325,7 @@ function App() {
                   audio: 'Audio',
                   holidays: 'Holiday Cheer',
                   setup: 'Setup',
+                  cache: 'Cache',
                   logs: 'Logs',
                 }[name]
               }
@@ -1368,6 +1416,107 @@ function App() {
 
       </div>
       <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Idle rotation</h2>
+          {rotation ? (
+            <form onSubmit={flushOnSubmit(rotationSave)}>
+              <p className="text-body-secondary small">
+                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
+                Consecutive rows of one sport show together, then the board moves to the other
+                sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
+                Empty falls back to each sport's built-in default.
+              </p>
+              {rotation.map((row, i) => (
+                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
+                  <select
+                    className="form-select"
+                    style={{ width: 'auto' }}
+                    aria-label={`rotation screen ${i + 1}`}
+                    value={row.screen}
+                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
+                  >
+                    <optgroup label="Hockey">
+                      {ROTATION_SCREENS.filter((screen) => screen !== 'clock').map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Football">
+                      {FOOTBALL_ROTATION_SCREENS.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="clock">clock</option>
+                  </select>
+                  <input
+                    className="form-control"
+                    style={{ width: '6rem' }}
+                    type="number"
+                    step="any"
+                    min="0"
+                    aria-label={`rotation seconds ${i + 1}`}
+                    value={row.seconds}
+                    onChange={(e) =>
+                      numberEdit(
+                        rotationSave,
+                        e,
+                        rotation.map((r, j) =>
+                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
+                        ),
+                        `rotation-seconds-${i}`,
+                      )
+                    }
+                    onBlur={rotationSave.flush}
+                  />
+                  <span className="text-body-secondary small">seconds</span>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, -1)}
+                    disabled={i === 0}
+                    aria-label="Move up"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => moveRow(i, 1)}
+                    disabled={i === rotation.length - 1}
+                    aria-label="Move down"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger btn-sm"
+                    onClick={() => removeRow(i)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="d-flex align-items-center gap-3 mt-3">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={addRow}
+                  disabled={rotation.length >= ROTATION_MAX_ROWS}
+                >
+                  Add row
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
 
       </div>
       </div>
@@ -1571,153 +1720,8 @@ function App() {
       {showsFootball && footballRotation && (
         <div className="card mb-4">
           <div className="card-body">
-            <h2 className="card-title h5">Football game screen lengths</h2>
-            <p className="text-body-secondary small">
-              How long each in-game screen stays up, in seconds. Each is held to its range.
-            </p>
-            <div className="row g-3">
-              {(
-                [
-                  ['play', 'Play animation'],
-                  ['playtext', 'Play text'],
-                  ['score', 'Score celebration'],
-                  ['score_detail', 'Score detail card'],
-                  ['quick', "Followed team's score"],
-                  ['fg_miss', 'Missed field goal'],
-                  ['turnover', 'Turnover'],
-                  ['reversal', 'Reversal'],
-                  ['cointoss', 'Coin toss'],
-                  ['stats', 'Team stats page (official timeout)'],
-                  ['redzone', 'Red zone alert (over the idle screens)'],
-                ] as const
-              ).map(([key, label]) => {
-                const range = footballTimingRanges[key]
-                return (
-                  <div className="col-sm-4" key={key}>
-                    <label className="form-label" htmlFor={`football-timing-${key}`}>
-                      {label}
-                    </label>
-                    <input
-                      className="form-control"
-                      id={`football-timing-${key}`}
-                      type="number"
-                      step="any"
-                      min={range?.[1]}
-                      max={range?.[2]}
-                      value={footballRotation.timings[key] ?? ''}
-                      onChange={(e) =>
-                        numberEdit(footballRotationSave, e, {
-                          ...footballRotation,
-                          timings: { ...footballRotation.timings, [key]: Number(e.target.value) },
-                        })
-                      }
-                      onBlur={footballRotationSave.flush}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Idle rotation</h2>
-          {rotation ? (
-            <form onSubmit={flushOnSubmit(rotationSave)}>
-              <p className="text-body-secondary small">
-                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
-                Consecutive rows of one sport show together, then the board moves to the other
-                sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
-                Empty falls back to each sport's built-in default.
-              </p>
-              {rotation.map((row, i) => (
-                <div className="d-flex align-items-center gap-2 mb-2" key={i}>
-                  <select
-                    className="form-select"
-                    style={{ width: 'auto' }}
-                    aria-label={`rotation screen ${i + 1}`}
-                    value={row.screen}
-                    onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
-                  >
-                    <optgroup label="Hockey">
-                      {ROTATION_SCREENS.filter((screen) => screen !== 'clock').map((screen) => (
-                        <option key={screen} value={screen}>
-                          {screen}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Football">
-                      {FOOTBALL_ROTATION_SCREENS.map((screen) => (
-                        <option key={screen} value={screen}>
-                          {screen}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <option value="clock">clock</option>
-                  </select>
-                  <input
-                    className="form-control"
-                    style={{ width: '6rem' }}
-                    type="number"
-                    step="any"
-                    min="0"
-                    aria-label={`rotation seconds ${i + 1}`}
-                    value={row.seconds}
-                    onChange={(e) =>
-                      numberEdit(
-                        rotationSave,
-                        e,
-                        rotation.map((r, j) =>
-                          j === i ? { ...row, seconds: Number(e.target.value) } : r,
-                        ),
-                        `rotation-seconds-${i}`,
-                      )
-                    }
-                    onBlur={rotationSave.flush}
-                  />
-                  <span className="text-body-secondary small">seconds</span>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, -1)}
-                    disabled={i === 0}
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => moveRow(i, 1)}
-                    disabled={i === rotation.length - 1}
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => removeRow(i)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <div className="d-flex align-items-center gap-3 mt-3">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={addRow}
-                  disabled={rotation.length >= ROTATION_MAX_ROWS}
-                >
-                  Add row
-                </button>
-              </div>
-              {showsFootball && footballRotation && (
-                <div className="mt-4 pt-3 border-top">
-                  <h3 className="h6">Football between games</h3>
+            <h2 className="card-title h5">Football between games</h2>
+            <form onSubmit={flushOnSubmit(footballRotationSave)}>
                   <p className="text-body-secondary small">
                     The countdown, the final and the bye-week screen join the rotation by themselves
                     when they apply (128px panels only). How long they wait and last:
@@ -1812,14 +1816,63 @@ function App() {
                     </div>
                   ))}
                 </div>
-                </div>
-              )}
             </form>
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {showsFootball && footballRotation && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Football game screen lengths</h2>
+            <p className="text-body-secondary small">
+              How long each in-game screen stays up, in seconds. Each is held to its range.
+            </p>
+            <div className="row g-3">
+              {(
+                [
+                  ['play', 'Play animation'],
+                  ['playtext', 'Play text'],
+                  ['score', 'Score celebration'],
+                  ['score_detail', 'Score detail card'],
+                  ['quick', "Followed team's score"],
+                  ['fg_miss', 'Missed field goal'],
+                  ['turnover', 'Turnover'],
+                  ['reversal', 'Reversal'],
+                  ['cointoss', 'Coin toss'],
+                  ['stats', 'Team stats page (official timeout)'],
+                  ['redzone', 'Red zone alert (over the idle screens)'],
+                ] as const
+              ).map(([key, label]) => {
+                const range = footballTimingRanges[key]
+                return (
+                  <div className="col-sm-4" key={key}>
+                    <label className="form-label" htmlFor={`football-timing-${key}`}>
+                      {label}
+                    </label>
+                    <input
+                      className="form-control"
+                      id={`football-timing-${key}`}
+                      type="number"
+                      step="any"
+                      min={range?.[1]}
+                      max={range?.[2]}
+                      value={footballRotation.timings[key] ?? ''}
+                      onChange={(e) =>
+                        numberEdit(footballRotationSave, e, {
+                          ...footballRotation,
+                          timings: { ...footballRotation.timings, [key]: Number(e.target.value) },
+                        })
+                      }
+                      onBlur={footballRotationSave.flush}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card mb-4">
         <div className="card-body">
@@ -2721,6 +2774,73 @@ function App() {
             ) : (
               <p className="text-body-secondary mb-0">waiting for server...</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {page === 'cache' && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h2 className="card-title h5">Cached data</h2>
+            <p className="text-body-secondary small">
+              What the board has fetched and keeps (refreshed every few seconds while this tab is
+              open). Clearing makes it fetch again; while a game of a team you follow is live, football's
+              idle data waits until it ends.
+            </p>
+            <div className="d-flex gap-2 mb-3">
+              {(['all', 'hockey', 'football'] as const).map((scope) => (
+                <button
+                  key={scope}
+                  type="button"
+                  className="btn btn-outline-danger btn-sm"
+                  onClick={() => clearCache(scope)}
+                >
+                  Clear {scope === 'all' ? 'everything' : scope}
+                </button>
+              ))}
+            </div>
+            {cacheItems === null && <p className="text-body-secondary mb-0">waiting for server...</p>}
+            {cacheItems !== null && cacheItems.length === 0 && (
+              <p className="text-body-secondary mb-0">Nothing cached right now.</p>
+            )}
+            {(['hockey', 'football'] as const).map((sport) => {
+              const rows = (cacheItems ?? []).filter((c) => c.sport === sport)
+              if (!rows.length) return null
+              return (
+                <div key={sport} className="mb-3">
+                  <h3 className="h6 text-capitalize">{sport}</h3>
+                  <ul className="list-group">
+                    {rows.map((c) => (
+                      <li className="list-group-item" key={c.key} data-cache-key={c.key}>
+                        <div className="d-flex align-items-center gap-2">
+                          <span className="flex-grow-1">
+                            {c.label} <span className="text-body-secondary small">{c.summary}</span>{' '}
+                            <span className="badge text-bg-secondary">{ageLabel(c.age_seconds)}</span>
+                          </span>
+                          {c.clearable && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              aria-label={`Clear ${c.label}`}
+                              onClick={() => clearCache(c.key)}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <details className="mt-1">
+                          <summary className="small">data</summary>
+                          <pre className="bg-body-tertiary border rounded p-2 mb-0 small" style={{ maxHeight: '16rem', overflow: 'auto' }}>
+                            {c.data}
+                            {c.truncated ? '\n... (cut)' : ''}
+                          </pre>
+                        </details>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

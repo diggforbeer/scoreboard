@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     app.install_signal_handlers()
     if args.demo:
         if args.sport and args.sport != app.current_mode():
-            app._switch_sport(args.sport)
+            app._switch_sport(args.sport, force_clean=True)
         app.run_demo()
         return 0
     app.run()

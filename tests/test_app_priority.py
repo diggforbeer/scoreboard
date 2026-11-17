@@ -734,3 +734,73 @@ def test_the_other_nights_slot_shows_nothing(backend):
         )
         is None
     )
+
+
+# -- the idle alternation must not wipe hockey's state -------------------------------------------
+
+
+def test_the_idle_alternation_never_shows_connecting_or_loses_hockeys_caches(backend):
+    """Seen on a board: every return to hockey went through CONNECTING and refetched everything."""
+    from scoreboard.config import RotationEntry
+
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.settings.rotation = [
+        RotationEntry("standings", 6.0),
+        RotationEntry("fb_week", 6.0),
+        RotationEntry("clock", 3.0),
+    ]
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.poll(1)
+    rig.app._leaders_retry_after = 12345.0  # state a clean switch used to reset
+    seen = set()
+    scenes = set()
+    for _ in range(80):
+        rig.poll(1)
+        seen.add(rig.sport)
+        scenes.add(rig.app.select_scene().kind)
+        assert rig.app._leaders_retry_after == 12345.0, "the switch wiped hockey's state"
+        assert rig.app.last_success is not None
+    assert seen == {"hockey", "football"}, "it did alternate"
+    assert "connecting" not in scenes and "fb_connecting" not in scenes and "no_data" not in scenes
+
+
+def test_the_idle_alternation_is_logged_at_debug_and_a_game_driven_switch_at_info(backend, caplog):
+    """The alternation switched every ~15 s and filled the journal on an SD card; a switch that
+    something caused (a ranked game starting) is still worth a line."""
+    import logging
+
+    from scoreboard.config import RotationEntry
+
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.settings.rotation = [RotationEntry("standings", 6.0), RotationEntry("fb_week", 6.0)]
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.poll(1)
+
+    def switches():
+        return [r for r in caplog.records if "Switching sport" in r.getMessage()]
+
+    with caplog.at_level(logging.DEBUG, logger="scoreboard.app"):
+        for _ in range(80):
+            rig.poll(1)
+        assert switches() and all(r.levelno == logging.DEBUG for r in switches())
+
+        for _ in range(40):  # rest on football, so the game below has to switch the board
+            if rig.sport == "football":
+                break
+            rig.poll(1)
+        assert rig.sport == "football"
+        caplog.clear()
+        rig.hockey.today = [nsh_live()]
+        rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+        assert rig.sport == "hockey"
+        assert switches() and all(r.levelno == logging.INFO for r in switches())
+
+
+def test_a_goal_scored_while_the_board_was_on_football_does_not_celebrate_on_return(backend):
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.poll(1)
+    rig.app._known_scores = {("x", "NSH"): 1}
+    rig.app._switch_sport("football")
+    rig.app._switch_sport("hockey")
+    assert rig.app._known_scores == {}, "re-baselined, so nothing fires"

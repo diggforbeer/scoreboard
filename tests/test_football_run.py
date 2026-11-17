@@ -7,6 +7,8 @@ cases (gap, scramble, kneel, touchdown) use the real plays in ``play_cases.json`
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from scoreboard.app import Scene
@@ -74,7 +76,8 @@ def test_the_director_uses_the_runs_own_length():
     from test_football_director import started
 
     rig = started(make_play(1, "rush", off="WSH"))
-    long_run = _play("Rush", "x", 20, 60, "WSH", 40)
+    # The demo helper numbers every play "100", the baseline's own: a real new play is later.
+    long_run = dataclasses.replace(_play("Rush", "x", 20, 60, "WSH", 40), sequence=200)
     rig.poll(make_play(1, "rush", off="WSH"), long_run)
     assert rig.run()[0].seconds == 4.0
 
