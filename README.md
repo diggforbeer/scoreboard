@@ -6,7 +6,7 @@
 |-------------------------------------------------- | -------: | -------: | ------: | --------: |
 | src/scoreboard/\_\_init\_\_.py                    |        1 |        0 |    100% |           |
 | src/scoreboard/\_\_main\_\_.py                    |      109 |        5 |     95% |100, 163-165, 188 |
-| src/scoreboard/admin\_server.py                   |      836 |       53 |     94% |752-753, 758, 971-972, 979-980, 988-989, 1102, 1108, 1115-1117, 1131-1132, 1203-1204, 1246, 1249, 1252, 1255, 1323, 1345-1347, 1368, 1409, 1450, 1719-1720, 1798-1799, 1821-1840, 1844-1847, 1909, 1940-1942, 1981 |
+| src/scoreboard/admin\_server.py                   |      836 |       53 |     94% |752-753, 758, 974-975, 982-983, 991-992, 1105, 1111, 1118-1120, 1134-1135, 1206-1207, 1249, 1252, 1255, 1258, 1326, 1348-1350, 1371, 1412, 1453, 1722-1723, 1801-1802, 1824-1843, 1847-1850, 1912, 1943-1945, 1984 |
 | src/scoreboard/app.py                             |     2010 |       73 |     96% |645-646, 690-691, 813-815, 892, 894, 1147, 1301-1302, 1321, 1324, 1347-1348, 1640-1641, 1850, 1853, 1864-1865, 1892, 1954, 1989, 2011, 2093, 2102, 2121, 2124, 2144, 2147, 2153, 2164, 2167, 2173, 2293, 2303, 2310, 2423, 2476, 2519-2521, 2536-2538, 2583-2585, 2603, 2629, 2731-2733, 2765-2766, 2788-2789, 2847-2848, 2938, 2965, 3182, 3233, 3248-3249, 3255-3256, 3290, 3524, 3532, 3675 |
 | src/scoreboard/april\_fools.py                    |       24 |        2 |     92% |     51-54 |
 | src/scoreboard/audio.py                           |      130 |        2 |     98% |  242, 249 |
@@ -15,7 +15,7 @@
 | src/scoreboard/brightness.py                      |        9 |        0 |    100% |           |
 | src/scoreboard/button.py                          |       56 |        1 |     98% |        51 |
 | src/scoreboard/cache\_view.py                     |       30 |        1 |     97% |        26 |
-| src/scoreboard/config.py                          |      464 |        6 |     99% |388-389, 391-392, 985-986 |
+| src/scoreboard/config.py                          |      467 |        6 |     99% |389-390, 392-393, 990-991 |
 | src/scoreboard/delay.py                           |       28 |        0 |    100% |           |
 | src/scoreboard/demo.py                            |       76 |        0 |    100% |           |
 | src/scoreboard/display/\_\_init\_\_.py            |        0 |        0 |    100% |           |
@@ -62,7 +62,7 @@
 | src/scoreboard/football/idle\_screens.py          |       45 |        0 |    100% |           |
 | src/scoreboard/football/idle\_views.py            |      219 |        2 |     99% |   253-254 |
 | src/scoreboard/football/mode.py                   |      375 |       14 |     96% |151-154, 165, 176-177, 188-190, 202-204, 719 |
-| src/scoreboard/football/models.py                 |      299 |        2 |     99% |   33, 253 |
+| src/scoreboard/football/models.py                 |      301 |        2 |     99% |   33, 253 |
 | src/scoreboard/football/pacing.py                 |       42 |        0 |    100% |           |
 | src/scoreboard/football/people.py                 |      137 |        0 |    100% |           |
 | src/scoreboard/football/playtext.py               |      241 |        5 |     98% |217-218, 266-268 |
@@ -70,7 +70,7 @@
 | src/scoreboard/football/redzone.py                |       75 |        2 |     97% |   108-109 |
 | src/scoreboard/football/reversals.py              |      124 |        0 |    100% |           |
 | src/scoreboard/football/stats.py                  |       83 |        5 |     94% |82, 109-110, 114, 134 |
-| src/scoreboard/football/teams.py                  |       40 |        0 |    100% |           |
+| src/scoreboard/football/teams.py                  |       54 |        1 |     98% |       131 |
 | src/scoreboard/football/textlayout.py             |       28 |        0 |    100% |           |
 | src/scoreboard/football/watch.py                  |       74 |        0 |    100% |           |
 | src/scoreboard/football/worker.py                 |      164 |        4 |     98% |235-236, 298-299 |
@@ -80,12 +80,12 @@
 | src/scoreboard/hostname.py                        |       69 |        2 |     97% |     86-87 |
 | src/scoreboard/light\_sensor.py                   |       38 |        0 |    100% |           |
 | src/scoreboard/network.py                         |       11 |        2 |     82% |     25-26 |
-| src/scoreboard/priority.py                        |      137 |        1 |     99% |       127 |
+| src/scoreboard/priority.py                        |      152 |        1 |     99% |       128 |
 | src/scoreboard/setup\_server.py                   |      134 |        1 |     99% |       409 |
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **13082** |  **438** | **97%** |           |
+| **TOTAL**                                         | **13116** |  **439** | **97%** |           |
 
 
 ## Setup coverage badge
