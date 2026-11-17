@@ -536,7 +536,9 @@ def _pixels(app, scene):
 def test_the_status_box_reports_the_football_feed(app):
     snap = app.status_snapshot()
     assert snap["scene"] == "fb_connecting" and snap["Football favourite team"] == "NYG"
-    assert snap["Football last successful poll"] == "never" and snap["Football last error"] == "(none)"
+    assert (
+        snap["Football last successful poll"] == "never" and snap["Football last error"] == "(none)"
+    )
     app.feed.answers = [None]
     app._football.worker.poll_once()
     snap = app.status_snapshot()
