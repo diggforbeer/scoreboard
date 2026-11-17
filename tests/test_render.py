@@ -2431,3 +2431,75 @@ def test_address_name_too_wide_never_leaves_its_half():
     box = c.bbox(0, 0, HALF - 1, H - 1)
     assert box is not None
     assert box.x1 <= HALF - 1
+
+
+# -- the intermission stats table ------------------------------------------------------------------
+
+INT_STATS_RAW = {
+    "teamGameStats": [
+        {"category": "sog", "awayValue": 14, "homeValue": 19},
+        {"category": "faceoffWinningPctg", "awayValue": 0.55, "homeValue": 0.45},
+        {"category": "powerPlay", "awayValue": "0/1", "homeValue": "1/2"},
+        {"category": "hits", "awayValue": 17, "homeValue": 12},
+        {"category": "pim", "awayValue": 4, "homeValue": 2},
+        {"category": "blockedShots", "awayValue": 6, "homeValue": 8},
+        {"category": "giveaways", "awayValue": 5, "homeValue": 9},
+        {"category": "takeaways", "awayValue": 3, "homeValue": 2},
+    ],
+    "shotsByPeriod": [
+        {"periodDescriptor": {"number": 1}, "away": 8, "home": 9},
+        {"periodDescriptor": {"number": 2}, "away": 6, "home": 10},
+    ],
+}
+INT_ROWS = ((1, 6), (7, 12), (13, 18), (19, 24), (25, 30))  # inclusive glyph rows per line
+
+
+def int_stats():
+    from scoreboard.hockey.models import game_stats_from_right_rail
+
+    return game_stats_from_right_rail(INT_STATS_RAW)
+
+
+@pytest.mark.parametrize("layout,tick", [("logo", 0), ("logo", 1), ("text", 0)])
+def test_intermission_stats(games, synthetic_logos, layout, tick, update_snapshots):
+    game = games["live"]  # SEA @ CGY
+    c = canvas()
+    make_renderer(logos=synthetic_logos if layout == "logo" else None).draw_intermission(
+        c, game, int_stats(), tick
+    )
+    art = show(f"{layout}, intermission stats, page tick {tick}", c)
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    away, home = team_color(game.away.abbrev), team_color(game.home.abbrev)
+    if layout == "logo":
+        for x0, colour in ((0, away), (MID_RIGHT, home)):
+            assert colour in c.colors(x0, 0, x0 + LOGO - 1, H - 1)
+    check_snapshot(f"{layout}_intermission_stats_{tick}", art, update_snapshots)
+
+
+def test_the_leader_of_a_row_is_lit_in_their_colour_and_the_other_side_dims(games, synthetic_logos):
+    game = games["live"]
+    away, home = team_color(game.away.abbrev), team_color(game.home.abbrev)
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_intermission(c, game, int_stats(), 0)
+    # Row 1 is shots, 14 to 19: home leads, away dims.
+    rows = INT_ROWS[0]
+    assert home in c.colors(MID_RIGHT - 14, rows[0], MID_RIGHT - 1, rows[1])
+    assert away not in c.colors(MID_LEFT, rows[0], MID_LEFT + 14, rows[1])
+    assert Renderer._INTERMISSION_TRAILING in c.colors(MID_LEFT, rows[0], MID_LEFT + 14, rows[1])
+    # Row 5 is penalty minutes, 4 to 2: fewer is better, so home leads again.
+    rows = INT_ROWS[4]
+    assert home in c.colors(MID_RIGHT - 14, rows[0], MID_RIGHT - 1, rows[1])
+    assert away not in c.colors(MID_LEFT, rows[0], MID_LEFT + 14, rows[1])
+
+
+def test_a_tied_row_keeps_both_sides_lit(games, synthetic_logos):
+    from scoreboard.hockey.models import game_stats_from_right_rail
+
+    stats = game_stats_from_right_rail(
+        {"teamGameStats": [{"category": "hits", "awayValue": 9, "homeValue": 9}]}
+    )
+    game = games["live"]
+    c = canvas()
+    make_renderer(logos=synthetic_logos).draw_intermission(c, game, stats, 0)
+    assert team_color(game.away.abbrev) in c.colors(MID_LEFT, 1, MID_LEFT + 14, 7)
+    assert team_color(game.home.abbrev) in c.colors(MID_RIGHT - 14, 1, MID_RIGHT - 1, 7)

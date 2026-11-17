@@ -785,3 +785,26 @@ def test_stale_landings_for_other_games_are_dropped():
         clock.now += 60
         client.situation(2)
         assert set(client._landings) == {2}
+
+
+@responses.activate
+def test_game_stats_come_from_the_right_rail_and_parse():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/42/right-rail",
+        json={"teamGameStats": [{"category": "sog", "awayValue": 3, "homeValue": 5}]},
+        status=200,
+    )
+    with HockeyClient() as client:
+        stats = client.game_stats(42)
+    assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/right-rail"
+    assert [(s.label, s.away, s.home, s.leader) for s in stats.lines] == [
+        ("SHOTS", "3", "5", "home")
+    ]
+
+
+@responses.activate
+def test_game_stats_are_none_when_the_payload_has_no_stats():
+    responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/right-rail", json={}, status=200)
+    with HockeyClient() as client:
+        assert client.game_stats(42) is None

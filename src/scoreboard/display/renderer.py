@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from .. import blowout
 from ..hockey.models import (
     Game,
+    GameStats,
     GoalEvent,
     MeetingResult,
     SeasonSeriesRecord,
@@ -564,6 +565,55 @@ class Renderer:
         if not event.assists:
             return ("UNASSISTED",)
         return tuple(f"#{a.sweater_number} {a.name} {a.assists_to_date}" for a in event.assists)
+
+    #: Tiny-face baselines of the intermission table's rows, and of its rows under a header line.
+    _INTERMISSION_BASELINES = (6, 12, 18, 24, 30)
+    _INTERMISSION_HEADED_BASELINES = (12, 18, 24, 30)
+    _INTERMISSION_TRAILING = (70, 70, 70)
+    _INTERMISSION_LABEL = (150, 150, 150)
+
+    def draw_intermission(self, canvas: Any, game: Game, stats: GameStats, tick: int = 0) -> None:
+        """The favourite's game stats in place of an empty game scene during an intermission.
+
+        Away on the left, home on the right, a stat's name between them in the tiny face; whoever
+        leads a row shows it in their team colour and the other side dims (a tie keeps both lit).
+        With both logos (the 128px layout) they sit at the edges as on the game scene and the table
+        fills the middle five rows a page. Without them (a 64px panel, or a missing logo) the
+        two abbreviations head the table and four rows fit a page. The pages take turns by
+        ``tick`` (a clock count, one per page-length) and a row of dots at the bottom says which.
+        """
+        canvas.Clear()
+        away_colour, home_colour = team_color(game.away.abbrev), team_color(game.home.abbrev)
+        left, right = 0, self.width
+        if self.logos is not None and self.width >= 128:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                left, right = self._draw_logos(canvas, away, home)
+        headed = left == 0 and right == self.width
+        baselines = self._INTERMISSION_HEADED_BASELINES if headed else self._INTERMISSION_BASELINES
+        flat = [line for page in stats.pages for line in page]
+        size = len(baselines)
+        pages = [flat[i : i + size] for i in range(0, len(flat), size)] or [[]]
+        page = tick % len(pages)
+        cx = (left + right) // 2
+        if headed:
+            self.text(canvas, self.fonts.tiny, left + 1, 6, away_colour, game.away.abbrev)
+            self.text_right(canvas, self.fonts.tiny, right - 1, 6, home_colour, game.home.abbrev)
+        for line, baseline in zip(pages[page], baselines, strict=False):
+            self.text_center(
+                canvas, self.fonts.tiny, cx, baseline, self._INTERMISSION_LABEL, line.label
+            )
+            away_on = self._INTERMISSION_TRAILING if line.leader == "home" else away_colour
+            home_on = self._INTERMISSION_TRAILING if line.leader == "away" else home_colour
+            self.text(canvas, self.fonts.tiny, left + 1, baseline, away_on, line.away)
+            self.text_right(canvas, self.fonts.tiny, right - 1, baseline, home_on, line.home)
+        if len(pages) > 1:
+            x0 = cx - (len(pages) * 4 - 2) // 2
+            for i in range(len(pages)):
+                shade = WHITE if i == page else (45, 45, 45)
+                for dx in range(2):
+                    canvas.SetPixel(x0 + i * 4 + dx, self.height - 1, *shade)
 
     def draw_three_stars(self, canvas: Any, game: Game, stars: Sequence[Star]) -> None:
         """The three stars of a finished favourite game (#156), all on one frame.

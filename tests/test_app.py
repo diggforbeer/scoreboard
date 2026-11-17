@@ -115,6 +115,8 @@ class FakeClient:
         self.team_roster_calls: list[str] = []
         self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
         self.three_stars_calls: list[int] = []
+        self.game_stats_calls: list[int] = []
+        self.game_stats_by_game: dict[int, object] = {}
         self.stars: dict[int, tuple[Star, ...]] = {}
         self.standings_rows: list[StandingsRow] = []
         self.standings_calls = 0
@@ -136,6 +138,12 @@ class FakeClient:
 
     def shootout(self, game_id: int):
         return None
+
+    def game_stats(self, game_id: int):
+        self.game_stats_calls.append(game_id)
+        if self.fail:
+            raise HockeyApiError("boom")
+        return self.game_stats_by_game.get(game_id)
 
     def goal_scoring(self, game_id: int) -> tuple[GoalEvent, ...]:
         self.goal_scoring_calls.append(game_id)
@@ -1758,6 +1766,7 @@ def stub_renderer(app: ScoreboardApp) -> None:
         "draw_goal",
         "draw_goal_detail",
         "draw_three_stars",
+        "draw_intermission",
         "draw_ap_setup",
         "draw_wifi_join",
         "draw_countdown",

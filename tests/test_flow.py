@@ -133,6 +133,12 @@ class FlowClient:
         self.shootouts: dict[int, Shootout | None] = {}
         self.shootout_calls: list[int] = []
         self.fail_shootout = False
+        self.game_stats_by_game: dict[int, object] = {}
+        self.game_stats_calls: list[int] = []
+
+    def game_stats(self, game_id):
+        self.game_stats_calls.append(game_id)
+        return self.game_stats_by_game.get(game_id)
 
     def club_stats(self, team, date="now"):
         self.club_stats_calls.append(team)
@@ -2284,3 +2290,124 @@ def test_rapid_sport_switching_leaks_nothing(day):
     assert app.current_mode() == "hockey"
     assert app._football is None
     assert len(app._known_scores) <= 2
+
+
+# -- the intermission stats screen ----------------------------------------------------------------
+
+
+def _int_stats():
+    from scoreboard.hockey.models import game_stats_from_right_rail
+
+    return game_stats_from_right_rail(
+        {
+            "teamGameStats": [
+                {"category": "sog", "awayValue": 14, "homeValue": 19},
+                {"category": "hits", "awayValue": 17, "homeValue": 12},
+            ],
+            "shotsByPeriod": [{"periodDescriptor": {"number": 1}, "away": 8, "home": 9}],
+        }
+    )
+
+
+def _in_intermission(client, **fields):
+    client.today[0] = dataclasses.replace(client.today[0], state="OFF")
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True, **fields)
+    client.game_stats_by_game[client.today[1].id] = _int_stats()
+
+
+def test_the_favourites_intermission_shows_its_stats_once_they_arrive(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    scene = app.select_scene()
+    assert scene.kind == "intermission" and scene.game.id == 1 and scene.stats == _int_stats()
+    assert client.game_stats_calls == [1]
+
+
+def test_until_the_stats_arrive_the_game_scene_stays_up(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    client.game_stats_by_game.clear()  # the feed has none yet
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    assert app.select_scene().kind == "game"
+
+
+def test_the_stats_are_fetched_at_the_start_then_once_a_minute_and_a_failure_is_retried(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    app.refresh_intermission_stats()
+    assert client.game_stats_calls == [1], "once, however often the loop asks"
+    clock.advance(seconds=59)
+    app.refresh_intermission_stats()
+    assert client.game_stats_calls == [1]
+    clock.advance(seconds=2)
+    app.refresh_intermission_stats()
+    assert client.game_stats_calls == [1, 1], "and again after a minute"
+
+    client.game_stats_by_game.clear()
+    clock.advance(seconds=61)
+    app.refresh_intermission_stats()  # empty answer: kept, retried soon
+    assert len(client.game_stats_calls) == 3
+    clock.advance(seconds=10)
+    app.refresh_intermission_stats()
+    assert len(client.game_stats_calls) == 3, "not before the retry delay"
+    clock.advance(seconds=6)
+    app.refresh_intermission_stats()
+    assert len(client.game_stats_calls) == 4
+
+
+def test_nothing_is_fetched_outside_the_favourites_intermission(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    client.today[1] = _live(client.today[1])  # in play, not in an intermission
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    assert client.game_stats_calls == []
+    # another team's intermission is not the favourite's
+    client.today[0] = dataclasses.replace(_live(client.today[0]), in_intermission=True)
+    app.refresh_intermission_stats()
+    assert client.game_stats_calls == []
+
+
+def test_the_stats_screen_ends_with_the_intermission_and_the_cache_is_dropped(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    assert app.select_scene().kind == "intermission"
+    client.today[1] = dataclasses.replace(client.today[1], in_intermission=False)
+    tick(app, clock, seconds=20)
+    app.refresh_intermission_stats()
+    assert app.select_scene().kind == "game" and app._int_stats == {}
+
+
+def test_the_stats_page_follows_the_clock(day):
+    from scoreboard.app import INTERMISSION_PAGE_SECONDS
+
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    first = app.select_scene()
+    clock.advance(seconds=INTERMISSION_PAGE_SECONDS)
+    second = app.select_scene()
+    assert second.stats_page == first.stats_page + 1, "one page per page-length, the same clock"
+    assert first != second, "so the live view takes a new snapshot"
+
+
+def test_a_shootout_never_gets_the_stats_screen(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client, period_type="SO")
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    assert client.game_stats_calls == [] and app.select_scene().kind != "intermission"

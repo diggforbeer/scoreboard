@@ -25,7 +25,7 @@ which one shows; `ScoreboardApp.draw_scene()` hands it to a `Renderer.draw_*`
 method.
 
 - [How a screen gets chosen](#how-a-screen-gets-chosen)
-- [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `penalty`, `three_stars`, shootout, `scores`
+- [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `penalty`, `three_stars`, `intermission`, shootout, `scores`
 - [Before a game](#before-a-game): `preview`, `countdown`, `matchup`, `matchup_meetings`
 - [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`
 - [Setup and status screens](#setup-and-status-screens): `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games`
@@ -40,7 +40,7 @@ Highest priority first:
 1. `wifi_join`: while a Wi-Fi join from the setup page is running, and for 15s after.
 2. `ap_setup`: while the board has no network and is broadcasting its own setup network.
 3. Night-mode blanking, if `dim_brightness = 0`: nothing is drawn at all.
-4. Goal override: `goal`, then `goal_detail`; then `penalty`, or `three_stars` after a final.
+4. Goal override: `goal`, then `goal_detail`; then `penalty`; then `three_stars` after a final, or `intermission` in the favourite's intermission.
 5. Followed teams' live games (the favourite, plus the other ranked teams).
 6. The favourite's own screen: live, then the held final, then a game today, then the next game from the schedule.
 7. With nothing live or upcoming, the **idle rotation**: a list of screens, each for its own number of seconds, set by `[[rotation]]` entries in `scoreboard.toml` or the admin page's Idle rotation card. A screen with nothing to show right now is skipped, never shown blank.
@@ -163,6 +163,29 @@ per star (rank, name in that player's team colour, one per-game stat: `2G`,
 The stars can come from either team. A game already final at startup doesn't
 show it, and a goalie's line has no stat. A name that doesn't fit shortens to
 the surname, then truncates.
+
+### `intermission`: the game's stats
+
+![Intermission stats, page 1](docs/screens/intermission_stats.png)
+![Intermission stats, page 2](docs/screens/intermission_stats_page2.png)
+
+In the favourite's own intermission (never a followed team's, never a shootout) the board shows
+how the game is going instead of a scoreboard with nothing moving. Away is on the left, home on
+the right, the two logos at the edges as on the game scene, and between them a table in the tiny
+face: the stat's name in the middle, each side's number beside its logo. Whoever leads a row shows
+it in their team colour and the other side dims; a tie keeps both lit (for penalty minutes and
+giveaways fewer is the leader). Five rows a page, the pages taking turns every 6 seconds for as
+long as the intermission lasts, two dots at the bottom saying which page.
+
+- **Page 1:** shots, faceoff %, power plays (goals/chances), hits, penalty minutes.
+- **Page 2:** blocked shots, giveaways, takeaways, then the shots of the last two periods.
+- **Data:** `right-rail`'s `teamGameStats` and `shotsByPeriod`, fetched when the intermission
+  starts and again every 60 s, only for the game showing the screen, on the fetch worker. Until
+  the first answer arrives (or if it never does) the plain game scene stays up.
+- **Narrow panels:** with no logos (64px, or a missing crest) the two abbreviations head the table
+  and four rows fit a page.
+
+![Intermission stats, text layout](docs/screens/intermission_stats_text.png)
 
 ### Shootout
 
