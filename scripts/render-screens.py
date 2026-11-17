@@ -59,6 +59,8 @@ MOCKUPS = REPO_ROOT / "scripts" / "football-mockups.py"
 NOW = datetime(2026, 10, 14, 19, 30, tzinfo=ZoneInfo("America/Chicago"))
 #: The Christmas tree's countdown only exists Dec 1-25.
 DECEMBER = datetime(2026, 12, 20, 19, 30, tzinfo=ZoneInfo("America/Chicago"))
+#: Seven days before US Thanksgiving (Nov 26): the turkey screen needs a November date.
+NOVEMBER = datetime(2026, 11, 19, 19, 30, tzinfo=ZoneInfo("America/Chicago"))
 #: Seconds into a holiday fly-by to capture, when the sprite is mid-panel.
 FLYBY_STILL_SECONDS = 2.0
 #: Seconds into a shootout step: past the pop-in, so the settled grid shows.
@@ -138,7 +140,7 @@ def make_app(logos: LogoLibrary) -> ScoreboardApp:
 def capture(app: ScoreboardApp, step) -> Frame:
     """The frame ``step`` shows, as the live view would snapshot it."""
     scene = step.scene
-    app._clock_box[0] = DECEMBER if scene.kind == "christmas_tree" else NOW
+    app._clock_box[0] = {"christmas_tree": DECEMBER, "thanksgiving": NOVEMBER}.get(scene.kind, NOW)
     app._set_demo_logos(step.use_logos)
     app._start_demo_holiday(step)
     app._start_demo_shootout(step)

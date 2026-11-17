@@ -2260,6 +2260,56 @@ def test_christmas_tree_screen(day, name, update_snapshots):
     check_snapshot(f"christmas_tree_{name}", art, update_snapshots)
 
 
+@pytest.mark.parametrize(("day", "name"), [(19, "countdown"), (26, "happy")])
+def test_thanksgiving_screen(day, name, update_snapshots):
+    from scoreboard.display.holiday import (
+        FEATHER_ORANGE,
+        THANKSGIVING_TEXT,
+        TURKEY_SCREEN_WIDTH,
+    )
+
+    c = canvas()
+    make_renderer().draw_thanksgiving(c, datetime(2026, 11, day, 23, 0, tzinfo=UTC), "NSH")
+    art = show(f"thanksgiving screen, Nov {day}", c)
+
+    assert not c.out_of_bounds
+    assert THANKSGIVING_TEXT == FEATHER_ORANGE
+    turkey = c.bbox(0, 0, TURKEY_SCREEN_WIDTH + 3)
+    assert turkey is not None and turkey.x1 < TURKEY_SCREEN_WIDTH + 4, "the turkey on the left"
+    text = c.bbox(TURKEY_SCREEN_WIDTH + 6, 0)
+    assert text is not None, "the countdown on the right"
+    assert text.x1 <= W - 1, "the longest line (TO THANKSGIVING) fits beside the turkey"
+    assert team_color("NSH") in c.colors(TURKEY_SCREEN_WIDTH + 6, 0), "top line in team colour"
+    check_snapshot(f"thanksgiving_{name}", art, update_snapshots)
+
+
+def test_thanksgiving_screen_turkey_steps_its_legs_every_half_second():
+    from datetime import timedelta
+
+    renderer = make_renderer()
+    first, second = canvas(), canvas()
+    start = datetime(2026, 11, 19, 23, 0, tzinfo=UTC)
+    renderer.draw_thanksgiving(first, start, "NSH")
+    renderer.draw_thanksgiving(second, start + timedelta(seconds=0.5), "NSH")
+    assert first.pixels != second.pixels, "the legs move"
+    still = canvas()
+    renderer.draw_thanksgiving(still, start + timedelta(seconds=0.2), "NSH")
+    assert still.pixels == first.pixels, "and only on the half second"
+
+
+def test_thanksgiving_screen_on_a_single_panel_is_just_the_turkey():
+    from scoreboard.display.holiday import TURKEY_SCREEN_WIDTH
+
+    c = AsciiCanvas(64, H)
+    renderer = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ)
+    renderer.draw_thanksgiving(c, datetime(2026, 11, 19, 23, 0, tzinfo=UTC), "NSH")
+    assert not c.out_of_bounds
+    box = c.bbox()
+    assert box is not None
+    assert box.x1 - box.x0 + 1 <= TURKEY_SCREEN_WIDTH, "only the turkey, no text beside it"
+    assert abs((box.x0 + box.x1) / 2 - 31.5) <= 2, "centred, no countdown beside it"
+
+
 def test_christmas_tree_screen_on_a_single_panel_is_just_the_tree():
     from scoreboard.display.holiday import TREE_GREEN
 

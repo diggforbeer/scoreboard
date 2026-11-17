@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -53,6 +53,7 @@ from scoreboard.display.holiday import (
     christmas_countdown,
     easter_sunday,
     egg_teams,
+    thanksgiving_countdown,
 )
 from scoreboard.display.matrix import Backend
 from scoreboard.display.teams import TEAM_COLORS, team_color, team_secondary_color
@@ -889,6 +890,59 @@ def test_night_blanking_drops_back_to_the_slow_loop(holiday_app):
 )
 def test_christmas_countdown(day, expected):
     assert christmas_countdown(day) == expected
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 10, 31), None),
+        (date(2026, 11, 1), ("25 DAYS", "TO THANKSGIVING")),
+        (date(2026, 11, 19), ("7 DAYS", "TO THANKSGIVING")),
+        (date(2026, 11, 25), ("1 DAY", "TO THANKSGIVING")),
+        (date(2026, 11, 26), ("HAPPY", "THANKSGIVING")),
+        (date(2026, 11, 27), None),
+        (date(2026, 12, 1), None),
+        # The 4th Thursday moves: Nov 27 in 2025, Nov 23 in 2028.
+        (date(2025, 11, 27), ("HAPPY", "THANKSGIVING")),
+        (date(2028, 11, 23), ("HAPPY", "THANKSGIVING")),
+    ],
+)
+def test_thanksgiving_countdown(day, expected):
+    assert thanksgiving_countdown(day) == expected
+
+
+def test_the_countdown_screens_never_overlap_so_one_row_serves_both():
+    day = date(2026, 11, 1)
+    while day <= date(2026, 12, 31):
+        assert not (thanksgiving_countdown(day) and christmas_countdown(day)), day
+        day += timedelta(days=1)
+
+
+def test_holiday_rotation_screen_is_the_turkey_in_november_until_thanksgiving(holiday_app):
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    assert app._rotation_screen_scene("holiday", None, None) == Scene("thanksgiving")
+    now["t"] = datetime(2026, 11, 26, 18, 0, tzinfo=UTC)
+    assert app._rotation_screen_scene("holiday", None, None) == Scene("thanksgiving")
+    now["t"] = datetime(2026, 11, 27, 18, 0, tzinfo=UTC)
+    assert app._rotation_screen_scene("holiday", None, None) is None, "the day after: skipped"
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    assert app._rotation_screen_scene("holiday", None, None) == Scene("christmas_tree")
+
+
+@pytest.mark.parametrize(
+    "switch_off",
+    [
+        lambda cfg: setattr(cfg, "enabled", False),
+        lambda cfg: setattr(cfg, "themes", ["christmas"]),
+    ],
+    ids=["holiday-cheer-off", "thanksgiving-unticked"],
+)
+def test_the_turkey_screen_follows_the_holiday_cheer_switches(holiday_app, switch_off):
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    switch_off(app.settings.holiday)
+    assert app._rotation_screen_scene("holiday", None, None) is None
 
 
 def test_holiday_rotation_screen_is_the_tree_only_in_its_season(holiday_app):
