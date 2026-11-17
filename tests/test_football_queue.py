@@ -7,6 +7,7 @@ wallclock times, so a feed can be scripted exactly. Time is a fake clock through
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -133,6 +134,29 @@ def test_a_play_that_arrives_late_is_slotted_in_if_still_waiting_and_dropped_if_
         assert queue.offer([stale, p1, p3, p4]) == []  # the board has already moved past it
     assert queue.depth == 0 and any("late play" in r.message for r in caplog.records)
     assert queue.latest is p4
+
+
+def test_a_play_older_than_the_baseline_that_turns_up_after_it_is_not_replayed(caplog):
+    """The core feed lists plays the site feed lacks, such as the coin toss (the game's first play,
+    no wallclock). It turns up after the baseline but happened before it: shown an hour into the
+    game it is a replay (seen on a board every time football took the screen)."""
+    queue, _ = make_queue()
+    p5, p6 = play(5), play(6, "pass_complete")
+    assert queue.offer([p5, p6]) == []  # the baseline: both already played
+    toss = dataclasses.replace(play(1, "kickoff_return"), wallclock=None)
+    with caplog.at_level(logging.INFO):
+        assert queue.offer([toss, p5, p6]) == []
+    assert queue.depth == 0 and queue.next() is None
+    assert any("late play" in r.message for r in caplog.records)
+    fresh = play(7)
+    assert queue.offer([toss, p5, p6, fresh]) == [fresh], "real new plays still come through"
+
+
+def test_a_game_watched_from_before_kickoff_still_shows_its_coin_toss():
+    queue, _ = make_queue()
+    queue.offer([])  # no plays yet: nothing has happened, so there is no baseline to be older than
+    toss = dataclasses.replace(play(1, "kickoff_return"), wallclock=None)
+    assert queue.offer([toss]) == [toss]
 
 
 def test_a_play_rewritten_after_a_review_keeps_its_id_and_is_not_shown_twice():

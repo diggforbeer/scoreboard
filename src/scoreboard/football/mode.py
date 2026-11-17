@@ -184,15 +184,21 @@ class FootballMode:
 
     def watched(self, games: Sequence[FbGame]) -> list[FbGame]:
         """The games whose plays are fetched: live (or about to start) ones the favourite or a
-        followed team is in; with nobody followed in play, the first live game, so the board
-        always has something to animate. Never every game on the slate."""
+        followed team is in. Never every game on the slate.
+
+        Only a board that follows **no** football team falls back to the first live game, so it
+        always has something to animate. With teams followed, none of them playing means nothing
+        is watched: an unfollowed game must not take over the idle rotation (a Monday-night game
+        between two other teams did, replayed from the coin toss)."""
         cfg = self._football() if self._football else None
         followed = ([cfg.favourite_team] if cfg and cfg.favourite_team else []) + (
             list(cfg.followed_teams) if cfg else []
         )
         playing = [g for g in games if g.is_live or self._imminent(g)]
         mine = [g for g in playing if any(g.involves(t) for t in followed)]
-        return mine or playing[:1]
+        if mine or followed:
+            return mine
+        return playing[:1]
 
     def _collect(
         self, client: Any, games: list[FbGame], prev: FeedSnapshot
