@@ -67,6 +67,7 @@ from .hockey.models import (
     WILDCARD_SPOTS,
     ClubStats,
     Game,
+    GameStats,
     GoalEvent,
     MeetingResult,
     Penalty,
@@ -109,6 +110,12 @@ ANIMATION_FRAME_INTERVAL = 0.05
 #: turns during its intermission or held final (#260): long enough to read
 #: the score, short enough that the games actually being played get the time.
 FAVOURITE_QUICK_TURN = 0.5
+#: The intermission stats screen (``intermission``): how long each page of the table stays up, and
+#: how often the stats are fetched again while the favourite's game sits in an intermission.
+INTERMISSION_PAGE_SECONDS = 6.0
+INTERMISSION_STATS_REFRESH_SECONDS = 60.0
+#: A failed or empty stats fetch is tried again after this long.
+INTERMISSION_STATS_RETRY_SECONDS = 15.0
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
@@ -238,7 +245,8 @@ class Scene:
     """What the board should show right now.
 
     ``kind`` is one of ``game`` (live or final scoreboard), ``goal``,
-    ``goal_detail``, ``penalty``, ``three_stars``, ``countdown``, ``preview``, ``standings``,
+    ``goal_detail``, ``penalty``, ``three_stars``, ``intermission``, ``countdown``, ``preview``,
+    ``standings``,
     ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
     ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``thanksgiving``, ``no_games``,
     ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
@@ -271,6 +279,10 @@ class Scene:
     #: Set only for ``three_stars`` -- the hockey's three stars of a finished
     #: favourite game, ranked, per-game stats (#156).
     stars: tuple[Star, ...] | None = None
+    #: Set only for ``intermission`` -- the favourite's game stats table, and the page tick (the
+    #: renderer takes it modulo its own page count).
+    stats: GameStats | None = None
+    stats_page: int = 0
     #: Set only for ``ap_setup`` (#131 follow-up) -- the board's own
     #: first-boot WiFi AP, so a phone can join and finish setup. ``None``
     #: password means the AP came up open, not WPA2-protected.
@@ -581,6 +593,10 @@ class ScoreboardApp:
         #: (game id, monotonic time, stars) of the three-stars screen, for
         #: how long it stays up.
         self._three_stars: tuple[int, float, tuple[Star, ...]] | None = None
+        #: game id -> (fetched at, its team stats) for the intermission screen, and when each
+        #: game's fetch was last tried. Only the favourite's game in an intermission is fetched.
+        self._int_stats: dict[int, tuple[float, GameStats]] = {}
+        self._int_stats_tried: dict[int, float] = {}
         #: (game id, monotonic start) of the blowout flash (#326, blowout.py).
         self._blowout: tuple[int, float] | None = None
         self._blowout_shown: set[int] = set()
@@ -704,6 +720,7 @@ class ScoreboardApp:
                 self.refresh_goal_details()
                 self.refresh_penalties()
                 self.refresh_three_stars()
+                self.refresh_intermission_stats()
             self._choose_sport()
             self._sync_setup_server()
             self._track_address()
@@ -1198,6 +1215,8 @@ class ScoreboardApp:
         self._three_stars_pending = {}
         self._three_stars_shown = set()
         self._three_stars = None
+        self._int_stats = {}
+        self._int_stats_tried = {}
         self._blowout = None
         self._blowout_shown = set()
         self._shootout_animating = False
@@ -1977,6 +1996,61 @@ class ScoreboardApp:
             return None
         game = next((g for g in self.games if g.id == self._blowout[0]), None)
         return None if game is None else Scene("blowout", game)
+
+    def refresh_intermission_stats(self) -> None:
+        """Fetch the team stats for the favourite's game while it sits in an intermission.
+
+        Only that game, only then: one ``right-rail`` request when the intermission starts and one
+        a minute while it lasts (the numbers do not move without play), a failed one retried after
+        ``INTERMISSION_STATS_RETRY_SECONDS``. Stats for any other game are forgotten. Runs on the
+        fetch worker; the render loop never waits for it.
+        """
+        game = self.favourite_game_today()
+        if game is None or not game.is_live or not game.in_intermission or game.in_shootout:
+            self._int_stats.clear()
+            self._int_stats_tried.clear()
+            return
+        self._int_stats = {k: v for k, v in self._int_stats.items() if k == game.id}
+        now = self.monotonic()
+        have = self._int_stats.get(game.id)
+        if have is not None and now - have[0] < INTERMISSION_STATS_REFRESH_SECONDS:
+            return
+        tried = self._int_stats_tried.get(game.id)
+        if tried is not None and now - tried < INTERMISSION_STATS_RETRY_SECONDS:
+            return
+        self._int_stats_tried[game.id] = now
+        self.fetcher.submit(
+            ("int_stats", game.id),
+            lambda i=game.id: self.client.game_stats(i),
+            lambda s, e, i=game.id: self._on_intermission_stats(i, s, e),
+        )
+
+    def _on_intermission_stats(
+        self, game_id: int, stats: GameStats | None, error: Exception | None
+    ) -> None:
+        if error is not None or stats is None:
+            log.debug("Intermission stats for %s unavailable: %s", game_id, error)
+            return
+        self._int_stats[game_id] = (self.monotonic(), stats)
+
+    def _intermission_scene(self, scene: Scene) -> Scene | None:
+        """The stats table in place of the favourite's game scene while it is in an intermission
+        (nothing else is moving), once its stats have arrived; else ``None`` and the game scene
+        stays. The page is a pure function of the clock."""
+        game = scene.game
+        if game is None or not game.in_intermission or game.in_shootout:
+            return None
+        if not game.involves(self._hockey_cfg().favourite_team):
+            return None
+        have = self._int_stats.get(game.id)
+        if have is None:
+            return None
+        stats = have[1]
+        if not stats.pages:
+            return None
+        # The page count is the renderer's (it depends on the panel), so this is just the tick.
+        tick = int(self.monotonic() // INTERMISSION_PAGE_SECONDS)
+        return Scene("intermission", game, stats=stats, stats_page=tick)
 
     def _three_stars_override(self) -> Scene | None:
         if self._three_stars is None:
@@ -2916,7 +2990,9 @@ class ScoreboardApp:
         if flash is not None:
             return flash
         stars = self._three_stars_override()
-        return stars if stars is not None else scene
+        if stars is not None:
+            return stars
+        return self._intermission_scene(scene) or scene
 
     def _goal_detail_override(self) -> Scene | None:
         if self._goal_detail is None:
@@ -3575,6 +3651,8 @@ class ScoreboardApp:
             r.draw_penalty(self.canvas, scene.penalty, penalty_age)
         elif scene.kind == "three_stars":
             r.draw_three_stars(self.canvas, scene.game, scene.stars)
+        elif scene.kind == "intermission":
+            r.draw_intermission(self.canvas, scene.game, scene.stats, scene.stats_page)
         elif scene.kind == "blowout":  # not documented on purpose, see blowout.py
             r.draw_blowout(self.canvas, scene.game, favourite)
         elif scene.kind == "countdown":

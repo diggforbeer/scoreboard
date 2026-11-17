@@ -405,6 +405,119 @@ def three_stars_from_landing(raw: dict[str, Any] | None) -> tuple[Star, ...]:
     return tuple(sorted(stars, key=lambda s: s.star))
 
 
+# -- the intermission stats (``right-rail``'s teamGameStats) -----------------------------------
+
+#: The stats the intermission screen shows, in order, as (the feed's category, the tiny-font label,
+#: whether a lower number is the better one). Labels are at most 7 letters to fit the middle column.
+STAT_ROWS: tuple[tuple[str, str, bool], ...] = (
+    ("sog", "SHOTS", False),
+    ("faceoffWinningPctg", "FACEOFF", False),
+    ("powerPlay", "PP", False),
+    ("hits", "HITS", False),
+    ("pim", "PIM", True),
+    ("blockedShots", "BLOCKS", False),
+    ("giveaways", "GIVE", True),
+    ("takeaways", "TAKE", False),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class StatLine:
+    """One row of the intermission table: both sides' numbers as drawn, and who is ahead."""
+
+    label: str
+    away: str
+    home: str
+    #: ``"away"``, ``"home"`` or ``None`` for a tie (or nothing to compare).
+    leader: str | None = None
+
+
+def _stat_number(value: Any) -> float | None:
+    """A stat's comparable number: ``12``, ``0.59`` or the goals of ``"1/3"`` (power plays)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        head = value.split("/")[0].strip()
+        try:
+            return float(head)
+        except ValueError:
+            return None
+    return None
+
+
+def _stat_text(category: str, value: Any) -> str:
+    if category == "faceoffWinningPctg":
+        number = _stat_number(value)
+        return "-" if number is None else f"{round(number * 100)}%"
+    if isinstance(value, float) and value == int(value):
+        return str(int(value))
+    return "-" if value is None else str(value)
+
+
+@dataclass(frozen=True, slots=True)
+class GameStats:
+    """A game's team stats for the intermission screen, ready to draw (``right-rail``).
+
+    ``pages`` splits them into tables of at most five rows: the headline stats first, then the
+    rest and the shots of the last two periods. Away is the left column, home the right.
+    """
+
+    lines: tuple[StatLine, ...]
+    #: ``(label, away shots, home shots)`` for each period played, oldest first.
+    periods: tuple[tuple[str, int, int], ...] = ()
+
+    ROWS_PER_PAGE = 5
+
+    @property
+    def pages(self) -> tuple[tuple[StatLine, ...], ...]:
+        rows = list(self.lines)
+        for label, away, home in self.periods[-2:]:
+            leader = "away" if away > home else "home" if home > away else None
+            rows.append(StatLine(f"SOG {label}", str(away), str(home), leader))
+        size = self.ROWS_PER_PAGE
+        return tuple(tuple(rows[i : i + size]) for i in range(0, len(rows), size))
+
+
+def game_stats_from_right_rail(raw: dict[str, Any] | None) -> GameStats | None:
+    """The intermission table from ``right-rail``, or ``None`` when it carries no team stats.
+
+    A category the feed does not give is left out rather than shown as zero; one malformed entry
+    does not lose the rest (the precedent of ``three_stars_from_landing``).
+    """
+    if not isinstance(raw, dict):
+        return None
+    by_category: dict[str, Any] = {}
+    for entry in raw.get("teamGameStats") or []:
+        try:
+            by_category[str(entry["category"])] = (entry["awayValue"], entry["homeValue"])
+        except (KeyError, TypeError):
+            continue
+    lines = []
+    for category, label, lower_is_better in STAT_ROWS:
+        if category not in by_category:
+            continue
+        away, home = by_category[category]
+        a, h = _stat_number(away), _stat_number(home)
+        leader = None
+        if a is not None and h is not None and a != h:
+            leader = "away" if (a < h) == lower_is_better else "home"
+        lines.append(
+            StatLine(label, _stat_text(category, away), _stat_text(category, home), leader)
+        )
+    if not lines:
+        return None
+    periods = []
+    for entry in raw.get("shotsByPeriod") or []:
+        try:
+            number = int(entry["periodDescriptor"]["number"])
+            periods.append((f"P{number}", int(entry["away"]), int(entry["home"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return GameStats(tuple(lines), tuple(periods))
+
+
 @dataclass(frozen=True, slots=True)
 class ShootoutAttempt:
     """One shot from ``summary.shootout.events`` (#259).

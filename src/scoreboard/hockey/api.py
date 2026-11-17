@@ -21,6 +21,7 @@ from urllib3.util.retry import Retry
 from .models import (
     ClubStats,
     Game,
+    GameStats,
     GoalEvent,
     Penalty,
     PlayerSeasonDetail,
@@ -29,6 +30,7 @@ from .models import (
     Situation,
     StandingsRow,
     Star,
+    game_stats_from_right_rail,
     goal_events_from_landing,
     penalties_from_landing,
     player_details_from_api,
@@ -167,6 +169,14 @@ class HockeyClient:
             return None
         # Same payload, so the meetings (#168) cost no extra request.
         return replace(record, meetings=series_meetings_from_api(payload.get("seasonSeries")))
+
+    def game_stats(self, game_id: int) -> GameStats | None:
+        """The game's team stats (shots, faceoffs, power plays, hits, ...) for the intermission
+        screen, from ``right-rail`` (the endpoint ``season_series`` reads, a different request from
+        ``landing``). ``None`` when the payload has none. Fetched only while the favourite's game
+        is in an intermission and showing the screen."""
+        payload = self._get(f"/gamecenter/{game_id}/right-rail")
+        return game_stats_from_right_rail(payload)
 
     def three_stars(self, game_id: int) -> tuple[Star, ...]:
         """The three stars of a finished game (#156), or ``()`` until they're named.

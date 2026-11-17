@@ -22,6 +22,7 @@ EVERY_KIND = {
     "goal_detail",
     "penalty",
     "three_stars",
+    "intermission",
     "standings",
     "matchup",
     "matchup_meetings",
@@ -144,6 +145,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_goal_detail(c, scene.game, scene.goal_event)
         elif scene.kind == "three_stars":
             r.draw_three_stars(c, scene.game, scene.stars)
+        elif scene.kind == "intermission":
+            r.draw_intermission(c, scene.game, scene.stats, scene.stats_page)
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(c, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":

@@ -28,6 +28,7 @@ from .hockey.models import (
     Star,
     TeamLeaders,
     conference_standings,
+    game_stats_from_right_rail,
     standings_window,
 )
 
@@ -128,6 +129,24 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         _game(4, away, home, "LIVE", now, away_score=2, home_score=3, period=3, clock="01:12"),
         situation=_situation(away_codes=("EN",), away=6),
     )
+    int_stats = game_stats_from_right_rail(
+        {
+            "teamGameStats": [
+                {"category": "sog", "awayValue": 14, "homeValue": 19},
+                {"category": "faceoffWinningPctg", "awayValue": 0.55, "homeValue": 0.45},
+                {"category": "powerPlay", "awayValue": "0/1", "homeValue": "1/2"},
+                {"category": "hits", "awayValue": 17, "homeValue": 12},
+                {"category": "pim", "awayValue": 4, "homeValue": 2},
+                {"category": "blockedShots", "awayValue": 6, "homeValue": 8},
+                {"category": "giveaways", "awayValue": 5, "homeValue": 9},
+                {"category": "takeaways", "awayValue": 3, "homeValue": 2},
+            ],
+            "shotsByPeriod": [
+                {"periodDescriptor": {"number": 1}, "away": 8, "home": 9},
+                {"periodDescriptor": {"number": 2}, "away": 6, "home": 10},
+            ],
+        }
+    )
     intermission = _game(
         5, away, home, "LIVE", now, away_score=1, home_score=1, period=2, intermission=True
     )
@@ -208,6 +227,17 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ("game_power_play", Scene("game", power_play), {}),
         ("game_empty_net", Scene("game", empty_net), {}),
         ("game_intermission", Scene("game", intermission), {}),
+        ("intermission_stats", Scene("intermission", intermission, stats=int_stats), {}),
+        (
+            "intermission_stats_page2",
+            Scene("intermission", intermission, stats=int_stats, stats_page=1),
+            {},
+        ),
+        (
+            "intermission_stats_text",
+            Scene("intermission", intermission, stats=int_stats),
+            {"use_logos": False},
+        ),
         ("game_overtime", Scene("game", overtime), {}),
         ("goal", Scene("goal", goal, goal_team=home), {"animate_goal": True}),
         ("goal_followed", Scene("goal", goal, goal_team=away), {}),

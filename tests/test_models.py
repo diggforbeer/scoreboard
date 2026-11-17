@@ -686,3 +686,82 @@ def test_playoff_cut_is_none_without_a_clean_line(sequences):
 
     rows = [_seq_row(f"T{i}", s) for i, s in enumerate(sequences)]
     assert playoff_cut(rows) is None
+
+
+# -- the intermission stats ------------------------------------------------------------------------
+
+from scoreboard.hockey.models import game_stats_from_right_rail  # noqa: E402
+
+RIGHT_RAIL = {
+    "teamGameStats": [
+        {"category": "sog", "awayValue": 19, "homeValue": 25},
+        {"category": "faceoffWinningPctg", "awayValue": 0.589286, "homeValue": 0.410714},
+        {"category": "faceoffWins", "awayValue": "33/56", "homeValue": "23/56"},
+        {"category": "powerPlay", "awayValue": "0/2", "homeValue": "1/2"},
+        {"category": "pim", "awayValue": 6, "homeValue": 4},
+        {"category": "hits", "awayValue": 28, "homeValue": 23},
+        {"category": "blockedShots", "awayValue": 11, "homeValue": 10},
+        {"category": "giveaways", "awayValue": 8, "homeValue": 17},
+        {"category": "takeaways", "awayValue": 4, "homeValue": 1},
+    ],
+    "shotsByPeriod": [
+        {"periodDescriptor": {"number": 1, "periodType": "REG"}, "away": 6, "home": 8},
+        {"periodDescriptor": {"number": 2, "periodType": "REG"}, "away": 5, "home": 9},
+        {"periodDescriptor": {"number": 3, "periodType": "REG"}, "away": 8, "home": 8},
+    ],
+}
+
+
+def test_game_stats_read_the_right_rail_in_display_order_with_who_leads():
+    stats = game_stats_from_right_rail(RIGHT_RAIL)
+    rows = {line.label: line for line in stats.lines}
+    assert [line.label for line in stats.lines] == [
+        "SHOTS", "FACEOFF", "PP", "HITS", "PIM", "BLOCKS", "GIVE", "TAKE",
+    ]  # fmt: skip
+    assert (rows["SHOTS"].away, rows["SHOTS"].home, rows["SHOTS"].leader) == ("19", "25", "home")
+    assert (rows["FACEOFF"].away, rows["FACEOFF"].home) == ("59%", "41%")
+    assert rows["FACEOFF"].leader == "away"
+    assert rows["PP"].leader == "home", "a power play compares its goals"
+    assert rows["PIM"].leader == "home", "fewer penalty minutes is the better side"
+    assert rows["GIVE"].leader == "away", "and fewer giveaways"
+    assert rows["TAKE"].leader == "away"
+
+
+def test_game_stats_pages_are_five_rows_with_the_last_two_periods_of_shots_at_the_end():
+    stats = game_stats_from_right_rail(RIGHT_RAIL)
+    pages = stats.pages
+    assert [len(p) for p in pages] == [5, 5]
+    assert [line.label for line in pages[1]] == ["BLOCKS", "GIVE", "TAKE", "SOG P2", "SOG P3"]
+    assert [line.leader for line in pages[1][3:]] == ["home", None]
+
+
+def test_a_tie_and_a_missing_number_have_no_leader():
+    stats = game_stats_from_right_rail(
+        {
+            "teamGameStats": [
+                {"category": "hits", "awayValue": 9, "homeValue": 9},
+                {"category": "sog", "awayValue": None, "homeValue": 4},
+            ]
+        }
+    )
+    assert [(line.label, line.leader) for line in stats.lines] == [("SHOTS", None), ("HITS", None)]
+    assert stats.lines[0].away == "-"
+
+
+def test_game_stats_skip_a_malformed_entry_and_are_none_without_any_stats():
+    stats = game_stats_from_right_rail(
+        {
+            "teamGameStats": [
+                {"category": "hits"},
+                {"category": "sog", "awayValue": 1, "homeValue": 2},
+            ]
+        }
+    )
+    assert [line.label for line in stats.lines] == ["SHOTS"]
+    assert game_stats_from_right_rail({"teamGameStats": []}) is None
+    assert game_stats_from_right_rail({}) is None
+    assert game_stats_from_right_rail(None) is None
+    assert (
+        game_stats_from_right_rail({"teamGameStats": [{"category": "bogus", "awayValue": 1}]})
+        is None
+    )

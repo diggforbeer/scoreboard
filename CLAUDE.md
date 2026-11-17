@@ -445,6 +445,22 @@ between the two logos like `goal_detail`; a name that doesn't fit drops
 to the surname, then truncates. The one-star-per-frame alternative wasn't
 needed at 128px -- only 12+ letter surnames truncate between logos.
 
+**The intermission stats screen (`intermission`, `display/renderer.draw_intermission`).** In the
+favourite's own intermission the game scene's frozen scoreboard is replaced by a two-page table of
+the game's team stats (shots, faceoff %, power plays, hits, penalty minutes; blocks, giveaways,
+takeaways, the last two periods' shots), away left and home right with the logos at the edges, the
+leader of each row in their colour, pages turning every `INTERMISSION_PAGE_SECONDS` (a pure function
+of the clock; `Scene.stats_page` is the tick and the renderer takes it modulo its own page count).
+By the owner's decisions: **the favourite's game only** (not a followed team's, not a shootout) and
+**one extra request, scoped**: `HockeyClient.game_stats` reads `right-rail` (`teamGameStats`,
+`shotsByPeriod`; no new endpoint beyond what `season_series` already reads), fetched by
+`refresh_intermission_stats` when the favourite's game enters an intermission and every 60 s after
+(15 s retry on a failure), on the fetch worker, and forgotten when the intermission ends. Do not
+widen it to other games without asking. Until the first answer arrives the plain game scene stays
+up. It is the last layer of `_apply_goal_override`, so a goal, penalty, blowout or three stars
+still win over it. Not verified against a live intermission (does `right-rail` update during one?)
+or on hardware (#4).
+
 The shootout screen (#259) replaces the game scene while `periodType ==
 "SO"` and the game is live (a finished one falls back to the plain game
 scene, labelled `FINAL/SO`, so the held final reads as a final score --
