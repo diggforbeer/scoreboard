@@ -466,6 +466,20 @@ class FootballMode:
         cfg = self._football() if self._football else _no_football()
         return cfg.idle_rotation
 
+    def idle_resolves(self) -> bool:
+        """Whether the idle rotation has any screen to show right now: the app asks before giving
+        football a turn, so a turn with nothing to show is skipped (otherwise ``scene()`` falls
+        through to every game's scoreboard). True while there is no data yet: it will say."""
+        snap = self.snapshot
+        if not snap.has_data or snap.is_stale(self._monotonic()):
+            return True
+        cfg = self._football() if self._football else _no_football()
+        if not cfg.favourite_team:
+            return False
+        now = self._monotonic()
+        ctx = self._idle_context(snap.games or (), snap, now, cfg)
+        return bool(self._rotation(cfg, ctx, cfg.favourite_team))
+
     def _has_clock(self) -> bool:
         return any(entry.screen == "clock" for entry in self._entries())
 

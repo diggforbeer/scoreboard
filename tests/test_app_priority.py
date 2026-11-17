@@ -730,3 +730,34 @@ def test_a_goal_scored_while_the_board_was_on_football_does_not_celebrate_on_ret
     rig.app._switch_sport("football")
     rig.app._switch_sport("hockey")
     assert rig.app._known_scores == {}, "re-baselined, so nothing fires"
+
+
+def test_a_football_turn_with_nothing_to_show_is_skipped_not_every_games_scoreboard(backend):
+    """Seen on a board: hockey's scores grid, then football's scoreboard of every game, because
+    football's rows (here a schedule with no data) had nothing to show."""
+    from scoreboard.config import RotationEntry
+
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.settings.rotation = [RotationEntry("scores_grid", 6.0), RotationEntry("fb_schedule", 10.0)]
+    rig.poll(1)
+    scenes = set()
+    for _ in range(60):
+        rig.poll(1)
+        scenes.add((rig.sport, rig.app.select_scene().kind))
+    assert not any(kind in ("fb_scores", "fb_no_games") for _, kind in scenes), scenes
+    assert {sport for sport, _ in scenes} == {"hockey"}
+
+
+def test_football_takes_its_turn_again_once_its_rows_have_something_to_show(backend):
+    from scoreboard.config import RotationEntry
+
+    rig = Rig(backend, [("hockey", NSH), ("football", TEN)])
+    rig.hockey.today, rig.football.games = [nsh_far()], [ten_far()]
+    rig.settings.rotation = [RotationEntry("scores_grid", 6.0), RotationEntry("fb_week", 10.0)]
+    rig.poll(1)
+    sports = set()
+    for _ in range(60):
+        rig.poll(1)
+        sports.add(rig.sport)
+    assert sports == {"hockey", "football"}

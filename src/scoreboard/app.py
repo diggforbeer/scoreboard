@@ -1055,9 +1055,27 @@ class ScoreboardApp:
         """With nothing ranked on, the one idle rotation runs across both sports: its rows are
         grouped into per-sport segments and the board alternates between them (epic #470). Falls
         back to the top-ranked team's sport when no sport has anything to show."""
-        segments = idle_segments(self._unified_rotation(), self._idle_available())
-        now = self.monotonic()
-        slot = segment_at(segments, now)
+        available = self._idle_available()
+        rotation = self._unified_rotation()
+        while True:
+            segments = idle_segments(rotation, available)
+            now = self.monotonic()
+            slot = segment_at(segments, now)
+            self._segment_rows = {}
+            if slot is None:
+                break
+            segment = segments[slot[0]]
+            self._segment_rows = {segment.sport: list(segment.entries)}
+            if (
+                segment.sport == "football"
+                and self._football is not None
+                and not self._football.idle_resolves()
+            ):
+                # Its screens have nothing to show (no preview, week or schedule data): sit the
+                # sport out rather than let football fall back to every game's scoreboard.
+                available = [s for s in available if s != "football"]
+                continue
+            break
         self._segment_rows = {}
         if slot is None:
             self._idle_origin = 0.0
