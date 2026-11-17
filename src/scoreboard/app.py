@@ -511,6 +511,8 @@ class ScoreboardApp:
         #: Demo only: when the current step's goal light "started".
         self._demo_goal_started: float | None = None
         self._egg_animating = False
+        #: ``scoreboard --eggs``: the tree egg being shown and its monotonic start (eggs.py).
+        self._egg_show: tuple[str, float] | None = None
         #: The favourite's goal light is on screen (fast loop); _goal_building
         #: is its first BUILD_SECONDS, which a live-view snapshot waits out.
         self._goal_animating = False
@@ -790,6 +792,45 @@ class ScoreboardApp:
         self.renderer.logos = self._demo_real_logos
         self.shutdown()
 
+    def run_eggs(self, names: tuple[str, ...]) -> None:
+        """Play the named Easter eggs in a loop until stopped (``--eggs``, see eggs.py).
+
+        Like ``run_demo`` it bypasses the state machine and hands scenes to ``draw_scene``. The
+        clock is held in December so the tree screen has its countdown whatever the real date.
+        """
+        from . import eggs
+
+        self._running = True
+        self._demo_drawing = True
+        real_clock = self.clock
+        now = real_clock()
+        offset = now.replace(month=eggs.TOUR_DAY[0], day=eggs.TOUR_DAY[1], hour=18) - now
+        self.clock = lambda: real_clock() + offset
+        try:
+            while self._running:
+                for name in names:
+                    plain = Scene("christmas_tree")
+                    self._play_egg_phase(plain, None, eggs.PAUSE_SECONDS)
+                    if name == "blowout":
+                        self._play_egg_phase(eggs.scene_for(name), None, eggs.seconds(name))
+                    else:
+                        self._play_egg_phase(plain, name, eggs.seconds(name))
+                    self._play_egg_phase(plain, None, eggs.PAUSE_SECONDS)
+        finally:
+            self._egg_show = None
+            self.clock = real_clock
+            self._demo_drawing = False
+        self.shutdown()
+
+    def _play_egg_phase(self, scene: Scene, egg: str | None, seconds: float) -> None:
+        """Draw ``scene`` for ``seconds``, with tree egg ``egg`` playing from the start."""
+        started = self.monotonic()
+        self._egg_show = (egg, started) if egg else None
+        while self._running and self.monotonic() - started < seconds:
+            self.draw_scene(scene)
+            self.sleep(self.frame_interval())
+        self._egg_show = None
+
     def _demo_step_list(self) -> list[DemoStep]:
         """The steps for the board's sport; football's are all text and field, no sound (#359)."""
         # Imported here: demo builds Scene objects, so a top-level import would be circular.
@@ -821,6 +862,9 @@ class ScoreboardApp:
 
     def _tree_egg(self) -> tuple[str, float] | None:
         """The Christmas tree Easter egg playing now and its age (#509); never in demo mode."""
+        if self._egg_show is not None:
+            kind, started = self._egg_show
+            return kind, self.monotonic() - started
         if self._demo_drawing:
             return None
         return tree_egg(self.clock().timestamp())

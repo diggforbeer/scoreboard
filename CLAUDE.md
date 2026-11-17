@@ -935,6 +935,11 @@ fire 1 in 1440 windows), playing from the window's top for its own length, so th
 no setting. Only the squirrel and the fire hold the fast animation loop (`_egg_animating`). Tests
 draw them with an explicit `egg=` and assert structure only (no snapshots, again like the blowout).
 Hardware cost at 20fps on a Pi 4 is unverified (#4).
+**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout]`** (`eggs.py`, `ScoreboardApp.run_eggs`):
+a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and `screens.md`) that loops the four
+on the real panel with the tree screen's date held in December, or plays just the one named. It
+overrides `_tree_egg()` with `_egg_show`, so the normal roll is untouched. April Fools is a
+date-gated relabelling of every screen, not a scene, so it is not in the tour.
 
 Demo mode (#47, `scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.
