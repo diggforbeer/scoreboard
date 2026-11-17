@@ -14,7 +14,7 @@
 | src/scoreboard/blowout.py                         |       23 |        0 |    100% |           |
 | src/scoreboard/brightness.py                      |        9 |        0 |    100% |           |
 | src/scoreboard/button.py                          |       56 |        1 |     98% |        51 |
-| src/scoreboard/config.py                          |      464 |        6 |     99% |390-391, 393-394, 985-986 |
+| src/scoreboard/config.py                          |      464 |        6 |     99% |388-389, 391-392, 983-984 |
 | src/scoreboard/delay.py                           |       28 |        0 |    100% |           |
 | src/scoreboard/demo.py                            |       76 |        0 |    100% |           |
 | src/scoreboard/display/\_\_init\_\_.py            |        0 |        0 |    100% |           |
