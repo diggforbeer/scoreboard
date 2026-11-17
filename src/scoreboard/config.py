@@ -879,7 +879,9 @@ class Settings:
             raw = tomllib.load(fh)
         settings = cls.from_dict(raw)
         settings.source_path = path
-        log.info("Loaded configuration from %s", path)
+        # DEBUG: every admin-page save and page visit reads the file several times, and the app's
+        # own "Reloaded configuration" line (INFO) already records a real change.
+        log.debug("Loaded configuration from %s", path)
         return settings
 
     @classmethod

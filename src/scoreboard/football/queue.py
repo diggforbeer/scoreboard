@@ -120,7 +120,9 @@ class PlayQueue:
             self.latest = batch[-1] if batch else None
             self.baseline = self.latest
             if batch:
-                log.info(
+                # DEBUG: the queue is rebuilt every time football takes the board back from
+                # hockey, so this repeated every ~30 s on a two-sport board.
+                log.debug(
                     "%sbaseline: %d plays already played, not animated", self._tag(), len(batch)
                 )
             return []
