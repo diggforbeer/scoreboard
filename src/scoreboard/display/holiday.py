@@ -1332,12 +1332,20 @@ TREE_WIDTH = len(CHRISTMAS_TREE[0])
 
 
 def draw_christmas_tree(
-    canvas: Any, x: int, y: int, tick: int, favourite: str, width: int, height: int
+    canvas: Any,
+    x: int,
+    y: int,
+    tick: int,
+    favourite: str,
+    width: int,
+    height: int,
+    only: Callable[[int, int], bool] | None = None,
 ) -> None:
     """The tree at (x, y); ``tick`` (half-seconds) steps the lights and star.
 
     Twinkles at the normal 2fps -- like the snow, a whole screen of it never
-    needs the fast animation loop.
+    needs the fast animation loop. ``only(dx, dy)`` limits which tree cells are drawn
+    (the fire uses it for the part not yet burning, and for the tree growing back).
     """
     ornament = team_color(favourite) if favourite else (220, 0, 30)
     second = team_secondary_color(favourite) if favourite else (255, 210, 0)
@@ -1345,7 +1353,7 @@ def draw_christmas_tree(
     star = TREE_STAR if tick % 2 == 0 else FLAG_WHITE
     for dy, row in enumerate(CHRISTMAS_TREE):
         for dx, ch in enumerate(row):
-            if ch == ".":
+            if ch == "." or (only is not None and not only(dx, dy)):
                 continue
             if ch == "*":
                 colour = TREE_LIGHTS[(tick + dx + 2 * dy) % len(TREE_LIGHTS)]
@@ -1364,6 +1372,269 @@ def christmas_countdown(day: date) -> tuple[str, str] | None:
     if left == 0:
         return "MERRY", "CHRISTMAS"
     return f"{left} DAY{'S' if left > 1 else ''}", "TO CHRISTMAS"
+
+
+# -- Christmas tree Easter eggs (#509) -----------------------------------------
+#
+# Very rare extras on the tree screen. Each is a pure function of the clock: time is cut into
+# windows, a seeded roll per window and kind decides whether one starts at the window's top, and
+# ``tree_egg`` says which is playing and how far in it is. Deterministic, so it can be tested and
+# never needs state; the board only drops into the fast loop while the squirrel or fire moves.
+# Deliberately kept out of README.md, screens.md, demo mode and the rendered snapshots (owner's
+# call): the joke is finding them. ``test_holiday.py`` pins that, as ``test_blowout.py`` does.
+
+#: How long the fire plays, in seconds.
+FIRE_SECONDS = 12.0
+#: Length of one roll window. Odds are "1 in N windows", so 120 windows is about an hour.
+TREE_EGG_WINDOW_SECONDS = 30
+#: (kind, odds, seconds it plays); the earlier kind wins a window both rolled.
+TREE_EGGS = (("quote", 120, 6.0), ("squirrel", 240, 5.0), ("fire", 1440, FIRE_SECONDS))
+#: The countdown's two lines, replaced for the quote's few seconds.
+TREE_QUOTE = ("VERY FULL,", "LOTS OF SAP")
+
+
+SQUIRREL_FUR = (170, 105, 50)
+SQUIRREL_TAIL = (205, 135, 65)
+SQUIRREL_BELLY = (235, 195, 140)
+SQUIRREL_NOSE = (60, 30, 15)
+SQUIRREL_EYE = (0, 0, 0)
+#: Facing left, tail on the right; the other way is the same rows mirrored.
+_SQUIRREL_LEFT = (
+    "..B.B..T.",
+    "..BBB.TTT",
+    ".NKBBBTTT",
+    "..BBBBTT.",
+    "..LBBBT..",
+    "..LLBBT..",
+    "..LLBBT..",
+    "..BBBB...",
+    "..B..B...",
+)
+SQUIRREL_FRAMES = (
+    _SQUIRREL_LEFT,
+    tuple(row[::-1] for row in _SQUIRREL_LEFT),
+)
+SQUIRREL_PALETTE = {
+    "B": SQUIRREL_FUR,
+    "T": SQUIRREL_TAIL,
+    "L": SQUIRREL_BELLY,
+    "N": SQUIRREL_NOSE,
+    "K": SQUIRREL_EYE,
+}
+SQUIRREL_HEIGHT = len(_SQUIRREL_LEFT)
+SQUIRREL_WIDTH = len(_SQUIRREL_LEFT[0])
+#: Where it pops out: the bottom edge of its sprite sits on this tree row, its left edge on this
+#: tree column (the lower right of the foliage).
+SQUIRREL_HOLE_ROW = 25
+SQUIRREL_COLUMN = 15
+_SQUIRREL_RISE_SECONDS = 0.8
+_SQUIRREL_LOOK_RIGHT_AT = 2.5
+_SQUIRREL_SINK_AT = 4.2
+
+
+# The fire (#512): a spark at the foot, flames climbing the tree, a fireball, the flames dying to
+# a bare trunk and twigs, then the tree growing back. Every phase is a function of age.
+_FIRE_SPARK_END = 1.0
+_FIRE_CLIMB_END = 3.5
+_FIRE_BLAZE_END = 5.5
+_FIRE_DYING_END = 8.0
+_FIRE_CHARRED_END = 10.5
+#: Flame colours from the dark red edge to the white-hot core.
+FIRE_PALETTE = (
+    (90, 0, 0),
+    (200, 20, 0),
+    (255, 90, 0),
+    (255, 170, 0),
+    (255, 230, 60),
+    (255, 255, 200),
+)
+CHARRED_TRUNK = (70, 40, 15)
+CHARRED_TWIG = (105, 60, 22)
+EMBER = (255, 70, 0)
+
+
+def _hash01(a: int, b: int, c: int = 0) -> float:
+    """A fixed pseudo-random number in [0, 1] for three integers (no state, no RNG object)."""
+    n = (a * 374761393 + b * 668265263 + c * 2147483647) & 0xFFFFFFFF
+    n = ((n ^ (n >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((n ^ (n >> 16)) & 0xFFFF) / 65535
+
+
+def fire_colour(heat: float) -> RGB:
+    """The flame colour at ``heat`` 0 (dark red) to 1 (white-hot)."""
+    scaled = max(0.0, min(1.0, heat)) * (len(FIRE_PALETTE) - 1)
+    i = min(int(scaled), len(FIRE_PALETTE) - 2)
+    frac = scaled - i
+    lo, hi = FIRE_PALETTE[i], FIRE_PALETTE[i + 1]
+    return (
+        round(lo[0] + (hi[0] - lo[0]) * frac),
+        round(lo[1] + (hi[1] - lo[1]) * frac),
+        round(lo[2] + (hi[2] - lo[2]) * frac),
+    )
+
+
+def _build_skeleton() -> frozenset[tuple[int, int]]:
+    """What is left of the tree: the trunk's line up the middle and drooping twigs."""
+    c = TREE_WIDTH // 2
+    cells: set[tuple[int, int]] = set()
+    for dy, row in enumerate(CHRISTMAS_TREE):
+        if row[c] != ".":
+            cells.add((c, dy))
+        if dy in (7, 10, 13, 16, 19, 22, 25):
+            reach = sum(1 for ch in row if ch not in ".K") // 2
+            for side in (-1, 1):
+                for i in range(1, reach + 1):
+                    cells.add((c + side * i, dy + i // 3))
+    return frozenset(cell for cell in cells if cell[1] < len(CHRISTMAS_TREE))
+
+
+TREE_SKELETON = _build_skeleton()
+_TREE_CELLS = tuple(
+    (dx, dy) for dy, row in enumerate(CHRISTMAS_TREE) for dx, ch in enumerate(row) if ch != "."
+)
+
+
+def _charred(dx: int, dy: int) -> RGB | None:
+    """The burnt tree's colour at a cell: the trunk block, a twig, or nothing."""
+    if CHRISTMAS_TREE[dy][dx] == "K":
+        return CHARRED_TRUNK
+    if (dx, dy) in TREE_SKELETON:
+        return CHARRED_TWIG if dx != TREE_WIDTH // 2 else CHARRED_TRUNK
+    return None
+
+
+def draw_burning_tree(
+    canvas: Any,
+    x: int,
+    y: int,
+    age: float,
+    tick: int,
+    favourite: str,
+    width: int,
+    height: int,
+) -> None:
+    """The tree at (x, y) ``age`` seconds into catching fire (see ``FIRE_SECONDS``)."""
+    rows = len(CHRISTMAS_TREE)
+    c = TREE_WIDTH // 2
+    flicker = int(age * 12)
+
+    def flame(dx: int, dy: int, heat: float) -> None:
+        wobble = (_hash01(dx, dy, flicker) - 0.5) * 0.35
+        _set(canvas, x + dx, y + dy, fire_colour(heat + wobble), width, height)
+
+    def burnt(dx: int, dy: int) -> None:
+        colour = _charred(dx, dy)
+        if colour is not None:
+            _set(canvas, x + dx, y + dy, colour, width, height)
+
+    if age < _FIRE_SPARK_END:
+        draw_christmas_tree(canvas, x, y, tick, favourite, width, height)
+        # An ember at the foot of the tree that flares and spreads into a few flames.
+        spread = age / _FIRE_SPARK_END
+        for dy in range(rows - 5 - round(3 * spread), rows - 4):
+            for dx in (c + 3, c + 4):
+                if _hash01(dx, dy, flicker) < 0.35 + 0.5 * spread:
+                    flame(dx, dy, 0.55 + 0.4 * _hash01(dy, dx, flicker + 7))
+        return
+    if age < _FIRE_CLIMB_END:
+        front = (rows - 1) - (age - _FIRE_SPARK_END) / (_FIRE_CLIMB_END - _FIRE_SPARK_END) * (
+            rows + 2
+        )
+        draw_christmas_tree(
+            canvas, x, y, tick, favourite, width, height, only=lambda _dx, dy: dy < front - 3
+        )
+        for dx, dy in _TREE_CELLS:
+            below = dy - front
+            if below >= 0:
+                heat = 0.12 + min(1.0, below / 7) * 0.3 + 0.12 * (1 - abs(dx - c) / c)
+                heat += 0.2 * (_hash01(dx, 0, flicker // 2) - 0.5)  # streaks
+                flame(dx, dy, heat)
+            elif below > -4 and _hash01(dx, dy, flicker) < 0.35 + 0.15 * below:
+                flame(dx, dy, 0.25 + 0.1 * _hash01(dy, dx, flicker))  # tongues licking ahead
+        return
+    if age < _FIRE_BLAZE_END:
+        for dx, dy in _TREE_CELLS:
+            core = 1 - abs(dx - c) / (c + 1)
+            streak = 0.25 * (_hash01(dx, 1, flicker // 2) - 0.5)
+            flame(dx, dy, 0.2 + 0.3 * core + 0.2 * dy / rows + streak)
+        return
+    if age < _FIRE_CHARRED_END:
+        dying = min(1.0, (age - _FIRE_BLAZE_END) / (_FIRE_DYING_END - _FIRE_BLAZE_END))
+        for dx, dy in _TREE_CELLS:
+            # The tips go out first, the trunk's foot last.
+            out_at = 0.55 * _hash01(dx, dy) + 0.45 * (dy / rows)
+            if out_at > dying:
+                flame(dx, dy, (0.4 + 0.15 * dy / rows) * (1 - dying) + 0.03)
+                continue
+            burnt(dx, dy)
+        if dying >= 1.0 or age > _FIRE_DYING_END:
+            # A few embers glow on in the bare branches.
+            for dx, dy in TREE_SKELETON:
+                if _hash01(dx, dy, flicker // 3) > 0.93:
+                    _set(canvas, x + dx, y + dy, EMBER, width, height)
+        return
+    # Growing back: the bare tree, with the real one dissolving in over it.
+    back = (age - _FIRE_CHARRED_END) / (FIRE_SECONDS - _FIRE_CHARRED_END)
+    for dx, dy in _TREE_CELLS:
+        burnt(dx, dy)
+    draw_christmas_tree(
+        canvas, x, y, tick, favourite, width, height, only=lambda dx, dy: _hash01(dx, dy, 99) < back
+    )
+
+
+def _roll_egg(
+    timestamp: float, table: tuple[tuple[str, int, float], ...], salt: str
+) -> tuple[str, float] | None:
+    window = int(timestamp // TREE_EGG_WINDOW_SECONDS)
+    age = timestamp - window * TREE_EGG_WINDOW_SECONDS
+    for kind, odds, seconds in table:
+        if age < seconds and random.Random(f"{salt}:{kind}:{window}").randrange(odds) == 0:
+            return kind, age
+    return None
+
+
+def tree_egg(timestamp: float) -> tuple[str, float] | None:
+    """The egg playing at ``timestamp`` (seconds since the epoch) and its age, else ``None``."""
+    return _roll_egg(timestamp, TREE_EGGS, "tree-egg")
+
+
+def squirrel_pose(age: float) -> tuple[int, int] | None:
+    """The squirrel at ``age`` seconds: (frame index, rows showing), or ``None`` out of sight.
+
+    It rises out of the foliage, looks left, looks right, then sinks back in.
+    """
+    seconds = dict((kind, s) for kind, _odds, s in TREE_EGGS)["squirrel"]
+    if not 0 <= age < seconds:
+        return None
+    if age < _SQUIRREL_RISE_SECONDS:
+        shown = age / _SQUIRREL_RISE_SECONDS
+    elif age < _SQUIRREL_SINK_AT:
+        shown = 1.0
+    else:
+        shown = 1.0 - (age - _SQUIRREL_SINK_AT) / (seconds - _SQUIRREL_SINK_AT)
+    rows = round(SQUIRREL_HEIGHT * max(0.0, min(1.0, shown)))
+    if rows == 0:
+        return None
+    return (1 if age >= _SQUIRREL_LOOK_RIGHT_AT else 0), rows
+
+
+def draw_tree_squirrel(
+    canvas: Any, tree_x: int, tree_y: int, age: float, width: int, height: int
+) -> None:
+    """The squirrel over a tree drawn at (tree_x, tree_y); it grows out of one fixed row."""
+    pose = squirrel_pose(age)
+    if pose is None:
+        return
+    frame, rows = pose
+    draw_sprite(
+        canvas,
+        SQUIRREL_FRAMES[frame][:rows],
+        SQUIRREL_PALETTE,
+        tree_x + SQUIRREL_COLUMN,
+        tree_y + SQUIRREL_HOLE_ROW - rows,
+        width,
+        height,
+    )
 
 
 # -- The Thanksgiving countdown screen ----------------------------------------
@@ -1412,6 +1683,129 @@ def thanksgiving_countdown(day: date) -> tuple[str, str] | None:
     if left == 0:
         return "HAPPY", "THANKSGIVING"
     return f"{left} DAY{'S' if left > 1 else ''}", "TO THANKSGIVING"
+
+
+# -- Thanksgiving turkey egg (#516) ---------------------------------------------
+#
+# Very rarely the turkey is startled and bolts right across the countdown, shaking the lettering
+# and blanking patches of it as it passes, shedding feathers that drift down over the words; the
+# patches repair themselves, and it wanders back in from the right, sheepish. A pure function of
+# age like the tree eggs (see above), and kept a surprise the same way.
+
+TURKEY_RUN_SECONDS = 8.0
+#: ``kind, odds (1 in N 30s windows), seconds``: about once in three hours of the screen.
+TURKEY_EGGS = (("turkey", 360, TURKEY_RUN_SECONDS),)
+_TR_STARTLE = 0.6
+_TR_RUN_END = 2.4
+_TR_RETURN = 3.4
+_TR_RETURN_END = 7.2
+#: The text column the lettering sits in (matches ``Renderer.draw_thanksgiving``).
+TURKEY_TEXT_LEFT = TURKEY_SCREEN_WIDTH + 6
+TURKEY_HOME_X = 3
+TURKEY_FACING_RIGHT = tuple(tuple(row[::-1] for row in frame) for frame in THANKSGIVING_TURKEY)
+_PATCHES = 30
+_FEATHERS = 13
+_EXCLAIM = ("YY", "YY", "YY", "..", "YY")
+
+
+def turkey_egg(timestamp: float) -> tuple[str, float] | None:
+    """The turkey egg playing at ``timestamp`` and its age, else ``None``."""
+    return _roll_egg(timestamp, TURKEY_EGGS, "turkey-egg")
+
+
+def _run_front(age: float, width: int) -> int:
+    """How far right the bolting turkey's left edge has got (it speeds up as it goes)."""
+    if age < _TR_STARTLE:
+        return TURKEY_HOME_X
+    progress = min(1.0, (age - _TR_STARTLE) / (_TR_RUN_END - _TR_STARTLE))
+    return TURKEY_HOME_X + round((width + 2 - TURKEY_HOME_X) * progress**1.6)
+
+
+def turkey_pose(age: float, width: int) -> tuple[int, bool, int, int | None] | None:
+    """The turkey ``age`` seconds in: (left edge x, facing right, hop in px, leg frame).
+
+    The leg frame is ``None`` while it is back on its spot (the screen's own 2 fps steps take
+    over); the whole result is ``None`` while it is off the panel.
+    """
+    leg = int(age * 8) % 2
+    if age < _TR_STARTLE:
+        hop = round(3 * math.sin(math.pi * age / _TR_STARTLE))  # a startled jump
+        return TURKEY_HOME_X, False, hop, 0
+    if age < _TR_RUN_END:
+        return _run_front(age, width), True, 0, leg
+    if age < _TR_RETURN:
+        return None
+    if age < _TR_RETURN_END:
+        progress = (age - _TR_RETURN) / (_TR_RETURN_END - _TR_RETURN)
+        return round(width - (width - TURKEY_HOME_X) * progress), False, 0, leg
+    return TURKEY_HOME_X, False, 0, None
+
+
+def turkey_text_shake(age: float) -> tuple[int, int]:
+    """How far the lettering is jolted (a pixel either way) while the turkey tears past."""
+    if not _TR_STARTLE <= age < 3.0:
+        return 0, 0
+    step = int(age * 30)
+    return step % 3 - 1, step // 3 % 3 - 1
+
+
+def turkey_patches(age: float, width: int) -> list[tuple[int, int]]:
+    """Top-left corners of the 4x5 blocks of lettering blanked out, each repairing itself.
+
+    A block goes the moment the turkey has passed it and comes back at its own time, so the
+    words heal piece by piece rather than all at once.
+    """
+    if age < _TR_STARTLE:
+        return []
+    front = _run_front(age, width)
+    span = width - TURKEY_TEXT_LEFT - 6
+    out = []
+    for i in range(_PATCHES):
+        x = TURKEY_TEXT_LEFT + int(_hash01(i, 1) * span)
+        y = 2 + int(_hash01(i, 2) * 24)
+        if front >= x and age < 3.2 + 3.0 * _hash01(i, 3):
+            out.append((x, y))
+    return out
+
+
+def turkey_feathers(
+    age: float, width: int, height: int, top: int
+) -> list[tuple[int, int, RGB, int]]:
+    """The feathers in the air: (x, y, colour, tilt), shed by the turkey as it runs."""
+    colours = (FEATHER_RED, FEATHER_ORANGE, FEATHER_GOLD)
+    out = []
+    for i in range(_FEATHERS):
+        released = _TR_STARTLE + 0.1 + i * 0.13
+        life = age - released
+        if not 0 <= life < 3.2:
+            continue
+        x = _run_front(released, width) + 12 + 3 * math.sin(life * 3 + i)
+        y = top + 6 + 10 * _hash01(i, 4) + life * 9
+        if 0 <= y < height:
+            out.append((round(x), round(y), colours[i % 3], int(life * 4 + i) % 2))
+    return out
+
+
+def draw_turkey_run(canvas: Any, age: float, tick: int, top: int, width: int, height: int) -> None:
+    """The turkey, its exclamation mark and its feathers, over the lettering."""
+    pose = turkey_pose(age, width)
+    if pose is not None:
+        x, right, hop, leg = pose
+        frames = TURKEY_FACING_RIGHT if right else THANKSGIVING_TURKEY
+        draw_sprite(
+            canvas,
+            frames[tick % 2 if leg is None else leg],
+            dict(TURKEY.palette),
+            x,
+            top - hop,
+            width,
+            height,
+        )
+    if age < _TR_STARTLE + 0.2:
+        draw_sprite(canvas, _EXCLAIM, {"Y": FEATHER_GOLD}, TURKEY_HOME_X + 3, 1, width, height)
+    for fx, fy, colour, tilt in turkey_feathers(age, width, height, top):
+        rows = ("FF.", ".FF") if tilt else (".FF", "FF.")
+        draw_sprite(canvas, rows, {"F": colour}, fx, fy, width, height)
 
 
 #: In calendar order: also the order of the admin page's checkboxes.

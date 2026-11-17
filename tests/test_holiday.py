@@ -975,3 +975,170 @@ def test_holiday_is_an_opt_in_rotation_screen():
     settings = Settings.from_dict({"rotation": [{"screen": "holiday", "seconds": 10}]})
     assert [e.screen for e in settings.rotation] == ["holiday"]
     assert "holiday" in VALID_ROTATION_SCREENS
+
+
+# -- Christmas tree Easter eggs (#509) -----------------------------------------
+
+
+def test_tree_egg_roll_is_a_pure_function_of_the_clock():
+    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, tree_egg
+
+    start = 1_800_000_000.0
+    first = [tree_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    again = [tree_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    assert first == again
+    kinds = [egg[0] for egg in first if egg]
+    # Roughly 1 in 120 and 1 in 240 windows; generous bounds, the seeds are fixed.
+    assert 20 <= kinds.count("quote") <= 70
+    assert 8 <= kinds.count("squirrel") <= 40
+    assert kinds.count("fire") <= 12, "the fire is the rarest"
+
+
+def test_tree_egg_only_plays_for_its_length_from_the_top_of_a_window():
+    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, TREE_EGGS, tree_egg
+
+    seconds = {kind: s for kind, _odds, s in TREE_EGGS}
+    start = 1_800_000_000.0
+    hit = next(
+        (start + i * TREE_EGG_WINDOW_SECONDS, tree_egg(start + i * TREE_EGG_WINDOW_SECONDS))
+        for i in range(5000)
+        if tree_egg(start + i * TREE_EGG_WINDOW_SECONDS)
+    )
+    top, egg = hit
+    kind, age = egg
+    assert age == pytest.approx(0.0, abs=1e-6)
+    assert tree_egg(top + seconds[kind] - 0.01) == (kind, pytest.approx(seconds[kind] - 0.01))
+    assert tree_egg(top + seconds[kind] + 0.01) is None
+
+
+def test_squirrel_rises_looks_left_then_right_then_sinks():
+    from scoreboard.display.holiday import SQUIRREL_HEIGHT, TREE_EGGS, squirrel_pose
+
+    assert squirrel_pose(0.0) is None
+    frame, rows = squirrel_pose(0.4)
+    assert frame == 0 and 0 < rows < SQUIRREL_HEIGHT, "half out, looking left"
+    assert squirrel_pose(1.5) == (0, SQUIRREL_HEIGHT)
+    assert squirrel_pose(3.0) == (1, SQUIRREL_HEIGHT), "looking right"
+    sinking = squirrel_pose(4.6)
+    assert sinking is not None and sinking[1] < SQUIRREL_HEIGHT
+    assert squirrel_pose(dict((k, s) for k, _o, s in TREE_EGGS)["squirrel"]) is None
+
+
+def test_the_fire_script_is_one_function_of_age():
+    from scoreboard.display.holiday import FIRE_SECONDS, TREE_EGGS, TREE_SKELETON, fire_colour
+
+    assert dict((k, s) for k, _o, s in TREE_EGGS)["fire"] == FIRE_SECONDS
+    assert fire_colour(0.0) == (90, 0, 0) and fire_colour(1.0) == (255, 255, 200)
+    assert fire_colour(-5) == fire_colour(0.0) and fire_colour(9) == fire_colour(1.0)
+    assert len(TREE_SKELETON) > 60, "a trunk and a good many twigs"
+
+
+def test_the_turkey_roll_is_a_pure_function_of_the_clock():
+    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, turkey_egg
+
+    start = 1_800_000_000.0
+    rolls = [turkey_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    assert rolls == [turkey_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
+    hits = [r for r in rolls if r]
+    assert 5 <= len(hits) <= 40, "about 1 in 360 windows"
+    assert {kind for kind, _age in hits} == {"turkey"}
+
+
+def test_the_turkey_bolts_right_then_wanders_back_left():
+    from scoreboard.display.holiday import TURKEY_HOME_X, TURKEY_RUN_SECONDS, turkey_pose
+
+    assert turkey_pose(0.0, 128) == (TURKEY_HOME_X, False, 0, 0)
+    startled = turkey_pose(0.3, 128)
+    assert startled is not None and startled[2] > 0, "a startled hop"
+    xs = [turkey_pose(t / 10, 128) for t in range(6, 24)]
+    assert all(p is not None and p[1] for p in xs), "facing right while it runs"
+    run_x = [p[0] for p in xs]
+    assert run_x == sorted(run_x) and run_x[-1] > 100, "running off the right edge"
+    exit_pose = turkey_pose(2.39, 128)
+    assert exit_pose is not None and exit_pose[0] >= 126, "off the right edge as the run ends"
+    assert turkey_pose(3.0, 128) is None, "off the panel"
+    back = [turkey_pose(t / 10, 128) for t in range(34, 72)]
+    assert all(p is not None and not p[1] for p in back), "facing left on the way back"
+    back_x = [p[0] for p in back]
+    assert back_x == sorted(back_x, reverse=True) and back_x[0] >= 126
+    assert turkey_pose(TURKEY_RUN_SECONDS - 0.2, 128) == (TURKEY_HOME_X, False, 0, None)
+
+
+def test_the_turkey_sheds_feathers_and_the_lettering_heals():
+    from scoreboard.display.holiday import turkey_feathers, turkey_patches, turkey_text_shake
+
+    assert turkey_feathers(0.2, 128, 32, 3) == [], "none before it runs"
+    assert len(turkey_feathers(1.8, 128, 32, 3)) > 3, "a trail of them"
+    assert turkey_feathers(7.0, 128, 32, 3) == [], "all down again"
+    assert turkey_patches(0.3, 128) == []
+    assert len(turkey_patches(2.6, 128)) > 5, "the words are blanked once it has passed"
+    assert turkey_patches(6.5, 128) == [], "and every patch has repaired"
+    assert turkey_text_shake(0.2) == (0, 0) and turkey_text_shake(5.0) == (0, 0)
+    assert any(turkey_text_shake(t / 30) != (0, 0) for t in range(20, 80))
+
+
+def test_the_turkey_run_holds_the_fast_loop_but_only_on_its_own_screen(holiday_app, monkeypatch):
+    from scoreboard import app as app_module
+    from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
+
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(app_module, "turkey_egg", lambda _ts: ("turkey", 1.0))
+    app.draw_scene(Scene("thanksgiving"))
+    assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
+    monkeypatch.setattr(app_module, "turkey_egg", lambda _ts: None)
+    app.draw_scene(Scene("thanksgiving"))
+    assert app.frame_interval() == FRAME_INTERVAL
+    # A tour phase for one egg never leaks into the other screen.
+    app._egg_show = ("turkey", app.monotonic())
+    assert app._tree_egg() is None
+    app._egg_show = ("fire", app.monotonic())
+    assert app._turkey_egg() is None
+
+
+def test_only_the_squirrel_and_fire_hold_the_fast_loop(holiday_app, monkeypatch):
+    from scoreboard import app as app_module
+    from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
+
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    scene = Scene("christmas_tree")
+    for egg, fast in ((("squirrel", 1.0), True), (("fire", 1.0), True), (("quote", 1.0), False)):
+        monkeypatch.setattr(app_module, "tree_egg", lambda _ts, egg=egg: egg)
+        app.draw_scene(scene)
+        expected = ANIMATION_FRAME_INTERVAL if fast else FRAME_INTERVAL
+        assert app.frame_interval() == expected, egg
+    monkeypatch.setattr(app_module, "tree_egg", lambda _ts: None)
+    app.draw_scene(scene)
+    assert app.frame_interval() == FRAME_INTERVAL
+
+
+def test_demo_mode_never_plays_a_tree_egg(holiday_app, monkeypatch):
+    from scoreboard import app as app_module
+
+    app, _src, now = holiday_app
+    now["t"] = datetime(2026, 12, 13, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(app_module, "tree_egg", lambda _ts: ("fire", 1.0))
+    assert app._tree_egg() == ("fire", 1.0)
+    app._demo_drawing = True
+    assert app._tree_egg() is None
+
+
+# The eggs are a surprise (owner's call), same family as the blowout (#326): kept out of the
+# README, the screen guide and the demo. These fail if a later pass "completes" the guide.
+@pytest.mark.parametrize("path", ["README.md", "screens.md", "src/scoreboard/demo.py"])
+def test_tree_eggs_are_kept_out_of_the_guide_readme_and_demo(path):
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parent.parent / path).read_text().lower()
+    for word in ("squirrel", "lots of sap", "griswold", "tree_egg", "turkey_egg", "turkey_pose"):
+        assert word not in text, f"{word!r} must not appear in {path}"
+
+
+def test_no_tree_egg_pictures_in_the_screen_guide():
+    from pathlib import Path
+
+    docs = Path(__file__).resolve().parent.parent / "docs" / "screens"
+    assert not list(docs.glob("christmas_tree_*.png")) or all(
+        p.name == "christmas_tree.png" for p in docs.glob("christmas_tree_*.png")
+    )
