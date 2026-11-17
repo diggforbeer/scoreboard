@@ -75,7 +75,7 @@ function ageLabel(seconds: number | null): string {
 
 const ROTATION_MAX_ROWS = 20
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
-const HORN_MAX_BYTES = 2 * 1024 * 1024
+const HORN_MAX_BYTES = 8 * 1024 * 1024
 
 // Abbreviations match display/teams.py's TEAM_COLORS keys exactly -- the
 // only place this project otherwise enumerates every team. Full names are
@@ -395,6 +395,24 @@ function teamName(abbrev: string) {
   return team ? team[1] : '(none)'
 }
 
+// What an uploaded sound is called in the list: the horns, the two stings, and football's
+// touchdown and field-goal sounds (``fb_td`` / ``fb_fg``, a team's as ``fb_td:NE``).
+const FOOTBALL_SOUND_KINDS: Record<string, string> = { td: 'touchdown', fg: 'field goal' }
+
+function hornLabel(key: string, football: FootballTeamOption[]): string {
+  if (key === 'default') return 'Default horn'
+  if (key === 'wah_wah') return 'Wah-wah (opponent scores)'
+  if (key === 'ding') return 'Ding (followed team scores)'
+  if (key.startsWith('fb_')) {
+    const [kind, abbrev] = key.slice(3).split(':')
+    const sound = `${FOOTBALL_SOUND_KINDS[kind] ?? kind} sound`
+    if (!abbrev) return `Football ${sound} (all teams)`
+    const name = football.find((t) => t.abbrev === abbrev)?.name ?? abbrev
+    return `${name} (${abbrev}) football ${sound}`
+  }
+  return `${teamName(key)} (${key})`
+}
+
 // The ranked list of teams (epic #470): one list for both sports, best first. The first team of
 // each sport is its lead: it gets the horn and the idle screens, so it is marked.
 // The night-game entries of the football list: not clubs, but every Sunday / Monday night game.
@@ -619,6 +637,8 @@ function App() {
   // Whether football's section of the Idle rotation card shows: a football team is ranked
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
+  // Football clubs for the sound pickers: the night-game slots are not teams.
+  const footballClubs = teamsAvailable.football.filter((t) => !NIGHT_SLOTS.includes(t.abbrev))
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
@@ -1183,7 +1203,7 @@ function App() {
     if (!hornUploadFile) return
     setHornUploadMessage(null)
     if (hornUploadFile.size > HORN_MAX_BYTES) {
-      setHornUploadMessage({ text: 'File is too large (max 2 MB).', ok: false })
+      setHornUploadMessage({ text: 'File is too large (max 8 MB).', ok: false })
       return
     }
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
@@ -2579,8 +2599,10 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Custom goal horns</h2>
           <p className="text-body-secondary small">
-            Upload a WAV (max 2 MB) to replace the default horn, or to give one team its own. A
-            team's own horn always wins over the default.
+            Upload a WAV or MP3 (up to 30 seconds, max 8 MB) to replace the default horn, or to give one team its
+            own. A team's own horn always wins over the default. Football has its own two sounds,
+            a touchdown and a field goal, each with a default and a per-team version: they play
+            when your top football team scores.
           </p>
 
           {hornList.length > 0 ? (
@@ -2591,15 +2613,7 @@ function App() {
                   className="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2"
                 >
                   <div>
-                    <strong>
-                      {horn.team === 'default'
-                        ? 'Default horn'
-                        : horn.team === 'wah_wah'
-                          ? 'Wah-wah (opponent scores)'
-                          : horn.team === 'ding'
-                            ? 'Ding (followed team scores)'
-                            : `${teamName(horn.team)} (${horn.team})`}
-                    </strong>
+                    <strong>{hornLabel(horn.team, teamsAvailable.football)}</strong>
                     <span className="text-body-secondary small ms-2">{horn.filename}</span>
                     {hornActionMessage?.team === horn.team && (
                       <span
@@ -2658,11 +2672,29 @@ function App() {
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
                 <option value="ding">Ding (followed team scores)</option>
-                {HOCKEY_TEAMS.map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name} ({code})
-                  </option>
-                ))}
+                <option value="fb_td">Football touchdown (all teams)</option>
+                <option value="fb_fg">Football field goal (all teams)</option>
+                <optgroup label="Hockey horns">
+                  {HOCKEY_TEAMS.map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name} ({code})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Football touchdown sounds">
+                  {footballClubs.map((t) => (
+                    <option key={t.abbrev} value={`fb_td:${t.abbrev}`}>
+                      {t.name} ({t.abbrev})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Football field goal sounds">
+                  {footballClubs.map((t) => (
+                    <option key={t.abbrev} value={`fb_fg:${t.abbrev}`}>
+                      {t.name} ({t.abbrev})
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div className="col-md-5">

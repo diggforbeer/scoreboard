@@ -158,7 +158,11 @@ class Director:
         utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
         timings: Callable[[], Timings] | None = None,
         stats: Callable[[int], object | None] = lambda _game_id: None,
+        on_sound: Callable[[Event], None] | None = None,
     ) -> None:
+        #: Called once for each score that carries a sound, the moment its play is shown (after
+        #: the broadcast delay), whatever is on screen. The app owns the player.
+        self._on_sound = on_sound
         #: ``stats(game_id)`` is the game's team stats, or None (none yet, or a panel too narrow).
         self._stats = stats
         self._last_break: dict[int, tuple] = {}
@@ -342,6 +346,11 @@ class Director:
         events = self.detector.on_shown(game, shown)
         already = self.reversals.remember_all(events)
         undone = {r.original.play.id for r in already}
+        if self._on_sound is not None:
+            for event in events:
+                # A score already reversed when first seen makes no sound.
+                if event.sound and event.play.id not in undone:
+                    self._on_sound(event)
         people = self._people(game, play)
 
         def stage(kind: str, seconds: float, event: Event | None = None) -> Stage:

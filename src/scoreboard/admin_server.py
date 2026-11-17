@@ -284,9 +284,11 @@ from . import updater
 from .audio import (
     DEFAULT_STEM,
     DING_STEM,
+    FOOTBALL_KINDS,
     HORN_EXTENSIONS,
     WAH_WAH_STEM,
     GoalHornPlayer,
+    football_stem,
     upload_directory,
 )
 from .audio_normalize import Normalized, normalize
@@ -386,9 +388,9 @@ DEMO_SETTER: Callable[[bool], None] | None = None
 #: The Cache tab's two hooks (see ``cache_view``): what is cached, and clearing a scope of it.
 CACHE_ITEMS: Callable[[], list[dict[str, Any]]] | None = None
 CACHE_CLEARER: Callable[[str], bool] | None = None
-#: A goal horn is a few seconds long; 2 MB is generous for that and still
-#: protects the SD card from an accidental multi-minute file (#193).
-HORN_MAX_BYTES = 2 * 1024 * 1024
+#: A goal horn can run to 30 seconds (``audio_normalize.MAX_SECONDS``): 8 MB holds that even as a
+#: stereo 44.1 kHz WAV, and still protects the SD card from an accidental multi-minute file (#193).
+HORN_MAX_BYTES = 8 * 1024 * 1024
 #: Uploads ride the WebSocket as base64 (~4/3 the raw size) plus a little
 #: JSON framing, so the library's default 1 MiB frame cap has to be raised
 #: to fit a HORN_MAX_BYTES file. Applies to every message on the socket;
@@ -1084,9 +1086,26 @@ def _horn_stem(team: object) -> str:
         return WAH_WAH_STEM
     if team == "ding":
         return DING_STEM
+    football = _football_sound(team)
+    if football is not None:
+        return football_stem(*football)
     if isinstance(team, str) and team in TEAM_COLORS:
         return team
     raise ValueError(f"unknown team {team!r}")
+
+
+def _football_sound(team: object) -> tuple[str, str] | None:
+    """``("td" | "fg", abbrev)`` for a football sound key (``fb_td``, ``fb_fg``: the default,
+    abbrev ``""``; ``fb_td:NE``: a team's), or None for any other key. Raises ValueError for a
+    football key naming a team that does not exist."""
+    if not isinstance(team, str) or not team.startswith("fb_"):
+        return None
+    kind, _, abbrev = team[3:].partition(":")
+    if kind not in FOOTBALL_KINDS:
+        return None
+    if ":" in team and not football_teams.is_team(abbrev):
+        raise ValueError(f"unknown football team {abbrev!r}")
+    return kind, abbrev
 
 
 def _save_horn(team: object, data_b64: object) -> tuple[str, Normalized]:
@@ -1122,10 +1141,11 @@ def _save_horn(team: object, data_b64: object) -> tuple[str, Normalized]:
     name = f"{stem}{ext}"
     directory = upload_directory()
     try:
-        directory.mkdir(parents=True, exist_ok=True)
-        tmp = directory / f".{name}.tmp"
+        target = directory / name
+        target.parent.mkdir(parents=True, exist_ok=True)  # football sounds sit in a subfolder
+        tmp = target.with_name(f".{target.name}.tmp")
         tmp.write_bytes(raw)
-        tmp.replace(directory / name)
+        tmp.replace(target)
         # path_for() prefers .wav within a directory, so a stale one of the
         # other format would shadow this upload.
         for other in HORN_EXTENSIONS:
@@ -1155,6 +1175,12 @@ def _list_uploaded_horns() -> list[dict[str, str]]:
         ("default", DEFAULT_STEM),
         ("wah_wah", WAH_WAH_STEM),
         ("ding", DING_STEM),
+        *((f"fb_{kind}", football_stem(kind)) for kind in FOOTBALL_KINDS),
+        *(
+            (f"fb_{kind}:{abbrev}", football_stem(kind, abbrev))
+            for kind in FOOTBALL_KINDS
+            for abbrev in football_teams.ABBREVIATIONS
+        ),
         *((t, t) for t in TEAM_COLORS),
     ]:
         for ext in HORN_EXTENSIONS:
@@ -1205,7 +1231,7 @@ def _read_horn(team: object) -> tuple[str, bytes]:
                 raw = path.read_bytes()
             except OSError as exc:
                 raise ValueError(f"could not read the file: {exc.strerror or exc}") from None
-            return f"{_HORN_DOWNLOAD_NAMES.get(str(team), stem)}{ext}", raw
+            return f"{_HORN_DOWNLOAD_NAMES.get(str(team), stem.replace('/', '-'))}{ext}", raw
     raise ValueError(f"no uploaded horn for {team}")
 
 
@@ -1254,6 +1280,15 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
         if horn.ding_path() is None:
             return False, "No ding file found."
         if horn.play_ding(force=True):
+            return True, ""
+        return False, horn.last_error or "The player command failed to launch."
+    football = _football_sound(team)
+    if football is not None:
+        kind, abbrev = football
+        label = "touchdown" if kind == "td" else "field-goal"
+        if horn.football_path(kind, abbrev) is None:
+            return False, f"No football {label} sound found, and no default is available either."
+        if horn.play_football(kind, abbrev):
             return True, ""
         return False, horn.last_error or "The player command failed to launch."
     if horn.path_for(team) is None:

@@ -588,3 +588,42 @@ def test_scenes_are_hashable_so_the_live_view_can_tell_when_the_picture_changed(
     b = Scene("fb_scores", fb_game=GAMES["live"])
     c = Scene("fb_scores", fb_game=dataclasses.replace(GAMES["live"], period=4))
     assert hash(a) == hash(b) and a == b and a != c
+
+
+# -- the scoring sounds ----------------------------------------------------------------------
+
+
+class _Sounds:
+    def __init__(self):
+        self.played = []
+
+    def play_football(self, kind, abbrev):
+        self.played.append((kind, abbrev))
+        return True
+
+
+def test_a_touchdown_plays_the_teams_td_sound_and_a_field_goal_its_fg_sound(app):
+    from test_football_events import detector, make_play
+
+    app.horn = _Sounds()
+    det, game, _ = detector("NYG", ())
+    (td,) = det.on_plays(game, [make_play(1, "rush_td_pat", score=(0, 7), off="NYG")])
+    (fg,) = det.on_plays(game, [make_play(2, "fg_good", score=(0, 10), off="NYG")])
+    app._on_football_sound(td)
+    app._on_football_sound(fg)
+    assert app.horn.played == [("td", "NYG"), ("fg", "NYG")]
+
+
+def test_the_buttons_mute_silences_the_football_sounds(app):
+    from test_football_events import detector, make_play
+
+    app.horn = _Sounds()
+    det, game, _ = detector("NYG", ())
+    (td,) = det.on_plays(game, [make_play(1, "rush_td_pat", score=(0, 7), off="NYG")])
+    app._horn_muted_until = app.monotonic() + 300
+    app._on_football_sound(td)
+    assert app.horn.played == []
+
+
+def test_the_apps_football_mode_is_wired_to_the_sound(app):
+    assert app._football.director._on_sound == app._on_football_sound

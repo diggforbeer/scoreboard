@@ -15,6 +15,7 @@ from scoreboard.audio import (
     VOLUME_CONTROLS,
     GoalHornPlayer,
     default_directories,
+    football_stem,
 )
 
 
@@ -355,3 +356,70 @@ def test_shipped_ding_is_reproducible_and_matches_the_horn_format():
         int.from_bytes(frames[i : i + 2], "little", signed=True) for i in range(0, len(frames), 2)
     ]
     assert max(abs(s) for s in samples) < 32767
+
+
+# -- football scoring sounds ---------------------------------------------------------------
+
+
+def test_football_sound_prefers_the_teams_file_then_the_default(tmp_path):
+    (tmp_path / "football").mkdir()
+    touch(tmp_path / "football" / "_td.wav")
+    touch(tmp_path / "football" / "NE_td.wav")
+    player = GoalHornPlayer([tmp_path])
+    assert player.football_path("td", "NE") == tmp_path / "football" / "NE_td.wav"
+    assert player.football_path("td", "KC") == tmp_path / "football" / "_td.wav"
+    assert player.football_path("fg", "NE") is None  # no field-goal file anywhere
+
+
+def test_football_sounds_never_shadow_the_hockey_horns_of_the_same_abbreviation(tmp_path):
+    (tmp_path / "football").mkdir()
+    touch(tmp_path / "football" / "DAL_td.wav")
+    touch(tmp_path / "DAL.wav")
+    player = GoalHornPlayer([tmp_path])
+    assert player.path_for("DAL") == tmp_path / "DAL.wav"
+    assert player.football_path("td", "DAL") == tmp_path / "football" / "DAL_td.wav"
+
+
+def test_football_upload_directory_beats_the_shipped_file(tmp_path):
+    uploads, shipped = tmp_path / "up", tmp_path / "ship"
+    for directory in (uploads, shipped):
+        (directory / "football").mkdir(parents=True)
+        touch(directory / "football" / "_fg.wav")
+    player = GoalHornPlayer([uploads, shipped])
+    assert player.football_path("fg") == uploads / "football" / "_fg.wav"
+
+
+def test_play_football_launches_the_file_and_respects_enabled(tmp_path):
+    (tmp_path / "football").mkdir()
+    touch(tmp_path / "football" / "_td.wav")
+    runner = RecordingRunner()
+    player = GoalHornPlayer([tmp_path], runner=runner)
+    assert player.play_football("td", "NE") is True
+    assert runner.calls == [["aplay", "-q", str(tmp_path / "football" / "_td.wav")]]
+    off = GoalHornPlayer([tmp_path], enabled=False, runner=RecordingRunner())
+    assert off.play_football("td", "NE") is False
+    assert GoalHornPlayer([tmp_path], runner=RecordingRunner()).play_football("fg", "NE") is False
+
+
+def test_football_stem_rejects_an_unknown_kind():
+    with pytest.raises(ValueError):
+        football_stem("punt")
+
+
+def test_shipped_football_sounds_match_their_generator():
+    import importlib.util
+    import wave
+
+    root = Path(__file__).resolve().parents[1]
+    path = root / "scripts/make_football_sounds.py"
+    spec = importlib.util.spec_from_file_location("make_football_sounds", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for name, notes in (("_td.wav", module.TOUCHDOWN), ("_fg.wav", module.FIELD_GOAL)):
+        with (
+            wave.open(str(root / "assets/horns/football" / name)) as sound,
+            wave.open(str(root / "assets/horns/_default.wav")) as horn,
+        ):
+            assert sound.getparams()[:3] == horn.getparams()[:3]
+            assert sound.readframes(sound.getnframes()) == module.generate(notes)

@@ -42,12 +42,13 @@ PEAK_CEILING_DBFS = -1.0
 #: amplify noise, so it is stored as it is.
 SILENCE_RMS_DBFS = -60.0
 #: Longer clips are rejected, not trimmed: cutting a horn mid-sound is worse
-#: than asking for a shorter file. The default horn is 2.2s.
-MAX_SECONDS = 10.0
-#: ``mpg123 -n``: decode at most this many frames (>= 24s of any MP3), so a
-#: 2 MB upload can't balloon into a huge temp file before the length check.
-MP3_MAX_FRAMES = 1000
-MP3_DECODE_TIMEOUT = 20
+#: than asking for a shorter file. The default horn is 2.2s; 30s leaves room for a full
+#: team goal song, hockey or football.
+MAX_SECONDS = 30.0
+#: ``mpg123 -n``: decode at most this many frames (>= 36s of any MP3), so an
+#: upload can't balloon into a huge temp file before the length check.
+MP3_MAX_FRAMES = 1500
+MP3_DECODE_TIMEOUT = 30
 FFMPEG_TIMEOUT = 30
 
 _FULL_SCALE = 32768.0
@@ -94,7 +95,7 @@ def decode_ffmpeg(raw: bytes) -> bytes:
     """Any audio format -> mono 16-bit WAV bytes via ``ffmpeg`` (#322).
 
     Output is cut at ``MAX_SECONDS`` + 1 so an over-long clip is still seen as
-    too long without decoding a whole 2 MB upload. Fixed argv, fixed file
+    too long without decoding a whole 8 MB upload. Fixed argv, fixed file
     names in a temp directory: nothing client-supplied reaches the command.
     """
     with tempfile.TemporaryDirectory(prefix="horn-") as tmp:

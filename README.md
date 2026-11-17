@@ -345,6 +345,14 @@ your team's actual horn instead; it's checked first, and the default plays
 whenever a team-specific file isn't found. See `[audio]` in
 [Configuration](#configuration).
 
+**Football has two sounds of its own**: a touchdown fanfare and a field-goal
+sting, both synthesized and shipped. They play when your top-ranked football
+team scores (and stay silent for anyone else's score), and the same Audio
+switch, volume and mute button apply. Give a team its own with
+`football/{ABBR}_td.wav` and `football/{ABBR}_fg.wav` in the horn directory
+(football has its own folder because abbreviations like `DAL` or `BUF` are in
+both leagues), or upload them from the admin page's Audio tab.
+
 **Uploaded sounds are loudness-normalized.** A horn, wah-wah or ding uploaded
 on the admin page is decoded once (with `ffmpeg`, so M4A, OGG and FLAC work
 too; boards flashed before ffmpeg joined the image accept only WAV and MP3,
@@ -352,7 +360,7 @@ and say `sudo apt-get install -y ffmpeg` for anything else), scaled to the same 
 as the default horn (about -6.3 dBFS) with the peak held under -1 dBFS, and
 stored as a mono WAV, so sounds from different files play at a similar
 volume. The upload message says what was applied ("normalized, +6.0 dB"). A
-clip longer than 10 seconds is rejected, and a silent file is stored
+clip longer than 30 seconds is rejected, and a silent file is stored
 unchanged. Without ffmpeg, MP3s need `mpg123` for the decode. Uploads made
 before this stay as they were; upload them again to normalize them.
 

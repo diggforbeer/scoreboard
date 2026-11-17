@@ -1396,7 +1396,7 @@ added later.
   silent by default (see the open question).
 - **Stored apart from the hockey horns.** football and hockey abbreviations overlap (`BUF`,
   `CAR`, `DAL`, `DET`, `MIN` and more), so the football files live in their own folder
-  or carry an `football` prefix. Proposed: `football/{ABBR}_td.wav`, `football/{ABBR}_fg.wav`,
+  or carry an `football` prefix. Built: `football/{ABBR}_td.wav`, `football/{ABBR}_fg.wav`,
   `football/_td.wav`, `football/_fg.wav`. The same upload directory and the same lookup
   order as the hockey horns (uploads before shipped files).
 - **Admin page:** in football mode the Audio tab shows the touchdown and field-goal
@@ -1559,7 +1559,7 @@ added later.
 - [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
 - [x] `fb_fg_miss` (#393)
 - [x] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks (#394, #395)
-- [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
+- [x] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
       support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
 - [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)
 - [x] `fb_reversal` screen (#396)

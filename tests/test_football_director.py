@@ -26,12 +26,16 @@ TICK = 0.25
 class Rig:
     """A director over a fake clock, polled the way the render loop does."""
 
-    def __init__(self, favourite="NYG", follow=(), delay=0.0, game: FbGame | None = None):
+    def __init__(
+        self, favourite="NYG", follow=(), delay=0.0, game: FbGame | None = None, on_sound=None
+    ):
         self.clock = Clock()
         self.cfg = fcfg(favourite_team=favourite, also_follow=list(follow))
         self.delay = delay
         self.game = game or make_game()
-        self.director = Director(lambda: self.cfg, self.clock, lambda: self.delay, self.clock.utc)
+        self.director = Director(
+            lambda: self.cfg, self.clock, lambda: self.delay, self.clock.utc, on_sound=on_sound
+        )
 
     def poll(self, *plays, game=None):
         game = game or self.game
@@ -255,3 +259,46 @@ def test_a_game_that_leaves_the_slate_is_forgotten():
 def test_timings_are_held_to_sane_ranges():
     t = Timings(score=1.0, reversal=100.0, play=0.0).clamped()
     assert (t.score, t.reversal, t.play) == (4.0, 15.0, 1.0)
+
+
+# -- the scoring sounds ----------------------------------------------------------------------
+
+
+def test_the_favourites_touchdown_and_field_goal_each_ask_for_their_sound_once():
+    heard = []
+    rig = started(make_play(1, "rush", off="WSH"), on_sound=heard.append)
+    rig.poll(make_play(1, "rush", off="WSH"), td(2))
+    rig.run()
+    assert [type(e) for e in heard] == [ev.Touchdown] and heard[0].team == "NYG"
+    kick = make_play(3, "fg_good", score=(0, 10), off="NYG")
+    rig.poll(make_play(1, "rush", off="WSH"), td(2), kick)
+    rig.run()
+    assert [type(e) for e in heard] == [ev.Touchdown, ev.FieldGoal]
+
+
+def test_nobody_elses_score_makes_a_sound():
+    heard = []
+    rig = started(make_play(1, "rush", off="WSH"), on_sound=heard.append)
+    rig.poll(make_play(1, "rush", off="WSH"), make_play(2, "rush_td_pat", score=(7, 0), off="WSH"))
+    rig.run()
+    assert heard == []
+
+
+def test_a_touchdown_skipped_in_a_backlog_still_sounds_once():
+    heard = []
+    rig = started(make_play(1, "rush", off="WSH"), on_sound=heard.append)
+    rig.poll(
+        make_play(1, "rush", off="WSH"),
+        td(2),
+        *[make_play(n, "rush", score=(0, 7), off="WSH") for n in range(3, 7)],
+    )
+    rig.run()
+    assert len(heard) == 1
+
+
+def test_the_baseline_is_silent():
+    heard = []
+    rig = Rig(on_sound=heard.append)
+    rig.poll(make_play(1, "rush", off="WSH"), td(2))
+    rig.run()
+    assert heard == []

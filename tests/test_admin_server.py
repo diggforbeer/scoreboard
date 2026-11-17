@@ -1367,6 +1367,38 @@ def test_upload_horn_default_overrides_the_shipped_one(app_dir, config_path, upl
     assert GoalHornPlayer.default().path_for("TOR") == upload_dir / "_default.wav"
 
 
+def test_upload_football_sounds_go_in_a_subfolder_and_are_listed(app_dir, config_path, upload_dir):
+    from scoreboard.audio import GoalHornPlayer
+
+    assert _upload("fb_td", _wav_b64())["name"] == "football/_td.wav"
+    assert _upload("fb_fg:NE", _wav_b64())["name"] == "football/NE_fg.wav"
+    assert (upload_dir / "football" / "_td.wav").is_file()
+    assert (upload_dir / "football" / "NE_fg.wav").is_file()
+    player = GoalHornPlayer.default()
+    assert player.football_path("fg", "NE") == upload_dir / "football" / "NE_fg.wav"
+    assert player.football_path("td", "KC") == upload_dir / "football" / "_td.wav"
+    listed = admin_server._list_uploaded_horns()
+    assert {"team": "fb_td", "filename": "_td.wav"} in listed
+    assert {"team": "fb_fg:NE", "filename": "NE_fg.wav"} in listed
+    # A hockey horn of the same abbreviation is a different file and key.
+    assert player.path_for("NE") != upload_dir / "football" / "NE_fg.wav"
+
+
+def test_football_sound_delete_and_download(app_dir, config_path, upload_dir):
+    _upload("fb_td:DAL", _wav_b64())
+    name, raw = admin_server._read_horn("fb_td:DAL")
+    assert name == "football-DAL_td.wav" and raw
+    assert admin_server._delete_horn("fb_td:DAL") is True
+    assert not (upload_dir / "football" / "DAL_td.wav").exists()
+
+
+@pytest.mark.parametrize("team", ["fb_td:ZZZ", "fb_td:", "fb_punt", "fb_td:../x", "fb_fg:nope"])
+def test_upload_football_sound_rejects_bad_keys(app_dir, config_path, upload_dir, team):
+    reply = _upload(team, _wav_b64())
+    assert reply["type"] == "error" and reply["section"] == "horn_upload"
+    assert not (upload_dir / "football").exists()
+
+
 def test_upload_horn_wah_wah_overrides_the_shipped_sting(app_dir, config_path, upload_dir):
     reply = _upload("wah_wah", _wav_b64())
     assert reply["name"] == "_wah_wah.wav"
@@ -1548,7 +1580,7 @@ def test_upload_horn_ffmpeg_timeout_is_a_readable_error(
 def test_upload_horn_ffmpeg_over_long_clip_is_rejected(
     app_dir, config_path, upload_dir, monkeypatch
 ):
-    _fake_ffmpeg(monkeypatch, wav_b64=_tone_b64(3000, seconds=11))
+    _fake_ffmpeg(monkeypatch, wav_b64=_tone_b64(3000, seconds=31))
     assert "too long" in _upload("NSH", _mp3_b64())["message"]
 
 
@@ -1626,9 +1658,15 @@ def test_upload_horn_silent_file_is_stored_unchanged(app_dir, config_path, uploa
 
 
 def test_upload_horn_rejects_over_long_clip(app_dir, config_path, upload_dir):
-    reply = _upload("NSH", _tone_b64(3000, seconds=11))
+    reply = _upload("NSH", _tone_b64(3000, seconds=31))
     assert reply["type"] == "error" and "too long" in reply["message"]
     assert not upload_dir.exists()
+
+
+def test_upload_horn_accepts_a_clip_up_to_30_seconds(app_dir, config_path, upload_dir):
+    reply = _upload("NSH", _tone_b64(3000, seconds=29))
+    assert reply["type"] == "horn_uploaded"
+    assert _upload("fb_td", _tone_b64(3000, seconds=29))["type"] == "horn_uploaded"
 
 
 def test_upload_horn_rejects_a_corrupt_mp3(app_dir, config_path, upload_dir, monkeypatch):
@@ -2641,3 +2679,33 @@ def test_the_same_abbreviation_in_both_sports_is_two_valid_teams(app_dir, config
         ("hockey", "BUF"),
         ("football", "BUF"),
     ]
+
+
+def test_play_horn_plays_a_football_sound_and_says_when_there_is_none(
+    app_dir, config_path, tmp_path, monkeypatch
+):
+    horn_dir = tmp_path / "horns"
+    (horn_dir / "football").mkdir(parents=True)
+    (horn_dir / "football" / "NE_td.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+    # The checkout ships the default football sounds; this test wants a place with none.
+    monkeypatch.setattr(
+        admin_server, "_current_horn", lambda settings: admin_server.GoalHornPlayer([horn_dir])
+    )
+
+    async def scenario(client):
+        await _skip_initial(client)
+        out = []
+        for team in ("fb_td:NE", "fb_fg:NE"):
+            await client.send(json.dumps({"type": "play_horn", "team": team}))
+            out.append(json.loads(await client.recv()))
+        return out
+
+    played, missing = asyncio.run(_serve_and_run(scenario))
+    assert played["played"] is True and calls[0][-1].endswith("football/NE_td.wav")
+    assert missing["played"] is False and "field-goal" in missing["reason"]
