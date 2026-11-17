@@ -935,11 +935,14 @@ fire 1 in 1440 windows), playing from the window's top for its own length, so th
 no setting. Only the squirrel and the fire hold the fast animation loop (`_egg_animating`). Tests
 draw them with an explicit `egg=` and assert structure only (no snapshots, again like the blowout).
 Hardware cost at 20fps on a Pi 4 is unverified (#4).
-**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout]`** (`eggs.py`, `ScoreboardApp.run_eggs`):
-a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and `screens.md`) that loops the four
-on the real panel with the tree screen's date held in December, or plays just the one named. It
-overrides `_tree_egg()` with `_egg_show`, so the normal roll is untouched. April Fools is a
-date-gated relabelling of every screen, not a scene, so it is not in the tour.
+**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools]`** (`eggs.py`,
+`ScoreboardApp.run_eggs`): a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and
+`screens.md`) that loops every egg on the real panel, or plays just the one named. Each is a `plan()`
+of `Phase`s (a calm moment, the egg, a calm moment). The tree eggs hold the tree screen's date in
+December and override `_tree_egg()` with `_egg_show`, so the normal roll is untouched; the blowout is
+a synthetic final; April Fools shows the live game and the standings plain, then relabelled NSH ->
+MIL by forcing `april_fools_active` for those phases. The holiday fly-bys are documented features,
+already in `--demo`, so they are not in the tour.
 
 Demo mode (#47, `scoreboard --demo`) loops every scene with synthetic
 data (`demo.py`'s `demo_steps()`, built through `Game.from_api()` etc.

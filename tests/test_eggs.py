@@ -29,15 +29,22 @@ def make_app(src: FakeClockSource) -> ScoreboardApp:
 
 
 def tour(names: tuple[str, ...], seconds: float):
-    """Run the tour for ``seconds`` of fake time; the frames as (kind, egg playing, month)."""
+    """Run the tour for ``seconds`` of fake time; the frames drawn, as dicts."""
     src = FakeClockSource()
     app = make_app(src)
-    frames: list[tuple[str, str | None, int]] = []
+    frames: list[dict] = []
     draw = app.draw_scene
 
     def record(scene: Scene) -> None:
-        egg = app._egg_show[0] if app._egg_show else None
-        frames.append((scene.kind, egg, app.clock().month))
+        frames.append(
+            {
+                "kind": scene.kind,
+                "egg": app._egg_show[0] if app._egg_show else None,
+                "month": app.clock().month,
+                "prank": app.april_fools_active(),
+                "home": scene.game.home.abbrev if scene.game else None,
+            }
+        )
         draw(scene)
         if src.now >= seconds:
             app._running = False
@@ -47,31 +54,43 @@ def tour(names: tuple[str, ...], seconds: float):
     return frames
 
 
+def total(name: str) -> float:
+    return sum(p.seconds for p in eggs.plan(name))
+
+
 @pytest.mark.parametrize("name", ["quote", "squirrel", "fire"])
 def test_a_tree_egg_plays_between_plain_tree_frames(name):
-    total = eggs.PAUSE_SECONDS * 2 + eggs.seconds(name)
-    frames = tour((name,), total - 0.5)
-    kinds = {kind for kind, _egg, _month in frames}
-    assert kinds == {"christmas_tree"}
-    assert frames[0][1] is None, "a calm moment first"
-    assert frames[-1][1] is None, "and the plain tree after"
-    assert any(egg == name for _kind, egg, _month in frames)
-    assert {month for *_rest, month in frames} == {12}, "held in December for the countdown"
+    frames = tour((name,), total(name) - 0.5)
+    assert {f["kind"] for f in frames} == {"christmas_tree"}
+    assert frames[0]["egg"] is None, "a calm moment first"
+    assert frames[-1]["egg"] is None, "and the plain tree after"
+    assert any(f["egg"] == name for f in frames)
+    assert {f["month"] for f in frames} == {12}, "held in December for the countdown"
 
 
 def test_the_blowout_plays_its_own_scene():
-    frames = tour(("blowout",), eggs.PAUSE_SECONDS * 2 + eggs.seconds("blowout") - 0.5)
-    assert {"christmas_tree", "blowout"} <= {kind for kind, _egg, _month in frames}
+    frames = tour(("blowout",), total("blowout") - 0.5)
+    assert {"christmas_tree", "blowout"} <= {f["kind"] for f in frames}
+
+
+def test_april_fools_shows_the_plain_screens_then_the_admirals():
+    frames = tour(("april_fools",), total("april_fools") - 0.5)
+    assert frames[0]["prank"] is False and frames[-1]["prank"] is False
+    assert any(f["prank"] for f in frames)
+    assert {"game", "standings"} <= {f["kind"] for f in frames if f["prank"]}
+    assert not any(f["prank"] for f in tour(("quote",), total("quote") - 0.5))
 
 
 def test_the_tour_loops_through_every_egg_in_order():
-    one_lap = sum(eggs.PAUSE_SECONDS * 2 + eggs.seconds(n) for n in eggs.NAMES)
+    one_lap = sum(total(n) for n in eggs.NAMES)
     frames = tour(eggs.NAMES, one_lap * 1.5)
     played = []
-    for _kind, egg, _month in frames:
+    for f in frames:
+        egg = f["egg"] or ("blowout" if f["kind"] == "blowout" else None)
+        egg = egg or ("april_fools" if f["prank"] else None)
         if egg and (not played or played[-1] != egg):
             played.append(egg)
-    assert played[:3] == ["quote", "squirrel", "fire"]
+    assert played[:5] == ["quote", "squirrel", "fire", "blowout", "april_fools"]
     assert played.count("quote") >= 2, "it goes round again"
 
 
@@ -80,9 +99,10 @@ def test_the_real_clock_and_normal_rolls_are_restored_afterwards():
     app = make_app(src)
     real = app.clock
     app.draw_scene = lambda scene: setattr(app, "_running", False)  # type: ignore[method-assign]
-    app.run_eggs(("quote",))
+    app.run_eggs(("april_fools",))
     assert app.clock is real
     assert app._egg_show is None and app._demo_drawing is False
+    assert "april_fools_active" not in vars(app), "the forced prank is cleared"
 
 
 def test_the_flag_parses_but_is_not_in_help(capsys):

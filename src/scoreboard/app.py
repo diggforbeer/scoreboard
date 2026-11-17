@@ -809,27 +809,28 @@ class ScoreboardApp:
         try:
             while self._running:
                 for name in names:
-                    plain = Scene("christmas_tree")
-                    self._play_egg_phase(plain, None, eggs.PAUSE_SECONDS)
-                    if name == "blowout":
-                        self._play_egg_phase(eggs.scene_for(name), None, eggs.seconds(name))
-                    else:
-                        self._play_egg_phase(plain, name, eggs.seconds(name))
-                    self._play_egg_phase(plain, None, eggs.PAUSE_SECONDS)
+                    for phase in eggs.plan(name):
+                        self._play_egg_phase(phase)
         finally:
             self._egg_show = None
             self.clock = real_clock
             self._demo_drawing = False
         self.shutdown()
 
-    def _play_egg_phase(self, scene: Scene, egg: str | None, seconds: float) -> None:
-        """Draw ``scene`` for ``seconds``, with tree egg ``egg`` playing from the start."""
+    def _play_egg_phase(self, phase: Any) -> None:
+        """Draw one stretch of the egg tour (an ``eggs.Phase``)."""
         started = self.monotonic()
-        self._egg_show = (egg, started) if egg else None
-        while self._running and self.monotonic() - started < seconds:
-            self.draw_scene(scene)
-            self.sleep(self.frame_interval())
-        self._egg_show = None
+        self._egg_show = (phase.egg, started) if phase.egg else None
+        if phase.prank:
+            # April Fools only happens on the day, on a Preds board: force it for this stretch.
+            self.april_fools_active = lambda: True  # type: ignore[method-assign]
+        try:
+            while self._running and self.monotonic() - started < phase.seconds:
+                self.draw_scene(phase.scene)
+                self.sleep(self.frame_interval())
+        finally:
+            self._egg_show = None
+            self.__dict__.pop("april_fools_active", None)
 
     def _demo_step_list(self) -> list[DemoStep]:
         """The steps for the board's sport; football's are all text and field, no sound (#359)."""

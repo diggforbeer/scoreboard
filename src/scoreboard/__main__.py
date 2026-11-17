@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--eggs",
         nargs="?",
         const="all",
-        choices=["all", "quote", "squirrel", "fire", "blowout"],
+        choices=["all", "quote", "squirrel", "fire", "blowout", "april_fools"],
         help=argparse.SUPPRESS,  # an Easter egg tour: deliberately not documented (eggs.py)
     )
     parser.add_argument(
