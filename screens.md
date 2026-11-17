@@ -27,7 +27,7 @@ method.
 - [How a screen gets chosen](#how-a-screen-gets-chosen)
 - [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `penalty`, `three_stars`, shootout, `scores`
 - [Before a game](#before-a-game): `preview`, `countdown`, `matchup`, `matchup_meetings`
-- [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`
+- [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`, `thanksgiving`
 - [Setup and status screens](#setup-and-status-screens): `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games`
 - [Holiday decorations](#holiday-decorations)
 - [Variants](#variants-that-apply-to-most-screens)
@@ -329,6 +329,19 @@ fit on a single 64px panel. Dec 1-25.
 
 - **Controls:** opt-in: `holiday` in `[[rotation]]`, and Christmas must be
   ticked under `[holiday]`. Skipped otherwise.
+
+### `thanksgiving`: November countdown
+
+![Thanksgiving](docs/screens/thanksgiving.png)
+
+A turkey (the fly-by's, drawn twice the size, shifting its legs at 2 fps) beside a countdown
+to US Thanksgiving, the 4th Thursday of November (`HAPPY THANKSGIVING` on the day), the top line in
+the favourite's colour; a single 64px panel shows just the turkey. Nov 1 through
+Thanksgiving Day.
+
+- **Controls:** the same `holiday` rotation entry as the Christmas tree: it shows whichever of
+  the two is in season. Thanksgiving must be ticked under `[holiday]`. Skipped otherwise.
+  Canadian Thanksgiving has no screen.
 
 ## Setup and status screens
 
