@@ -22,6 +22,7 @@ import tomlkit
 
 from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 from .display.teams import TEAM_COLORS
+from .football.teams import NIGHT_SLOTS
 from .football.teams import is_team as football_team_exists
 
 log = logging.getLogger(__name__)
@@ -792,7 +793,9 @@ class TeamEntry:
 
 def team_exists(sport: str, team: str) -> bool:
     """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports)."""
-    return team in TEAM_COLORS if sport == "hockey" else football_team_exists(team)
+    if sport == "hockey":
+        return team in TEAM_COLORS
+    return football_team_exists(team) or team in NIGHT_SLOTS  # SNF / MNF follow a night's games
 
 
 def _parse_teams(raw: Any) -> list[TeamEntry]:
@@ -902,7 +905,7 @@ class Settings:
 
     def teams_for(self, sport: str) -> list[str]:
         """The ranked teams of one sport, best first."""
-        return [entry.team for entry in self.teams if entry.sport == sport]
+        return [e.team for e in self.teams if e.sport == sport and e.team not in NIGHT_SLOTS]
 
     def rank_of(self, sport: str, team: str) -> int | None:
         """A team's rank in the whole list (1 is the top), or ``None`` if it is not ranked."""

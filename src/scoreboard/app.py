@@ -959,8 +959,8 @@ class ScoreboardApp:
         """
         if favourite == april_fools.PRANK_AS:
             return "hockey", favourite  # the April Fools prank recolours everything, as ever
-        if self.settings.teams:
-            first = self.settings.teams[0]
+        first = self._priority().colour_team()
+        if first is not None:
             return first.sport, first.team
         return "hockey", ""
 

@@ -21,7 +21,7 @@ from enum import StrEnum
 from typing import Any
 
 from .playtext import PlayText, parse_text
-from .teams import team_by_id
+from .teams import in_night_slot, team_by_id
 
 #: ``status.type.state`` values the feed uses; anything else is kept as sent.
 PRE, IN, POST = "pre", "in", "post"
@@ -354,6 +354,10 @@ class FbGame:
     def involves(self, abbrev: str) -> bool:
         key = abbrev.strip().upper()
         return key in (self.away.abbrev, self.home.abbrev)
+
+    def in_slot(self, slot: str) -> bool:
+        """Whether this is a Sunday or Monday night game (``SNF`` / ``MNF``), by its kick-off."""
+        return in_night_slot(slot, self.start_utc)
 
     def team(self, abbrev: str) -> FbTeam | None:
         key = abbrev.strip().upper()

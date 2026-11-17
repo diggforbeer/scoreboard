@@ -376,6 +376,10 @@ function teamName(abbrev: string) {
 
 // The ranked list of teams (epic #470): one list for both sports, best first. The first team of
 // each sport is its lead: it gets the horn and the idle screens, so it is marked.
+// The night-game entries of the football list: not clubs, but every Sunday / Monday night game.
+const NIGHT_SLOTS = ['SNF', 'MNF']
+const isSlot = (row: TeamRow) => row.sport === 'football' && NIGHT_SLOTS.includes(row.team)
+
 function teamLabel(row: TeamRow, available: TeamsAvailable): string {
   if (row.sport === 'hockey') {
     return HOCKEY_TEAMS.find(([code]) => code === row.team)?.[1] ?? row.team
@@ -401,7 +405,8 @@ function TeamsCard({
     row.sport === 'hockey'
       ? (hockeyNames[row.team] ?? row.team)
       : (available.football.find((t) => t.abbrev === row.team)?.name ?? row.team)
-  const isLead = (row: TeamRow, index: number) => teams.findIndex((t) => t.sport === row.sport) === index
+  const isLead = (row: TeamRow, index: number) =>
+    !isSlot(row) && teams.findIndex((t) => t.sport === row.sport && !isSlot(t)) === index
   const taken = (sport: string, team: string) => teams.some((t) => t.sport === sport && t.team === team)
   const full = teams.length >= max
   const move = (index: number, by: number) => {
@@ -421,7 +426,9 @@ function TeamsCard({
       <p className="text-body-secondary small">
         Your teams in priority order, hockey and football together. The highest-ranked team that is
         playing gets the screen. The first team of each sport (marked with a horn) gets the goal or
-        touchdown horn and the screens between games.
+        touchdown horn and the screens between games. Sunday or Monday Night Football (in the
+        football list) follows that night&apos;s games, whoever plays, when nothing ranked above
+        it is on.
       </p>
       {teams.length === 0 && (
         <div className="alert alert-info py-2" id="teams-empty">
@@ -442,6 +449,14 @@ function TeamsCard({
                 {row.sport}
               </span>{' '}
               {index === 0 && <span className="badge text-bg-warning teams-top">top priority</span>}{' '}
+              {isSlot(row) && (
+                <span
+                  className="badge text-bg-info teams-slot"
+                  title="Every game in this time slot, whoever plays, when nothing ranked above it is on"
+                >
+                  night game
+                </span>
+              )}{' '}
               {isLead(row, index) && (
                 <span
                   className="badge text-bg-secondary teams-horn"

@@ -393,3 +393,107 @@ def test_the_view_is_read_through_so_it_follows_the_real_settings_live():
     base.final_hold_minutes = 7.0
     assert view.final_hold_minutes == 7.0
     assert [e.screen for e in view.idle_rotation][:2] == ["fb_preview", "fb_standings"]
+
+
+# -- the night-game slots: SNF and MNF rank like teams --------------------------------------------
+
+
+def _at(year, month, day, hour, minute=0):
+    """A kick-off given in Eastern time (November: UTC-5)."""
+    return datetime(year, month, day, hour, minute, tzinfo=UTC) + timedelta(hours=5)
+
+
+class N(G):
+    """A football game that knows the night slots, as ``FbGame`` does."""
+
+    def in_slot(self, slot):
+        from scoreboard.football.teams import in_night_slot
+
+        return in_night_slot(slot, self.start_utc)
+
+
+SUN_NIGHT = _at(2026, 11, 15, 20, 20)  # a Sunday
+MON_NIGHT = _at(2026, 11, 16, 20, 15)  # a Monday
+SUN_NOON = _at(2026, 11, 15, 13)
+
+
+def test_the_sunday_slot_is_a_sunday_evening_in_eastern_time_and_the_monday_slot_a_monday_one():
+    from scoreboard.football.teams import in_night_slot
+
+    assert in_night_slot("SNF", SUN_NIGHT) and not in_night_slot("MNF", SUN_NIGHT)
+    assert in_night_slot("MNF", MON_NIGHT) and not in_night_slot("SNF", MON_NIGHT)
+    assert not in_night_slot("SNF", SUN_NOON), "the early and late-afternoon games are not it"
+    assert not in_night_slot("SNF", _at(2026, 11, 15, 16, 25))
+    assert not in_night_slot("SNF", _at(2026, 11, 12, 20, 15)), "Thursday night is not Sunday's"
+    assert not in_night_slot("SNF", None) and not in_night_slot("XYZ", SUN_NIGHT)
+    # 8:20pm Eastern is already Monday in UTC: the slot is judged in the league's own zone
+    assert SUN_NIGHT.weekday() == 0 and in_night_slot("SNF", SUN_NIGHT)
+
+
+def test_a_slot_shows_that_nights_game_when_nothing_ranked_above_it_is_on():
+    game = N(1, "DAL", "NYG", "live", SUN_NIGHT)
+    priority = board(("football", "SNF"))
+    moment = priority.owner({"football": [game]}, SUN_NIGHT, WINDOWS)
+    assert moment is not None and moment.kind is Kind.LIVE and moment.sport == "football"
+    assert moment.team == "NYG", "the screens need a side: the home team when none is ranked"
+
+
+def test_a_team_ranked_above_the_slot_wins_and_one_below_it_does_not():
+    night = N(1, "DAL", "NYG", "live", SUN_NIGHT)
+    other = N(2, "TEN", "HOU", "live", SUN_NOON)
+    above = board(("football", "TEN"), ("football", "SNF"))
+    assert above.owner({"football": [night, other]}, SUN_NIGHT, WINDOWS).team == "TEN"
+    below = board(("football", "SNF"), ("football", "TEN"))
+    assert below.owner({"football": [night, other]}, SUN_NIGHT, WINDOWS).game is night
+
+
+def test_a_ranked_team_in_the_night_game_is_the_side_the_screens_favour():
+    night = N(1, "DAL", "NYG", "live", SUN_NIGHT)
+    priority = board(("football", "SNF"), ("football", "DAL"))
+    assert priority.owner({"football": [night]}, SUN_NIGHT, WINDOWS).team == "DAL"
+
+
+def test_a_slot_only_follows_its_own_night():
+    monday = N(1, "DAL", "NYG", "live", MON_NIGHT)
+    assert board(("football", "SNF")).owner({"football": [monday]}, MON_NIGHT, WINDOWS) is None
+    assert board(("football", "MNF")).owner({"football": [monday]}, MON_NIGHT, WINDOWS) is not None
+
+
+def test_a_slot_has_a_countdown_and_a_held_final_like_a_team():
+    kickoff = SUN_NIGHT
+    pre = N(1, "DAL", "NYG", "pre", kickoff)
+    near = kickoff - timedelta(minutes=30)
+    assert (
+        board(("football", "SNF")).owner({"football": [pre]}, near, WINDOWS).kind is Kind.COUNTDOWN
+    )
+    far = kickoff - timedelta(hours=5)
+    assert board(("football", "SNF")).owner({"football": [pre]}, far, WINDOWS) is None
+    done = N(2, "DAL", "NYG", "final", kickoff)
+    ages = {("football", 2): timedelta(minutes=5)}
+    assert (
+        board(("football", "SNF")).owner({"football": [done]}, kickoff, WINDOWS, ages).kind
+        is Kind.FINAL
+    )
+
+
+def test_a_slot_is_not_a_team_it_has_no_horn_idle_screens_or_colours():
+    priority = board(("football", "SNF"), ("football", "TEN"), ("hockey", "NSH"))
+    assert priority.lead("football") == "TEN" and priority.teams_for("football") == ["TEN"]
+    assert priority.colour_team() == TeamEntry("football", "TEN")
+    only = board(("football", "MNF"))
+    assert only.lead("football") is None and only.colour_team() is None
+    assert only.sports() == ["football"], "it still needs the football feed running"
+    view = only.view("football", object(), None)
+    assert view.favourite_team == "" and view.followed_teams == [] and view.horn_team == ""
+
+
+def test_slots_are_valid_in_the_football_list_only(tmp_path):
+    from scoreboard.config import team_exists
+
+    assert team_exists("football", "SNF") and team_exists("football", "MNF")
+    assert not team_exists("hockey", "SNF") and not team_exists("football", "TNF")
+    path = tmp_path / "c.toml"
+    path.write_text(
+        '[[teams]]\nsport = "football"\nteam = "snf"\n\n[[teams]]\nsport = "hockey"\nteam = "SNF"\n'
+    )
+    assert Settings.load(path).teams == [TeamEntry("football", "SNF")]

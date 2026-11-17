@@ -34,6 +34,7 @@ from enum import IntEnum
 from typing import Any, Protocol
 
 from .config import TEAM_SPORTS, TeamEntry
+from .football.teams import NIGHT_SLOTS
 
 
 class GameLike(Protocol):
@@ -201,11 +202,11 @@ class Priority:
 
     def lead(self, sport: str) -> str | None:
         """The highest-ranked team of ``sport``: the one with the horn and the idle screens."""
-        return next((e.team for e in self.teams if e.sport == sport), None)
+        return next((e.team for e in self.teams if e.sport == sport and not _is_slot(e)), None)
 
     def teams_for(self, sport: str) -> list[str]:
-        """The ranked teams of ``sport``, best first."""
-        return [e.team for e in self.teams if e.sport == sport]
+        """The ranked teams of ``sport``, best first (the night-game slots are not teams)."""
+        return [e.team for e in self.teams if e.sport == sport and not _is_slot(e)]
 
     def view(
         self,
@@ -237,8 +238,20 @@ class Priority:
         return out
 
     def colour_team(self) -> TeamEntry | None:
-        """The team the clock and holiday colours follow: the overall rank 1."""
-        return self.teams[0] if self.teams else None
+        """The team the clock and holiday colours follow: the overall rank 1 (a night-game slot
+        has no colours, so the first real team)."""
+        return next((e for e in self.teams if not _is_slot(e)), None)
+
+    def _perspective(self, entry: TeamEntry, game: GameLike) -> str:
+        """The team a moment is about: the ranked team itself, or for a night-game slot a ranked
+        team playing in that game, else the home team (the screens need one side to favour)."""
+        if not _is_slot(entry):
+            return entry.team
+        for other in self.teams:
+            if other.sport == entry.sport and not _is_slot(other) and game.involves(other.team):
+                return other.team
+        home = getattr(game, "home", "")
+        return str(getattr(home, "abbrev", home))
 
     # -- what is on ------------------------------------------------------------------------
 
@@ -260,18 +273,22 @@ class Priority:
         for rank, entry in enumerate(self.teams, start=1):
             window = windows.get(entry.sport)
             for game in games.get(entry.sport, ()):
-                if not game.involves(entry.team):
+                if _is_slot(entry):
+                    if not getattr(game, "in_slot", lambda _s: False)(entry.team):
+                        continue
+                elif not game.involves(entry.team):
                     continue
+                team = self._perspective(entry, game)
                 if game.is_live:
-                    out.append(Moment(entry.sport, entry.team, rank, Kind.LIVE, game))
+                    out.append(Moment(entry.sport, team, rank, Kind.LIVE, game))
                 elif game.is_pregame and window is not None and game.start_utc is not None:
                     until = game.start_utc - now
                     if timedelta(0) <= until <= window.countdown:
-                        out.append(Moment(entry.sport, entry.team, rank, Kind.COUNTDOWN, game))
+                        out.append(Moment(entry.sport, team, rank, Kind.COUNTDOWN, game))
                 elif game.is_final and window is not None:
                     age = final_ages.get((entry.sport, game.id))
                     if age is not None and age < window.final_hold:
-                        out.append(Moment(entry.sport, entry.team, rank, Kind.FINAL, game, age))
+                        out.append(Moment(entry.sport, team, rank, Kind.FINAL, game, age))
         out.sort(key=_order)
         return out
 
@@ -294,6 +311,11 @@ class Priority:
         if self.teams:
             return None
         return next((s for s in TEAM_SPORTS if any(g.is_live for g in games.get(s, ()))), None)
+
+
+def _is_slot(entry: TeamEntry) -> bool:
+    """A night-game slot (``SNF`` / ``MNF``) rather than a team."""
+    return entry.sport == "football" and entry.team in NIGHT_SLOTS
 
 
 def _order(moment: Moment) -> tuple[int, timedelta, int]:
