@@ -27,6 +27,20 @@ WAH_WAH_STEM = "_wah_wah"
 #: The "ding" for a followed (non-favourite) team's goals (#311); same override rules.
 DING_STEM = "_ding"
 
+#: Football's touchdown and field-goal sounds (#517). Football and hockey abbreviations overlap
+#: (BUF, CAR, DAL, DET, MIN...), so team files carry a ``football_`` prefix, not the hockey
+#: horn's ``{ABBR}`` name; each kind has a shipped default, ``_football_td`` / ``_football_fg``.
+FOOTBALL_KINDS: tuple[str, ...] = ("td", "fg")
+
+
+def football_default_stem(kind: str) -> str:
+    return f"_football_{kind}"
+
+
+def football_team_stem(abbrev: str, kind: str) -> str:
+    return f"football_{abbrev.strip().upper()}_{kind}"
+
+
 #: Horn file extensions, in lookup order within one directory. WAV plays
 #: through aplay, MP3 through mpg123 (#208) -- aplay can't decode MP3.
 HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
@@ -133,6 +147,12 @@ class GoalHornPlayer:
         """The followed-team ding: uploads and drop-ins first, then the shipped file."""
         return self._find(DING_STEM)
 
+    def football_path(self, abbrev: str, kind: str) -> Path | None:
+        """The team's own touchdown / field-goal sound, else that kind's default."""
+        if kind not in FOOTBALL_KINDS:
+            return None
+        return self._find(football_team_stem(abbrev, kind), football_default_stem(kind))
+
     def _find(self, *stems: str) -> Path | None:
         for stem in stems:
             for directory in self.directories:
@@ -150,6 +170,17 @@ class GoalHornPlayer:
         path = self.path_for(abbrev)
         if path is None:
             log.debug("No horn for %s and no default available", abbrev)
+            return False
+        return self._launch(path)
+
+    def play_football(self, abbrev: str, kind: str) -> bool:
+        """Launch ``abbrev``'s touchdown (``td``) or field-goal (``fg``) sound. Never raises."""
+        self.last_error = ""
+        if not self.enabled:
+            return False
+        path = self.football_path(abbrev, kind)
+        if path is None:
+            log.warning("No football %s sound for %s and no default available", kind, abbrev)
             return False
         return self._launch(path)
 

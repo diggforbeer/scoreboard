@@ -284,9 +284,12 @@ from . import updater
 from .audio import (
     DEFAULT_STEM,
     DING_STEM,
+    FOOTBALL_KINDS,
     HORN_EXTENSIONS,
     WAH_WAH_STEM,
     GoalHornPlayer,
+    football_default_stem,
+    football_team_stem,
     upload_directory,
 )
 from .audio_normalize import Normalized, normalize
@@ -1069,6 +1072,21 @@ def _looks_like_mp3(raw: bytes) -> bool:
     return len(head) == 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0 and (head[1] & 0x06) != 0
 
 
+def _football_key(team: object) -> tuple[str, str] | None:
+    """``(kind, abbrev)`` for a football sound key (#517): ``fb_td`` / ``fb_fg`` (the defaults,
+    abbrev ``""``) or ``fb_td:BUF`` / ``fb_fg:BUF``; None for any other key. Raises ValueError
+    for a football key naming an unknown team."""
+    if not isinstance(team, str) or not team.startswith("fb_"):
+        return None
+    head, _, abbrev = team.partition(":")
+    kind = head[3:]
+    if kind not in FOOTBALL_KINDS:
+        return None
+    if team != head and abbrev not in football_teams.TEAMS:
+        raise ValueError(f"unknown football team {abbrev!r}")
+    return kind, abbrev
+
+
 def _horn_stem(team: object) -> str:
     """The on-disk stem for ``team`` -- the shipped default slot
     (``"default"``), the opponent-goal sting (``"wah_wah"``, #307), the followed-team ding
@@ -1084,6 +1102,10 @@ def _horn_stem(team: object) -> str:
         return WAH_WAH_STEM
     if team == "ding":
         return DING_STEM
+    football = _football_key(team)
+    if football is not None:
+        kind, abbrev = football
+        return football_team_stem(abbrev, kind) if abbrev else football_default_stem(kind)
     if isinstance(team, str) and team in TEAM_COLORS:
         return team
     raise ValueError(f"unknown team {team!r}")
@@ -1156,6 +1178,14 @@ def _list_uploaded_horns() -> list[dict[str, str]]:
         ("wah_wah", WAH_WAH_STEM),
         ("ding", DING_STEM),
         *((t, t) for t in TEAM_COLORS),
+        *(
+            (f"fb_{kind}" + (f":{a}" if a else ""), stem)
+            for kind in FOOTBALL_KINDS
+            for a, stem in [
+                ("", football_default_stem(kind)),
+                *((a, football_team_stem(a, kind)) for a in sorted(football_teams.TEAMS)),
+            ]
+        ),
     ]:
         for ext in HORN_EXTENSIONS:
             path = directory / f"{stem}{ext}"
@@ -1185,7 +1215,12 @@ def _delete_horn(team: object) -> bool:
     return deleted
 
 
-_HORN_DOWNLOAD_NAMES = {"default": "default-horn", "wah_wah": "wah-wah"}
+_HORN_DOWNLOAD_NAMES = {
+    "default": "default-horn",
+    "wah_wah": "wah-wah",
+    "fb_td": "football-touchdown",
+    "fb_fg": "football-field-goal",
+}
 
 
 def _read_horn(team: object) -> tuple[str, bytes]:
@@ -1254,6 +1289,16 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
         if horn.ding_path() is None:
             return False, "No ding file found."
         if horn.play_ding(force=True):
+            return True, ""
+        return False, horn.last_error or "The player command failed to launch."
+    football = _football_key(team)
+    if football is not None:
+        kind, abbrev = football
+        # A default slot plays itself; a team slot plays that team's own, else the default.
+        abbrev = abbrev or "default"
+        if horn.football_path(abbrev, kind) is None:
+            return False, "No football sound file found, and no default is available either."
+        if horn.play_football(abbrev, kind):
             return True, ""
         return False, horn.last_error or "The player command failed to launch."
     if horn.path_for(team) is None:

@@ -43,3 +43,5 @@ assets/horns/*.wav
 !assets/horns/_default.wav
 !assets/horns/_wah_wah.wav
 !assets/horns/_ding.wav
+!assets/horns/_football_td.wav
+!assets/horns/_football_fg.wav

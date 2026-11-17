@@ -76,6 +76,7 @@ class FootballMode:
         utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
         timings: Callable[[], Timings] | None = None,
         wide: Callable[[], bool] = lambda: True,
+        on_sound: Callable[[Any], None] | None = None,
     ) -> None:
         """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
         settings (read at each poll and each frame, so an admin-page change applies without a
@@ -87,6 +88,7 @@ class FootballMode:
 
             client_factory = FootballClient
         self._scoreboard = scoreboard
+        self._on_sound = on_sound
         self._football = football
         self._monotonic = monotonic
         self._client_factory = client_factory
@@ -132,7 +134,7 @@ class FootballMode:
         self._roster_client: Any = None
 
     def _make_director(self) -> Director:
-        return Director(*self._director_args, stats=self._stats_for)
+        return Director(*self._director_args, stats=self._stats_for, on_sound=self._on_sound)
 
     def request_clear(self, scope: str) -> None:
         """Ask for the idle data (and rosters) to be forgotten: ``football`` or ``football:<item>``

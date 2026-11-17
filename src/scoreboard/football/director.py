@@ -158,7 +158,11 @@ class Director:
         utc_now: Callable[[], datetime] = lambda: datetime.now(UTC),
         timings: Callable[[], Timings] | None = None,
         stats: Callable[[int], object | None] = lambda _game_id: None,
+        on_sound: Callable[[Event], None] | None = None,
     ) -> None:
+        #: Called with each celebration that carries a sound (``Event.sound``: the lead team's
+        #: touchdown or made field goal, #517) the moment it is detected, whatever is on screen.
+        self._on_sound = on_sound
         #: ``stats(game_id)`` is the game's team stats, or None (none yet, or a panel too narrow).
         self._stats = stats
         self._last_break: dict[int, tuple] = {}
@@ -340,6 +344,10 @@ class Director:
                 return []
             self._last_break[game.id] = key
         events = self.detector.on_shown(game, shown)
+        if self._on_sound is not None:
+            for event in events:
+                if event.sound:
+                    self._on_sound(event)
         already = self.reversals.remember_all(events)
         undone = {r.original.play.id for r in already}
         people = self._people(game, play)
