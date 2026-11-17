@@ -2769,8 +2769,8 @@ function App() {
             <h2 className="card-title h5">Cached data</h2>
             <p className="text-body-secondary small">
               What the board has fetched and keeps (refreshed every few seconds while this tab is
-              open). Clearing makes it fetch again; while a football game is live the football idle
-              data is not refetched until it ends.
+              open). Clearing makes it fetch again; while a game of a team you follow is live, football's
+              idle data waits until it ends.
             </p>
             <div className="d-flex gap-2 mb-3">
               {(['all', 'hockey', 'football'] as const).map((scope) => (

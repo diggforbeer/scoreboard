@@ -1798,7 +1798,8 @@ when it was written; that history is left as-is rather than rewritten.
   `all`, a sport or one item. `cache_get` / `cache_clear` over the websocket; the admin thread only
   leaves a note (`ScoreboardApp.request_cache_clear`): hockey's caches are cleared by the render
   loop, football's by its feed worker, which owns them (`FootballMode.request_clear`). The data
-  refetches by itself, but football's idle data is not fetched while a game is live.
+  refetches by itself, but football's idle data is not fetched while a followed team's game is
+  live.
 - **Autosave + Undo (#273).** Every section except Panel and Status saves
   itself (`frontend/src/autosave.ts`'s `useAutosave`, one per section;
   the Save buttons are gone). One `AutosaveToast` bar pinned to the
