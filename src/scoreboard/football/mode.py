@@ -246,18 +246,21 @@ class FootballMode:
         the standings (hourly) and the week's games (every few minutes), each fetched only when it
         is due. The scoreboard's own week, byes and calendar come in on the poll already made.
 
-        **Nothing is fetched while any game is live** (the idle screens are not showing and the
-        live poll is the busy one); the last data is kept. A failed fetch keeps the last good
-        value (``IdleCache``), and a client without these methods (a test fake) is simply skipped.
+        **Nothing is fetched while a followed team's game is live** (the idle screens are not
+        showing and the live poll is the busy one); the last data is kept. A live game between
+        two other teams does not count: the idle screens are up through it, so their data has to
+        load (a board restarted during Monday-night football otherwise never got a schedule or
+        the standings until the game ended). A failed fetch keeps the last good value
+        (``IdleCache``), and a client without these methods (a test fake) is simply skipped.
         """
         snap = with_scoreboard(prev, scoreboard)
-        if any(g.is_live for g in games):
-            return snap
         cfg = self._football() if self._football else None
         mine = ([cfg.favourite_team] if cfg and cfg.favourite_team else []) + (
             list(cfg.followed_teams) if cfg else []
         )
         mine = [t for t in dict.fromkeys(mine) if is_team(t)]
+        if any(g.is_live and any(g.involves(t) for t in mine) for g in games):
+            return snap
         cache = self._idle_cache
         schedules = dict(snap.schedules)
         if hasattr(client, "schedule"):

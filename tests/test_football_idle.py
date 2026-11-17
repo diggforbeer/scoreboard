@@ -396,12 +396,19 @@ def test_with_nobody_followed_only_the_scoreboards_extras_and_the_week_are_fetch
     assert feed.count("week") == 1 and mode.snapshot.idle.scoreboard.week == 10
 
 
-def test_nothing_is_fetched_while_a_game_is_live_and_the_last_data_is_kept():
+def live_followed(game_id=3):
+    """The favourite's own game (NYG), live."""
+    from test_football_scenes import SIT, game
+
+    return game("WSH", "NYG", "in", 3, 0, situation=SIT, game_id=game_id)
+
+
+def test_nothing_is_fetched_while_a_followed_teams_game_is_live_and_the_last_data_is_kept():
     clock, feed = Clock(), IdleFeed([pregame()])
     mode = make_mode(feed, clock)
     mode.worker.poll_once()
     fetched = len(feed.calls)
-    feed.games = [pregame(), live()]
+    feed.games = [pregame(), live_followed()]
     feed.week_number = 11
     clock.t += idle.SCHEDULE_TTL * 3
     mode.worker.poll_once()
@@ -409,6 +416,25 @@ def test_nothing_is_fetched_while_a_game_is_live_and_the_last_data_is_kept():
     snap = mode.snapshot.idle
     assert snap.scoreboard.week == 11, "the week still follows the scoreboard"
     assert snap.schedules and snap.standings_cached is not None, "the old data is kept"
+
+
+def test_a_followed_team_other_than_the_favourite_playing_also_pauses_the_fetches():
+    clock, feed = Clock(), IdleFeed([pregame(), live()])  # DAL @ PHI is live
+    mode = make_mode(feed, clock, "NYG", ["DAL"])
+    mode.worker.poll_once()
+    assert feed.count("schedule") == 0 and feed.count("standings") == 0
+
+
+def test_a_live_game_nobody_follows_does_not_stop_the_idle_data_loading():
+    """The idle screens are up whenever no followed team is playing, so their data must load then:
+    a board restarted during Monday-night football between two other teams had no schedule or
+    standings, so the preview, schedule and standings rows were skipped all night."""
+    clock, feed = Clock(), IdleFeed([pregame(), live()])  # DAL @ PHI is live; the board follows NYG
+    mode = make_mode(feed, clock)
+    mode.worker.poll_once()
+    assert feed.count("schedule") == 1 and feed.count("standings") == 1 and feed.count("week") == 1
+    snap = mode.snapshot.idle
+    assert snap.schedule(NYG_ID, clock()) is not None and snap.standings(clock()) is not None
 
 
 def test_a_failed_fetch_keeps_the_last_good_data_and_a_later_one_replaces_it():
