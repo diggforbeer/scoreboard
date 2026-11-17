@@ -21,3 +21,6 @@ footer{padding:2rem 0;color:var(--mute);font-size:.9rem;border-top:1px solid #1d
 figure{margin:0}
 figcaption{color:var(--mute);font-size:.9rem;margin-top:.3rem}
 .shots img{width:100%;image-rendering:pixelated}
+.btn.alt{background:transparent;color:var(--accent);border:2px solid var(--accent);margin-left:.5rem}
+h3{margin:1.5rem 0 .5rem;font-size:1.15rem}
+.card h3{margin:0 0 .4rem}
