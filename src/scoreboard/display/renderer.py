@@ -1184,6 +1184,43 @@ class Renderer:
         self.text_center(canvas, self.fonts.large, centre, 14, top_colour, top)
         self.text_center(canvas, self.fonts.medium, centre, self.height - 4, (0, 200, 60), bottom)
 
+    def draw_thanksgiving(self, canvas: Any, now: datetime, favourite: str) -> None:
+        """The holiday rotation screen in November (like the December tree): a turkey on the
+        left, the countdown to Thanksgiving on the right, the top line in the favourite's colour.
+        """
+        from .holiday import (
+            THANKSGIVING_TEXT,
+            TURKEY_SCREEN_HEIGHT,
+            TURKEY_SCREEN_WIDTH,
+            draw_thanksgiving_turkey,
+            thanksgiving_countdown,
+        )
+
+        canvas.Clear()
+        local = now.astimezone(self.tz)
+        tick = int(now.timestamp() * 2)
+        lines = thanksgiving_countdown(local.date())
+        top = (self.height - TURKEY_SCREEN_HEIGHT) // 2
+        left = TURKEY_SCREEN_WIDTH + 6  # the text column starts here
+        room = self.width - left - 2
+        fits = lines is not None and all(
+            text_width(font, line) <= room
+            for font, line in zip((self.fonts.large, self.fonts.medium), lines, strict=True)
+        )
+        if not fits:
+            # A single 64px panel has no room beside the turkey: just the turkey.
+            x = (self.width - TURKEY_SCREEN_WIDTH) // 2
+            draw_thanksgiving_turkey(canvas, x, top, tick, self.width, self.height)
+            return
+        draw_thanksgiving_turkey(canvas, 3, top, tick, self.width, self.height)
+        first, second = lines
+        centre = (left + self.width) // 2
+        first_colour = team_color(favourite) if favourite else THANKSGIVING_TEXT
+        self.text_center(canvas, self.fonts.large, centre, 14, first_colour, first)
+        self.text_center(
+            canvas, self.fonts.medium, centre, self.height - 4, THANKSGIVING_TEXT, second
+        )
+
     def draw_blowout(self, canvas: Any, game: Game, favourite: str) -> None:
         """The blowout Easter egg (#326): see blowout.py. A toilet at each edge
         where the logos go, the caption between, the score from the loser's side.
