@@ -28,7 +28,8 @@ from ..hockey.models import (
     Star,
     TeamLeaders,
 )
-from . import goal_light
+from ..important_dates import DateView, countdown_text, years_text
+from . import date_icons, goal_light
 from . import penalty as penalty_screen
 from .fonts import FontSet, text_width
 from .logos import Logo, LogoLibrary, LogoSet
@@ -1555,6 +1556,77 @@ class Renderer:
                 WHITE,
                 self._fit_text(self.fonts.tiny, password, max_w - 15),
             )
+
+    def draw_date(self, canvas: Any, view: DateView, now: datetime) -> None:
+        """The ``dates`` rotation screen (#524): one important date's icon on the left, the owner's
+        label over a big countdown (``12 DAYS``, ``TOMORROW``) on the right, and when the date
+        counts years a small ``TURNS 8`` / ``8 YEARS`` line under it.
+
+        On the day itself the big line is a greeting that cycles colours, the icon bobs and
+        confetti twinkles, all a pure function of the half-second tick (the normal 2fps loop, never
+        the fast one). With no room beside the icon (a single 64px panel) the text is centred alone.
+        """
+        canvas.Clear()
+        tick = int(now.timestamp() * 2)
+        today = view.days <= 0
+        big = countdown_text(view)
+        years = years_text(view)
+        box_w, box_h = date_icons.ICON_BOX
+        left = 3 + box_w + 5
+        room = self.width - left - 2
+        icon = (
+            text_width(self.fonts.large, big) <= room or text_width(self.fonts.medium, big) <= room
+        ) and text_width(self.fonts.medium, view.text[:6]) <= room
+        if icon:
+            centre = (left + self.width) // 2
+        else:
+            centre, room = self.width // 2, self.width - 4
+        label = self._cut_text(self.fonts.medium, view.text, room)
+        big_font = next(
+            (f for f in (self.fonts.large, self.fonts.medium) if text_width(f, big) <= room),
+            self.fonts.small,
+        )
+        label_rgb = date_icons.ICON_COLOURS.get(view.icon, ACCENT)
+        big_rgb = date_icons.CONFETTI[tick % len(date_icons.CONFETTI)] if today else WHITE
+        if years:
+            label_y, big_y, years_y = 9, 21, self.height - 2
+        else:
+            label_y, big_y, years_y = 12, 26, 0
+        if icon:
+            date_icons.draw_icon(
+                canvas,
+                view.icon,
+                3,
+                (self.height - box_h) // 2,
+                self.width,
+                self.height,
+                bob=tick % 2 if today else 0,
+            )
+        self.text_center(canvas, self.fonts.medium, centre, label_y, label_rgb, label)
+        self.text_center(canvas, big_font, centre, big_y, big_rgb, big)
+        if years:
+            self.text_center(
+                canvas,
+                self.fonts.tiny,
+                centre,
+                years_y,
+                SUBDUED if not today else WHITE,
+                self._cut_text(self.fonts.tiny, years, room),
+            )
+        if today:
+            edge = [(self.width - 7, 0, self.width, self.height)]
+            if icon:
+                edge.append((0, 0, 3, self.height))
+            else:
+                edge.append((0, 0, 7, self.height))
+            date_icons.draw_confetti(canvas, tick, edge, self.width, self.height)
+
+    @staticmethod
+    def _cut_text(font: Any, text: str, room: int) -> str:
+        """``text`` cut from the end until it is no wider than ``room`` pixels."""
+        while text and text_width(font, text) > room:
+            text = text[:-1]
+        return text.rstrip()
 
     def draw_address(
         self,

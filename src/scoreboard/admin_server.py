@@ -316,6 +316,17 @@ from .hostname import (
     normalise_hostname,
     valid_hostname_label,
 )
+from .important_dates import (
+    DATE_ICONS,
+    DATE_TEXT_MAX,
+    DATES_MAX,
+    DAYS_BEFORE_DEFAULT,
+    DAYS_BEFORE_MAX,
+    DAYS_BEFORE_MIN,
+    clean_text,
+    parse_day,
+    text_problem,
+)
 from .priority import Priority
 from .updater import installed_version
 
@@ -619,6 +630,35 @@ def _rotation_payload(settings: Settings) -> dict[str, object]:
         "type": "config",
         "section": "rotation",
         "data": [dataclasses.asdict(entry) for entry in settings.rotation],
+    }
+
+
+def _dates_payload(settings: Settings) -> dict[str, object]:
+    """The owner's important dates (#524), as the page edits them: ``date`` as ``YYYY-MM-DD`` (what
+    its date picker holds). ``available`` is the bounds the page enforces as the owner types."""
+    return {
+        "type": "config",
+        "section": "dates",
+        "data": {
+            "dates": [
+                {
+                    "date": entry.date.isoformat(),
+                    "text": entry.text,
+                    "icon": entry.icon,
+                    "repeat": entry.repeat,
+                    "show_years": entry.show_years,
+                    "days_before": entry.days_before,
+                }
+                for entry in settings.dates
+            ]
+        },
+        "available": {
+            "icons": list(DATE_ICONS),
+            "text_max": DATE_TEXT_MAX,
+            "days_before": [DAYS_BEFORE_MIN, DAYS_BEFORE_MAX],
+            "days_before_default": DAYS_BEFORE_DEFAULT,
+        },
+        "max": DATES_MAX,
     }
 
 
@@ -946,6 +986,13 @@ async def _send_teams_config(
 ) -> None:
     settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_teams_payload(settings)))
+
+
+async def _send_dates_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_dates_payload(settings)))
 
 
 async def _send_snapshot(connection: ServerConnection) -> None:
@@ -1527,6 +1574,7 @@ _SEND_AFTER_SAVE = {
     "update": _send_update_config,
     "football_rotation": _send_football_rotation_config,
     "teams": _send_teams_config,
+    "dates": _send_dates_config,
 }
 
 
@@ -1554,6 +1602,54 @@ def _coerce_teams(data: object) -> list[dict[str, str]]:
         if entry in entries:
             raise ValueError(json.dumps({label: f"{sport} {team} is already in the list"}))
         entries.append(entry)
+    return entries
+
+
+def _coerce_dates(data: object) -> list[dict[str, object]]:
+    """Validate a ``dates`` save (#524): the whole new list, rejected whole on the first bad row
+    (like ``_coerce_teams``). The text is turned into capitals, then must be drawable; the window
+    must be a whole number of days in range."""
+    if not isinstance(data, dict) or not isinstance(data.get("dates"), list):
+        raise ValueError(json.dumps({"dates": "must be an object with a list of dates"}))
+    rows = data["dates"]
+    if len(rows) > DATES_MAX:
+        raise ValueError(json.dumps({"dates": f"at most {DATES_MAX} dates"}))
+    entries: list[dict[str, object]] = []
+    for i, row in enumerate(rows):
+        label = f"row {i + 1}"
+        if not isinstance(row, dict):
+            raise ValueError(json.dumps({label: "must be an object"}))
+        day = parse_day(row.get("date"))
+        if day is None or not isinstance(row.get("date"), str):
+            raise ValueError(json.dumps({label: "pick a date"}))
+        text = clean_text(row.get("text", ""))
+        problem = text_problem(text)
+        if problem:
+            raise ValueError(json.dumps({label: problem}))
+        icon = row.get("icon")
+        if icon not in DATE_ICONS:
+            raise ValueError(json.dumps({label: f"icon must be one of {', '.join(DATE_ICONS)}"}))
+        for key in ("repeat", "show_years"):
+            if not isinstance(row.get(key), bool):
+                raise ValueError(json.dumps({label: f"{key} must be true or false"}))
+        days = row.get("days_before")
+        if (
+            not isinstance(days, int)
+            or isinstance(days, bool)
+            or not DAYS_BEFORE_MIN <= days <= DAYS_BEFORE_MAX
+        ):
+            msg = f"days before must be a whole number from {DAYS_BEFORE_MIN} to {DAYS_BEFORE_MAX}"
+            raise ValueError(json.dumps({label: msg}))
+        entries.append(
+            {
+                "date": day,
+                "text": text,
+                "icon": icon,
+                "repeat": row["repeat"],
+                "show_years": row["show_years"],
+                "days_before": days,
+            }
+        )
     return entries
 
 
@@ -1617,6 +1713,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_football_rotation(message.get("data"))
         elif section == "teams":
             values = _coerce_teams(message.get("data"))
+        elif section == "dates":
+            values = _coerce_dates(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
@@ -1662,6 +1760,8 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_football_rotation_config(connection, settings)
         # And the ranked team list (epic #470) after that.
         await _send_teams_config(connection, settings)
+        # And the important dates (#524), last again for the same reason.
+        await _send_dates_config(connection, settings)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:

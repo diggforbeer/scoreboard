@@ -273,7 +273,9 @@ def test_every_hockey_screen_is_hockeys_and_every_football_screen_footballs():
     from scoreboard.config import FOOTBALL_SCREENS, VALID_ROTATION_SCREENS, screen_sport
 
     for screen in VALID_ROTATION_SCREENS:
-        expected = F if screen in FOOTBALL_SCREENS else ("shared" if screen == "clock" else H)
+        expected = (
+            F if screen in FOOTBALL_SCREENS else ("shared" if screen in ("clock", "dates") else H)
+        )
         assert screen_sport(screen) == expected, screen
     assert set(FOOTBALL_SCREENS) <= set(VALID_ROTATION_SCREENS)
 

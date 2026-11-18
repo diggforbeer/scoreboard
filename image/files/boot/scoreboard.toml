@@ -121,7 +121,8 @@ scores_grid = false
 # nothing to show is skipped. The football screens are "fb_preview", "fb_standings", "fb_week"
 # and "fb_schedule"; with no list at all each sport shows its own default.
 # screen is one of "countdown_preview", "standings", "clock",
-# "matchup", "top_west", "top_east", "division", "leaders", "holiday", "scores_grid", "address".
+# "matchup", "top_west", "top_east", "division", "leaders", "holiday", "scores_grid", "address",
+# "dates".
 # "matchup" (your team's head-to-head record this season against its next
 # opponent, then the scores of the meetings so far for the second half of
 # its time),
@@ -133,7 +134,8 @@ scores_grid = false
 # "christmas" ticked), "scores_grid" (every game today, four to a frame, its
 # seconds shared between the pages) and "address" (the admin page's IP and a
 # QR code to it; it also shows by itself for a minute once the board is
-# online) are never in the default list -- they
+# online) and "dates" (the birthdays and anniversaries in [[dates]] below, shown
+# while one is inside its window) are never in the default list -- they
 # only show if you add them here. A screen with nothing to show right now
 # (e.g. standings before your team's season has started) is skipped for
 # that pass, not shown blank.
@@ -149,6 +151,25 @@ scores_grid = false
 # [[rotation]]
 # screen = "clock"
 # seconds = 8
+
+# Important dates: birthdays, anniversaries, a trip. Add the "dates" screen to
+# the rotation above to show them (or enter them on the admin page, which writes
+# this list). Up to 10. Each counts down from days_before days out and
+# celebrates on the day.
+#   date        = the day (YYYY-MM-DD); with repeat = true only the month and day
+#                 matter each year, and the year is the one it began (a birth year)
+#   text        = up to 14 characters: capitals, digits and . , ' ! & - ?
+#   icon        = cake, balloon, heart, gift or star
+#   repeat      = every year (true) or once, on exactly that date (false)
+#   show_years  = also say how many years: "TURNS 8" (cake/balloon) or "8 YEARS"
+#   days_before = how many days ahead to start showing it (1-365)
+# [[dates]]
+# date = 2018-03-14
+# text = "MOM"
+# icon = "cake"
+# repeat = true
+# show_years = true
+# days_before = 30
 
 [football]
 # Football's own settings: the screen lengths and the toggles (all also on the

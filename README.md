@@ -190,14 +190,15 @@ scores_grid = false         # with no favourite game up, show today's games four
 # "What it shows" below). With no [[rotation]] tables, the list above
 # (rotate_seconds/show_standings/show_clock_between_games) still applies.
 # [[rotation]]
-# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, division, leaders, holiday, scores_grid, address
+# screen = "countdown_preview"  # one of countdown_preview, standings, clock, matchup, top_west, top_east, division, leaders, holiday, scores_grid, address, dates
 # seconds = 10
 # "matchup" (season series vs. the next opponent, then each finished meeting),
 # "top_west"/"top_east" (the whole conference, scrolling down), "division" (your team's division, scrolling), "leaders" (your team's top
 # goal scorer, top point getter and top two goalies), "holiday" (Dec 1-25: a
 # Christmas tree counting down to the 25th) and "scores_grid" (every game today, four
 # to a frame, its seconds shared between the pages) and "address" (the admin page's
-# IP and a QR code to it) only show if listed here. The address also appears by
+# IP and a QR code to it) and "dates" (your birthdays and anniversaries, see
+# [[dates]]) only show if listed here. The address also appears by
 # itself for a minute once the board first gets online.
 
 [audio]
@@ -330,6 +331,12 @@ gold coins; and the week before Easter, a hopping bunny and eggs painted in
 team colours; and Canada Day and July 4th, fireworks and flags. Canadian
 Thanksgiving (`thanksgiving_ca`) and Canada Day (`canada_day`) are
 available but not ticked by default.
+
+**Important dates.** Enter birthdays, anniversaries and other days on the admin page (Home tab,
+"Important dates") and add a `dates` row to the idle rotation: each date counts down on its own screen
+(a cake, balloon, heart, gift or star beside your label and `12 DAYS`, or `TURNS 8` for a birthday)
+from as many days before as you choose, and celebrates on the day. Up to 10, 14 characters each; see
+[screens.md](screens.md#dates-important-dates) for what it looks like.
 
 ## Audio
 

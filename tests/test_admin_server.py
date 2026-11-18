@@ -95,10 +95,10 @@ async def _serve_and_get(path):
         return await asyncio.to_thread(_get)
 
 
-async def _skip_initial(client, n=14):
+async def _skip_initial(client, n=15):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update/horn_list/snapshot/holiday/football/football_rotation messages every connection
-    opens with."""
+    rotation/update/horn_list/snapshot/holiday/football/football_rotation/teams/dates messages
+    every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -1259,6 +1259,7 @@ def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch
                     await client.recv()  # holiday, sent after the snapshot
                     await client.recv()  # football_rotation, sent after holiday
                     await client.recv()  # teams, sent after that
+                    await client.recv()  # dates, sent after teams
                     state["scene"] = "game"
                     second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
                     return first, second
@@ -1300,7 +1301,7 @@ def test_admin_server_class_sets_config_path_and_snapshot_provider(app_dir, conf
     server.start()
     try:
         with sync_connect(f"ws://localhost:{server.port}/", open_timeout=5) as ws:
-            messages = [json.loads(ws.recv(timeout=5)) for _ in range(12)]
+            messages = [json.loads(ws.recv(timeout=5)) for _ in range(13)]
         audio = next(m for m in messages if m.get("section") == "audio")
         assert audio["data"]["device"] == "hw:9,0"
         snapshot = next(m for m in messages if m["type"] == "snapshot")
@@ -1699,7 +1700,8 @@ def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
         await client.recv()  # snapshot
         await client.recv()  # holiday
         await client.recv()  # football_rotation
-        await client.recv()  # teams, the 14th and last
+        await client.recv()  # teams
+        await client.recv()  # dates, the 15th and last
         await client.send(json.dumps({"type": "upload_horn", "team": "NSH", "data": _wav_b64()}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1905,7 +1907,8 @@ def test_delete_horn_removes_the_file_and_broadcasts_the_updated_list(
         await client.recv()  # snapshot
         await client.recv()  # holiday
         await client.recv()  # football_rotation
-        await client.recv()  # teams, the 14th and last
+        await client.recv()  # teams
+        await client.recv()  # dates, the 15th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "NSH"}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1933,7 +1936,8 @@ def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_pat
         await client.recv()  # snapshot
         await client.recv()  # holiday
         await client.recv()  # football_rotation
-        await client.recv()  # teams, the 14th and last
+        await client.recv()  # teams
+        await client.recv()  # dates, the 15th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "default"}))
         return await client.recv()
 
@@ -2390,7 +2394,7 @@ def test_saving_football_s_settings_writes_the_football_section(app_dir, config_
     config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         saved = await _save_football_rotation(client, {"final_hold_minutes": 45})
         return saved, await _next(client)
 
@@ -2413,7 +2417,7 @@ def test_football_screens_save_through_the_one_rotation_list_mixed_with_hockeys(
     ]
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
         saved = await _next(client)
         return saved, await _next(client)
@@ -2430,7 +2434,7 @@ def test_football_screens_save_through_the_one_rotation_list_mixed_with_hockeys(
 
 def test_the_rotation_still_rejects_a_screen_that_belongs_to_neither_sport(app_dir, config_path):
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         data = [{"screen": "fb_bye", "seconds": 5}]  # added by the board itself, never listed
         await client.send(json.dumps({"type": "save", "section": "rotation", "data": data}))
         return await _next(client)
@@ -2462,7 +2466,7 @@ def test_a_bad_football_rotation_save_is_rejected_and_writes_nothing(app_dir, co
     config_path.write_text("[football]\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         return await _save_football_rotation(client, data)
 
     message = asyncio.run(_serve_and_run(scenario))
@@ -2475,7 +2479,7 @@ def test_the_football_screen_toggles_save_and_reload(app_dir, config_path):
     config_path.write_text("[football]\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         saved = await _save_football_rotation(client, {"show_bye": False, "show_countdown": False})
         return saved, await _next(client)
 
@@ -2490,7 +2494,7 @@ def test_the_football_screen_lengths_save_to_the_football_section(app_dir, confi
     config_path.write_text("[football]\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         saved = await _save_football_rotation(client, {"timings": {"score": 10, "play": 2.5}})
         return saved, await _next(client)
 
@@ -2510,7 +2514,7 @@ async def _save_teams(client, data):
     return await _next(client)
 
 
-def test_sends_the_ranked_teams_last_with_what_the_page_may_offer(app_dir, config_path):
+def test_sends_the_ranked_teams_with_what_the_page_may_offer(app_dir, config_path):
     config_path.write_text(
         '[[teams]]\nsport = "hockey"\nteam = "NSH"\n\n[[teams]]\nsport = "football"\nteam = "TEN"\n'
     )
@@ -2551,7 +2555,7 @@ def test_saving_the_teams_writes_the_list_in_order_and_echoes_it(app_dir, config
     ]
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         saved = await _save_teams(client, {"teams": rows})
         return saved, await _next(client)
 
@@ -2575,7 +2579,7 @@ def test_saving_an_empty_list_clears_it(app_dir, config_path):
     config_path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n')
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         return await _save_teams(client, {"teams": []})
 
     assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
@@ -2622,7 +2626,7 @@ def test_a_bad_teams_save_is_rejected_whole_and_writes_nothing(app_dir, config_p
     config_path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n')
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         return await _save_teams(client, data)
 
     message = asyncio.run(_serve_and_run(scenario))
@@ -2635,7 +2639,7 @@ def test_the_same_abbreviation_in_both_sports_is_two_valid_teams(app_dir, config
     config_path.write_text("")
 
     async def scenario(client):
-        await _skip_initial(client, n=14)
+        await _skip_initial(client, n=15)
         return await _save_teams(
             client,
             {"teams": [{"sport": "hockey", "team": "BUF"}, {"sport": "football", "team": "BUF"}]},
@@ -2668,3 +2672,131 @@ def test_upload_football_sounds_are_stored_apart_from_the_hockey_horn(
 def test_upload_football_sound_rejects_unknown_keys(app_dir, config_path, upload_dir, team):
     reply = _upload(team, _wav_b64())
     assert reply["type"] == "error"
+
+
+# -- important dates (#524) ---------------------------------------------------------------------
+
+
+def _date_row(**changes):
+    row = {
+        "date": "2018-03-14",
+        "text": "Mom",
+        "icon": "cake",
+        "repeat": True,
+        "show_years": True,
+        "days_before": 30,
+    }
+    return {**row, **changes}
+
+
+async def _save_dates(client, data):
+    await client.send(json.dumps({"type": "save", "section": "dates", "data": data}))
+    return await _next(client)
+
+
+def test_sends_the_important_dates_after_the_teams_with_the_bounds_the_page_enforces(
+    app_dir, config_path
+):
+    config_path.write_text(
+        '[[dates]]\ndate = 2018-03-14\ntext = "MOM"\nicon = "cake"\nshow_years = true\n'
+    )
+
+    async def scenario(client):
+        await _skip_initial(client, n=14)
+        return await _next(client)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["section"] == "dates"
+    assert message["data"] == {"dates": [_date_row(text="MOM")]}
+    assert message["available"]["icons"] == ["cake", "balloon", "heart", "gift", "star"]
+    assert message["available"]["text_max"] == 14
+    assert message["available"]["days_before"] == [1, 365]
+    assert message["max"] == 10
+
+
+def test_saving_the_dates_writes_toml_dates_in_order_and_echoes_them(app_dir, config_path):
+    config_path.write_text("# kept\n[scoreboard]\nrotate_seconds = 9\n")
+    rows = [_date_row(), _date_row(date="2020-06-01", text="our day!", icon="heart", repeat=False)]
+
+    async def scenario(client):
+        await _skip_initial(client, n=15)
+        saved = await _save_dates(client, {"dates": rows})
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "dates"}
+    # The text is capitalised on the way in.
+    assert [r["text"] for r in echo["data"]["dates"]] == ["MOM", "OUR DAY!"]
+    text = config_path.read_text()
+    assert text.count("[[dates]]") == 2 and "# kept" in text
+    assert "date = 2018-03-14" in text  # a real TOML date, not a string
+    dates = Settings.load(config_path).dates
+    assert [(d.text, d.icon, d.repeat) for d in dates] == [
+        ("MOM", "cake", True),
+        ("OUR DAY!", "heart", False),
+    ]
+
+
+def test_saving_no_dates_clears_the_list(app_dir, config_path):
+    config_path.write_text('[[dates]]\ndate = 2018-03-14\ntext = "MOM"\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=15)
+        return await _save_dates(client, {"dates": []})
+
+    assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
+    assert Settings.load(config_path).dates == []
+    assert "[[dates]]" not in config_path.read_text()
+
+
+@pytest.mark.parametrize(
+    ("data", "why"),
+    [
+        ({"dates": [_date_row(date="")]}, "pick a date"),
+        ({"dates": [_date_row(date="2018-02-30")]}, "pick a date"),
+        ({"dates": [_date_row(date=20180314)]}, "pick a date"),
+        ({"dates": [_date_row(text="  ")]}, "enter some text"),
+        ({"dates": [_date_row(text="A" * 15)]}, "at most 14 characters"),
+        ({"dates": [_date_row(text="MOM <3")]}, "can't use"),
+        ({"dates": [_date_row(icon="rocket")]}, "icon must be one of"),
+        ({"dates": [_date_row(repeat="yes")]}, "repeat must be true or false"),
+        ({"dates": [_date_row(show_years=None)]}, "show_years must be true or false"),
+        ({"dates": [_date_row(days_before=0)]}, "days before must be a whole number"),
+        ({"dates": [_date_row(days_before=366)]}, "days before must be a whole number"),
+        ({"dates": [_date_row(days_before=7.5)]}, "days before must be a whole number"),
+        ({"dates": [_date_row(days_before=True)]}, "days before must be a whole number"),
+        ({"dates": ["MOM"]}, "must be an object"),
+        ({"dates": [_date_row()] * 11}, "at most 10 dates"),
+        ({"dates": "MOM"}, "must be an object with a list"),
+        ([_date_row()], "must be an object with a list"),
+    ],
+)  # fmt: skip
+def test_a_bad_dates_save_is_rejected_whole_and_writes_nothing(app_dir, config_path, data, why):
+    config_path.write_text('[[dates]]\ndate = 2018-03-14\ntext = "KEEP"\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=15)
+        return await _save_dates(client, data)
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and message["section"] == "dates"
+    assert why in message["message"]
+    assert [d.text for d in Settings.load(config_path).dates] == ["KEEP"]
+
+
+def test_the_dates_screen_is_a_valid_rotation_row(app_dir, config_path):
+    async def scenario(client):
+        await _skip_initial(client, n=15)
+        await client.send(
+            json.dumps(
+                {
+                    "type": "save",
+                    "section": "rotation",
+                    "data": [{"screen": "dates", "seconds": 8}],
+                }
+            )
+        )
+        return await _next(client)
+
+    assert asyncio.run(_serve_and_run(scenario)) == {"type": "saved", "section": "rotation"}
+    assert [e.screen for e in Settings.load(config_path).rotation] == ["dates"]

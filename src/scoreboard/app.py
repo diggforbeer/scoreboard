@@ -91,6 +91,9 @@ from .hockey.models import (
     wildcard_standings,
 )
 from .hostname import AliasPublisher, current_hostname, valid_hostname_label
+from .important_dates import DateView
+from .important_dates import pick as pick_date
+from .important_dates import upcoming as upcoming_dates
 from .light_sensor import LightSensor
 from .network import default_route_ip
 from .priority import Moment, Priority, Windows, idle_segments, segment_at
@@ -253,7 +256,7 @@ class Scene:
     ``standings``,
     ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
     ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``thanksgiving``, ``no_games``,
-    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``.
+    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``, ``dates``.
 
     Football mode (football) adds the ``fb_`` kinds listed in ``football.mode.FB_SCENE_KINDS``,
     documented in ``football_screen.md`` rather than ``screens.md``.
@@ -312,6 +315,9 @@ class Scene:
     #: The board's mDNS name (``<host>.local``, #292), None when unknown.
     address_name: str | None = None
     address_qr: tuple[tuple[bool, ...], ...] | None = None
+    #: Set only for ``dates`` (#524) -- the important dates inside their window, nearest first
+    #: (a rotation slot narrows it to the one being shown).
+    date_views: tuple[DateView, ...] = ()
     #: Set only for ``fb_scores`` (#352) -- the football game to show.
     fb_game: FbGame | None = None
     #: Set only for the football play scenes (``fb_play``, ``fb_playtext``, ``fb_event``, #377):
@@ -1012,6 +1018,7 @@ class ScoreboardApp:
             utc_now=self.clock,
             wide=lambda: self.renderer.width >= 128,
             on_sound=self._on_football_sound,
+            dates=self._dates_views,
         )
 
     def _on_football_sound(self, event: FbEvent) -> None:
@@ -2431,6 +2438,9 @@ class ScoreboardApp:
         """One rotation slot's scene at ``offset`` seconds into its ``seconds`` dwell."""
         if scene.kind == "scores":
             return self._page_scores(scene, offset, seconds)
+        if scene.kind == "dates":
+            shown = pick_date(scene.date_views, offset, seconds)
+            return dataclasses.replace(scene, date_views=(shown,))
         if scene.kind in SCROLLING_KINDS:
             return self._scroll_conference(scene, offset, seconds)
         return self._split_matchup(scene, offset, seconds)
@@ -2612,9 +2622,21 @@ class ScoreboardApp:
             return self._holiday_screen_scene()
         if screen == "address":
             return self._address_scene()
+        if screen == "dates":
+            return self._dates_scene()
         if screen == "scores_grid":
             return Scene("scores", games=tuple(self.games)) if self.games else None
         return None
+
+    def _dates_views(self) -> list[DateView]:
+        today = self.clock().astimezone(self.tz).date()
+        return upcoming_dates(self.settings.dates, today)
+
+    def _dates_scene(self) -> Scene | None:
+        """The owner's important dates that are inside their window (#524), or None to skip the
+        slot: nothing is near, or none are entered. Football's idle rotation builds the same."""
+        views = self._dates_views()
+        return Scene("dates", date_views=tuple(views)) if views else None
 
     def _holiday_screen_scene(self) -> Scene | None:
         """The active holiday's own screen (#243), or None to skip the slot.
@@ -3879,6 +3901,8 @@ class ScoreboardApp:
             self._egg_animating = egg is not None
             with use_sport(sport):
                 r.draw_thanksgiving(self.canvas, self.clock(), abbrev, egg)
+        elif scene.kind == "dates" and scene.date_views:
+            r.draw_date(self.canvas, scene.date_views[0], self.clock())
         elif scene.kind == "address":
             r.draw_address(
                 self.canvas,
