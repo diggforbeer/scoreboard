@@ -49,7 +49,7 @@
 | src/scoreboard/display/matrix.py                  |       43 |        0 |    100% |           |
 | src/scoreboard/display/mirror.py                  |      148 |        4 |     97% |98, 126, 176, 197 |
 | src/scoreboard/display/penalty.py                 |      118 |        1 |     99% |       126 |
-| src/scoreboard/display/renderer.py                |      838 |        3 |     99% |1137, 1172, 1578 |
+| src/scoreboard/display/renderer.py                |      838 |        3 |     99% |1138, 1173, 1579 |
 | src/scoreboard/display/teams.py                   |       16 |        0 |    100% |           |
 | src/scoreboard/eggs.py                            |       38 |        2 |     95% |    56, 95 |
 | src/scoreboard/fetcher.py                         |      128 |        2 |     98% |  178, 228 |
