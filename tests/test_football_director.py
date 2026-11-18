@@ -26,16 +26,12 @@ TICK = 0.25
 class Rig:
     """A director over a fake clock, polled the way the render loop does."""
 
-    def __init__(
-        self, favourite="NYG", follow=(), delay=0.0, game: FbGame | None = None, on_sound=None
-    ):
+    def __init__(self, favourite="NYG", follow=(), delay=0.0, game: FbGame | None = None):
         self.clock = Clock()
         self.cfg = fcfg(favourite_team=favourite, also_follow=list(follow))
         self.delay = delay
         self.game = game or make_game()
-        self.director = Director(
-            lambda: self.cfg, self.clock, lambda: self.delay, self.clock.utc, on_sound=on_sound
-        )
+        self.director = Director(lambda: self.cfg, self.clock, lambda: self.delay, self.clock.utc)
 
     def poll(self, *plays, game=None):
         game = game or self.game
@@ -261,44 +257,28 @@ def test_timings_are_held_to_sane_ranges():
     assert (t.score, t.reversal, t.play) == (4.0, 15.0, 1.0)
 
 
-# -- the scoring sounds ----------------------------------------------------------------------
+# -- sounds (#517) --------------------------------------------------------------------------------
 
 
-def test_the_favourites_touchdown_and_field_goal_each_ask_for_their_sound_once():
+def test_the_favourites_touchdown_calls_the_sound_hook_once_when_detected():
     heard = []
-    rig = started(make_play(1, "rush", off="WSH"), on_sound=heard.append)
+    rig = started(make_play(1, "rush", off="WSH"))
+    rig.director._on_sound = heard.append
     rig.poll(make_play(1, "rush", off="WSH"), td(2))
-    rig.run()
-    assert [type(e) for e in heard] == [ev.Touchdown] and heard[0].team == "NYG"
-    kick = make_play(3, "fg_good", score=(0, 10), off="NYG")
-    rig.poll(make_play(1, "rush", off="WSH"), td(2), kick)
-    rig.run()
-    assert [type(e) for e in heard] == [ev.Touchdown, ev.FieldGoal]
-
-
-def test_nobody_elses_score_makes_a_sound():
-    heard = []
-    rig = started(make_play(1, "rush", off="WSH"), on_sound=heard.append)
-    rig.poll(make_play(1, "rush", off="WSH"), make_play(2, "rush_td_pat", score=(7, 0), off="WSH"))
-    rig.run()
-    assert heard == []
-
-
-def test_a_touchdown_skipped_in_a_backlog_still_sounds_once():
-    heard = []
-    rig = started(make_play(1, "rush", off="WSH"), on_sound=heard.append)
-    rig.poll(
-        make_play(1, "rush", off="WSH"),
-        td(2),
-        *[make_play(n, "rush", score=(0, 7), off="WSH") for n in range(3, 7)],
-    )
+    rig.director.current(1)  # the play is applied: the sound is not held for the celebration
+    assert [(type(e).__name__, e.team) for e in heard] == [("Touchdown", "NYG")]
     rig.run()
     assert len(heard) == 1
 
 
-def test_the_baseline_is_silent():
+def test_an_opponents_or_ordinary_play_calls_no_sound_hook():
     heard = []
-    rig = Rig(on_sound=heard.append)
-    rig.poll(make_play(1, "rush", off="WSH"), td(2))
+    rig = started(make_play(1, "rush", off="WSH"))
+    rig.director._on_sound = heard.append
+    rig.poll(
+        make_play(1, "rush", off="WSH"),
+        make_play(2, "pass_complete", off="WSH"),
+        make_play(3, "rush_td_pat", score=(7, 0), off="WSH"),
+    )
     rig.run()
     assert heard == []

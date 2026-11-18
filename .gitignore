@@ -43,7 +43,5 @@ assets/horns/*.wav
 !assets/horns/_default.wav
 !assets/horns/_wah_wah.wav
 !assets/horns/_ding.wav
-# Football: the shipped default touchdown and field-goal sounds only; team files are drop-ins.
-assets/horns/football/*.wav
-!assets/horns/football/_td.wav
-!assets/horns/football/_fg.wav
+!assets/horns/_football_td.wav
+!assets/horns/_football_fg.wav

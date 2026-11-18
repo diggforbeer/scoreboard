@@ -152,6 +152,22 @@ interface HornEntry {
   filename: string
 }
 
+// The admin page's name for a horn slot: football sounds are "fb_td" / "fb_fg" (the defaults) or
+// "fb_td:BUF" / "fb_fg:BUF" (admin_server.py's _football_key).
+function hornLabel(team: string, available: TeamsAvailable): string {
+  if (team === 'default') return 'Default horn'
+  if (team === 'wah_wah') return 'Wah-wah (opponent scores)'
+  if (team === 'ding') return 'Ding (followed team scores)'
+  if (team.startsWith('fb_')) {
+    const [head, abbrev] = team.split(':')
+    const kind = head === 'fb_td' ? 'touchdown' : 'field goal'
+    if (!abbrev) return `Default ${kind} (football)`
+    const name = available.football.find((t) => t.abbrev === abbrev)?.name ?? abbrev
+    return `${name} (${abbrev}) ${kind}`
+  }
+  return `${teamName(team)} (${team})`
+}
+
 interface ScoreboardConfig {
   timezone: string
   rotate_seconds: number
@@ -395,24 +411,6 @@ function teamName(abbrev: string) {
   return team ? team[1] : '(none)'
 }
 
-// What an uploaded sound is called in the list: the horns, the two stings, and football's
-// touchdown and field-goal sounds (``fb_td`` / ``fb_fg``, a team's as ``fb_td:NE``).
-const FOOTBALL_SOUND_KINDS: Record<string, string> = { td: 'touchdown', fg: 'field goal' }
-
-function hornLabel(key: string, football: FootballTeamOption[]): string {
-  if (key === 'default') return 'Default horn'
-  if (key === 'wah_wah') return 'Wah-wah (opponent scores)'
-  if (key === 'ding') return 'Ding (followed team scores)'
-  if (key.startsWith('fb_')) {
-    const [kind, abbrev] = key.slice(3).split(':')
-    const sound = `${FOOTBALL_SOUND_KINDS[kind] ?? kind} sound`
-    if (!abbrev) return `Football ${sound} (all teams)`
-    const name = football.find((t) => t.abbrev === abbrev)?.name ?? abbrev
-    return `${name} (${abbrev}) football ${sound}`
-  }
-  return `${teamName(key)} (${key})`
-}
-
 // The ranked list of teams (epic #470): one list for both sports, best first. The first team of
 // each sport is its lead: it gets the horn and the idle screens, so it is marked.
 // The night-game entries of the football list: not clubs, but every Sunday / Monday night game.
@@ -637,8 +635,6 @@ function App() {
   // Whether football's section of the Idle rotation card shows: a football team is ranked
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
-  // Football clubs for the sound pickers: the night-game slots are not teams.
-  const footballClubs = teamsAvailable.football.filter((t) => !NIGHT_SLOTS.includes(t.abbrev))
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
@@ -2597,12 +2593,12 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Custom goal horns</h2>
+          <h2 className="card-title h5">Custom goal horns and football sounds</h2>
           <p className="text-body-secondary small">
             Upload a WAV or MP3 (up to 30 seconds, max 8 MB) to replace the default horn, or to give one team its
-            own. A team's own horn always wins over the default. Football has its own two sounds,
-            a touchdown and a field goal, each with a default and a per-team version: they play
-            when your top football team scores.
+            own. A team's own horn always wins over the default. Football has its own touchdown
+            and field-goal sounds, kept apart from the hockey horns; only your top football
+            team's touchdowns and field goals play one.
           </p>
 
           {hornList.length > 0 ? (
@@ -2613,7 +2609,9 @@ function App() {
                   className="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2"
                 >
                   <div>
-                    <strong>{hornLabel(horn.team, teamsAvailable.football)}</strong>
+                    <strong>
+                      {hornLabel(horn.team, teamsAvailable)}
+                    </strong>
                     <span className="text-body-secondary small ms-2">{horn.filename}</span>
                     {hornActionMessage?.team === horn.team && (
                       <span
@@ -2672,9 +2670,7 @@ function App() {
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
                 <option value="ding">Ding (followed team scores)</option>
-                <option value="fb_td">Football touchdown (all teams)</option>
-                <option value="fb_fg">Football field goal (all teams)</option>
-                <optgroup label="Hockey horns">
+                <optgroup label="Hockey goal horns">
                   {HOCKEY_TEAMS.map(([code, name]) => (
                     <option key={code} value={code}>
                       {name} ({code})
@@ -2682,14 +2678,16 @@ function App() {
                   ))}
                 </optgroup>
                 <optgroup label="Football touchdown sounds">
-                  {footballClubs.map((t) => (
+                  <option value="fb_td">Default touchdown (all teams)</option>
+                  {teamsAvailable.football.map((t) => (
                     <option key={t.abbrev} value={`fb_td:${t.abbrev}`}>
                       {t.name} ({t.abbrev})
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Football field goal sounds">
-                  {footballClubs.map((t) => (
+                <optgroup label="Football field-goal sounds">
+                  <option value="fb_fg">Default field goal (all teams)</option>
+                  {teamsAvailable.football.map((t) => (
                     <option key={t.abbrev} value={`fb_fg:${t.abbrev}`}>
                       {t.name} ({t.abbrev})
                     </option>

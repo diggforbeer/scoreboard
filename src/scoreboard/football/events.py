@@ -399,7 +399,7 @@ def _game_scope(game: FbGame, cfg: FootballConfig) -> Scope | None:
 
 
 def _favourite_sound(team: str, scope: Scope, cfg: FootballConfig) -> bool:
-    """Whether a celebration carries the sound (a flag; the director tells the app, which plays it).
+    """Whether a celebration carries the sound (a flag; the sound itself is not wired yet).
 
     With the plain settings it is the favourite's full celebration, as ever. Under a ranked list
     (``horn_team``, epic #470) the horn belongs to the sport's lead team alone: its score carries

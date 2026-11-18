@@ -60,7 +60,7 @@ from .display.mirror import Mirror, MirrorCanvas, MirrorGraphics, unwrap
 from .display.renderer import Renderer
 from .fetcher import SLOW_FETCH_SECONDS, InlineFetcher, ThreadedFetcher
 from .football.events import Event as FbEvent
-from .football.events import Touchdown as FbTouchdown
+from .football.events import Touchdown
 from .football.mode import FootballMode
 from .football.models import FbGame, Play
 from .football.people import Person
@@ -1010,13 +1010,14 @@ class ScoreboardApp:
         )
 
     def _on_football_sound(self, event: FbEvent) -> None:
-        """The lead football team scored a touchdown or a made field goal: play its sound
-        (its own file, else the default). Silenced by the audio switch and the button's mute."""
-        kind = "td" if isinstance(event, FbTouchdown) else "fg"
+        """The lead football team's touchdown or made field goal (#517): its own sound, else the
+        default. Same rules as the hockey horn: the audio switch, volume and button mute apply."""
+        kind = "td" if isinstance(event, Touchdown) else "fg"
+        log.info("Football %s sound: %s", kind, event.team)
         if self._horn_muted():
-            log.info("Sounds muted by button press; not playing the football %s sound", kind)
+            log.info("Sounds muted by button press; not playing the football sound")
             return
-        self.horn.play_football(kind, event.team)
+        self.horn.play_football(event.team, kind)
 
     def current_mode(self) -> str:
         """``hockey`` or ``football``: the one place that says which sport is running (#346)."""

@@ -95,6 +95,11 @@ class RecordingHorn:
         self.calls: list[str] = []
         self.wah_wah_calls = 0
         self.ding_calls = 0
+        self.football_calls: list[tuple[str, str]] = []
+
+    def play_football(self, abbrev: str, kind: str) -> bool:
+        self.football_calls.append((abbrev, kind))
+        return True
 
     def play(self, abbrev: str) -> bool:
         self.calls.append(abbrev)
@@ -2411,3 +2416,19 @@ def test_a_shootout_never_gets_the_stats_screen(day):
     tick(app, clock, hours=6)
     app.refresh_intermission_stats()
     assert client.game_stats_calls == [] and app.select_scene().kind != "intermission"
+
+
+def test_a_football_touchdown_and_field_goal_play_their_own_sounds_unless_muted(day):
+    """#517: the director's sound hook reaches the horn player, through the button mute."""
+    from scoreboard.football.events import FieldGoal, Scope, Touchdown
+    from test_football_events import make_play
+
+    app, _clock, _client = day
+    play = make_play(2, "rush_td_pat", score=(0, 7), off="NYG")
+    common = {"play": play, "game_id": 1, "team": "NYG", "scope": Scope.FULL, "sound": True}
+    app._on_football_sound(Touchdown(**common))
+    app._on_football_sound(FieldGoal(**common, made=True))
+    assert app.horn.football_calls == [("NYG", "td"), ("NYG", "fg")]
+    app._horn_muted_until = app.monotonic() + 3600
+    app._on_football_sound(Touchdown(**common))
+    assert len(app.horn.football_calls) == 2

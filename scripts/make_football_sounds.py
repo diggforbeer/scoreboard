@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Synthesize the default football scoring sounds: a touchdown fanfare and a field-goal sting.
+"""Synthesize the default football sounds: a touchdown fanfare and a field-goal sting (#517).
 
-Brass-like notes (a fundamental plus a few harmonics, a short attack, a slow release) played
-as a rising triad for the touchdown and a two-note lift for the field goal. Pure stdlib
-(wave + math), deterministic, same format as the shipped goal horn (mono, 16-bit, 22050 Hz).
+Brass-ish tones (a fundamental plus a few harmonics, a short attack, an exponential decay), no
+third-party audio. Same format as the shipped horn (mono, 16-bit, 22050 Hz), deterministic.
 
     python scripts/make_football_sounds.py
 
-Writes assets/horns/football/_td.wav and _fg.wav, committed alongside this script. A team's own
-file (``football/NE_td.wav``) or an upload always wins over these.
+Writes assets/horns/_football_td.wav and assets/horns/_football_fg.wav.
 """
 
 from __future__ import annotations
@@ -18,55 +16,52 @@ import struct
 import wave
 from pathlib import Path
 
-OUT_DIR = Path(__file__).resolve().parents[1] / "assets" / "horns" / "football"
+OUT_DIR = Path(__file__).resolve().parents[1] / "assets" / "horns"
 SAMPLE_RATE = 22050
-AMPLITUDE = 0.6  # headroom below full scale so the sum never clips
+AMPLITUDE = 0.7
 ATTACK_S = 0.015
-RELEASE_S = 0.12
-#: Relative levels of the harmonics (1x, 2x, 3x, 4x): enough edge to read as a horn.
-HARMONICS: tuple[float, ...] = (1.0, 0.55, 0.35, 0.18)
+RELEASE_S = 0.08
 
-#: Note frequencies in Hz.
-C5, E5, G5, C6 = 523.25, 659.25, 783.99, 1046.50
+#: (harmonic number, relative level): a rough trumpet spectrum.
+HARMONICS: tuple[tuple[int, float], ...] = ((1, 1.0), (2, 0.6), (3, 0.45), (4, 0.25), (5, 0.12))
 
-#: (frequency, start seconds, length seconds)
+#: Each sound is a list of (frequency Hz, start s, length s). A touchdown is a rising
+#: C-E-G arpeggio into a held high C; a field goal is a quicker two-note "ta-da".
 TOUCHDOWN: tuple[tuple[float, float, float], ...] = (
-    (C5, 0.00, 0.20),
-    (E5, 0.20, 0.20),
-    (G5, 0.40, 0.20),
-    (C6, 0.60, 0.90),
+    (523.25, 0.00, 0.20),  # C5
+    (659.25, 0.20, 0.20),  # E5
+    (783.99, 0.40, 0.20),  # G5
+    (1046.50, 0.60, 1.20),  # C6, held
 )
 FIELD_GOAL: tuple[tuple[float, float, float], ...] = (
-    (G5, 0.00, 0.22),
-    (C6, 0.22, 0.60),
+    (783.99, 0.00, 0.18),  # G5
+    (1046.50, 0.18, 0.62),  # C6
 )
 
-
-def _note(freq: float, length: float) -> list[float]:
-    n = int(SAMPLE_RATE * length)
-    attack = int(SAMPLE_RATE * ATTACK_S)
-    release = min(int(SAMPLE_RATE * RELEASE_S), n)
-    out: list[float] = []
-    for i in range(n):
-        t = i / SAMPLE_RATE
-        value = sum(
-            level * math.sin(2 * math.pi * freq * (k + 1) * t) for k, level in enumerate(HARMONICS)
-        )
-        if i < attack:
-            value *= i / attack
-        if i >= n - release:
-            value *= (n - i) / release
-        out.append(value)
-    return out
+SOUNDS = {"_football_td.wav": TOUCHDOWN, "_football_fg.wav": FIELD_GOAL}
 
 
 def generate(notes: tuple[tuple[float, float, float], ...]) -> bytes:
-    total = int(SAMPLE_RATE * max(start + length for _, start, length in notes))
-    samples = [0.0] * total
+    total = max(start + length for _, start, length in notes)
+    n = int(SAMPLE_RATE * total)
+    samples = [0.0] * n
     for freq, start, length in notes:
-        offset = int(SAMPLE_RATE * start)
-        for i, value in enumerate(_note(freq, length)):
-            samples[offset + i] += value
+        first = int(SAMPLE_RATE * start)
+        count = int(SAMPLE_RATE * length)
+        attack = int(SAMPLE_RATE * ATTACK_S)
+        release = int(SAMPLE_RATE * RELEASE_S)
+        for i in range(count):
+            t = i / SAMPLE_RATE
+            value = sum(
+                level * math.sin(2 * math.pi * freq * harmonic * t) for harmonic, level in HARMONICS
+            )
+            value *= math.exp(-t / (length * 1.5))
+            if i < attack:
+                value *= i / attack
+            elif i >= count - release:
+                value *= (count - i) / release
+            if first + i < n:
+                samples[first + i] += value
     peak = max(abs(s) for s in samples) or 1.0
     scale = AMPLITUDE * 32767 / peak
     return b"".join(struct.pack("<h", int(s * scale)) for s in samples)
@@ -74,14 +69,14 @@ def generate(notes: tuple[tuple[float, float, float], ...]) -> bytes:
 
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for name, notes in (("_td.wav", TOUCHDOWN), ("_fg.wav", FIELD_GOAL)):
-        out = OUT_DIR / name
-        with wave.open(str(out), "wb") as wav:
+    for name, notes in SOUNDS.items():
+        path = OUT_DIR / name
+        with wave.open(str(path), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(SAMPLE_RATE)
             wav.writeframes(generate(notes))
-        print(f"wrote {out} ({out.stat().st_size} bytes)")
+        print(f"wrote {path} ({path.stat().st_size} bytes)")
     return 0
 
 

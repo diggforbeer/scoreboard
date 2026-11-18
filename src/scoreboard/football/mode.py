@@ -78,8 +78,7 @@ class FootballMode:
         wide: Callable[[], bool] = lambda: True,
         on_sound: Callable[[Any], None] | None = None,
     ) -> None:
-        """``on_sound(event)`` is told of each favourite score that carries a sound (the app plays
-        it). ``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
+        """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
         settings (read at each poll and each frame, so an admin-page change applies without a
         restart); ``client_factory`` makes the feed client (a fake in tests). The settings carry the
         idle rotation's rows as ``idle_rotation`` (football's share of the one mixed
@@ -89,6 +88,7 @@ class FootballMode:
 
             client_factory = FootballClient
         self._scoreboard = scoreboard
+        self._on_sound = on_sound
         self._football = football
         self._monotonic = monotonic
         self._client_factory = client_factory
@@ -122,7 +122,6 @@ class FootballMode:
         #: Each watched game's team stats (shown over an official timeout). The feed worker's
         #: thread swaps in a new dict; the render loop only reads the reference.
         self._stats: Mapping[int, GameStats] = {}
-        self._on_sound = on_sound
         self._director_args = (football or _no_football, monotonic, delay_seconds, utc_now, timings)
         self.director = self._make_director()
         self._core_sync = CoreSync()

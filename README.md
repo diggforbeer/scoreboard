@@ -345,14 +345,6 @@ your team's actual horn instead; it's checked first, and the default plays
 whenever a team-specific file isn't found. See `[audio]` in
 [Configuration](#configuration).
 
-**Football has two sounds of its own**: a touchdown fanfare and a field-goal
-sting, both synthesized and shipped. They play when your top-ranked football
-team scores (and stay silent for anyone else's score), and the same Audio
-switch, volume and mute button apply. Give a team its own with
-`football/{ABBR}_td.wav` and `football/{ABBR}_fg.wav` in the horn directory
-(football has its own folder because abbreviations like `DAL` or `BUF` are in
-both leagues), or upload them from the admin page's Audio tab.
-
 **Uploaded sounds are loudness-normalized.** A horn, wah-wah or ding uploaded
 on the admin page is decoded once (with `ffmpeg`, so M4A, OGG and FLAC work
 too; boards flashed before ffmpeg joined the image accept only WAV and MP3,
