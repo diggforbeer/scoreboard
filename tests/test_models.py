@@ -765,3 +765,82 @@ def test_game_stats_skip_a_malformed_entry_and_are_none_without_any_stats():
         game_stats_from_right_rail({"teamGameStats": [{"category": "bogus", "awayValue": 1}]})
         is None
     )
+
+
+# -- the shot map ------------------------------------------------------------------------------
+
+from scoreboard.hockey.models import shot_map_from_play_by_play  # noqa: E402
+
+
+def _pbp(*plays, home_id=6, away_id=26):
+    return {"awayTeam": {"id": away_id}, "homeTeam": {"id": home_id}, "plays": list(plays)}
+
+
+def _shot(owner, x, y, kind="shot-on-goal", defending="left", period_type="REG"):
+    play = {
+        "typeDescKey": kind,
+        "periodDescriptor": {"number": 1, "periodType": period_type},
+        "details": {"xCoord": x, "yCoord": y, "eventOwnerTeamId": owner},
+    }
+    if defending is not None:
+        play["homeTeamDefendingSide"] = defending
+    return play
+
+
+def test_the_home_team_attacks_the_right_net_and_the_away_team_the_left():
+    # Period one: home (6) defends the left end, so it shoots at x > 0 and away at x < 0.
+    shots = shot_map_from_play_by_play(_pbp(_shot(6, 80, 22), _shot(26, -70, -10)))
+    assert [(s.side, s.x, s.y) for s in shots.shots] == [("home", 80, 22), ("away", -70, -10)]
+
+
+def test_the_ends_swap_in_the_next_period_so_the_shots_are_turned_back():
+    # Period two: home defends the right end, so it now shoots at x < 0 and away at x > 0.
+    shots = shot_map_from_play_by_play(
+        _pbp(_shot(6, -80, -22, defending="right"), _shot(26, 70, 10, defending="right"))
+    )
+    assert [(s.side, s.x, s.y) for s in shots.shots] == [("home", 80, 22), ("away", -70, -10)]
+
+
+def test_a_play_with_no_defending_side_is_read_from_where_it_is():
+    shots = shot_map_from_play_by_play(_pbp(_shot(6, -80, -22, defending=None)))
+    assert [(s.side, s.x, s.y) for s in shots.shots] == [("home", 80, 22)]
+
+
+def test_goals_are_marked_and_only_shots_on_goal_and_goals_count():
+    shots = shot_map_from_play_by_play(
+        _pbp(
+            _shot(6, 80, 1, "goal"),
+            _shot(6, 70, 2),
+            _shot(6, 75, 3, "missed-shot"),
+            _shot(26, -75, 3, "blocked-shot"),
+            _shot(26, -60, 3, "hit"),
+        )
+    )
+    assert [(s.x, s.goal) for s in shots.shots] == [(80, True), (70, False)]
+
+
+def test_shootout_attempts_and_impossible_coordinates_are_left_out():
+    shots = shot_map_from_play_by_play(
+        _pbp(
+            _shot(6, 80, 1, period_type="SO"),
+            _shot(6, 150, 0),
+            _shot(6, 80, 60),
+            _shot(6, 71, 5),
+        )
+    )
+    assert [(s.x, s.y) for s in shots.shots] == [(71, 5)]
+
+
+def test_one_bad_play_does_not_lose_the_rest_and_no_shots_is_none():
+    shots = shot_map_from_play_by_play(
+        _pbp({"typeDescKey": "shot-on-goal", "details": {}}, _shot(6, 80, 1), _shot(99, 80, 1))
+    )
+    assert len(shots.shots) == 1, "an unknown team is skipped too"
+    assert shot_map_from_play_by_play(_pbp()) is None
+    assert shot_map_from_play_by_play({"plays": []}) is None
+    assert shot_map_from_play_by_play(None) is None
+
+
+def test_shots_of_a_side_are_picked_out():
+    shots = shot_map_from_play_by_play(_pbp(_shot(6, 80, 1), _shot(26, -80, 1), _shot(26, -70, 2)))
+    assert len(shots.of("away")) == 2 and len(shots.of("home")) == 1

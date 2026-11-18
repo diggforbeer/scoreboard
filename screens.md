@@ -168,6 +168,7 @@ the surname, then truncates.
 
 ![Intermission stats, page 1](docs/screens/intermission_stats.png)
 ![Intermission stats, page 2](docs/screens/intermission_stats_page2.png)
+![Intermission shot map, page 3](docs/screens/intermission_shot_map.png)
 
 In the favourite's own intermission (never a followed team's, never a shootout) the board shows
 how the game is going instead of a scoreboard with nothing moving. Away is on the left, home on
@@ -182,8 +183,13 @@ long as the intermission lasts, two dots at the bottom saying which page.
 - **Data:** `right-rail`'s `teamGameStats` and `shotsByPeriod`, fetched when the intermission
   starts and again every 60 s, only for the game showing the screen, on the fetch worker. Until
   the first answer arrives (or if it never does) the plain game scene stays up.
+- **Page 3, the shot map:** the whole rink drawn small across the middle, each team's shots on goal
+  glowing at the net it is attacking (away at the left end, home at the right, whichever way they
+  really shot that period), brighter where they pile up and towards white at the hottest spot. A
+  goal is a white dot on top; the abbreviation and shot count sit at the panel's edges. It comes
+  from `play-by-play` and shows once it arrives (the stats pages do not wait for it).
 - **Narrow panels:** with no logos (64px, or a missing crest) the two abbreviations head the table
-  and four rows fit a page.
+  and four rows fit a page. A panel narrower than 128px has no shot map page (the rink does not fit).
 
 ![Intermission stats, text layout](docs/screens/intermission_stats_text.png)
 

@@ -27,6 +27,7 @@ from .models import (
     PlayerSeasonDetail,
     SeasonSeriesRecord,
     Shootout,
+    ShotMap,
     Situation,
     StandingsRow,
     Star,
@@ -36,6 +37,7 @@ from .models import (
     player_details_from_api,
     series_meetings_from_api,
     shootout_from_landing,
+    shot_map_from_play_by_play,
     three_stars_from_landing,
 )
 
@@ -177,6 +179,14 @@ class HockeyClient:
         is in an intermission and showing the screen."""
         payload = self._get(f"/gamecenter/{game_id}/right-rail")
         return game_stats_from_right_rail(payload)
+
+    def shot_map(self, game_id: int) -> ShotMap | None:
+        """Where each team's shots on goal came from, for the intermission screen's shot map, from
+        ``play-by-play`` (~100-200 KB, the biggest of the intermission fetches). ``None`` when it
+        has no shot with a place yet. Fetched only for the favourite's game while it is in an
+        intermission and showing the screen."""
+        payload = self._get(f"/gamecenter/{game_id}/play-by-play")
+        return shot_map_from_play_by_play(payload)
 
     def three_stars(self, game_id: int) -> tuple[Star, ...]:
         """The three stars of a finished game (#156), or ``()`` until they're named.

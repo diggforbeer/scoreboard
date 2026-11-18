@@ -455,8 +455,12 @@ By the owner's decisions: **the favourite's game only** (not a followed team's, 
 **one extra request, scoped**: `HockeyClient.game_stats` reads `right-rail` (`teamGameStats`,
 `shotsByPeriod`; no new endpoint beyond what `season_series` already reads), fetched by
 `refresh_intermission_stats` when the favourite's game enters an intermission and every 60 s after
-(15 s retry on a failure), on the fetch worker, and forgotten when the intermission ends. Do not
-widen it to other games without asking. Until the first answer arrives the plain game scene stays
+(15 s retry on a failure), on the fetch worker, and forgotten when the intermission ends. The **shot map** (`display/shotmap.py`, the last page of the same screen, 128px only) is a second request on the
+same schedule: `HockeyClient.shot_map` reads `play-by-play` (~100-200 KB; shots on goal and goals
+with their rink coordinates, each team turned to attack the net at its own end: away left, home
+right, from `homeTeamDefendingSide`), also only for the favourite's intermission, held a minute,
+retried after 15 s. The screen shows as soon as either the stats or the shots have arrived. Do not
+widen either to other games without asking. Until the first answer arrives the plain game scene stays
 up. It is the last layer of `_apply_goal_override`, so a goal, penalty, blowout or three stars
 still win over it. Not verified against a live intermission (does `right-rail` update during one?)
 or on hardware (#4).
