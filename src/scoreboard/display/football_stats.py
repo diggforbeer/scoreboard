@@ -30,7 +30,8 @@ ROW_BASELINES = (6, 12, 18, 24, 30)
 #: Where a side's numbers start, clear of its 16px logo.
 LEFT_X, RIGHT_X = 19, 108
 LOGO_CENTRE_Y = 16
-TRAILING = (70, 70, 70)
+#: The side behind on a row shows its number in the stat name's grey: dimmer was unreadable.
+TRAILING = DIM
 LIT_DOT, UNLIT_DOT = WHITE, (45, 45, 45)
 
 
