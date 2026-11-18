@@ -65,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_475107ec5a30a521_app_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-18 00:20 +0000
+            created at 2026-11-18 00:42 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -471,9 +471,9 @@
     <p class="pln"><span class="n"><a id="t389" href="#t389">389</a></span><span class="t"><span class="com">#: The Cache tab&#x27;s two hooks (see ``cache_view``): what is cached, and clearing a scope of it.</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t390" href="#t390">390</a></span><span class="t"><span class="nam">CACHE_ITEMS</span><span class="op">:</span> <span class="nam">Callable</span><span class="op">[</span><span class="op">[</span><span class="op">]</span><span class="op">,</span> <span class="nam">list</span><span class="op">[</span><span class="nam">dict</span><span class="op">[</span><span class="nam">str</span><span class="op">,</span> <span class="nam">Any</span><span class="op">]</span><span class="op">]</span><span class="op">]</span> <span class="op">|</span> <span class="key">None</span> <span class="op">=</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t391" href="#t391">391</a></span><span class="t"><span class="nam">CACHE_CLEARER</span><span class="op">:</span> <span class="nam">Callable</span><span class="op">[</span><span class="op">[</span><span class="nam">str</span><span class="op">]</span><span class="op">,</span> <span class="nam">bool</span><span class="op">]</span> <span class="op">|</span> <span class="key">None</span> <span class="op">=</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t392" href="#t392">392</a></span><span class="t"><span class="com">#: A goal horn is a few seconds long; 2 MB is generous for that and still</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t393" href="#t393">393</a></span><span class="t"><span class="com">#: protects the SD card from an accidental multi-minute file (#193).</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t394" href="#t394">394</a></span><span class="t"><span class="nam">HORN_MAX_BYTES</span> <span class="op">=</span> <span class="num">2</span> <span class="op">*</span> <span class="num">1024</span> <span class="op">*</span> <span class="num">1024</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t392" href="#t392">392</a></span><span class="t"><span class="com">#: A goal horn can run to 30 seconds (``audio_normalize.MAX_SECONDS``): 8 MB holds that even as a</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t393" href="#t393">393</a></span><span class="t"><span class="com">#: WAV, and still protects the SD card from an accidental multi-minute file (#193).</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t394" href="#t394">394</a></span><span class="t"><span class="nam">HORN_MAX_BYTES</span> <span class="op">=</span> <span class="num">8</span> <span class="op">*</span> <span class="num">1024</span> <span class="op">*</span> <span class="num">1024</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t395" href="#t395">395</a></span><span class="t"><span class="com">#: Uploads ride the WebSocket as base64 (~4/3 the raw size) plus a little</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t396" href="#t396">396</a></span><span class="t"><span class="com">#: JSON framing, so the library&#x27;s default 1 MiB frame cap has to be raised</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t397" href="#t397">397</a></span><span class="t"><span class="com">#: to fit a HORN_MAX_BYTES file. Applies to every message on the socket;</span>&nbsp;</span><span class="r"></span></p>
@@ -2118,7 +2118,7 @@
             <a class="nav" href="z_475107ec5a30a521_app_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.3">coverage.py v7.17.3</a>,
-            created at 2026-11-18 00:20 +0000
+            created at 2026-11-18 00:42 +0000
         </p>
     </div>
 </footer>
