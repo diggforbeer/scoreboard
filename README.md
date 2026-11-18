@@ -6,8 +6,8 @@
 |-------------------------------------------------- | -------: | -------: | ------: | --------: |
 | src/scoreboard/\_\_init\_\_.py                    |        1 |        0 |    100% |           |
 | src/scoreboard/\_\_main\_\_.py                    |      114 |        5 |     96% |112, 175-177, 200 |
-| src/scoreboard/admin\_server.py                   |      859 |       60 |     93% |755-756, 761, 977-978, 985-986, 994-995, 1127, 1133, 1140-1142, 1156-1157, 1241-1242, 1284, 1287, 1290, 1293, 1296-1303, 1371, 1393-1395, 1416, 1457, 1498, 1767-1768, 1846-1847, 1869-1888, 1892-1895, 1957, 1988-1990, 2029 |
-| src/scoreboard/app.py                             |     2140 |       75 |     96% |672-673, 717-718, 903-905, 982, 984, 1248, 1407-1408, 1427, 1430, 1453-1454, 1746-1747, 1956, 1959, 1970-1971, 1998, 2060, 2126, 2164, 2183, 2205, 2287, 2296, 2315, 2318, 2338, 2341, 2347, 2358, 2361, 2367, 2487, 2497, 2504, 2617, 2670, 2713-2715, 2730-2732, 2777-2779, 2797, 2823, 2925-2927, 2959-2960, 2982-2983, 3041-3042, 3134, 3161, 3388, 3439, 3454-3455, 3461-3462, 3496, 3746, 3754, 3905 |
+| src/scoreboard/admin\_server.py                   |      898 |       60 |     93% |795-796, 801, 1024-1025, 1032-1033, 1041-1042, 1174, 1180, 1187-1189, 1203-1204, 1288-1289, 1331, 1334, 1337, 1340, 1343-1350, 1418, 1440-1442, 1463, 1504, 1545, 1867-1868, 1946-1947, 1969-1988, 1992-1995, 2057, 2088-2090, 2129 |
+| src/scoreboard/app.py                             |     2157 |       75 |     97% |678-679, 723-724, 909-911, 988, 990, 1255, 1414-1415, 1434, 1437, 1460-1461, 1753-1754, 1963, 1966, 1977-1978, 2005, 2067, 2133, 2171, 2190, 2212, 2294, 2303, 2322, 2325, 2345, 2348, 2354, 2365, 2368, 2374, 2497, 2507, 2514, 2629, 2692, 2735-2737, 2752-2754, 2799-2801, 2819, 2845, 2947-2949, 2981-2982, 3004-3005, 3063-3064, 3156, 3183, 3410, 3461, 3476-3477, 3483-3484, 3518, 3768, 3776, 3929 |
 | src/scoreboard/april\_fools.py                    |       24 |        2 |     92% |     51-54 |
 | src/scoreboard/audio.py                           |      148 |        1 |     99% |       280 |
 | src/scoreboard/audio\_normalize.py                |      132 |       19 |     86% |87-88, 112, 129, 131-144, 155, 159, 162-164, 166, 174 |
@@ -15,11 +15,12 @@
 | src/scoreboard/brightness.py                      |        9 |        0 |    100% |           |
 | src/scoreboard/button.py                          |       56 |        1 |     98% |        51 |
 | src/scoreboard/cache\_view.py                     |       30 |        1 |     97% |        26 |
-| src/scoreboard/config.py                          |      467 |        6 |     99% |389-390, 392-393, 990-991 |
+| src/scoreboard/config.py                          |      488 |        6 |     99% |396-397, 399-400, 1020-1021 |
 | src/scoreboard/delay.py                           |       28 |        0 |    100% |           |
-| src/scoreboard/demo.py                            |       78 |        0 |    100% |           |
+| src/scoreboard/demo.py                            |       79 |        0 |    100% |           |
 | src/scoreboard/display/\_\_init\_\_.py            |        0 |        0 |    100% |           |
 | src/scoreboard/display/ascii.py                   |       54 |        0 |    100% |           |
+| src/scoreboard/display/date\_icons.py             |       31 |        1 |     97% |       187 |
 | src/scoreboard/display/fonts.py                   |       29 |        2 |     93% |     33-34 |
 | src/scoreboard/display/football\_cointoss.py      |       63 |        1 |     98% |       112 |
 | src/scoreboard/display/football\_fgmiss.py        |       60 |        0 |    100% |           |
@@ -49,7 +50,7 @@
 | src/scoreboard/display/matrix.py                  |       43 |        0 |    100% |           |
 | src/scoreboard/display/mirror.py                  |      148 |        4 |     97% |98, 126, 176, 197 |
 | src/scoreboard/display/penalty.py                 |      118 |        1 |     99% |       126 |
-| src/scoreboard/display/renderer.py                |      852 |        4 |     99% |615, 1167, 1202, 1608 |
+| src/scoreboard/display/renderer.py                |      890 |        4 |     99% |616, 1168, 1203, 1680 |
 | src/scoreboard/display/shotmap.py                 |       86 |        0 |    100% |           |
 | src/scoreboard/display/teams.py                   |       16 |        0 |    100% |           |
 | src/scoreboard/eggs.py                            |       38 |        2 |     95% |    56, 95 |
@@ -63,7 +64,7 @@
 | src/scoreboard/football/idle.py                   |      238 |        7 |     97% |53-55, 114, 339, 348-349 |
 | src/scoreboard/football/idle\_screens.py          |       45 |        0 |    100% |           |
 | src/scoreboard/football/idle\_views.py            |      219 |        2 |     99% |   253-254 |
-| src/scoreboard/football/mode.py                   |      376 |       14 |     96% |153-156, 167, 178-179, 190-192, 204-206, 721 |
+| src/scoreboard/football/mode.py                   |      386 |       14 |     96% |158-161, 172, 183-184, 195-197, 209-211, 734 |
 | src/scoreboard/football/models.py                 |      301 |        2 |     99% |   33, 253 |
 | src/scoreboard/football/pacing.py                 |       42 |        0 |    100% |           |
 | src/scoreboard/football/people.py                 |      137 |        0 |    100% |           |
@@ -80,6 +81,7 @@
 | src/scoreboard/hockey/api.py                      |      135 |       20 |     85% |128-130, 137-142, 201-203, 211-216, 267-268 |
 | src/scoreboard/hockey/models.py                   |      693 |       11 |     98% |283, 345-346, 438, 445-446, 455, 516-517, 687, 855 |
 | src/scoreboard/hostname.py                        |       69 |        2 |     97% |     86-87 |
+| src/scoreboard/important\_dates.py                |      134 |        3 |     98% |124-125, 151 |
 | src/scoreboard/light\_sensor.py                   |       38 |        0 |    100% |           |
 | src/scoreboard/network.py                         |       11 |        2 |     82% |     25-26 |
 | src/scoreboard/priority.py                        |      152 |        1 |     99% |       128 |
@@ -87,7 +89,7 @@
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **13825** |  **456** | **97%** |           |
+| **TOTAL**                                         | **14116** |  **460** | **97%** |           |
 
 
 ## Setup coverage badge
