@@ -2719,3 +2719,135 @@ def test_a_tied_row_keeps_both_sides_lit(games, synthetic_logos):
     make_renderer(logos=synthetic_logos).draw_intermission(c, game, stats, 0)
     assert team_color(game.away.abbrev) in c.colors(MID_LEFT, 1, MID_LEFT + 14, 7)
     assert team_color(game.home.abbrev) in c.colors(MID_RIGHT - 14, 1, MID_RIGHT - 1, 7)
+
+
+# -- the shot map page of the intermission stats ------------------------------------------------
+
+
+def a_shot_map():
+    from scoreboard.hockey.models import ShotMap, ShotPoint
+
+    away = [(-78, 6, True), (-70, -12, False), (-62, 20, False), (-55, -4, False)]
+    home = [(80, 4, True), (76, -6, False), (72, 10, True), (69, -2, False), (66, 14, False)]
+    return ShotMap(
+        tuple(ShotPoint("away", x, y, g) for x, y, g in away)
+        + tuple(ShotPoint("home", x, y, g) for x, y, g in home)
+    )
+
+
+def draw_map_page(game, logos=None):
+    c = canvas()
+    # No stats: the map is the only page, so any tick shows it.
+    make_renderer(logos=logos).draw_intermission(c, game, None, 0, a_shot_map())
+    return c
+
+
+@pytest.mark.parametrize("layout", ["logo", "text"])
+def test_intermission_shot_map(games, synthetic_logos, layout, update_snapshots):
+    game = games["live"]
+    logos = synthetic_logos if layout == "logo" else None
+    r = make_renderer(logos=logos)
+    c = canvas()
+    # Table pages: 2 with logos (5 rows), 3 without (4 rows); the map is the page after them.
+    tables = 2 if layout == "logo" else 3
+    r.draw_intermission(c, game, int_stats(), tables, a_shot_map())
+    art = show(f"{layout}, intermission shot map", c)
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    away, home = team_color(game.away.abbrev), team_color(game.home.abbrev)
+    check_snapshot(f"{layout}_intermission_shot_map", art, update_snapshots)
+    assert away in c.colors(0, 0, 10, H - 1) and home in c.colors(W - 11, 0, W - 1, H - 1)
+
+
+RINK_LINES = {(38, 38, 52), (90, 24, 24), (70, 20, 20), (22, 30, 90)}
+
+
+def glow_pixels(c, x0, x1):
+    """Lit pixels in columns ``x0``..``x1`` that are not a rink line or a goal dot."""
+    lit = c.lit(x0, 1, x1, H - 2)
+    return {xy: rgb for xy, rgb in lit.items() if rgb not in RINK_LINES and rgb != WHITE}
+
+
+def test_each_teams_shots_glow_at_the_net_it_attacks_and_goals_are_white(games):
+    from scoreboard.hockey.models import ShotMap
+
+    game = games["live"]
+    x0 = (W - 75) // 2
+    mid = x0 + 37
+    both = draw_map_page(game)
+    assert glow_pixels(both, x0 + 1, mid - 1) and glow_pixels(both, mid + 1, x0 + 73)
+    assert WHITE in both.colors(x0, 1, x0 + 74, H - 2), "a goal is a white dot"
+
+    only_away = canvas()
+    make_renderer().draw_intermission(only_away, game, None, 0, ShotMap(a_shot_map().of("away")))
+    assert glow_pixels(only_away, x0 + 1, mid - 1)
+    assert not glow_pixels(only_away, mid + 2, x0 + 73), "away shots never light the home end"
+
+    only_home = canvas()
+    make_renderer().draw_intermission(only_home, game, None, 0, ShotMap(a_shot_map().of("home")))
+    assert glow_pixels(only_home, mid + 1, x0 + 73)
+    assert not glow_pixels(only_home, x0 + 1, mid - 2), "home shots never light the away end"
+
+
+def test_the_shot_counts_are_the_number_of_dots_and_in_white(games):
+    game = games["live"]
+    c = draw_map_page(game)
+    # 4 away shots and 5 home shots: a digit in white under each abbreviation.
+    assert WHITE in c.colors(0, 14, 10, 22)
+    assert WHITE in c.colors(W - 11, 14, W - 1, 22)
+
+
+def test_a_narrow_panel_has_no_shot_map_page(games):
+    game = games["live"]
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ)
+    for tick in range(6):
+        c = AsciiCanvas(64, H)
+        r.draw_intermission(c, game, int_stats(), tick, a_shot_map())
+        assert not c.out_of_bounds
+        # Never the rink: its outline colour is only drawn by the map.
+        assert (38, 38, 52) not in c.colors(0, 0, 63, H - 1)
+
+
+def test_the_shot_map_is_a_page_even_when_the_stats_have_not_arrived(games):
+    game = games["live"]
+    c = canvas()
+    make_renderer().draw_intermission(c, game, None, 0, a_shot_map())
+    assert (38, 38, 52) in c.colors(0, 0, W - 1, H - 1), "the rink is drawn"
+
+
+def test_heat_grows_where_shots_pile_up_and_a_lone_shot_still_shows():
+    from scoreboard.display.shotmap import FULL_AT, heat_grid, shade
+
+    one = heat_grid([(60.0, 0.0)])
+    many = heat_grid([(60.0, 0.0)] * 4 + [(-60.0, 20.0)])
+    hot = max(max(r) for r in many)
+    assert hot > max(max(r) for r in one) * 3
+    assert shade(one[16][round((60 + 100) * 0.375)], (0, 200, 0), FULL_AT) is not None
+    assert shade(0.0, (0, 200, 0), FULL_AT) is None
+    assert shade(FULL_AT, (0, 200, 0), FULL_AT)[0] > 0, "the hottest spot is pushed towards white"
+
+
+def test_the_rinks_corners_are_rounded_and_the_ice_is_clipped_to_them():
+    from scoreboard.display.shotmap import CORNER, RINK_H, RINK_W, in_rink
+
+    assert not in_rink(0, 0) and not in_rink(RINK_W - 1, 0)
+    assert not in_rink(0, RINK_H - 1) and not in_rink(RINK_W - 1, RINK_H - 1)
+    assert in_rink(CORNER, 0) and in_rink(0, CORNER), "the straight runs start past the curve"
+    assert in_rink(RINK_W // 2, RINK_H // 2) and not in_rink(-1, 5) and not in_rink(5, RINK_H)
+    # the curve is symmetric about both axes
+    for px in range(CORNER):
+        for py in range(CORNER):
+            same = {
+                in_rink(px, py),
+                in_rink(RINK_W - 1 - px, py),
+                in_rink(px, RINK_H - 1 - py),
+                in_rink(RINK_W - 1 - px, RINK_H - 1 - py),
+            }
+            assert len(same) == 1
+
+
+def test_the_shot_map_draws_nothing_in_the_rounded_off_corners(games):
+    game = games["live"]
+    c = draw_map_page(game)
+    x0 = (W - 75) // 2
+    for cx, cy in ((x0, 0), (x0 + 74, 0), (x0, H - 2), (x0 + 74, H - 2)):
+        assert not c.lit(cx, cy, cx, cy), f"a pixel was drawn in the cut corner at {cx},{cy}"

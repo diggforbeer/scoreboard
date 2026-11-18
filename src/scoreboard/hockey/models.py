@@ -518,6 +518,78 @@ def game_stats_from_right_rail(raw: dict[str, Any] | None) -> GameStats | None:
     return GameStats(tuple(lines), tuple(periods))
 
 
+# -- the shot map (``play-by-play`` shots on goal and goals) -----------------------------------
+
+#: The NHL rink in feet: x runs -100..100 along its length (goal lines at +-89), y -42.5..42.5.
+RINK_HALF_LENGTH = 100.0
+RINK_HALF_WIDTH = 42.5
+
+
+@dataclass(frozen=True, slots=True)
+class ShotPoint:
+    """One shot on goal (or goal), in rink feet, with each team at the net it is attacking:
+    **away at the left end (x < 0), home at the right (x > 0)**, whichever way they really
+    shot that period."""
+
+    side: str  #: ``"away"`` or ``"home"``
+    x: float
+    y: float
+    goal: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ShotMap:
+    shots: tuple[ShotPoint, ...]
+
+    def of(self, side: str) -> tuple[ShotPoint, ...]:
+        return tuple(s for s in self.shots if s.side == side)
+
+
+def shot_map_from_play_by_play(raw: dict[str, Any] | None) -> ShotMap | None:
+    """Shots on goal and goals from ``play-by-play``, or ``None`` when there are none with a place.
+
+    The feed's coordinates are the rink's own, and the teams swap ends each period
+    (``homeTeamDefendingSide`` on every play says which end the home team defends), so each shot
+    is turned to have its team attacking the same way before the sides are put at opposite ends.
+    A play with no defending side is read from where it is: a shot on goal is taken at the net
+    being attacked, so its x says which end that is. Shootout attempts are left out (their
+    coordinates are not the rink's), as are blocked and missed shots (the screen's count is the
+    SOG count). One malformed play does not lose the rest.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        sides = {int(raw["awayTeam"]["id"]): "away", int(raw["homeTeam"]["id"]): "home"}
+    except (KeyError, TypeError, ValueError):
+        return None
+    shots: list[ShotPoint] = []
+    for play in raw.get("plays") or []:
+        try:
+            kind = play["typeDescKey"]
+            if kind not in ("shot-on-goal", "goal"):
+                continue
+            if (play.get("periodDescriptor") or {}).get("periodType") == "SO":
+                continue
+            details = play["details"]
+            side = sides.get(int(details["eventOwnerTeamId"]))
+            x, y = float(details["xCoord"]), float(details["yCoord"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if side is None or abs(x) > RINK_HALF_LENGTH or abs(y) > RINK_HALF_WIDTH:
+            continue
+        defending = play.get("homeTeamDefendingSide")
+        if defending in ("left", "right"):
+            attacks_right = (side == "home") == (defending == "left")
+        else:
+            attacks_right = x > 0
+        if not attacks_right:
+            x, y = -x, -y
+        if side == "away":  # away attacks the left net: turn the whole picture half a turn
+            x, y = -x, -y
+        shots.append(ShotPoint(side, x, y, kind == "goal"))
+    return ShotMap(tuple(shots)) if shots else None
+
+
 @dataclass(frozen=True, slots=True)
 class ShootoutAttempt:
     """One shot from ``summary.shootout.events`` (#259).

@@ -116,6 +116,8 @@ class FakeClient:
         self.team_rosters: dict[str, dict[int, PlayerSeasonDetail]] = {}
         self.three_stars_calls: list[int] = []
         self.game_stats_calls: list[int] = []
+        self.shot_map_calls: list[int] = []
+        self.shot_maps: dict[int, object] = {}
         self.game_stats_by_game: dict[int, object] = {}
         self.stars: dict[int, tuple[Star, ...]] = {}
         self.standings_rows: list[StandingsRow] = []
@@ -138,6 +140,12 @@ class FakeClient:
 
     def shootout(self, game_id: int):
         return None
+
+    def shot_map(self, game_id: int):
+        self.shot_map_calls.append(game_id)
+        if self.fail:
+            raise HockeyApiError("boom")
+        return self.shot_maps.get(game_id)
 
     def game_stats(self, game_id: int):
         self.game_stats_calls.append(game_id)

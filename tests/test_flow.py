@@ -140,6 +140,12 @@ class FlowClient:
         self.fail_shootout = False
         self.game_stats_by_game: dict[int, object] = {}
         self.game_stats_calls: list[int] = []
+        self.shot_maps: dict[int, object] = {}
+        self.shot_map_calls: list[int] = []
+
+    def shot_map(self, game_id):
+        self.shot_map_calls.append(game_id)
+        return self.shot_maps.get(game_id)
 
     def game_stats(self, game_id):
         self.game_stats_calls.append(game_id)
@@ -2432,3 +2438,76 @@ def test_a_football_touchdown_and_field_goal_play_their_own_sounds_unless_muted(
     app._horn_muted_until = app.monotonic() + 3600
     app._on_football_sound(Touchdown(**common))
     assert len(app.horn.football_calls) == 2
+
+
+def _shots():
+    from scoreboard.hockey.models import ShotMap, ShotPoint
+
+    return ShotMap((ShotPoint("home", 75, 3, True), ShotPoint("away", -66, -8)))
+
+
+def test_the_shot_map_is_fetched_with_the_stats_and_rides_in_the_same_scene(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    client.shot_maps[1] = _shots()
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    scene = app.select_scene()
+    assert scene.kind == "intermission" and scene.shots == _shots() and scene.stats == _int_stats()
+    assert client.shot_map_calls == [1] and client.game_stats_calls == [1]
+
+
+def test_the_shot_map_alone_is_enough_for_the_screen_and_a_missing_one_is_not_needed(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    client.game_stats_by_game.clear()
+    client.shot_maps[1] = _shots()
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    scene = app.select_scene()
+    assert scene.kind == "intermission" and scene.stats is None and scene.shots == _shots()
+
+    client.shot_maps.clear()
+    client.game_stats_by_game[1] = _int_stats()
+    clock.advance(seconds=61)
+    app.refresh_intermission_stats()
+    assert app.select_scene().stats == _int_stats(), "the stats arrive and the screen carries on"
+
+
+def test_the_shot_map_has_its_own_minute_and_retry_clock(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    tick(app, clock, hours=6)  # no shot map from the feed yet
+    app.refresh_intermission_stats()
+    assert client.shot_map_calls == [1]
+    clock.advance(seconds=10)
+    app.refresh_intermission_stats()
+    assert client.shot_map_calls == [1], "not before the retry delay"
+    clock.advance(seconds=6)
+    client.shot_maps[1] = _shots()
+    app.refresh_intermission_stats()
+    assert client.shot_map_calls == [1, 1] and app._int_shots[1][1] == _shots()
+    clock.advance(seconds=30)
+    app.refresh_intermission_stats()
+    assert client.shot_map_calls == [1, 1], "held for a minute once it has arrived"
+    assert client.game_stats_calls == [1, 1] or client.game_stats_calls == [1], (
+        "stats keep their own clock"
+    )
+
+
+def test_the_shot_map_is_forgotten_when_the_intermission_ends(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client)
+    client.shot_maps[1] = _shots()
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    assert app._int_shots
+    client.today[1] = dataclasses.replace(client.today[1], in_intermission=False)
+    tick(app, clock, seconds=20)
+    app.refresh_intermission_stats()
+    assert app._int_shots == {} and app._int_shots_tried == {}
+    assert app.select_scene().kind == "game"

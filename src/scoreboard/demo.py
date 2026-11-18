@@ -22,6 +22,8 @@ from .hockey.models import (
     SeasonSeriesRecord,
     Shootout,
     ShootoutAttempt,
+    ShotMap,
+    ShotPoint,
     Situation,
     SkaterLine,
     StandingsRow,
@@ -129,6 +131,42 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         _game(4, away, home, "LIVE", now, away_score=2, home_score=3, period=3, clock="01:12"),
         situation=_situation(away_codes=("EN",), away=6),
     )
+    demo_shots = ShotMap(
+        tuple(
+            ShotPoint("away", x, y, goal)
+            for x, y, goal in (
+                (-78, 6, True),
+                (-70, -12, False),
+                (-62, 20, False),
+                (-55, -4, False),
+                (-45, 30, False),
+                (-40, -22, False),
+                (-72, 0, False),
+                (-38, 8, False),
+                (-82, -15, False),
+            )
+        )
+        + tuple(
+            ShotPoint("home", x, y, goal)
+            for x, y, goal in (
+                (80, 4, True),
+                (76, -6, False),
+                (72, 10, True),
+                (69, -2, False),
+                (66, 14, False),
+                (74, -14, False),
+                (62, 24, False),
+                (58, -26, False),
+                (82, 0, False),
+                (71, 6, False),
+                (64, -8, False),
+                (55, 12, False),
+                (78, -2, False),
+                (60, 0, False),
+                (86, 8, False),
+            )
+        )
+    )
     int_stats = game_stats_from_right_rail(
         {
             "teamGameStats": [
@@ -231,6 +269,11 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         (
             "intermission_stats_page2",
             Scene("intermission", intermission, stats=int_stats, stats_page=1),
+            {},
+        ),
+        (
+            "intermission_shot_map",
+            Scene("intermission", intermission, stats=int_stats, stats_page=2, shots=demo_shots),
             {},
         ),
         (

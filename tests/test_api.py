@@ -808,3 +808,40 @@ def test_game_stats_are_none_when_the_payload_has_no_stats():
     responses.add(responses.GET, f"{BASE_URL}/gamecenter/42/right-rail", json={}, status=200)
     with HockeyClient() as client:
         assert client.game_stats(42) is None
+
+
+@responses.activate
+def test_shot_map_comes_from_play_by_play_and_parses():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/42/play-by-play",
+        json={
+            "awayTeam": {"id": 26},
+            "homeTeam": {"id": 6},
+            "plays": [
+                {
+                    "typeDescKey": "shot-on-goal",
+                    "homeTeamDefendingSide": "left",
+                    "periodDescriptor": {"number": 1, "periodType": "REG"},
+                    "details": {"xCoord": 80, "yCoord": 5, "eventOwnerTeamId": 6},
+                }
+            ],
+        },
+        status=200,
+    )
+    with HockeyClient() as client:
+        shots = client.shot_map(42)
+    assert responses.calls[0].request.url == f"{BASE_URL}/gamecenter/42/play-by-play"
+    assert [(s.side, s.x, s.y) for s in shots.shots] == [("home", 80, 5)]
+
+
+@responses.activate
+def test_shot_map_is_none_when_nothing_has_been_shot():
+    responses.add(
+        responses.GET,
+        f"{BASE_URL}/gamecenter/42/play-by-play",
+        json={"awayTeam": {"id": 26}, "homeTeam": {"id": 6}, "plays": []},
+        status=200,
+    )
+    with HockeyClient() as client:
+        assert client.shot_map(42) is None
