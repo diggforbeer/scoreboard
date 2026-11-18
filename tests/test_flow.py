@@ -2511,3 +2511,76 @@ def test_the_shot_map_is_forgotten_when_the_intermission_ends(day):
     app.refresh_intermission_stats()
     assert app._int_shots == {} and app._int_shots_tried == {}
     assert app.select_scene().kind == "game"
+
+
+# --------------------------------------------------------------------------
+# Important dates (#524)
+# --------------------------------------------------------------------------
+
+
+def _in_days(app, n: int, text: str, **kwargs):
+    """A one-off date ``n`` days from the board's today, so the test never depends on the date."""
+    from scoreboard.important_dates import ImportantDate
+
+    today = app.clock().astimezone(app.tz).date()
+    return ImportantDate(today + timedelta(days=n), text, repeat=False, **kwargs)
+
+
+def test_the_dates_screen_is_skipped_with_no_dates_or_none_near(day):
+    app, _, _ = day
+    assert app._rotation_screen_scene("dates", None, None) is None
+    app.settings.dates = [_in_days(app, 40, "FAR", days_before=30)]
+    assert app._rotation_screen_scene("dates", None, None) is None
+
+
+def test_the_dates_screen_carries_the_dates_inside_their_window_nearest_first(day):
+    app, _, _ = day
+    app.settings.dates = [
+        _in_days(app, 9, "LATER", icon="gift"),
+        _in_days(app, 40, "FAR"),
+        _in_days(app, 2, "SOON", icon="cake", days_before=5),
+    ]
+    scene = app._rotation_screen_scene("dates", None, None)
+    assert scene.kind == "dates"
+    assert [(v.text, v.icon, v.days) for v in scene.date_views] == [
+        ("SOON", "cake", 2),
+        ("LATER", "gift", 9),
+    ]
+
+
+def test_the_dates_slot_shares_its_seconds_between_dates(day):
+    app, _, _ = day
+    app.settings.dates = [_in_days(app, 1, "ONE"), _in_days(app, 3, "THREE")]
+    scene = app._rotation_screen_scene("dates", None, None)
+    assert [v.text for v in app._split_slot(scene, 0.0, 10.0).date_views] == ["ONE"]
+    assert [v.text for v in app._split_slot(scene, 4.9, 10.0).date_views] == ["ONE"]
+    assert [v.text for v in app._split_slot(scene, 5.0, 10.0).date_views] == ["THREE"]
+
+
+def test_a_dates_row_in_the_idle_rotation_shows_the_screen_and_skips_it_when_nothing_is_near(day):
+    app, _, _ = day
+    app.settings.rotation = [RotationEntry("dates", 10.0)]
+    assert app._rotate_idle_scenes(None, None) is None  # nothing entered: skipped, never blank
+    app.settings.dates = [_in_days(app, 4, "TRIP", icon="star")]
+    shown = app._rotate_idle_scenes(None, None)
+    assert shown.kind == "dates" and [v.text for v in shown.date_views] == ["TRIP"]
+
+
+def test_the_dates_screen_draws_through_the_renderer_for_a_date_and_for_the_day(day):
+    app, _, _ = day
+    drawn = []
+    app.renderer.draw_date = lambda canvas, view, now: drawn.append((view.text, view.days))
+    for days in (6, 0):
+        app.settings.dates = [_in_days(app, days, "MOM")]
+        app.draw_scene(app._rotation_screen_scene("dates", None, None))
+    assert drawn == [("MOM", 6), ("MOM", 0)]
+
+
+def test_the_dates_scene_is_stable_so_the_live_view_does_not_resnapshot_it(day):
+    """The scene key is its data, not the clock: the day-of sparkle moves every half second, and
+    a scene that changed with it would snapshot every frame."""
+    app, clock, _ = day
+    app.settings.dates = [_in_days(app, 0, "MOM")]
+    first = app._rotation_screen_scene("dates", None, None)
+    clock.advance(seconds=1)
+    assert app._rotation_screen_scene("dates", None, None) == first

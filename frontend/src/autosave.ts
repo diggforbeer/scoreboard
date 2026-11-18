@@ -27,6 +27,11 @@ export interface AutosaveHandlers<T> {
   edit(value: T, delayMs?: number, field?: string, invalid?: boolean): void
   /** Save any pending edit now (a blur, or Enter in the form). */
   flush(): void
+  /**
+   * Forget which fields were marked invalid. For a list whose rows are removed or reordered:
+   * the marks are keyed by row position, so a removed row's would block saving for good.
+   */
+  clearInvalid(): void
   /** Re-save the values from before the last save. */
   undo(): void
   /** The section's config, on connect or echoed after a save. */
@@ -142,6 +147,9 @@ export function useAutosave<T>(
     return {
       edit,
       flush,
+      clearInvalid() {
+        invalidFields.clear()
+      },
       undo() {
         if (undoTarget === null) return
         const target = undoTarget

@@ -33,6 +33,7 @@ from .hockey.models import (
     game_stats_from_right_rail,
     standings_window,
 )
+from .important_dates import DateView
 
 
 def _meetings(now: datetime) -> tuple[MeetingResult, ...]:
@@ -356,6 +357,12 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
             {},
         ),
         ("clock", Scene("clock"), {}),
+        ("dates", Scene("dates", date_views=(DateView("MOM", "cake", 12, 8),)), {}),
+        ("dates_today", Scene("dates", date_views=(DateView("MOM", "cake", 0, 8),)), {}),
+        ("dates_balloon", Scene("dates", date_views=(DateView("LILY'S PARTY", "balloon", 5),)), {}),
+        ("dates_heart", Scene("dates", date_views=(DateView("NATE & EM", "heart", 1, 9),)), {}),
+        ("dates_gift", Scene("dates", date_views=(DateView("XMAS GIFTS", "gift", 21),)), {}),
+        ("dates_star", Scene("dates", date_views=(DateView("BIG TRIP", "star", 30),)), {}),
     ]
     for holiday in (
         "halloween",

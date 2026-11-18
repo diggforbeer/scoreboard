@@ -27,7 +27,7 @@ method.
 - [How a screen gets chosen](#how-a-screen-gets-chosen)
 - [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `penalty`, `three_stars`, `intermission`, shootout, `scores`
 - [Before a game](#before-a-game): `preview`, `countdown`, `matchup`, `matchup_meetings`
-- [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`, `thanksgiving`
+- [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`, `thanksgiving`, `dates`
 - [Setup and status screens](#setup-and-status-screens): `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games`
 - [Holiday decorations](#holiday-decorations)
 - [Variants](#variants-that-apply-to-most-screens)
@@ -371,6 +371,45 @@ Thanksgiving Day.
 - **Controls:** the same `holiday` rotation entry as the Christmas tree: it shows whichever of
   the two is in season. Thanksgiving must be ticked under `[holiday]`. Skipped otherwise.
   Canadian Thanksgiving has no screen.
+
+### `dates`: important dates
+
+![Important date: a birthday coming up](docs/screens/dates.png)
+
+A countdown to a date the owner entered on the admin page ("Important dates" card): a pixel
+icon on the left, the owner's label over a big `12 DAYS` (or `TOMORROW`) on the right, and, for a
+date that counts years, a small `TURNS 8` (birthdays) or `8 YEARS` line under it. A single 64px
+panel has no room beside the icon, so it shows the text alone. Several dates inside their window
+share the slot's seconds evenly, nearest first.
+
+On the day itself the big line becomes a greeting (`BIRTHDAY!`, `ANNIVERSARY!`, `CELEBRATE!`,
+`TODAY!`) that cycles colours, with the icon bobbing and confetti twinkling at the edges. It runs
+at the normal 2fps loop, not the fast one.
+
+![Important date: the day itself](docs/screens/dates_today.png)
+
+| Icon | Meant for | Day-of greeting | Years line |
+| --- | --- | --- | --- |
+| cake | birthdays | `BIRTHDAY!` | `TURNS 8` |
+| balloon | parties | `CELEBRATE!` | `TURNS 8` |
+| heart | anniversaries | `ANNIVERSARY!` | `8 YEARS` |
+| gift | gifts, holidays | `TODAY!` | `8 YEARS` |
+| star | anything else | `TODAY!` | `8 YEARS` |
+
+![Balloon](docs/screens/dates_balloon.png)
+![Heart](docs/screens/dates_heart.png)
+![Gift](docs/screens/dates_gift.png)
+![Star](docs/screens/dates_star.png)
+
+Each date (up to 10) has a date, a label, an icon, "every year" or one time, whether to count
+years, and how many days before to start showing it (1-365, default 30). The label is capitals,
+digits and `. , ' ! & - ?`, up to 14 characters (anything lower case is capitalised). A date outside
+its window is not shown, and a one-time date that has passed is dropped. A Feb 29 date falls on
+Feb 28 in a year with no 29th.
+
+- **Controls:** opt-in: `dates` in `[[rotation]]` (the admin page's idle rotation list), plus the
+  dates themselves in `[[dates]]`. Skipped while nothing is inside its window. It belongs to no
+  sport, like the clock, so it shows in either sport's turn.
 
 ## Setup and status screens
 

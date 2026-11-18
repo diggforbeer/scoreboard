@@ -2851,3 +2851,129 @@ def test_the_shot_map_draws_nothing_in_the_rounded_off_corners(games):
     x0 = (W - 75) // 2
     for cx, cy in ((x0, 0), (x0 + 74, 0), (x0, H - 2), (x0 + 74, H - 2)):
         assert not c.lit(cx, cy, cx, cy), f"a pixel was drawn in the cut corner at {cx},{cy}"
+
+
+# -- important dates (#524) ---------------------------------------------------------------------
+
+from scoreboard.display import date_icons  # noqa: E402 - kept with the tests that use it
+from scoreboard.important_dates import DateView  # noqa: E402
+
+DATES_NOW = datetime(2026, 11, 18, 12, 0, 0, tzinfo=UTC)
+DATES_TEXT_LEFT = 3 + date_icons.ICON_BOX[0] + 5  # where the text column starts at 128px
+DATES_TEXT_CENTRE = (DATES_TEXT_LEFT + W) // 2
+
+
+def draw_date(view: DateView, *, width: int = W, now: datetime = DATES_NOW) -> AsciiCanvas:
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=width, height=H, tz=TZ)
+    c = AsciiCanvas(width, H)
+    r.draw_date(c, view, now)
+    return c
+
+
+def assert_date_layout(c: AsciiCanvas, view: DateView, *, years: bool, icon: bool = True) -> None:
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    left = DATES_TEXT_LEFT if icon else 0
+    right = W - 8  # the day-of confetti twinkles in the last 7 columns
+    label = c.bbox(left, 2, right, 10 if years else 13)
+    big = c.bbox(left, 12 if years else 15, right, 22 if years else 27)
+    assert label is not None, "no label"
+    assert big is not None, "no big line"
+    centre = DATES_TEXT_CENTRE if icon else (W - 1) / 2
+    for name, box in (("label", label), ("big line", big)):
+        assert abs(box.center_x - centre) <= 2.5, f"{name} not centred: {box}"
+    if icon:
+        # the icon is on the left, in its own colours, and the text never reaches into it
+        assert c.colors(3, 0, DATES_TEXT_LEFT - 2, H - 1) - {WHITE}, "the icon column has no colour"
+        assert label.x0 >= DATES_TEXT_LEFT and big.x0 >= DATES_TEXT_LEFT
+    small = c.bbox(left, 28, right, H - 1)
+    assert (small is not None) == years, "the years line shows if and only if the date counts years"
+
+
+DATE_SNAPSHOTS = [
+    ("dates_cake", DateView("MOM", "cake", 12, 8), True),
+    ("dates_cake_today", DateView("MOM", "cake", 0, 8), True),
+    ("dates_balloon", DateView("LILY'S PARTY", "balloon", 5), False),
+    ("dates_heart_tomorrow", DateView("NATE & EM", "heart", 1, 9), True),
+    ("dates_gift", DateView("XMAS GIFTS", "gift", 21), False),
+    ("dates_star_today", DateView("BIG TRIP", "star", 0), False),
+]
+
+
+@pytest.mark.parametrize(("name", "view", "years"), DATE_SNAPSHOTS)
+def test_date_scene(name, view, years, update_snapshots):
+    c = draw_date(view)
+    art = show(name, c)
+    assert_date_layout(c, view, years=years)
+    check_snapshot(name, art, update_snapshots)
+
+
+@pytest.mark.parametrize("icon", date_icons.ICON_COLOURS)
+def test_every_icon_is_a_clean_sprite(icon):
+    from scoreboard.display.holiday import draw_sprite
+
+    rows, palette = date_icons._SPRITES[icon]
+    assert len({len(row) for row in rows}) == 1, f"{icon}: rows differ in width"
+    assert set("".join(rows)) - {"."} <= set(palette), f"{icon}: a letter has no colour"
+    w, h = date_icons.icon_size(icon)
+    assert w <= date_icons.ICON_BOX[0] and h <= date_icons.ICON_BOX[1]
+    c = AsciiCanvas(W, H)
+    draw_sprite(c, rows, palette, 0, 0, W, H)
+    assert c.bbox() == BBox(0, 0, w - 1, h - 1) or c.bbox() is not None
+
+
+def test_the_day_of_greeting_cycles_colours_and_the_icon_bobs_with_the_half_second():
+    seen, tops = set(), set()
+    for half in range(len(date_icons.CONFETTI) * 2):
+        now = DATES_NOW + timedelta(seconds=half / 2)
+        c = draw_date(DateView("MOM", "cake", 0, 8), now=now)
+        assert not c.out_of_bounds
+        seen |= c.colors(DATES_TEXT_LEFT, 12, W - 8, 22)
+        box = c.bbox(3, 0, DATES_TEXT_LEFT - 2, H - 1)
+        tops.add(box.y0)
+    assert set(date_icons.CONFETTI) <= seen, "the greeting should pass through every colour"
+    assert len(tops) == 2, f"the icon should bob between two heights, saw {sorted(tops)}"
+
+
+def test_a_countdown_is_still_on_every_half_second_and_draws_nothing_but_the_text_and_icon():
+    """Only the day itself sparkles: a countdown frame is the same at every tick."""
+    view = DateView("MOM", "cake", 12, 8)
+    frames = {draw_date(view, now=DATES_NOW + timedelta(seconds=s)).render() for s in (0, 0.5, 1)}
+    assert len(frames) == 1
+
+
+def test_the_day_of_confetti_stays_out_of_the_text_column():
+    for half in range(8):
+        now = DATES_NOW + timedelta(seconds=half / 2)
+        c = draw_date(DateView("MOM", "cake", 0, 8), now=now)
+        for x, y in c.pixels:
+            in_text = DATES_TEXT_LEFT <= x < W - 7
+            if in_text:
+                assert 2 <= y <= H - 1  # text only; the confetti lives at the edges
+        assert c.bbox(W - 7, 0, W - 1, H - 1) is not None, "no confetti at the right edge"
+
+
+def test_the_longest_label_and_greeting_fit_beside_the_icon_at_128px():
+    longest = DateView("W" * 14, "heart", 0, 99)  # 14 wide letters, the widest greeting, 2 digits
+    c = draw_date(longest)
+    assert not c.out_of_bounds
+    text = c.bbox(DATES_TEXT_LEFT, 2, W - 8, H - 1)
+    assert text is not None and text.x0 >= DATES_TEXT_LEFT and text.x1 <= W - 3
+
+
+def test_a_single_panel_has_no_room_for_the_icon_so_the_text_is_centred_alone(update_snapshots):
+    view = DateView("GRANDMA SUE", "cake", 12, 80)
+    c = draw_date(view, width=64)
+    art = show("dates_64", c)
+    assert not c.out_of_bounds
+    box = c.bbox(0, 0, 63, H - 1)
+    assert box is not None and box.x0 >= 0 and box.x1 <= 63
+    assert abs(box.center_x - 31.5) <= 2
+    assert c.colors(0, 0, 63, H - 1) <= {WHITE, SUBDUED, date_icons.ICON_COLOURS["cake"]}
+    check_snapshot("dates_64", art, update_snapshots)
+
+
+def test_a_label_that_is_too_wide_for_a_single_panel_is_cut_not_drawn_off_it():
+    c = draw_date(DateView("W" * 14, "star", 3), width=64)
+    assert not c.out_of_bounds
+    box = c.bbox(0, 0, 63, 13)
+    assert box is not None and box.x1 <= 63

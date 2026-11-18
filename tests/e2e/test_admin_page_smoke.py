@@ -563,3 +563,126 @@ def test_the_cache_tab_opens_and_offers_to_clear(admin_page):
             assert page.get_by_role("button", name="Clear football").count() == 1
         finally:
             browser.close()
+
+
+def test_important_dates_card_adds_edits_and_removes_a_date(admin_page):
+    """#524: a date picker, a text box limited to what the panel can draw, icon radios and the
+    show-years / window controls. A new date is held back until it has text; every change then
+    saves to ``[[dates]]`` as a real TOML date and survives a reload."""
+    from datetime import date
+
+    from playwright.sync_api import sync_playwright
+
+    def saved():
+        return admin_page.config().get("dates", [])
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            frames = _sent_saves(page)
+            page.goto(admin_page.url)
+            page.wait_for_selector("#dates-add-button", timeout=15000)
+            assert page.locator("#dates-empty").is_visible()
+
+            # A new row has no text yet: it shows, but nothing is sent.
+            page.click("#dates-add-button")
+            page.wait_for_selector("[data-date-row='0']")
+            page.wait_for_timeout(1500)
+            assert [f for f in frames if '"section":"dates"' in f] == [], "saved an empty date"
+            assert not admin_page.config_path.read_text().count("[[dates]]")
+
+            # Lower case becomes capitals and characters the panel can't draw are dropped.
+            page.fill('[aria-label="date 1"]', "2018-03-14")
+            page.fill('[aria-label="text 1"]', "mom <3 & dad")
+            assert page.input_value('[aria-label="text 1"]') == "MOM 3 & DAD"
+            page.fill('[aria-label="text 1"]', "mom")
+            _wait_until(lambda: saved() and saved()[0]["text"] == "MOM")
+            assert saved()[0]["date"] == date(2018, 3, 14)  # a real TOML date, not a string
+            assert saved()[0]["icon"] == "cake" and saved()[0]["repeat"] is True
+            assert saved()[0]["days_before"] == 30
+
+            # The label stops at 14 characters.
+            page.fill('[aria-label="text 1"]', "A" * 20)
+            assert len(page.input_value('[aria-label="text 1"]')) == 14
+            page.fill('[aria-label="text 1"]', "MOM")
+
+            # Icons are radios, and the others are plain clicks that save at once.
+            page.check("#dates-icon-0-heart")
+            _wait_until(lambda: saved()[0]["icon"] == "heart")
+            page.check("#dates-years-0")
+            _wait_until(lambda: saved()[0]["show_years"] is True)
+            page.fill("#dates-days-0", "10")
+            _wait_until(lambda: saved()[0]["days_before"] == 10)
+
+            # "Every year" off is a one-off, which has no years to count.
+            page.uncheck("#dates-repeat-0")
+            _wait_until(lambda: saved()[0]["repeat"] is False)
+            assert saved()[0]["show_years"] is False
+            assert page.locator("#dates-years-0").is_disabled()
+
+            page.reload()
+            page.wait_for_selector("[data-date-row='0']", timeout=15000)
+            assert page.input_value('[aria-label="date 1"]') == "2018-03-14"
+            assert page.input_value('[aria-label="text 1"]') == "MOM"
+            assert page.locator("#dates-icon-0-heart").is_checked()
+
+            page.get_by_role("button", name="Remove date 1").click()
+            _wait_until(lambda: "dates" not in admin_page.config())
+            assert page.locator("#dates-empty").is_visible()
+        finally:
+            browser.close()
+
+
+def test_a_removed_blank_date_never_blocks_saving_the_others(admin_page):
+    """The page holds back a date with no text by its position, so removing that row has to forget
+    the mark or no later save would ever be sent."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#dates-add-button", timeout=15000)
+            page.click("#dates-add-button")
+            page.fill('[aria-label="text 1"]', "ONE")
+            _wait_until(lambda: admin_page.config()["dates"][0]["text"] == "ONE")
+
+            page.click("#dates-add-button")  # a blank second row, held back
+            page.wait_for_selector("[data-date-row='1']")
+            page.get_by_role("button", name="Remove date 2").click()
+            page.wait_for_selector("[data-date-row='1']", state="detached")
+
+            page.check("#dates-icon-0-gift")
+            _wait_until(lambda: admin_page.config()["dates"][0]["icon"] == "gift")
+        finally:
+            browser.close()
+
+
+def test_the_dates_card_offers_to_add_the_screen_to_a_rotation_that_lacks_it(admin_page):
+    """Dates only show through a ``dates`` rotation row. With a rotation but no such row the card
+    says so and can add one; with no rotation (the built-in default) it explains instead, since
+    adding a lone row would replace the default."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(admin_page.url)
+            page.wait_for_selector("#dates-hint", timeout=15000)
+            assert page.get_by_role("button", name="Add to rotation").count() == 0
+            assert "Add a dates row" in page.locator("#dates-hint").inner_text()
+
+            rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
+            card = rotation.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
+            card.get_by_role("button", name="Add row").click()
+            page.select_option('[aria-label="rotation screen 1"]', "clock")
+            page.get_by_role("button", name="Add to rotation").click()
+            _wait_until(
+                lambda: [r["screen"] for r in admin_page.config()["rotation"]] == ["clock", "dates"]
+            )
+            assert page.locator("#dates-hint").count() == 0
+        finally:
+            browser.close()

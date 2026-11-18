@@ -24,6 +24,7 @@ from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 from .display.teams import TEAM_COLORS
 from .football.teams import NIGHT_SLOTS
 from .football.teams import is_team as football_team_exists
+from .important_dates import ImportantDate, parse_dates
 
 log = logging.getLogger(__name__)
 
@@ -288,8 +289,8 @@ class ScoreboardConfig:
 #: "matchup" (#157), "top_west"/"top_east" (#200), "division" (#296), "wildcard" (#298),
 #: "leaders" (#201) and "holiday" (#243, the active holiday's own screen) and "scores_grid" (#269,
 #: today's games several to a frame) and "address" (#293, how to reach the admin
-#: page) are opt-in only: never part of the
-#: derived default list.
+#: page) and "dates" (#524, the owner's birthdays and anniversaries) are opt-in only: never part of
+#: the derived default list.
 VALID_ROTATION_SCREENS = (
     "countdown_preview",
     "standings",
@@ -303,6 +304,7 @@ VALID_ROTATION_SCREENS = (
     "holiday",
     "scores_grid",
     "address",
+    "dates",
     "fb_preview",
     "fb_standings",
     "fb_week",
@@ -322,12 +324,17 @@ FOOTBALL_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule")
 FOOTBALL_ROTATION_SCREENS = (*FOOTBALL_SCREENS, "clock")
 
 
+#: Screens that belong to no sport (see ``screen_sport``).
+SHARED_SCREENS = ("clock", "dates")
+
+
 def screen_sport(screen: str) -> str:
-    """Which sport shows a rotation screen: ``football``, ``hockey``, or ``shared`` (the clock,
-    which either sport draws and which takes the sport of the rows around it)."""
+    """Which sport shows a rotation screen: ``football``, ``hockey``, or ``shared`` (the clock and
+    the owner's important dates, which either sport draws and which take the sport of the rows
+    around them)."""
     if screen in FOOTBALL_SCREENS:
         return "football"
-    return "shared" if screen == "clock" else "hockey"
+    return "shared" if screen in SHARED_SCREENS else "hockey"
 
 
 #: The in-game screen lengths (#445): name -> (default, lowest, highest) seconds. The defaults are
@@ -858,6 +865,9 @@ class Settings:
     #: show_clock_between_games in that case, so an upgraded board changes
     #: nothing until the owner opts in.
     rotation: list[RotationEntry] = field(default_factory=list)
+    #: The owner's important dates (#524), up to ``DATES_MAX``, in file order. Shown by the opt-in
+    #: ``dates`` rotation screen.
+    dates: list[ImportantDate] = field(default_factory=list)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
     wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
@@ -897,6 +907,7 @@ class Settings:
             football=_build(FootballConfig, raw.get("football", {}), "football"),
             teams=_parse_teams(raw.get("teams", [])),
             rotation=_parse_rotation(raw.get("rotation", [])),
+            dates=parse_dates(raw.get("dates", [])),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
             wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
@@ -964,6 +975,25 @@ class Settings:
                     aot.append(row)
                 doc["teams"] = aot
                 continue
+            if section == "dates":
+                # ``[[dates]]`` is the whole new list, replaced like ``[[teams]]``; an empty list
+                # removes the key. ``date`` is written as a TOML date, so a hand edit reads well.
+                if not values:
+                    if "dates" in doc:
+                        del doc["dates"]
+                    continue
+                aot = tomlkit.aot()
+                for entry in values:
+                    row = tomlkit.table()
+                    row["date"] = entry["date"]
+                    row["text"] = entry["text"]
+                    row["icon"] = entry["icon"]
+                    row["repeat"] = entry["repeat"]
+                    row["show_years"] = entry["show_years"]
+                    row["days_before"] = entry["days_before"]
+                    aot.append(row)
+                doc["dates"] = aot
+                continue
             if section == "rotation":
                 aot = tomlkit.aot()
                 for entry in values:
@@ -996,6 +1026,7 @@ class Settings:
         self.football = reloaded.football
         self.teams = reloaded.teams
         self.rotation = reloaded.rotation
+        self.dates = reloaded.dates
         self.audio = reloaded.audio
         self.status = reloaded.status
         self.wifi_setup = reloaded.wifi_setup

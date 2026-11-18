@@ -51,7 +51,13 @@ const ROTATION_SCREENS = [
   'holiday',
   'scores_grid',
   'address',
+  'dates',
 ] as const
+// The screens that belong to no sport (config.py's SHARED_SCREENS): either sport shows them.
+const SHARED_ROTATION_SCREENS = ['clock', 'dates'] as const
+const HOCKEY_ROTATION_SCREENS = ROTATION_SCREENS.filter(
+  (screen) => !(SHARED_ROTATION_SCREENS as readonly string[]).includes(screen),
+)
 // The football screens the same list can hold (config.py's FOOTBALL_SCREENS); the clock is shared.
 const FOOTBALL_ROTATION_SCREENS = ['fb_preview', 'fb_standings', 'fb_week', 'fb_schedule'] as const
 // One cached thing on the Cache tab (cache_view.py): what it is, how old, and its data.
@@ -220,6 +226,31 @@ interface TeamsAvailable {
   football: FootballTeamOption[]
 }
 
+// The owner's important dates (#524): birthdays, anniversaries and other days the "dates"
+// rotation screen counts down to. ``date`` is what the browser's date picker holds (YYYY-MM-DD).
+const DATE_ICONS = ['cake', 'balloon', 'heart', 'gift', 'star'] as const
+type DateIcon = (typeof DATE_ICONS)[number]
+
+interface DateRow {
+  date: string
+  text: string
+  icon: DateIcon
+  repeat: boolean
+  show_years: boolean
+  days_before: number
+}
+
+interface DatesConfig {
+  dates: DateRow[]
+}
+
+interface DatesAvailable {
+  icons: string[]
+  text_max: number
+  days_before: [number, number]
+  days_before_default: number
+}
+
 interface StatusConfig {
   enabled: boolean
   port: number
@@ -351,6 +382,7 @@ type ServerMessage =
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'teams'; data: TeamsConfig; available: TeamsAvailable; max: number }
+  | { type: 'config'; section: 'dates'; data: DatesConfig; available: DatesAvailable; max: number }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
@@ -575,6 +607,254 @@ function TeamsCard({
   )
 }
 
+// What a date's text may hold (important_dates.DATE_TEXT_CHARS): the page capitalises and drops
+// the rest as it is typed, so the panel is never asked to draw something it cannot; the server
+// checks again.
+const DATE_TEXT_FILTER = /[^A-Z0-9 .,'!&?-]/g
+const cleanDateText = (raw: string, max: number) =>
+  raw.toUpperCase().replace(DATE_TEXT_FILTER, '').replace(/ {2,}/g, ' ').slice(0, max)
+
+const DATE_ICON_LABELS: Record<DateIcon, [string, string]> = {
+  cake: ['\u{1F382}', 'Cake'],
+  balloon: ['\u{1F388}', 'Balloon'],
+  heart: ['❤️', 'Heart'],
+  gift: ['\u{1F381}', 'Gift'],
+  star: ['⭐', 'Star'],
+}
+
+// Today as the picker spells it, in the browser's own time zone.
+function todayInput(): string {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
+function DatesCard({
+  section,
+  value,
+  available,
+  max,
+  rotationHasDates,
+  rotationCanTakeRow,
+  onAddToRotation,
+}: {
+  section: {
+    edit(value: DatesConfig, delayMs?: number, field?: string, invalid?: boolean): void
+    flush(): void
+    clearInvalid(): void
+  }
+  value: DatesConfig
+  available: DatesAvailable
+  max: number
+  rotationHasDates: boolean
+  rotationCanTakeRow: boolean
+  onAddToRotation: () => void
+}) {
+  const rows = value.dates
+  const [lowest, highest] = available.days_before
+  const full = rows.length >= max
+  // Change one row. ``delayMs`` 0 saves now (a click); typed fields wait for a pause, and a field
+  // that is empty or incomplete holds the whole save until it is not.
+  const change = (i: number, patch: Partial<DateRow>, delayMs = 0, field?: string, invalid = false) =>
+    section.edit(
+      { dates: rows.map((row, j) => (j === i ? { ...row, ...patch } : row)) },
+      delayMs,
+      field,
+      invalid,
+    )
+  const remove = (i: number) => {
+    section.clearInvalid()
+    section.edit({ dates: rows.filter((_, j) => j !== i) })
+  }
+  const add = () => {
+    const fresh: DateRow = {
+      date: todayInput(),
+      text: '',
+      icon: 'cake',
+      repeat: true,
+      show_years: false,
+      days_before: available.days_before_default,
+    }
+    // Nothing is sent until it has some text.
+    section.edit({ dates: [...rows, fresh] }, 0, `dates-text-${rows.length}`, true)
+  }
+  return (
+    <>
+      <p className="text-body-secondary small">
+        Birthdays, anniversaries and other days to count down to. Add a <code>dates</code> row to the
+        Idle rotation to show them: each appears that many days before, with a countdown, and
+        celebrates on the day. Up to {max}.
+      </p>
+      {!rotationHasDates && (
+        <div className="alert alert-info py-2 small d-flex align-items-center gap-2" id="dates-hint">
+          <span className="flex-grow-1">
+            {rotationCanTakeRow
+              ? 'The Idle rotation has no dates row yet, so these will not show.'
+              : 'Add a dates row to the Idle rotation (below) to show these.'}
+          </span>
+          {rotationCanTakeRow && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={onAddToRotation}>
+              Add to rotation
+            </button>
+          )}
+        </div>
+      )}
+      {rows.length === 0 && (
+        <p className="text-body-secondary" id="dates-empty">
+          No dates yet.
+        </p>
+      )}
+      <ul className="list-group mb-3" id="dates-list">
+        {rows.map((row, i) => (
+          <li className="list-group-item" key={i} data-date-row={i}>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                section.flush()
+              }}
+            >
+              <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <input
+                  className="form-control"
+                  style={{ width: 'auto' }}
+                  type="date"
+                  aria-label={`date ${i + 1}`}
+                  value={row.date}
+                  onChange={(e) =>
+                    change(
+                      i,
+                      { date: e.target.value },
+                      TYPING_DELAY_MS,
+                      `dates-date-${i}`,
+                      e.target.value === '' || e.target.validity.badInput,
+                    )
+                  }
+                  onBlur={section.flush}
+                />
+                <input
+                  className="form-control"
+                  style={{ width: '12rem', textTransform: 'uppercase' }}
+                  type="text"
+                  maxLength={available.text_max}
+                  placeholder="TEXT (e.g. MOM)"
+                  aria-label={`text ${i + 1}`}
+                  value={row.text}
+                  onChange={(e) => {
+                    const text = cleanDateText(e.target.value, available.text_max)
+                    change(i, { text }, TYPING_DELAY_MS, `dates-text-${i}`, text.trim() === '')
+                  }}
+                  onBlur={section.flush}
+                />
+                <span className="text-body-secondary small">
+                  {row.text.length}/{available.text_max}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-outline-danger btn-sm ms-auto"
+                  onClick={() => remove(i)}
+                  aria-label={`Remove date ${i + 1}`}
+                >
+                  Remove
+                </button>
+              </div>
+              <div
+                className="d-flex flex-wrap gap-3 mb-2"
+                role="radiogroup"
+                aria-label={`icon ${i + 1}`}
+              >
+                {DATE_ICONS.filter((icon) => available.icons.includes(icon)).map((icon) => (
+                  <div className="form-check" key={icon}>
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name={`dates-icon-${i}`}
+                      id={`dates-icon-${i}-${icon}`}
+                      checked={row.icon === icon}
+                      onChange={() => change(i, { icon })}
+                    />
+                    <label className="form-check-label" htmlFor={`dates-icon-${i}-${icon}`}>
+                      <span aria-hidden="true">{DATE_ICON_LABELS[icon][0]}</span>{' '}
+                      {DATE_ICON_LABELS[icon][1]}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <div className="d-flex flex-wrap align-items-center gap-3">
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id={`dates-repeat-${i}`}
+                    checked={row.repeat}
+                    onChange={(e) =>
+                      change(i, {
+                        repeat: e.target.checked,
+                        show_years: e.target.checked && row.show_years,
+                      })
+                    }
+                  />
+                  <label className="form-check-label" htmlFor={`dates-repeat-${i}`}>
+                    Every year
+                  </label>
+                </div>
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id={`dates-years-${i}`}
+                    checked={row.show_years}
+                    disabled={!row.repeat}
+                    onChange={(e) => change(i, { show_years: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor={`dates-years-${i}`}>
+                    Show the years (TURNS 8)
+                  </label>
+                </div>
+                <div className="d-flex align-items-center gap-2">
+                  <label className="small" htmlFor={`dates-days-${i}`}>
+                    Show it
+                  </label>
+                  <input
+                    className="form-control"
+                    style={{ width: '5.5rem' }}
+                    type="number"
+                    step="1"
+                    min={lowest}
+                    max={highest}
+                    id={`dates-days-${i}`}
+                    value={row.days_before}
+                    onChange={(e) =>
+                      change(
+                        i,
+                        { days_before: Number(e.target.value) },
+                        TYPING_DELAY_MS,
+                        `dates-days-${i}`,
+                        e.target.value === '' || e.target.validity.badInput,
+                      )
+                    }
+                    onBlur={section.flush}
+                  />
+                  <span className="small">days before</span>
+                </div>
+              </div>
+            </form>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="btn btn-outline-secondary"
+        id="dates-add-button"
+        onClick={add}
+        disabled={full}
+      >
+        {full ? `Full (${max} dates)` : 'Add a date'}
+      </button>
+    </>
+  )
+}
+
 // One line, colour-coded, for the "Software update" status box -- the same
 // four states the Software update card itself distinguishes, just
 // summarised at a glance rather than with its own Check/Install buttons.
@@ -636,6 +916,18 @@ function App() {
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
+
+  const [datesState, datesSave] = useAutosave<DatesConfig>(
+    (v) => save('dates', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const [datesAvailable, setDatesAvailable] = useState<DatesAvailable>({
+    icons: [...DATE_ICONS],
+    text_max: 14,
+    days_before: [1, 365],
+    days_before_default: 30,
+  })
+  const [datesMax, setDatesMax] = useState(10)
 
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
@@ -728,6 +1020,7 @@ function App() {
       wifiSave,
       rotationSave,
       holidaySave,
+      datesSave,
     ]
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -772,6 +1065,11 @@ function App() {
               teamsSave.receiveConfig(message.data)
               setTeamsAvailable(message.available)
               setTeamsMax(message.max)
+            }
+            else if (message.section === 'dates') {
+              datesSave.receiveConfig(message.data)
+              setDatesAvailable(message.available)
+              setDatesMax(message.max)
             }
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
@@ -819,6 +1117,7 @@ function App() {
             if (message.section === 'audio') audioSave.receiveSaved()
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
             else if (message.section === 'teams') teamsSave.receiveSaved()
+            else if (message.section === 'dates') datesSave.receiveSaved()
             else if (message.section === 'football_rotation') footballRotationSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
@@ -892,6 +1191,8 @@ function App() {
               footballRotationSave.receiveError(message.message)
             } else if (message.section === 'teams') {
               teamsSave.receiveError(message.message)
+            } else if (message.section === 'dates') {
+              datesSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -959,6 +1260,7 @@ function App() {
     scoreboardSave,
     footballRotationSave,
     teamsSave,
+    datesSave,
     nightModeSave,
     wifiSave,
     rotationSave,
@@ -1435,6 +1737,27 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
+          <h2 className="card-title h5">Important dates</h2>
+          {datesState.value ? (
+            <DatesCard
+              section={datesSave}
+              value={datesState.value}
+              available={datesAvailable}
+              max={datesMax}
+              rotationHasDates={rotation?.some((row) => row.screen === 'dates') ?? false}
+              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
+              onAddToRotation={() => {
+                if (rotation) rotationSave.edit([...rotation, { screen: 'dates', seconds: 8 }])
+              }}
+            />
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
           <h2 className="card-title h5">Idle rotation</h2>
           {rotation ? (
             <form onSubmit={flushOnSubmit(rotationSave)}>
@@ -1454,7 +1777,7 @@ function App() {
                     onChange={(e) => updateRow(i, { ...row, screen: e.target.value })}
                   >
                     <optgroup label="Hockey">
-                      {ROTATION_SCREENS.filter((screen) => screen !== 'clock').map((screen) => (
+                      {HOCKEY_ROTATION_SCREENS.map((screen) => (
                         <option key={screen} value={screen}>
                           {screen}
                         </option>
@@ -1467,7 +1790,13 @@ function App() {
                         </option>
                       ))}
                     </optgroup>
-                    <option value="clock">clock</option>
+                    <optgroup label="Both sports">
+                      {SHARED_ROTATION_SCREENS.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                   <input
                     className="form-control"
@@ -2908,6 +3237,7 @@ function App() {
         sections={[
           { label: 'Scoreboard', state: scoreboardState, onUndo: scoreboardSave.undo },
           { label: 'My teams', state: teamsState, onUndo: teamsSave.undo },
+          { label: 'Important dates', state: datesState, onUndo: datesSave.undo },
           { label: 'Idle rotation', state: rotationState, onUndo: rotationSave.undo },
           { label: 'Football', state: footballRotationState, onUndo: footballRotationSave.undo },
           { label: 'Night mode', state: nightModeState, onUndo: nightModeSave.undo },

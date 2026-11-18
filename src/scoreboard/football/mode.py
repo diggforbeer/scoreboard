@@ -20,6 +20,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from ..important_dates import pick as pick_date
 from .api import MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
 from .idle import (
@@ -77,6 +78,7 @@ class FootballMode:
         timings: Callable[[], Timings] | None = None,
         wide: Callable[[], bool] = lambda: True,
         on_sound: Callable[[Any], None] | None = None,
+        dates: Callable[[], Sequence[Any]] = lambda: (),
     ) -> None:
         """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
         settings (read at each poll and each frame, so an admin-page change applies without a
@@ -89,6 +91,9 @@ class FootballMode:
             client_factory = FootballClient
         self._scoreboard = scoreboard
         self._on_sound = on_sound
+        #: The owner's important dates inside their window (#524), nearest first: what the shared
+        #: ``dates`` rotation screen shows between games, as hockey's does.
+        self._dates = dates
         self._football = football
         self._monotonic = monotonic
         self._client_factory = client_factory
@@ -600,6 +605,9 @@ class FootballMode:
         for entry in self._entries():
             if entry.screen == "clock":
                 clock.append((entry.screen, entry.seconds))
+            elif entry.screen == "dates":
+                if self._dates():
+                    slots.append((entry.screen, entry.seconds))
             elif entry.screen in IDLE_SCREENS:
                 view = IDLE_SCREENS[entry.screen](ctx)
                 if not view:
@@ -635,6 +643,11 @@ class FootballMode:
         from ..app import Scene
         from .idle_screens import IDLE_SCREENS
 
+        if kind == "dates":
+            views = list(self._dates())
+            if views:
+                shown = pick_date(views, self._slot_fraction, 1.0)
+                return Scene("dates", date_views=(shown,))
         cfg = self._football() if self._football else _no_football()
         favourite = cfg.favourite_team
         mine = next((g for g in games if favourite and g.involves(favourite)), None)

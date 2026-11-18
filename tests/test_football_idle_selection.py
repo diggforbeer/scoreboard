@@ -53,7 +53,16 @@ class Utc:
 
 
 def build(
-    games, *, favourite="NYG", follow=(), rotation=(), wide=True, utc=None, clock=None, **cfg
+    games,
+    *,
+    favourite="NYG",
+    follow=(),
+    rotation=(),
+    wide=True,
+    utc=None,
+    clock=None,
+    dates=(),
+    **cfg,
 ):
     clock = clock or Clock(BASE)
     config = fcfg(
@@ -69,6 +78,7 @@ def build(
         football=lambda: config,
         utc_now=utc or Utc(),
         wide=lambda: wide,
+        dates=lambda: list(dates),
     )
     mode.worker.poll_once()
     return mode, clock
@@ -299,3 +309,40 @@ def test_the_bye_screen_can_be_turned_off():
     register("fb_bye", "fb_week")
     mode, clock = build([pregame()], favourite="CHI", rotation=[("fb_week", 10)], show_bye=False)
     assert set(kinds(mode, clock, range(0, 20))) == {"fb_week"}
+
+
+# -- the shared "dates" screen (#524) -----------------------------------------------------------
+# Two 12s rows make a 24s turn, which divides BASE like the other rotation tests' do.
+
+
+def test_the_dates_screen_joins_the_football_rotation_while_a_date_is_near():
+    from scoreboard.important_dates import DateView
+
+    register("fb_preview")
+    mom = DateView("MOM", "cake", 3, 8)
+    mode, clock = build([pregame()], rotation=[("fb_preview", 12), ("dates", 12)], dates=[mom])
+    assert kinds(mode, clock, [0, 11.9, 12, 23.9, 24]) == [
+        "fb_preview", "fb_preview", "dates", "dates", "fb_preview",
+    ]  # fmt: skip
+    clock.t = BASE + 13
+    assert mode.scene().date_views == (mom,)
+
+
+def test_the_dates_screen_shares_its_seconds_between_dates_nearest_first():
+    from scoreboard.important_dates import DateView
+
+    register("fb_preview")
+    first, second = DateView("MOM", "cake", 0), DateView("ANNIV", "heart", 4)
+    mode, clock = build(
+        [pregame()], rotation=[("fb_preview", 12), ("dates", 12)], dates=[first, second]
+    )
+    clock.t = BASE + 13
+    assert mode.scene().date_views == (first,)
+    clock.t = BASE + 19
+    assert mode.scene().date_views == (second,)
+
+
+def test_the_dates_screen_drops_out_with_nothing_near():
+    register("fb_preview")
+    mode, clock = build([pregame()], rotation=[("fb_preview", 12), ("dates", 12)])
+    assert set(kinds(mode, clock, range(0, 30))) == {"fb_preview"}
