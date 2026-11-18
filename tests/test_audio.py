@@ -355,3 +355,58 @@ def test_shipped_ding_is_reproducible_and_matches_the_horn_format():
         int.from_bytes(frames[i : i + 2], "little", signed=True) for i in range(0, len(frames), 2)
     ]
     assert max(abs(s) for s in samples) < 32767
+
+
+# -- football touchdown and field-goal sounds (#517) --------------------------------------------
+
+
+def test_football_team_sound_beats_the_default_and_hockey_horns_are_apart(tmp_path):
+    touch(tmp_path / "BUF.wav")  # a hockey horn with the same abbreviation
+    touch(tmp_path / "_football_td.wav")
+    own = touch(tmp_path / "football_BUF_td.wav")
+    player = GoalHornPlayer([tmp_path])
+    assert player.football_path("buf", "td") == own
+    assert player.football_path("DAL", "td") == tmp_path / "_football_td.wav"
+    # No fg file at all: nothing to play, never the touchdown's or the horn's.
+    assert player.football_path("BUF", "fg") is None
+    assert player.path_for("BUF") == tmp_path / "BUF.wav"
+
+
+def test_football_kind_must_be_td_or_fg(tmp_path):
+    touch(tmp_path / "_football_td.wav")
+    assert GoalHornPlayer([tmp_path]).football_path("BUF", "safety") is None
+
+
+def test_play_football_launches_aplay_and_respects_the_audio_switch(tmp_path):
+    path = touch(tmp_path / "_football_fg.wav")
+    runner = RecordingRunner()
+    assert GoalHornPlayer([tmp_path], runner=runner).play_football("NYG", "fg") is True
+    assert runner.calls == [["aplay", "-q", str(path)]]
+    off = RecordingRunner()
+    assert GoalHornPlayer([tmp_path], enabled=False, runner=off).play_football("NYG", "fg") is False
+    assert off.calls == []
+
+
+def test_play_football_with_no_file_is_not_an_error(tmp_path):
+    runner = RecordingRunner()
+    assert GoalHornPlayer([tmp_path], runner=runner).play_football("NYG", "td") is False
+    assert runner.calls == []
+
+
+def test_shipped_football_sounds_are_reproducible_and_match_the_horn_format():
+    import importlib.util
+    import wave
+
+    root = Path(__file__).resolve().parents[1]
+    path = root / "scripts/make_football_sounds.py"
+    spec = importlib.util.spec_from_file_location("make_football_sounds", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with wave.open(str(root / "assets/horns/_default.wav")) as horn:
+        horn_format = horn.getparams()[:3]
+    for name, notes in module.SOUNDS.items():
+        with wave.open(str(root / "assets" / "horns" / name)) as sound:
+            assert sound.getparams()[:3] == horn_format
+            frames = sound.readframes(sound.getnframes())
+        assert frames == module.generate(notes)

@@ -152,6 +152,22 @@ interface HornEntry {
   filename: string
 }
 
+// The admin page's name for a horn slot: football sounds are "fb_td" / "fb_fg" (the defaults) or
+// "fb_td:BUF" / "fb_fg:BUF" (admin_server.py's _football_key).
+function hornLabel(team: string, available: TeamsAvailable): string {
+  if (team === 'default') return 'Default horn'
+  if (team === 'wah_wah') return 'Wah-wah (opponent scores)'
+  if (team === 'ding') return 'Ding (followed team scores)'
+  if (team.startsWith('fb_')) {
+    const [head, abbrev] = team.split(':')
+    const kind = head === 'fb_td' ? 'touchdown' : 'field goal'
+    if (!abbrev) return `Default ${kind} (football)`
+    const name = available.football.find((t) => t.abbrev === abbrev)?.name ?? abbrev
+    return `${name} (${abbrev}) ${kind}`
+  }
+  return `${teamName(team)} (${team})`
+}
+
 interface ScoreboardConfig {
   timezone: string
   rotate_seconds: number
@@ -2577,10 +2593,12 @@ function App() {
 
       <div className="card mb-4">
         <div className="card-body">
-          <h2 className="card-title h5">Custom goal horns</h2>
+          <h2 className="card-title h5">Custom goal horns and football sounds</h2>
           <p className="text-body-secondary small">
-            Upload a WAV (max 2 MB) to replace the default horn, or to give one team its own. A
-            team's own horn always wins over the default.
+            Upload a WAV or MP3 (max 2 MB) to replace the default horn, or to give one team its
+            own. A team's own horn always wins over the default. Football has its own touchdown
+            and field-goal sounds, kept apart from the hockey horns; only your top football
+            team's touchdowns and field goals play one.
           </p>
 
           {hornList.length > 0 ? (
@@ -2592,13 +2610,7 @@ function App() {
                 >
                   <div>
                     <strong>
-                      {horn.team === 'default'
-                        ? 'Default horn'
-                        : horn.team === 'wah_wah'
-                          ? 'Wah-wah (opponent scores)'
-                          : horn.team === 'ding'
-                            ? 'Ding (followed team scores)'
-                            : `${teamName(horn.team)} (${horn.team})`}
+                      {hornLabel(horn.team, teamsAvailable)}
                     </strong>
                     <span className="text-body-secondary small ms-2">{horn.filename}</span>
                     {hornActionMessage?.team === horn.team && (
@@ -2658,11 +2670,29 @@ function App() {
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
                 <option value="ding">Ding (followed team scores)</option>
-                {HOCKEY_TEAMS.map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name} ({code})
-                  </option>
-                ))}
+                <optgroup label="Hockey goal horns">
+                  {HOCKEY_TEAMS.map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name} ({code})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Football touchdown sounds">
+                  <option value="fb_td">Default touchdown (all teams)</option>
+                  {teamsAvailable.football.map((t) => (
+                    <option key={t.abbrev} value={`fb_td:${t.abbrev}`}>
+                      {t.name} ({t.abbrev})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Football field-goal sounds">
+                  <option value="fb_fg">Default field goal (all teams)</option>
+                  {teamsAvailable.football.map((t) => (
+                    <option key={t.abbrev} value={`fb_fg:${t.abbrev}`}>
+                      {t.name} ({t.abbrev})
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div className="col-md-5">

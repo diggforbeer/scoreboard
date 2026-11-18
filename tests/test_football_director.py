@@ -255,3 +255,30 @@ def test_a_game_that_leaves_the_slate_is_forgotten():
 def test_timings_are_held_to_sane_ranges():
     t = Timings(score=1.0, reversal=100.0, play=0.0).clamped()
     assert (t.score, t.reversal, t.play) == (4.0, 15.0, 1.0)
+
+
+# -- sounds (#517) --------------------------------------------------------------------------------
+
+
+def test_the_favourites_touchdown_calls_the_sound_hook_once_when_detected():
+    heard = []
+    rig = started(make_play(1, "rush", off="WSH"))
+    rig.director._on_sound = heard.append
+    rig.poll(make_play(1, "rush", off="WSH"), td(2))
+    rig.director.current(1)  # the play is applied: the sound is not held for the celebration
+    assert [(type(e).__name__, e.team) for e in heard] == [("Touchdown", "NYG")]
+    rig.run()
+    assert len(heard) == 1
+
+
+def test_an_opponents_or_ordinary_play_calls_no_sound_hook():
+    heard = []
+    rig = started(make_play(1, "rush", off="WSH"))
+    rig.director._on_sound = heard.append
+    rig.poll(
+        make_play(1, "rush", off="WSH"),
+        make_play(2, "pass_complete", off="WSH"),
+        make_play(3, "rush_td_pat", score=(7, 0), off="WSH"),
+    )
+    rig.run()
+    assert heard == []

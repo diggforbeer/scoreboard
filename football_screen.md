@@ -1413,6 +1413,16 @@ added later.
 - **Not verified on hardware** (the same caveat as the hockey audio): USB audio and
   its timing against the panel.
 
+**Built (#517).** Files are flat, not in a subfolder, so uploads, the bundle and the image need
+no new directory: `football_{ABBR}_td.wav` / `football_{ABBR}_fg.wav` and the defaults
+`_football_td.wav` / `_football_fg.wav` (`scripts/make_football_sounds.py`, committed in
+`assets/horns/`, installed by the image layer). `Director._build_all` calls its `on_sound` hook for
+each event with `sound` set, the moment the play is applied (after the broadcast delay, whatever is
+on screen); the app's `_on_football_sound` honours the button mute and calls
+`GoalHornPlayer.play_football(team, kind)`. The Audio tab's upload list has football optgroups; the
+admin keys are `fb_td`, `fb_fg`, `fb_td:BUF`, `fb_fg:BUF`. The lead football team only (the flag
+follows `horn_team`); the followed-team question above is still deferred.
+
 ## Timing (proposed, tune on hardware)
 
 | Screen | Trigger | Length |
@@ -1559,8 +1569,8 @@ added later.
 - [x] `fb_score_detail` (scorer, passer, PAT, new score) with the play-text parser (#391)
 - [x] `fb_fg_miss` (#393)
 - [x] `fb_turnover`, plus the on-downs and generic `fb_score` fallbacks (#394, #395)
-- [ ] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
-      support, admin Audio tab slots and uploads, shipped defaults (see "Sounds")
+- [x] Per-team touchdown and field-goal sounds: lookup, playback, mute-button
+      support, admin Audio tab slots and uploads, shipped defaults (see "Sounds") (#517)
 - [x] Reversal detector (remembers celebrated plays, compares each poll, logs every match) (#357)
 - [x] `fb_reversal` screen (#396)
 - [x] Live sport switch: tear down the old sport's state and baseline the new one cleanly

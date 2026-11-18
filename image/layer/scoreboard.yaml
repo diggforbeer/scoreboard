@@ -198,8 +198,10 @@ mmdebstrap:
     - |-
       set -eu
       install -d -m 0755 "$1/usr/share/scoreboard/horns"
-      install -m 0644 "$IGconf_sb_srcdir/assets/horns/_default.wav" \
-        "$1/usr/share/scoreboard/horns/"
+      # Every shipped sound (_default, plus the football touchdown/field-goal pair, #517).
+      for wav in "$IGconf_sb_srcdir"/assets/horns/_*.wav; do
+        install -m 0644 "$wav" "$1/usr/share/scoreboard/horns/"
+      done
 
     # ---- HUB75 driver ------------------------------------------------
     - |-

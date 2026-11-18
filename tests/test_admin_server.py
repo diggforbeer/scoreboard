@@ -2641,3 +2641,25 @@ def test_the_same_abbreviation_in_both_sports_is_two_valid_teams(app_dir, config
         ("hockey", "BUF"),
         ("football", "BUF"),
     ]
+
+
+def test_upload_football_sounds_are_stored_apart_from_the_hockey_horn(
+    app_dir, config_path, upload_dir
+):
+    assert _upload("fb_td", _wav_b64())["name"] == "_football_td.wav"
+    assert _upload("fb_fg:BUF", _wav_b64())["name"] == "football_BUF_fg.wav"
+    assert not (upload_dir / "BUF.wav").exists()
+    listed = admin_server._list_uploaded_horns()
+    assert {"team": "fb_td", "filename": "_football_td.wav"} in listed
+    assert {"team": "fb_fg:BUF", "filename": "football_BUF_fg.wav"} in listed
+    from scoreboard.audio import GoalHornPlayer
+
+    player = GoalHornPlayer.default()
+    assert player.football_path("DAL", "td") == upload_dir / "_football_td.wav"
+    assert player.football_path("BUF", "fg") == upload_dir / "football_BUF_fg.wav"
+
+
+@pytest.mark.parametrize("team", ["fb_td:ZZZ", "fb_xx", "fb_td:../x", "fb_"])
+def test_upload_football_sound_rejects_unknown_keys(app_dir, config_path, upload_dir, team):
+    reply = _upload(team, _wav_b64())
+    assert reply["type"] == "error"
