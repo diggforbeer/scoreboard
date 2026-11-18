@@ -569,8 +569,9 @@ class Renderer:
     #: Tiny-face baselines of the intermission table's rows, and of its rows under a header line.
     _INTERMISSION_BASELINES = (6, 12, 18, 24, 30)
     _INTERMISSION_HEADED_BASELINES = (12, 18, 24, 30)
-    _INTERMISSION_TRAILING = (70, 70, 70)
     _INTERMISSION_LABEL = (150, 150, 150)
+    #: The side behind on a row shows its number in the label's grey: dimmer was unreadable.
+    _INTERMISSION_TRAILING = _INTERMISSION_LABEL
 
     def draw_intermission(self, canvas: Any, game: Game, stats: GameStats, tick: int = 0) -> None:
         """The favourite's game stats in place of an empty game scene during an intermission.
