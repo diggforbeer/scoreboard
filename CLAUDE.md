@@ -1144,7 +1144,7 @@ audio hardware (#4).
 - **Horn uploads (#193)**: the admin page's Audio tab uploads a WAV for
   `default` (`_default.wav`) or one `TEAM_COLORS` abbreviation, over the
   existing WebSocket as base64 (`upload_horn`; `max_size` raised to fit the
-  2 MB `HORN_MAX_BYTES` cap) rather than a new HTTP POST path -- the file
+  8 MB `HORN_MAX_BYTES` cap) rather than a new HTTP POST path -- the file
   name is never client-supplied, only a validated team key. Files land in
   `/var/lib/scoreboard/horns` (`audio.upload_directory()`, persistent
   across reflash/update, unlike `/usr/share`), which `default_directories()`
@@ -1173,7 +1173,7 @@ audio hardware (#4).
   ffmpeg's `loudnorm`: that targets integrated LUFS, a different measure
   from the horn's RMS, and is unreliable on clips this short. `mpg123` stays
   for playback of old `.mp3` uploads and the fallback. Over `MAX_SECONDS`
-  (10) is rejected, not trimmed; a near-silent file is stored unchanged (a
+  (30) is rejected, not trimmed; a near-silent file is stored unchanged (a
   non-WAV as its decoded WAV) with a note. `_save_horn` runs in
   `asyncio.to_thread` and replies `note`/`gain_db`, shown by the upload
   message. Existing uploads are left alone (re-upload to normalise; no

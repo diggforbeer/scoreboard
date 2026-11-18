@@ -389,9 +389,9 @@ DEMO_SETTER: Callable[[bool], None] | None = None
 #: The Cache tab's two hooks (see ``cache_view``): what is cached, and clearing a scope of it.
 CACHE_ITEMS: Callable[[], list[dict[str, Any]]] | None = None
 CACHE_CLEARER: Callable[[str], bool] | None = None
-#: A goal horn is a few seconds long; 2 MB is generous for that and still
-#: protects the SD card from an accidental multi-minute file (#193).
-HORN_MAX_BYTES = 2 * 1024 * 1024
+#: A goal horn can run to 30 seconds (``audio_normalize.MAX_SECONDS``): 8 MB holds that even as a
+#: WAV, and still protects the SD card from an accidental multi-minute file (#193).
+HORN_MAX_BYTES = 8 * 1024 * 1024
 #: Uploads ride the WebSocket as base64 (~4/3 the raw size) plus a little
 #: JSON framing, so the library's default 1 MiB frame cap has to be raised
 #: to fit a HORN_MAX_BYTES file. Applies to every message on the socket;

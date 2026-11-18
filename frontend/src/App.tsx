@@ -75,7 +75,7 @@ function ageLabel(seconds: number | null): string {
 
 const ROTATION_MAX_ROWS = 20
 // Mirrors admin_server.py's HORN_MAX_BYTES; the server re-checks.
-const HORN_MAX_BYTES = 2 * 1024 * 1024
+const HORN_MAX_BYTES = 8 * 1024 * 1024
 
 // Abbreviations match display/teams.py's TEAM_COLORS keys exactly -- the
 // only place this project otherwise enumerates every team. Full names are
@@ -1199,7 +1199,7 @@ function App() {
     if (!hornUploadFile) return
     setHornUploadMessage(null)
     if (hornUploadFile.size > HORN_MAX_BYTES) {
-      setHornUploadMessage({ text: 'File is too large (max 2 MB).', ok: false })
+      setHornUploadMessage({ text: 'File is too large (max 8 MB).', ok: false })
       return
     }
     if (socketRef.current?.readyState !== WebSocket.OPEN) {
@@ -2595,7 +2595,7 @@ function App() {
         <div className="card-body">
           <h2 className="card-title h5">Custom goal horns and football sounds</h2>
           <p className="text-body-secondary small">
-            Upload a WAV or MP3 (max 2 MB) to replace the default horn, or to give one team its
+            Upload a WAV or MP3 (up to 30 seconds, max 8 MB) to replace the default horn, or to give one team its
             own. A team's own horn always wins over the default. Football has its own touchdown
             and field-goal sounds, kept apart from the hockey horns; only your top football
             team's touchdowns and field goals play one.

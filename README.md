@@ -352,7 +352,7 @@ and say `sudo apt-get install -y ffmpeg` for anything else), scaled to the same 
 as the default horn (about -6.3 dBFS) with the peak held under -1 dBFS, and
 stored as a mono WAV, so sounds from different files play at a similar
 volume. The upload message says what was applied ("normalized, +6.0 dB"). A
-clip longer than 10 seconds is rejected, and a silent file is stored
+clip longer than 30 seconds is rejected, and a silent file is stored
 unchanged. Without ffmpeg, MP3s need `mpg123` for the decode. Uploads made
 before this stay as they were; upload them again to normalize them.
 

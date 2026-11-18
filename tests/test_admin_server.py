@@ -1548,7 +1548,7 @@ def test_upload_horn_ffmpeg_timeout_is_a_readable_error(
 def test_upload_horn_ffmpeg_over_long_clip_is_rejected(
     app_dir, config_path, upload_dir, monkeypatch
 ):
-    _fake_ffmpeg(monkeypatch, wav_b64=_tone_b64(3000, seconds=11))
+    _fake_ffmpeg(monkeypatch, wav_b64=_tone_b64(3000, seconds=31))
     assert "too long" in _upload("NSH", _mp3_b64())["message"]
 
 
@@ -1626,9 +1626,14 @@ def test_upload_horn_silent_file_is_stored_unchanged(app_dir, config_path, uploa
 
 
 def test_upload_horn_rejects_over_long_clip(app_dir, config_path, upload_dir):
-    reply = _upload("NSH", _tone_b64(3000, seconds=11))
+    reply = _upload("NSH", _tone_b64(3000, seconds=31))
     assert reply["type"] == "error" and "too long" in reply["message"]
     assert not upload_dir.exists()
+
+
+def test_upload_horn_accepts_a_clip_up_to_30_seconds(app_dir, config_path, upload_dir):
+    reply = _upload("NSH", _tone_b64(3000, seconds=29))
+    assert reply["type"] == "horn_uploaded"
 
 
 def test_upload_horn_rejects_a_corrupt_mp3(app_dir, config_path, upload_dir, monkeypatch):
