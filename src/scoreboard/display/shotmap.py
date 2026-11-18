@@ -34,6 +34,9 @@ LIGHT_AT = 0.04
 FULL_AT = 1.8
 MIN_PANEL_WIDTH = RINK_W + 2 * 24  # room for a label at each edge
 
+#: The rink's corners are rounded where the end boards meet the sides (28 ft in the real rink).
+CORNER = round(28 * SCALE)
+
 OUTLINE = (38, 38, 52)
 CENTRE_LINE = (90, 24, 24)
 GOAL_LINE = (70, 20, 20)
@@ -45,6 +48,16 @@ GOAL_DOT = (255, 255, 255)
 def fits(width: int) -> bool:
     """Whether a panel is wide enough for the shot map page."""
     return width >= MIN_PANEL_WIDTH
+
+
+def in_rink(px: int, py: int, width: int = RINK_W, height: int = RINK_H) -> bool:
+    """Whether the pixel (``px``, ``py`` from the rink's top-left corner) is on the ice: inside the
+    rectangle and, in each corner, inside the quarter circle that rounds it."""
+    if not (0 <= px < width and 0 <= py < height):
+        return False
+    cx = CORNER if px < CORNER else width - 1 - CORNER if px > width - 1 - CORNER else px
+    cy = CORNER if py < CORNER else height - 1 - CORNER if py > height - 1 - CORNER else py
+    return (px - cx) ** 2 + (py - cy) ** 2 <= (CORNER + 0.5) ** 2
 
 
 def heat_grid(points: list[tuple[float, float]], width: int = RINK_W, height: int = RINK_H):
@@ -85,14 +98,14 @@ def draw_shot_map(r: Renderer, canvas: Any, game: Game, shots: ShotMap) -> None:
         for py, row in enumerate(grid):
             for px, strength in enumerate(row):
                 colour = shade(strength, colours[side], peak)
-                if colour is not None:
+                if colour is not None and in_rink(px, py):
                     canvas.SetPixel(x0 + px, py, *colour)
     for s in shots.shots:
         if s.goal:
-            px = x0 + round((s.x + RINK_HALF_LENGTH) * SCALE)
+            px = round((s.x + RINK_HALF_LENGTH) * SCALE)
             py = round((s.y + RINK_HALF_WIDTH) * SCALE)
-            if 0 <= px < r.width and 0 <= py < RINK_H:
-                canvas.SetPixel(px, py, *GOAL_DOT)
+            if in_rink(px, py):
+                canvas.SetPixel(x0 + px, py, *GOAL_DOT)
     font = r.fonts.tiny
     for side, abbrev, edge in (("away", game.away.abbrev, 1), ("home", game.home.abbrev, None)):
         count = str(len(shots.of(side)))
@@ -105,18 +118,29 @@ def draw_shot_map(r: Renderer, canvas: Any, game: Game, shots: ShotMap) -> None:
 
 
 def _rink(canvas: Any, x0: int) -> None:
-    """The rink's outline, centre, blue and goal lines, dim so the glow reads over them."""
-    for x in range(x0, x0 + RINK_W):
-        canvas.SetPixel(x, 0, *OUTLINE)
-        canvas.SetPixel(x, RINK_H - 1, *OUTLINE)
-    for y in range(RINK_H):
-        canvas.SetPixel(x0, y, *OUTLINE)
-        canvas.SetPixel(x0 + RINK_W - 1, y, *OUTLINE)
-        for feet, colour in (
-            (0, CENTRE_LINE),
-            (-25, BLUE_LINE),
-            (25, BLUE_LINE),
-            (-89, GOAL_LINE),
-            (89, GOAL_LINE),
-        ):
-            canvas.SetPixel(x0 + round((feet + RINK_HALF_LENGTH) * SCALE), y, *colour)
+    """The rink's outline (rounded at the corners), centre, blue and goal lines, dim so the glow
+    reads over them. The lines stop at the outline."""
+    for py in range(RINK_H):
+        for px in range(RINK_W):
+            if not in_rink(px, py):
+                continue
+            edge = not all(
+                in_rink(px + dx, py + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            )
+            colour = OUTLINE if edge else _line_colour(px)
+            if colour is not None:
+                canvas.SetPixel(x0 + px, py, *colour)
+
+
+def _line_colour(px: int) -> tuple[int, int, int] | None:
+    """The colour of the rink's marking at column ``px``, or ``None`` for plain ice."""
+    for feet, colour in (
+        (0, CENTRE_LINE),
+        (-25, BLUE_LINE),
+        (25, BLUE_LINE),
+        (-89, GOAL_LINE),
+        (89, GOAL_LINE),
+    ):
+        if px == round((feet + RINK_HALF_LENGTH) * SCALE):
+            return colour
+    return None

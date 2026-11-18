@@ -2824,3 +2824,30 @@ def test_heat_grows_where_shots_pile_up_and_a_lone_shot_still_shows():
     assert shade(one[16][round((60 + 100) * 0.375)], (0, 200, 0), FULL_AT) is not None
     assert shade(0.0, (0, 200, 0), FULL_AT) is None
     assert shade(FULL_AT, (0, 200, 0), FULL_AT)[0] > 0, "the hottest spot is pushed towards white"
+
+
+def test_the_rinks_corners_are_rounded_and_the_ice_is_clipped_to_them():
+    from scoreboard.display.shotmap import CORNER, RINK_H, RINK_W, in_rink
+
+    assert not in_rink(0, 0) and not in_rink(RINK_W - 1, 0)
+    assert not in_rink(0, RINK_H - 1) and not in_rink(RINK_W - 1, RINK_H - 1)
+    assert in_rink(CORNER, 0) and in_rink(0, CORNER), "the straight runs start past the curve"
+    assert in_rink(RINK_W // 2, RINK_H // 2) and not in_rink(-1, 5) and not in_rink(5, RINK_H)
+    # the curve is symmetric about both axes
+    for px in range(CORNER):
+        for py in range(CORNER):
+            same = {
+                in_rink(px, py),
+                in_rink(RINK_W - 1 - px, py),
+                in_rink(px, RINK_H - 1 - py),
+                in_rink(RINK_W - 1 - px, RINK_H - 1 - py),
+            }
+            assert len(same) == 1
+
+
+def test_the_shot_map_draws_nothing_in_the_rounded_off_corners(games):
+    game = games["live"]
+    c = draw_map_page(game)
+    x0 = (W - 75) // 2
+    for cx, cy in ((x0, 0), (x0 + 74, 0), (x0, H - 2), (x0 + 74, H - 2)):
+        assert not c.lit(cx, cy, cx, cy), f"a pixel was drawn in the cut corner at {cx},{cy}"
