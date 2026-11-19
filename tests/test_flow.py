@@ -2584,3 +2584,61 @@ def test_the_dates_scene_is_stable_so_the_live_view_does_not_resnapshot_it(day):
     first = app._rotation_screen_scene("dates", None, None)
     clock.advance(seconds=1)
     assert app._rotation_screen_scene("dates", None, None) == first
+
+
+# -- the Zamboni page's clock (#526) --------------------------------------------------------------
+
+
+def _ice_scene(app):
+    app.refresh_intermission_stats()
+    scene = app.select_scene()
+    assert scene.kind == "intermission"
+    return scene
+
+
+def test_the_break_is_timed_from_when_it_was_first_seen_when_the_feed_gives_no_countdown(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client, period=2)
+    tick(app, clock, hours=6)
+    first = _ice_scene(app)
+    assert first.ice_elapsed == 0 and first.ice_total == 17 * 60
+    clock.advance(seconds=300)
+    tick(app, clock, hours=0)
+    later = _ice_scene(app)
+    assert later.ice_elapsed == 300
+
+
+def test_the_feeds_countdown_is_used_and_a_longer_break_stretches_the_length(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client, period=2, clock_seconds=1100, feed_intermission=True)
+    tick(app, clock, hours=6)
+    scene = _ice_scene(app)
+    assert scene.ice_total == 1100 and scene.ice_elapsed == 0, "scaled to the feed"
+
+
+def test_a_board_that_joins_mid_break_starts_part_way_through(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client, period=1, clock_seconds=400, feed_intermission=True)
+    tick(app, clock, hours=6)
+    scene = _ice_scene(app)
+    assert scene.ice_total == 17 * 60 and scene.ice_elapsed == 17 * 60 - 400
+
+
+def test_the_playoffs_break_is_eighteen_minutes(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client, period=1, game_type=3)
+    tick(app, clock, hours=6)
+    assert _ice_scene(app).ice_total == 18 * 60
+
+
+def test_there_is_no_zamboni_before_overtime(day):
+    app, clock, client = day
+    set_follow(app.settings, ["SEA"])
+    _in_intermission(client, period=3)
+    tick(app, clock, hours=6)
+    scene = _ice_scene(app)
+    assert scene.ice_elapsed is None

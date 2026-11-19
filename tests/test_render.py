@@ -2977,3 +2977,86 @@ def test_a_label_that_is_too_wide_for_a_single_panel_is_cut_not_drawn_off_it():
     assert not c.out_of_bounds
     box = c.bbox(0, 0, 63, 13)
     assert box is not None and box.x1 <= 63
+
+
+# -- the Zamboni page of the intermission screen (#526) -------------------------------------------
+
+
+def draw_ice(game, elapsed, total=1020.0, logos=None, stats=None, tick=0):
+    c = canvas()
+    make_renderer(logos=logos).draw_intermission(c, game, stats, tick, None, (elapsed, total))
+    return c
+
+
+@pytest.mark.parametrize("name,elapsed", [("start", 20), ("half", 435), ("done", 900)])
+def test_intermission_zamboni(games, synthetic_logos, name, elapsed, update_snapshots):
+    c = draw_ice(games["live"], elapsed)
+    art = show(f"intermission zamboni, {name}", c)
+    assert not c.out_of_bounds, f"drew outside the panel at {c.out_of_bounds[:5]}"
+    check_snapshot(f"intermission_zamboni_{name}", art, update_snapshots)
+
+
+def test_the_ice_turns_from_scratched_to_clean_as_the_machines_pass(games):
+    from scoreboard.display import zamboni
+
+    def clean_share(elapsed):
+        c = draw_ice(games["live"], elapsed)
+        lit = c.lit(1, 1, zamboni.RINK_W - 2, H - 2)
+        light = [rgb for rgb in lit.values() if rgb[0] > 175]
+        return len(light) / len(lit)
+
+    start, half, done = clean_share(0), clean_share(435), clean_share(900)
+    assert start < 0.05 < half < 0.95 < done + 0.05
+    assert done > 0.95, "by the end the whole sheet is clean"
+
+
+def test_the_machines_start_in_opposite_corners_in_the_team_colours_and_leave_at_the_end(games):
+    from scoreboard.display import zamboni
+
+    game = games["live"]
+    away, home = team_color(game.away.abbrev), team_color(game.home.abbrev)
+    c = draw_ice(game, 200)
+    assert away in c.colors(0, 0, 47, H - 1) and home in c.colors(48, 0, 95, H - 1)
+    assert away not in c.colors(48, 0, 95, H - 1)
+    # Half a turn apart: one machine is where the other's mirror image is.
+    assert zamboni.path(1)[0] == (95 - 2, 31 - 2)
+    gone = draw_ice(game, zamboni.clean_seconds(1020.0) + zamboni.EXIT_SECONDS + 1)
+    assert away not in gone.colors(0, 0, 95, H - 1) and home not in gone.colors(0, 0, 95, H - 1)
+
+
+def test_the_two_spirals_leave_no_pixel_of_the_rink_uncleaned():
+    from scoreboard.display import zamboni
+
+    cover = zamboni._coverage()
+    for y in range(1, zamboni.RINK_H - 1):
+        for x in range(1, zamboni.RINK_W - 1):
+            if zamboni._inside(x, y, 1):
+                assert (x, y) in cover[0] or (x, y) in cover[1], (x, y)
+
+
+def test_the_countdown_reads_the_time_left_and_ready_shows_once_the_ice_is_done(games):
+    from scoreboard.display import zamboni
+
+    assert zamboni.countdown_text(1020) == "17:00" and zamboni.countdown_text(0) == "00:00"
+    assert zamboni.countdown_text(59.2) == "01:00"
+    assert 0 < zamboni.clean_seconds(1020.0) < 1020 - 100, "finishes early, by design"
+    assert zamboni.clean_seconds(1080.0) > zamboni.clean_seconds(1020.0), "scales with the break"
+    assert zamboni.progress(0, 1020.0) == 0 and zamboni.progress(1020, 1020.0) == 1
+
+
+def test_the_zamboni_is_the_last_page_after_the_stats_and_the_map(games, synthetic_logos):
+    game = games["live"]
+    pages = 2 + 1  # two stats tables with logos, then the ice
+    stats_page = draw_ice(game, 435, logos=synthetic_logos, stats=int_stats(), tick=0)
+    ice_page = draw_ice(game, 435, logos=synthetic_logos, stats=int_stats(), tick=pages - 1)
+    assert not stats_page.out_of_bounds and not ice_page.out_of_bounds
+    assert (196, 218, 236) in ice_page.colors(0, 0, 95, H - 1), "the clean ice is on this page"
+    assert stats_page.lit() != ice_page.lit()
+
+
+def test_a_single_panel_has_no_zamboni_page(games):
+    c = canvas()
+    r = make_renderer()
+    r.width = 64
+    r.draw_intermission(c, games["live"], None, 0, None, (100.0, 1020.0))
+    assert not c.lit(), "nothing to draw: the rink needs 128px"

@@ -582,6 +582,7 @@ class Renderer:
         stats: GameStats | None,
         tick: int = 0,
         shots: ShotMap | None = None,
+        ice: tuple[float, float] | None = None,
     ) -> None:
         """The favourite's game stats in place of an empty game scene during an intermission.
 
@@ -592,9 +593,10 @@ class Renderer:
         two abbreviations head the table and four rows fit a page. The last page is the shot map
         (``display.shotmap``) when there are shots and the panel is wide enough for the rink. The
         pages take turns by ``tick`` (a clock count, one per page-length) and a row of dots at the
-        bottom says which.
+        bottom says which. ``ice`` (elapsed, total seconds of the break) adds the Zamboni page
+        (``display.zamboni``, #526) after them on a panel wide enough for it.
         """
-        from . import shotmap
+        from . import shotmap, zamboni
 
         canvas.Clear()
         logos = None
@@ -611,7 +613,8 @@ class Renderer:
         flat = [line for page in stats.pages for line in page] if stats is not None else []
         tables = [flat[i : i + size] for i in range(0, len(flat), size)]
         has_map = shots is not None and shotmap.fits(self.width)
-        total = len(tables) + (1 if has_map else 0)
+        has_ice = ice is not None and zamboni.fits(self.width)
+        total = len(tables) + (1 if has_map else 0) + (1 if has_ice else 0)
         if total == 0:
             return
         page = tick % total
@@ -619,8 +622,10 @@ class Renderer:
             if logos is not None:
                 self._draw_logos(canvas, *logos)
             self._draw_intermission_table(canvas, game, tables[page], left, right, headed)
-        else:
+        elif has_map and page == len(tables):
             shotmap.draw_shot_map(self, canvas, game, shots)
+        else:
+            zamboni.draw(self, canvas, game, *ice)
         if total > 1:
             x0 = self.width // 2 - (total * 4 - 2) // 2
             for i in range(total):
