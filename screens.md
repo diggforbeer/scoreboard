@@ -193,6 +193,25 @@ long as the intermission lasts, two dots at the bottom saying which page.
 
 ![Intermission stats, text layout](docs/screens/intermission_stats_text.png)
 
+- **Page 4, the Zamboni** (128px only, periods 1 and 2 only): a top-down rink that starts as scratched,
+  dull ice while two machines resurface it, with the break's countdown at the right. The two
+  machines split the rink along its length at the centre line, one working the top half (the away
+  team's colour) and one the bottom (the home team's), each in the same inward spiral: east along its
+  outer board, down the far end, back along the middle, up the near end, then an inner lap and a last
+  pass through the middle, in 3px swaths. What they have passed turns to clean, light ice with a brief
+  wet shine behind them. The rink is a rounded rectangle, with faint markings (centre line, blue
+  lines, goal lines and face-off circles) showing through. The time-lapse is stretched over the whole
+  break and finishes about 2.5 minutes before it ends: the machines drive off and `READY` shows over
+  the clean ice until the countdown reaches zero. The countdown is the feed's own when it gives one
+  (the break is 17 minutes, 18 in the playoffs, longer if the feed says so), else timed from when the
+  board first saw the break, so it can be a little off, like puck drop. No page is shown for the
+  break before overtime.
+
+![Zamboni, just starting](docs/screens/intermission_zamboni_start.png)
+![Zamboni, a quarter done](docs/screens/intermission_zamboni_quarter.png)
+![Zamboni, half done](docs/screens/intermission_zamboni_half.png)
+![Zamboni, clean ice and READY](docs/screens/intermission_zamboni_done.png)
+
 ### Shootout
 
 | | |

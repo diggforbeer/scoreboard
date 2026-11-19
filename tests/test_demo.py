@@ -147,7 +147,8 @@ def test_every_step_renders_on_panel(width):
         elif scene.kind == "three_stars":
             r.draw_three_stars(c, scene.game, scene.stars)
         elif scene.kind == "intermission":
-            r.draw_intermission(c, scene.game, scene.stats, scene.stats_page, scene.shots)
+            ice = None if scene.ice_elapsed is None else (scene.ice_elapsed, scene.ice_total)
+            r.draw_intermission(c, scene.game, scene.stats, scene.stats_page, scene.shots, ice)
         elif scene.kind == "ap_setup":
             r.draw_ap_setup(c, scene.ap_ssid, scene.ap_password, scene.ap_qr_matrix)
         elif scene.kind == "wifi_join":
