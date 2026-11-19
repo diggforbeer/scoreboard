@@ -3010,18 +3010,37 @@ def test_the_ice_turns_from_scratched_to_clean_as_the_machines_pass(games):
     assert done > 0.95, "by the end the whole sheet is clean"
 
 
-def test_the_machines_start_in_opposite_corners_in_the_team_colours_and_leave_at_the_end(games):
+def test_one_machine_works_each_half_in_the_team_colours_and_both_leave_at_the_end(games):
     from scoreboard.display import zamboni
 
     game = games["live"]
     away, home = team_color(game.away.abbrev), team_color(game.home.abbrev)
     c = draw_ice(game, 200)
-    assert away in c.colors(0, 0, 47, H - 1) and home in c.colors(48, 0, 95, H - 1)
-    assert away not in c.colors(48, 0, 95, H - 1)
-    # Half a turn apart: one machine is where the other's mirror image is.
-    assert zamboni.path(1)[0] == (95 - 2, 31 - 2)
+    assert away in c.colors(0, 0, 95, 15) and home in c.colors(0, 16, 95, H - 1)
+    assert away not in c.colors(0, 19, 95, H - 1), "the away machine stays in the top half"
+    assert home not in c.colors(0, 0, 95, 12), "the home machine stays in the bottom half"
+    for machine, top in ((0, 2), (1, 17)):
+        route = zamboni.path(machine)
+        assert route[0][1] == top and route[1][0] == route[0][0] + 1, "starts heading east"
+        assert all(0 <= y - 15 * machine < 16 for _, y in route), "stays in its half"
     gone = draw_ice(game, zamboni.clean_seconds(1020.0) + zamboni.EXIT_SECONDS + 1)
     assert away not in gone.colors(0, 0, 95, H - 1) and home not in gone.colors(0, 0, 95, H - 1)
+
+
+def test_the_route_is_the_drawn_pattern_and_the_machines_stay_on_the_ice():
+    from itertools import groupby
+
+    from scoreboard.display import zamboni
+
+    for machine in (0, 1):
+        route = zamboni.path(machine)
+        base = 15 * machine
+        # The long runs along the rink, in order: the outer board, the middle, then the inner
+        # lap's two passes and the last one through the middle (the owner's drawing, #526).
+        runs = [(y, len(list(g))) for y, g in groupby(y for _, y in route)]
+        long_rows = [y - base for y, n in runs if n > 20]
+        assert long_rows == [2, 14, 5, 11, 8]
+        assert all(zamboni._inside(x, y, 2) for x, y in route), "centre never on the boards"
 
 
 def test_the_two_spirals_leave_no_pixel_of_the_rink_uncleaned():

@@ -467,8 +467,10 @@ or on hardware (#4).
 
 **The Zamboni page (#526, `display/zamboni.py`)** is the last page of the same intermission screen
 (after the stats tables and the shot map), 128px only, periods 1 and 2 only (the break before OT is
-short). A top-down rink: scratched ice, two machines (one per half, a half-turn apart, spiralling in
-from the end boards in 3px swaths, drawn in the two teams' colours) turning it clean, the countdown at
+short). A top-down rink: scratched ice on a rounded-rectangle rink (elliptical corners, faint lines and face-off circles), two
+machines (the away team's on the top half, the home team's on the bottom, each the owner's drawn
+inward spiral in 3px swaths: outer board east, far end down, middle west, near end up, inner lap, a
+last middle pass; legs are pulled in at the rounded corners) turning it clean, the countdown at
 the right. A pure function of (elapsed, total) seconds; `Scene.ice_elapsed/ice_total` carry it in whole
 seconds, so the live view re-snapshots once a second while that page is up. `_intermission_ice` times
 it: the feed's `clock.secondsRemaining` while `inIntermission` (`Game.intermission_left`), the length

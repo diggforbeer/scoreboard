@@ -1,9 +1,11 @@
 """The Zamboni page of the intermission screen (#526): a top-down rink resurfaced during the break.
 
-The ice starts scratched and dull; two machines, one per half of the rink, each start at the end
-boards and spiral inward in 3px swaths (rotationally mirrored, so they start in opposite corners),
-and everything they have passed turns to clean, light ice with a brief wet shine behind them. The
-machines are drawn in the two teams' colours. The countdown is at the right.
+The ice starts scratched and dull. Two machines split the rink along its length at the centre
+line, one working the top half and one the bottom, each in the same inward spiral (the pattern the
+owner drew in #526): along the top boards, down the far end, back along the middle, up the near end,
+then the inner lap, in 3px swaths. Everything they have passed turns to clean, light ice with a
+brief wet shine behind them. The machines are drawn in the two teams' colours; the rink is a
+rounded rectangle with faint markings (lines and face-off circles); the countdown is at the right.
 
 Real arenas run two machines for about six minutes a break; here it is a time-lapse stretched over
 the whole break, finishing ``EARLY_FINISH_SECONDS`` before it ends so the clean ice is seen. All a
@@ -25,9 +27,10 @@ if TYPE_CHECKING:
 
 RINK_W, RINK_H = 96, 32
 MIN_PANEL_WIDTH = 128
-CORNER = 6
+#: The rink's corners are rounded ellipses (the owner's reference drawing, stretched to this panel's
+#: shape): wider than tall, since 200 ft is drawn 96px across but 85 ft only 32px down.
+CORNER_X, CORNER_Y = 10, 7
 SWATH = 3
-LAPS = 5
 #: Each machine's last stretch of path that still shines wet, in path pixels.
 SHINE_PIXELS = 12
 #: The clean is done this long before the break ends, and the machines drive off this long after.
@@ -48,15 +51,33 @@ BEACON = (255, 170, 0)
 LABEL = (150, 150, 150)
 WHITE = (255, 255, 255)
 
-#: Faint rink markings as (x, colour): centre line, blue lines, goal lines (200ft over 96px).
-MARKINGS = (
-    (47, RED_LINE),
-    (48, RED_LINE),
-    (35, BLUE_LINE),
-    (60, BLUE_LINE),
-    (5, RED_LINE),
-    (90, RED_LINE),
+#: Faint rink markings, after the reference drawing: (x, colour, strength) lines (centre, blue,
+#: goal)
+#: and (centre x, centre y, radius x, radius y) face-off circles.
+LINES = (
+    (47, RED_LINE, 0.35),
+    (48, RED_LINE, 0.35),
+    (34, BLUE_LINE, 0.4),
+    (61, BLUE_LINE, 0.4),
+    (6, RED_LINE, 0.3),
+    (89, RED_LINE, 0.3),
 )
+CIRCLES = (
+    (47.5, 15.5, 7.0, 5.5),
+    (15.0, 9.0, 7.0, 5.0),
+    (15.0, 23.0, 7.0, 5.0),
+    (80.0, 9.0, 7.0, 5.0),
+    (80.0, 23.0, 7.0, 5.0),
+)
+CIRCLE_STRENGTH = 0.28
+
+
+def _on_circle(x: int, y: int) -> bool:
+    for cx, cy, rx, ry in CIRCLES:
+        d = math.hypot((x - cx) / rx, (y - cy) / ry)
+        if abs(d - 1.0) * min(rx, ry) < 0.6:
+            return True
+    return False
 
 
 def clean_seconds(total: float) -> float:
@@ -80,22 +101,36 @@ def _inside(x: int, y: int, inset: int) -> bool:
     lo_y, hi_y = inset, RINK_H - 1 - inset
     if not (lo_x <= x <= hi_x and lo_y <= y <= hi_y):
         return False
-    radius = CORNER - inset
-    cx = lo_x + radius if x < lo_x + radius else hi_x - radius if x > hi_x - radius else x
-    cy = lo_y + radius if y < lo_y + radius else hi_y - radius if y > hi_y - radius else y
-    return (x - cx) ** 2 + (y - cy) ** 2 <= (radius + 0.5) ** 2
+    rx, ry = CORNER_X - inset, CORNER_Y - inset
+    cx = lo_x + rx if x < lo_x + rx else hi_x - rx if x > hi_x - rx else x
+    cy = lo_y + ry if y < lo_y + ry else hi_y - ry if y > hi_y - ry else y
+    return ((x - cx) / (rx + 0.5)) ** 2 + ((y - cy) / (ry + 0.5)) ** 2 <= 1.0
+
+
+def _nudge(x: int, ys: range, step: int) -> int:
+    """``x`` moved by ``step`` until a machine's centre is on the ice (2px in from the boards) along
+    every row of ``ys``: the spiral's legs keep clear of the rounded corners."""
+    while not all(_inside(x, y, 2) for y in ys):
+        x += step
+    return x
 
 
 @functools.cache
-def spiral() -> tuple[tuple[int, int], ...]:
-    """The left-half machine's path, a pixel at a time: round the boards, then inward each lap."""
-    verts: list[tuple[int, int]] = []
-    for k in range(LAPS):
-        xl, xr = 2 + SWATH * k, 46 - SWATH * k
-        top, bottom = 2 + SWATH * k, 29 - SWATH * k
-        verts += [(xl, top), (xr, top), (xr, bottom), (xl, bottom)]
-        if k < LAPS - 1:
-            verts.append((xl, top + SWATH))
+def path(machine: int) -> tuple[tuple[int, int], ...]:
+    """A machine's route, a pixel at a time. Machine 0 works the top half of the rink and machine 1
+    the bottom, the same shape: east along the outer board, down the far end, west along the middle,
+    up the near end, then the inner lap (east, down, west, up) and a last pass east through the
+    middle. Legs are pulled in where a rounded corner would put the machine on the boards."""
+    oy = 15 * machine
+    a, b, c, d, e = 2 + oy, 14 + oy, 5 + oy, 11 + oy, 8 + oy
+    xa = _nudge(2, range(a, a + 1), 1)
+    xb = _nudge(93, range(a, b + 1), -1)
+    xc = _nudge(2, range(c, b + 1), 1)
+    xd = _nudge(min(90, xb - SWATH), range(c, d + 1), -1)
+    xe = _nudge(max(5, xc + SWATH), range(e, d + 1), 1)
+    xf = _nudge(min(88, xd - 2), range(e, e + 1), -1)
+    verts = [(xa, a), (xb, a), (xb, b), (xc, b), (xc, c), (xd, c), (xd, d), (xe, d), (xe, e)]
+    verts.append((xf, e))
     points = [verts[0]]
     for (x0, y0), (x1, y1) in itertools.pairwise(verts):
         sx, sy = (x1 > x0) - (x1 < x0), (y1 > y0) - (y1 < y0)
@@ -106,23 +141,11 @@ def spiral() -> tuple[tuple[int, int], ...]:
     return tuple(points)
 
 
-def _mirror(point: tuple[int, int]) -> tuple[int, int]:
-    return RINK_W - 1 - point[0], RINK_H - 1 - point[1]
-
-
-def path(machine: int) -> tuple[tuple[int, int], ...]:
-    """Machine 0 spirals in the left half, machine 1 is its half-turn on the right."""
-    return spiral() if machine == 0 else _mirror_path()
-
-
-@functools.cache
-def _mirror_path() -> tuple[tuple[int, int], ...]:
-    return tuple(_mirror(p) for p in spiral())
-
-
 @functools.cache
 def _coverage() -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]:
-    """For each machine, the first path index whose swath covers each pixel."""
+    """For each machine, the path index at which each pixel of its half is cleaned: the first one
+    whose 3px swath covers it, and for the few corner pixels no swath reaches, that of the nearest
+    pixel that is (the driver's rounded corner)."""
     out = []
     for machine in (0, 1):
         first: dict[tuple[int, int], int] = {}
@@ -130,6 +153,25 @@ def _coverage() -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]
             for dx in range(-1, 2):
                 for dy in range(-1, 2):
                     first.setdefault((x + dx, y + dy), i)
+        rows = range(16 * machine, 16 * machine + 16)
+        todo = {
+            (x, y) for y in rows for x in range(RINK_W) if _inside(x, y, 1) and (x, y) not in first
+        }
+        while todo:
+            filled = {}
+            for x, y in todo:
+                near = [
+                    first[(x + dx, y + dy)]
+                    for dx in (-1, 0, 1)
+                    for dy in (-1, 0, 1)
+                    if (x + dx, y + dy) in first
+                ]
+                if near:
+                    filled[(x, y)] = min(near)
+            if not filled:
+                break
+            first.update(filled)
+            todo -= set(filled)
         out.append(first)
     return out[0], out[1]
 
@@ -158,20 +200,24 @@ def _blend(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[
     return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))  # type: ignore[return-value]
 
 
-def ice_colour(x: int, y: int, reach: float, cover: tuple[dict, dict]) -> tuple[int, int, int]:
-    """The ice at (x, y) once the machines have gone ``reach`` path pixels."""
+def ice_colour(
+    x: int, y: int, reaches: tuple[float, float], cover: tuple[dict, dict]
+) -> tuple[int, int, int]:
+    """The ice at (x, y) once the two machines have gone ``reaches`` path pixels."""
     colour = _scratched(x, y)
     shine = 0.0
-    for first in cover:
+    for first, reach in zip(cover, reaches, strict=True):
         i = first.get((x, y))
         if i is not None and i <= reach:
             colour = CLEAN
             shine = max(shine, max(0.0, 1.0 - (reach - i) / SHINE_PIXELS))
     if shine:
         colour = _blend(colour, SHINE, shine)
-    for mx, mc in MARKINGS:
+    for mx, mc, strength in LINES:
         if x == mx:
-            colour = _blend(colour, mc, 0.35)
+            colour = _blend(colour, mc, strength)
+    if _on_circle(x, y):
+        colour = _blend(colour, RED_LINE, CIRCLE_STRENGTH)
     return colour
 
 
@@ -179,7 +225,7 @@ def machine_pixels(
     x: int, y: int, heading: tuple[int, int], body: tuple[int, int, int]
 ) -> list[tuple[int, int, tuple[int, int, int]]]:
     """A machine seen from above, centred at (x, y): 7 long, 5 wide, cab at the front, an amber
-    beacon at the back. Pixels off the panel are left out."""
+    beacon at the back. Pixels off the rink (the rounded corners) are left out."""
     hx, hy = heading
     px, py = -hy, hx
     out = []
@@ -196,7 +242,7 @@ def machine_pixels(
             else:
                 colour = body
             wx, wy = x + hx * (u - 3) + px * v, y + hy * (u - 3) + py * v
-            if 0 <= wx < RINK_W and 0 <= wy < RINK_H:
+            if _inside(wx, wy, 0):
                 out.append((wx, wy, colour))
     return out
 
@@ -223,19 +269,18 @@ def draw(r: Renderer, canvas: Any, game: Game, elapsed: float, total: float) -> 
     canvas.Clear()
     p = progress(elapsed, total)
     cover = _coverage()
-    length = len(spiral())
-    reach = p * (length - 1)
+    reaches = tuple(p * (len(path(m)) - 1) for m in (0, 1))
     for y in range(RINK_H):
         for x in range(RINK_W):
             if not _inside(x, y, 0):
                 continue
-            colour = BOARD if not _inside(x, y, 1) else ice_colour(x, y, reach, cover)
+            colour = BOARD if not _inside(x, y, 1) else ice_colour(x, y, reaches, cover)
             canvas.SetPixel(x, y, *colour)
     if elapsed <= clean_seconds(total) + EXIT_SECONDS:
         colours = (team_color(game.away.abbrev), team_color(game.home.abbrev))
         for machine in (0, 1):
             points = path(machine)
-            i = min(length - 1, round(reach))
+            i = min(len(points) - 1, round(reaches[machine]))
             x, y = points[i]
             for wx, wy, colour in machine_pixels(x, y, _heading(points, i), colours[machine]):
                 canvas.SetPixel(wx, wy, *colour)
