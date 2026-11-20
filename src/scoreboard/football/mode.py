@@ -16,12 +16,14 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from ..important_dates import pick as pick_date
-from .api import MIN_POLL_SECONDS
+from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
 from .idle import (
     SCHEDULE_TTL,
@@ -36,7 +38,7 @@ from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
 from .redzone import RedZoneWatcher
 from .stats import GameStats
-from .teams import is_team, team, team_by_id
+from .teams import EMPTY_DIRECTORY, Directory, is_team, team, team_by_id, use_directory
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -66,6 +68,17 @@ KICKOFF_WINDOW = timedelta(minutes=20)
 DEFAULT_ROTATE_SECONDS = 8.0
 
 
+def _in_scope(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Run a render-thread (or admin-thread) method of the mode in its league's team directory."""
+
+    @wraps(method)
+    def scoped(self: FootballMode, *args: Any, **kwargs: Any) -> Any:
+        with self.scope():
+            return method(self, *args, **kwargs)
+
+    return scoped
+
+
 class FootballMode:
     def __init__(
         self,
@@ -79,16 +92,25 @@ class FootballMode:
         wide: Callable[[], bool] = lambda: True,
         on_sound: Callable[[Any], None] | None = None,
         dates: Callable[[], Sequence[Any]] = lambda: (),
+        league: str = LEAGUE_NFL,
     ) -> None:
-        """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
-        settings (read at each poll and each frame, so an admin-page change applies without a
-        restart); ``client_factory`` makes the feed client (a fake in tests). The settings carry the
-        idle rotation's rows as ``idle_rotation`` (football's share of the one mixed
-        ``[[rotation]]`` list, epic #470)."""
+        """``league`` is ``nfl`` or ``college-football``: the mode's team lookups (by id and by
+        abbreviation) resolve in that league's directory (``teams.use_directory``), since the two
+        share both. ``scoreboard`` and ``football`` return the live ``[scoreboard]`` and
+        ``[football]`` settings (read at each poll and each frame, so an admin-page change
+        applies without a restart); ``client_factory`` makes the feed client (a fake in tests).
+        The settings carry the idle rotation's rows as ``idle_rotation`` (football's share of the
+        one mixed ``[[rotation]]`` list, epic #470)."""
         if client_factory is None:
             from .api import FootballClient
 
-            client_factory = FootballClient
+            def client_factory() -> Any:
+                return FootballClient(league=league)
+
+        self.league = league
+        #: The league's teams: fixed for the NFL; for college, the FBS table the feed's client
+        #: fetched (set from its thread, read by the render loop: one reference swap).
+        self._directory: Directory | None = None
         self._scoreboard = scoreboard
         self._on_sound = on_sound
         #: The owner's important dates inside their window (#524), nearest first: what the shared
@@ -120,6 +142,7 @@ class FootballMode:
             monotonic,
             collect=self._collect,
             idle=self._collect_idle,
+            scope=self._scope_for_client,
         )
         #: Which play, celebration or reversal is on screen (#377). Render loop only.
         if timings is None and football is not None:
@@ -138,6 +161,23 @@ class FootballMode:
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
 
+    def scope(self) -> AbstractContextManager[None]:
+        """The league's team directory as a context: wrap anything that resolves teams (drawing a
+        scene, reading the snapshot) in it. The NFL's is the default, so it is a no-op there. Until
+        the college table has loaded nothing resolves (everything is drawn as an unknown team)."""
+        if self.league != LEAGUE_COLLEGE:
+            return nullcontext()
+        return use_directory(self._directory or EMPTY_DIRECTORY)
+
+    def _scope_for_client(self, client: Any) -> AbstractContextManager[None]:
+        """The scope for the feed worker's thread, and where the render loop learns the table."""
+        if self.league != LEAGUE_COLLEGE:
+            return nullcontext()
+        directory = getattr(client, "directory", None)
+        if directory is not None:
+            self._directory = directory
+        return use_directory(directory or EMPTY_DIRECTORY)
+
     def _make_director(self) -> Director:
         return Director(*self._director_args, stats=self._stats_for, on_sound=self._on_sound)
 
@@ -147,6 +187,7 @@ class FootballMode:
         only leaves a note; the next poll does it, and fetches afresh."""
         self._clear_requests.add(":".join(scope.split(":")[:2]))  # a team's item clears its kind
 
+    @_in_scope
     def cache_items(self) -> list[dict[str, Any]]:
         """What football has cached, for the admin page's Cache tab (read-only; any thread)."""
         from ..cache_view import item
@@ -233,6 +274,7 @@ class FootballMode:
         self.redzone.clear()
         self._slot_fraction = 0.0
 
+    @_in_scope
     def track(self) -> None:
         """Note which games were seen live and when each final first appeared, from the latest
         snapshot. ``scene`` does this as it draws; the app calls it too while another sport has
@@ -244,6 +286,7 @@ class FootballMode:
             elif game.is_final and game.id in self._seen_live:
                 self._final_since.setdefault(game.id, now)
 
+    @_in_scope
     def final_ages(self) -> dict[int, float]:
         """Seconds since each final was first seen ending (only games seen live)."""
         now = self._monotonic()
@@ -271,6 +314,7 @@ class FootballMode:
 
     # -- the feed worker's plays (its thread) --------------------------------------
 
+    @_in_scope
     def watched(self, games: Sequence[FbGame]) -> list[FbGame]:
         """The games whose plays are fetched: live (or about to start) ones the favourite or a
         followed team is in. Never every game on the slate.
@@ -437,6 +481,7 @@ class FootballMode:
 
     # -- what to show ----------------------------------------------------
 
+    @_in_scope
     def scene(self) -> Scene:
         from ..app import Scene
 
@@ -683,6 +728,7 @@ class FootballMode:
             animating=True,
         )
 
+    @_in_scope
     def pick_game(self, games: Sequence[FbGame], now: float) -> FbGame:
         """Which game to show: the favourite's while it is live, else the followed teams' in turn.
 
