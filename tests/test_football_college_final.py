@@ -17,7 +17,7 @@ from scoreboard.display.football_scenes import RANK_COLOR
 from scoreboard.football.idle_screens import IDLE_SCREENS
 from scoreboard.football.idle_views import build_final
 from scoreboard.football.mode import FootballMode
-from test_football_college_top25 import FakePoll
+from test_football_college_listed_only import FakePoll
 from test_football_idle import Clock
 from test_football_idle_final import draw, final_game, view_of
 from test_football_idle_selection import IdleFeed, stand_ins  # noqa: F401 - autouse
