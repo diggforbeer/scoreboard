@@ -38,7 +38,15 @@ from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
 from .redzone import RedZoneWatcher
 from .stats import GameStats
-from .teams import EMPTY_DIRECTORY, Directory, is_team, team, team_by_id, use_directory
+from .teams import (
+    EMPTY_DIRECTORY,
+    NFL_DIRECTORY,
+    Directory,
+    is_team,
+    team,
+    team_by_id,
+    use_directory,
+)
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -160,6 +168,11 @@ class FootballMode:
         #: feed worker's thread owns it: it must not be used from the render loop.
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
+
+    @property
+    def directory(self) -> Directory | None:
+        """The league's teams: the NFL's from the start, the FBS's once its client loaded them."""
+        return NFL_DIRECTORY if self.league != LEAGUE_COLLEGE else self._directory
 
     def scope(self) -> AbstractContextManager[None]:
         """The league's team directory as a context: wrap anything that resolves teams (drawing a

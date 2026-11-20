@@ -14,8 +14,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from scoreboard import admin_server
-from scoreboard.app import ScoreboardApp
 from scoreboard.config import (
+    FOOTBALL_SPORTS,
     RUNNING_SPORTS,
     TEAM_SPORTS,
     TEAMS_MAX,
@@ -57,9 +57,10 @@ class G:
 # -- config ---------------------------------------------------------------------------------------
 
 
-def test_college_is_a_sport_and_not_one_the_app_runs_yet():
-    assert "college" in TEAM_SPORTS and "college" not in RUNNING_SPORTS
+def test_college_is_a_sport_the_app_runs_with_a_football_style_engine():
+    assert "college" in TEAM_SPORTS and "college" in RUNNING_SPORTS
     assert set(RUNNING_SPORTS) <= set(TEAM_SPORTS)
+    assert FOOTBALL_SPORTS == ("football", "college")
 
 
 @pytest.mark.parametrize("abbrev", ["UGA", "UTSA", "SJSU", "M-OH", "TA&M", "BGSU", "OSU", "BYU"])
@@ -170,11 +171,11 @@ def test_sports_lists_college_in_rank_order_and_the_lead_team_is_per_sport():
     assert priority.sports() == ["college", "hockey"]
 
 
-def test_colour_team_can_skip_a_sport_that_cannot_be_drawn():
+def test_colour_team_can_skip_a_team_whose_colours_cannot_be_drawn_yet():
     priority = board(("college", "UGA"), ("hockey", "NSH"))
     assert priority.colour_team().sport == "college"
-    assert priority.colour_team(RUNNING_SPORTS).team == "NSH"
-    assert board(("college", "UGA")).colour_team(RUNNING_SPORTS) is None
+    assert priority.colour_team(lambda e: e.sport != "college").team == "NSH"
+    assert board(("college", "UGA")).colour_team(lambda e: e.sport != "college") is None
 
 
 def test_with_no_hockey_or_football_team_ranked_a_live_game_of_either_still_takes_the_board():
@@ -182,59 +183,3 @@ def test_with_no_hockey_or_football_team_ranked_a_live_game_of_either_still_take
     only_college = Priority([TeamEntry("college", "UGA")])
     assert not only_college.empty
     assert only_college.empty_list_sport({"hockey": [G(1, "NSH", "TOR")]}) is None
-
-
-# -- the app never runs a sport it has no engine for ----------------------------------------------
-
-
-def settings_with(*rows):
-    return Settings.from_dict({"teams": [row(s, t) for s, t in rows]})
-
-
-def test_the_board_starts_on_the_first_sport_it_can_run():
-    start = ScoreboardApp._initial_sport
-    assert start(settings_with(("college", "UGA"), ("football", "TEN"))) == "football"
-    assert start(settings_with(("college", "UGA"), ("hockey", "NSH"))) == "hockey"
-    assert start(settings_with(("college", "UGA"))) == "hockey", "college alone: the default"
-    assert start(settings_with()) == "hockey"
-    assert start(settings_with(("football", "TEN"), ("college", "UGA"))) == "football"
-
-
-def test_a_college_only_list_does_not_ask_for_the_other_sports_feeds():
-    wants = ScoreboardApp._wants
-    only_college = settings_with(("college", "UGA"))
-    assert not wants("hockey", only_college) and not wants("football", only_college)
-    assert wants("football", settings_with(("college", "UGA"), ("football", "TEN")))
-
-
-# -- a whole app with a college team on top -------------------------------------------------------
-
-
-@pytest.fixture
-def backend():
-    from scoreboard.display.matrix import Backend
-    from test_app import FakeGraphics, FakeMatrix, FakeOptions
-
-    return Backend(
-        name="fake", RGBMatrix=FakeMatrix, RGBMatrixOptions=FakeOptions, graphics=FakeGraphics
-    )
-
-
-def test_a_college_team_on_top_never_makes_the_board_switch_to_college(backend):
-    from scoreboard.app import SPORT_MIN_DWELL_SECONDS
-    from test_app_priority import Rig
-
-    rig = Rig(backend, [("college", "UGA"), ("hockey", "NSH")])
-    assert rig.sport == "hockey"
-    for _ in range(4):  # nothing is on: the idle alternation has nothing to fall back to but hockey
-        rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
-        assert rig.sport in RUNNING_SPORTS
-    assert rig.app._desired_sport() in RUNNING_SPORTS
-
-
-def test_the_colours_skip_a_college_rank_1_for_the_first_team_that_can_be_drawn(backend):
-    from test_app_priority import Rig
-
-    rig = Rig(backend, [("college", "UGA"), ("hockey", "NSH")])
-    assert rig.app._colour_scheme("anything") == ("hockey", "NSH")
-    assert Rig(backend, [("college", "UGA")]).app._colour_scheme("x") == ("hockey", "")
