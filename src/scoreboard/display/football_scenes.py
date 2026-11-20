@@ -75,6 +75,16 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
     r.vline(canvas, half - 1, 2, situation_baseline - 7, DIM)
 
     sit = game.situation
+    if wide and game.is_live and sit is not None:
+        from ..football.geometry import AWAY
+        from . import football_ball as fball
+        from . import football_field as ff
+
+        holder = ff.possession_of(game, sit.possession_team_id)
+        if holder is not None:
+            team, x0 = (game.away, 0) if holder == AWAY else (game.home, half)
+            bx = x0 + 3 + text_width(font, team.abbrev) + 4
+            fball.draw_sprite(canvas, bx, score_baseline - 8, fball.LARGE)
     if game.is_live and sit is not None and sit.down_distance_text:
         color = RED_ZONE if sit.is_red_zone else SITUATION
         text = r._fit_text(r.fonts.tiny, sit.down_distance_text.upper(), r.width - 6)
@@ -117,11 +127,27 @@ def draw_fb_field(r: Renderer, canvas: Any, game: FbGame) -> None:
     if sit is not None and sit.yard_line is not None:
         if side is not None:
             ff.draw_markers(r, canvas, layout, sit.yard_line, sit.distance or 0, side)
-        ff.draw_ball(canvas, layout, sit.yard_line)
-    _band(r, canvas, game, sit, in_red_zone)
+        if side is not None:
+            from ..football.geometry import HOME, drive_direction
+            from . import football_ball as fball
+
+            drive = drive_direction(side)
+            team = game.home if side == HOME else game.away
+            fball.draw_drive_ball(
+                canvas,
+                layout.px(sit.yard_line),
+                layout.mid_y,
+                drive,
+                side_color(team),
+            )
+        else:
+            ff.draw_ball(canvas, layout, sit.yard_line)
+    _band(r, canvas, game, sit, in_red_zone, side)
 
 
-def _band(r: Renderer, canvas: Any, game: FbGame, sit: Any, in_red_zone: bool) -> None:
+def _band(
+    r: Renderer, canvas: Any, game: FbGame, sit: Any, in_red_zone: bool, side: str | None = None
+) -> None:
     font, baseline = r.fonts.tiny, 6
     wide = r.width >= 128
     down = ""
@@ -131,11 +157,11 @@ def _band(r: Renderer, canvas: Any, game: FbGame, sit: Any, in_red_zone: bool) -
     right = r._fit_text(font, down, r.width // 2 - 2) if down else ""
     if right:
         r.text_right(canvas, font, r.width - 1, baseline, color, right)
-    left_room = r.width - text_width(font, right) - 3 - (56 if wide else 0)
+    left_room = r.width - text_width(font, right) - 3 - (60 if wide else 0)
     clock = r._fit_text(font, band_clock(game, r), max(left_room, 8))
     r.text(canvas, font, 1, baseline, status_color(game), clock)
     if wide:
-        _score(r, canvas, game, baseline)
+        _score(r, canvas, game, baseline, side, min_x=1 + text_width(font, clock) + 3)
 
 
 _LIVE_CLOCK = re.compile(r"^\s*(\d{1,2}:\d{2})\s*-\s*(\d)(?:st|nd|rd|th)\s*$", re.I)
@@ -165,19 +191,32 @@ def _compact_down(sit: Any) -> str:
     return f"{sit.down}&{sit.distance}"
 
 
-def _score(r: Renderer, canvas: Any, game: FbGame, baseline: int) -> None:
-    """``WSH 10 NYG 17`` centred in the band, each abbreviation in its team's colour."""
+def _score(
+    r: Renderer, canvas: Any, game: FbGame, baseline: int, side: str | None = None, min_x: int = 0
+) -> None:
+    """``WSH 10 NYG 17`` centred in the band, each abbreviation in its team's colour. The team
+    with the ball gets a small football before its abbreviation; both slots are reserved so the
+    text does not jump on a turnover."""
+    from ..football.geometry import AWAY, HOME
+    from . import football_ball as fball
+
     font = r.fonts.tiny
+    ball_w = fball.sprite_width(fball.SMALL) + 1
     parts = [
         (game.away.abbrev, side_color(game.away)),
         (str(game.away.score), WHITE),
         (game.home.abbrev, side_color(game.home)),
         (str(game.home.score), WHITE),
     ]
-    gaps = (2, 4, 2, 0)  # abbreviation-score, between the teams, abbreviation-score
-    total = sum(text_width(font, t) for t, _ in parts) + sum(gaps)
-    x = (r.width - total) // 2
-    for (text, color), gap in zip(parts, gaps, strict=True):
+    gaps = (1, 3, 1, 0)  # abbreviation-score, between the teams, abbreviation-score
+    total = sum(text_width(font, t) for t, _ in parts) + sum(gaps) + 2 * ball_w
+    x = max((r.width - total) // 2, min_x)
+    for i, ((text, color), gap) in enumerate(zip(parts, gaps, strict=True)):
+        if i in (0, 2):
+            has_ball = side == (AWAY if i == 0 else HOME)
+            if has_ball:
+                fball.draw_sprite(canvas, x, baseline - 4, fball.SMALL)
+            x += ball_w
         r.text(canvas, font, x, baseline, color, text)
         x += text_width(font, text) + gap
 
