@@ -122,6 +122,7 @@ def test_an_overtime_final_is_still_a_final():
     assert ot.is_final and "OT" in ot.detail
 
 
-def test_college_standings_say_they_are_not_built_rather_than_returning_nfl_garbage():
-    with pytest.raises(NotImplementedError, match="#553"):
-        college_client(FakeResponse({})).standings()
+def test_college_standings_are_no_data_until_they_are_parsed_and_ask_for_nothing():
+    # Not the NFL parser's garbage, and not an exception that would cost a mode its idle data.
+    client = college_client(FakeResponse({}))
+    assert client.standings() is None and client.session.calls == []

@@ -212,9 +212,11 @@ class FootballClient:
     def standings(self) -> Standings | None:
         """Each conference's divisions with every team's record, seed and streak (~160 KB)."""
         if self.league != LEAGUE_NFL:
-            # The college table is a different shape (conferences, Sun Belt nested under its
-            # divisions, repeated stat names); its parser is #553.
-            raise NotImplementedError("college standings are not parsed yet (#553)")
+            # The college table is a different shape (conferences, the Sun Belt nested under its
+            # divisions, repeated stat names); its parser is #553. "No data" until then, so a mode
+            # asking for it every hour keeps the rest of its idle data.
+            log.debug("college standings are not parsed yet (#553)")
+            return None
         payload = self._get("/standings", {"level": "3"}, base=self.standings_url)
         if payload is None:
             return None
@@ -239,6 +241,11 @@ class FootballClient:
         if table is not None:
             self._directory = directory_from_table(table)
         return table
+
+    @property
+    def directory(self) -> Directory | None:
+        """The teams this client parses against, or ``None`` until the college table has loaded."""
+        return self._directory
 
     def _league_directory(self) -> Directory | None:
         """The directory to parse with, fetching the college table first if it is needed."""
