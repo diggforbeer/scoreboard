@@ -220,6 +220,15 @@ class FbSituation:
         )
 
 
+def _headline(comp: dict[str, Any]) -> str:
+    """The first note's headline (a bowl's name), or ``""``."""
+    for note in _list(comp.get("notes")):
+        text = _str(_dict(note).get("headline")).strip()
+        if text:
+            return text
+    return ""
+
+
 def _leaders(comp: dict[str, Any]) -> tuple[FbLeader, ...]:
     out = []
     for cat in _list(comp.get("leaders")):
@@ -291,6 +300,11 @@ class FbGame:
     broadcasts: tuple[str, ...] = ()
     #: The game's top passer, rusher and receiver; **only for a final** (see ``FbLeader``).
     leaders: tuple[FbLeader, ...] = ()
+    #: The postseason game's name, ``Cricket Celebration Bowl`` (college: ``notes[].headline`` on a
+    #: season-type-3 game, which is where the bowls are named, also while both teams are still
+    #: ``TBD``); empty otherwise. The regular season's notes are scheduling remarks (``FLEX: ...``),
+    #: not names, so they are not read.
+    headline: str = ""
 
     @staticmethod
     def from_api(raw: Any) -> FbGame:
@@ -306,6 +320,7 @@ class FbGame:
             raise ValueError(f"game {game_id} does not have both an away and a home team")
         status = _dict(comp.get("status") or event.get("status"))
         stype = _dict(status.get("type"))
+        season_type = _int(_dict(event.get("season")).get("type"), None)
         return FbGame(
             id=game_id,
             away=away,
@@ -325,7 +340,7 @@ class FbGame:
             venue=_str(_dict(comp.get("venue")).get("fullName")),
             week=_int(_dict(event.get("week")).get("number"), None),
             situation=FbSituation.from_api(comp.get("situation")),
-            season_type=_int(_dict(event.get("season")).get("type"), None),
+            season_type=season_type,
             broadcasts=tuple(
                 name
                 for b in _list(comp.get("broadcasts"))
@@ -333,6 +348,7 @@ class FbGame:
                 if name
             ),
             leaders=_leaders(comp) if _str(stype.get("state")) == POST else (),
+            headline=_headline(comp) if season_type == 3 else "",
         )
 
     # -- state ---------------------------------------------------------

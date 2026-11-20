@@ -167,7 +167,9 @@ def rig(backend, teams, rotation=None):
 
 
 def test_college_sits_out_the_alternation_until_it_has_a_row_it_can_draw(backend):
-    r = rig(backend, [("hockey", "NSH"), ("college", "UGA")])
+    # Only rows with nothing to show here (no polls fetched): the preview, now built (#554), has
+    # a next game on this slate, so it is left out of the rotation to make the premise true.
+    r = rig(backend, [("hockey", "NSH"), ("college", "UGA")], [("cfb_ap", 20), ("cfb_cfp", 20)])
     assert r.app._college.snapshot.games, "it has a slate"
     assert not r.app._college.has_idle_rows()
     assert r.app._idle_available() == ["hockey"]

@@ -351,3 +351,96 @@ conference_png("UTSA", 0, "24_conference_american_rest_top")
 conference_png("USF", 40, "25_conference_american_mid_scroll_lead_team_listed")
 conference_png("ND", 0, "26_conference_independents_two_teams_no_conference_record")
 conference_png("GASO", 0, "27_conference_sun_belt_nested_merged_by_seed")
+
+
+# ---- the next-game idle screen (#554): real schedule and postseason captures (2026-11-20) ----
+from scoreboard.football.api import _parse_events  # noqa: E402
+from scoreboard.football.college_views import PollView  # noqa: E402,F401
+from scoreboard.football.idle import Scoreboard, schedule_from_payload  # noqa: E402
+from scoreboard.football.idle_views import build_college_preview  # noqa: E402
+
+uga_schedule = schedule_from_payload(
+    61, json.loads((FX / "college_schedule_UGA_trimmed.json").read_text())
+)
+postseason = json.loads((FX / "college_postseason_trimmed.json").read_text())
+
+
+def preview_png(now, favourite, name, scoreboard=None, games=(), week_games=None):
+    from scoreboard.football.idle import Cached
+
+    snap = IdleSnapshot(
+        scoreboard=scoreboard,
+        schedules={FBS.by_abbrev[favourite].espn_id: Cached(uga_schedule, 0.0)},
+        polls_cached=Cached(ap_polls, 0.0),
+        week_cached=Cached(week_games, 0.0) if week_games is not None else None,
+    )
+    cfg = TeamView(FootballConfig(), favourite, [], favourite)
+    ctx = IdleContext(0.0, now, list(games), snap, cfg)
+    with use_directory(FBS):
+        view = build_college_preview(ctx)
+        assert view is not None, name
+        c = AsciiCanvas(128, H)
+        rend().draw_fb_preview(c, view, now)
+    assert not c.out_of_bounds, name
+    png(c, 128, name)
+    return view
+
+
+preview_png(datetime(2026, 11, 20, 12, 0, tzinfo=UTC), "UGA", "28_preview_next_game_ranked")
+bye_board = Scoreboard(games=(), season_type=2, season_year=2026, week=8)
+# The capture is from week 12, so for week 8's bye every game after Oct 24 is made "not yet played".
+as_of_week_8 = json.loads((FX / "college_schedule_UGA_trimmed.json").read_text())
+for event in as_of_week_8["events"]:
+    if event["date"] > "2026-10-24T":
+        status = event["competitions"][0]["status"]["type"]
+        status.update(state="pre", completed=False, name="STATUS_SCHEDULED")
+        for side in event["competitions"][0]["competitors"]:
+            side.pop("score", None)
+uga_schedule_real, uga_schedule = uga_schedule, schedule_from_payload(61, as_of_week_8)
+preview_png(
+    datetime(2026, 10, 24, 12, 0, tzinfo=UTC), "UGA", "29_preview_bye_week", scoreboard=bye_board
+)
+uga_schedule = uga_schedule_real
+bowl = json.loads(json.dumps(postseason["events"][0]))
+for side, (tid, abbrev), where in zip(
+    bowl["competitions"][0]["competitors"],
+    ((61, "UGA"), (251, "TEX")),
+    ("away", "home"),
+    strict=True,
+):
+    side["id"] = side["team"]["id"] = str(tid)
+    side["team"]["abbreviation"] = abbrev
+    side["homeAway"] = where
+bowl_games = _parse_events([bowl])
+preview_png(
+    datetime(2026, 12, 6, 12, 0, tzinfo=UTC),
+    "UGA",
+    "30_preview_bowl_named",
+    scoreboard=Scoreboard(games=(), season_type=3, season_year=2026, week=1),
+    week_games=Scoreboard(games=tuple(bowl_games), season_type=3, week=1),
+)
+
+# the kickoff countdown (already the NFL's, shared by both leagues) now carries the poll numbers
+from scoreboard.display.football_idle import draw_fb_countdown  # noqa: E402
+
+countdown_game = game(
+    "TEX",
+    "ALA",
+    "pre",
+    0,
+    0,
+    "11/22 - 12:00 PM EST",
+    0,
+    name="STATUS_SCHEDULED",
+    ranks=(5, 3),
+)
+countdown_game = dataclasses.replace(
+    countdown_game,
+    start_utc=datetime(2026, 11, 22, 17, 0, tzinfo=UTC),
+    away=dataclasses.replace(countdown_game.away, record="8-2"),
+    home=dataclasses.replace(countdown_game.home, record="9-1"),
+)
+cd_canvas = AsciiCanvas(128, H)
+with use_directory(FBS):
+    draw_fb_countdown(rend(), cd_canvas, countdown_game, datetime(2026, 11, 22, 16, 17, tzinfo=UTC))
+png(cd_canvas, 128, "31_countdown_ranked")
