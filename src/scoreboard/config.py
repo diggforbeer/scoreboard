@@ -23,7 +23,7 @@ import tomlkit
 from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 from .display.teams import TEAM_COLORS
 from .football.teams import NIGHT_SLOTS
-from .football.teams import is_team as football_team_exists
+from .football.teams import is_nfl_team as football_team_exists
 from .important_dates import ImportantDate, parse_dates
 
 log = logging.getLogger(__name__)

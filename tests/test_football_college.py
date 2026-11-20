@@ -11,6 +11,7 @@ import pytest
 
 from scoreboard.football import api
 from scoreboard.football.api import FootballClient
+from scoreboard.football.college_teams import directory_from_table, table_from_payloads
 from test_football_plays import FakeResponse, FakeSession
 
 FIXTURES = Path(__file__).parent / "fixtures" / "football"
@@ -21,8 +22,17 @@ def college_payload():
     return json.loads((FIXTURES / "college_scoreboard.json").read_text())
 
 
+def _fbs_directory():
+    standings = json.loads((FIXTURES / "college_standings_trimmed.json").read_text())
+    teams = json.loads((FIXTURES / "college_teams_trimmed.json").read_text())
+    return directory_from_table(table_from_payloads(standings, teams))
+
+
 def college_client(*responses):
-    return FootballClient(league="college-football", session=FakeSession(*responses))
+    """A college client that has already loaded its team table, as a running one has."""
+    client = FootballClient(league="college-football", session=FakeSession(*responses))
+    client._directory = _fbs_directory()
+    return client
 
 
 def test_the_default_league_is_the_nfl_with_the_urls_it_always_had():
