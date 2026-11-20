@@ -81,7 +81,10 @@ Anything visual (a screen, a badge, a layout) gets a mockup so the owner can see
   instead.
 - Use `rm -rf` or `rm` with an unquoted variable (the harness blocks it): use literal paths.
 - Put secrets, the owner's name or email, or model identifiers in commits, PRs or code.
-- Guess a design decision, a number the owner should choose, or a rule the issue leaves open.
+- Guess a design decision or a rule the issue leaves open. (A small numeric default that is easy to
+  change, such as a turn length, is fine **if it is a setting**, is stated in the PR body under
+  "Defaults I chose", and the issue says "decided and documented". Anything that changes what the
+  board shows in a way the owner has not seen in a mockup is a decision.)
 - Treat a test you cannot make pass as a reason to weaken it: stop and report.
 
 ## Live game nights
