@@ -40,9 +40,10 @@ RANK_COLOR = (200, 160, 255)
 
 
 def rank_badge(side: FbTeam, r: Renderer) -> str:
-    """``#5`` for a ranked college team, else ``""``. 128px panels only: a single 64px panel has
-    no room beside the abbreviation, so it never shows a badge."""
-    return f"#{side.rank}" if side.rank and r.width >= 128 else ""
+    """``5`` for a ranked college team, else ``""``: just the number, in its own colour (a ``#``
+    is not needed, and costs four pixels of a crowded line). 128px panels only: a single 64px
+    panel has no room beside the abbreviation, so it never shows a badge."""
+    return str(side.rank) if side.rank and r.width >= 128 else ""
 
 
 def side_color(side: FbTeam) -> tuple[int, int, int]:

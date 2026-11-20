@@ -1,4 +1,4 @@
-"""The rank badge on the football game scenes (#547): ``#5`` beside a ranked college team.
+"""The rank badge on the football game scenes (#547): the number beside a ranked college team.
 
 The badge is gold, 128px panels only, and only where it fits. Unranked teams draw exactly as they
 always did (every existing football snapshot is unchanged); these are the new ones.
@@ -43,8 +43,8 @@ def halftime(g, width=128):
 
 def test_the_badge_text_is_the_number_and_only_on_a_wide_panel():
     live = GAMES["live"]
-    assert fs.rank_badge(ranked(live, away=5).away, renderer(128)) == "#5"
-    assert fs.rank_badge(ranked(live, away=25).away, renderer(128)) == "#25"
+    assert fs.rank_badge(ranked(live, away=5).away, renderer(128)) == "5"
+    assert fs.rank_badge(ranked(live, away=25).away, renderer(128)) == "25"
     assert fs.rank_badge(ranked(live, away=5).away, renderer(64)) == ""
     assert fs.rank_badge(live.away, renderer(128)) == ""
 
@@ -97,7 +97,7 @@ def test_the_abbreviation_moves_right_for_the_badge_and_the_score_stays_put():
 
 def test_a_badge_is_dropped_rather_than_run_into_the_score():
     # The longest FBS abbreviations are four letters (TA&M, M-OH): with a two-digit score the
-    # "#25" badge still fits; with a three-digit score there is no room, so it is dropped.
+    # "25" badge still fits; with a three-digit score there is no room, so it is dropped.
     two = ranked(game("TA&M", "M-OH", "in", 38, 41), away=25, home=24)
     three = dataclasses.replace(
         two,
@@ -197,7 +197,7 @@ def test_the_rank_colour_is_not_one_the_band_already_uses():
 def test_the_band_drops_the_badges_when_the_clock_leaves_no_room_for_them():
     g = ranked(GAMES["live"], away=5, home=12)
     r = renderer(128)
-    for min_x, badges in ((0, True), (60, False)):
+    for min_x, badges in ((0, True), (66, False)):
         c = AsciiCanvas(128, H)
         fs._score(r, c, g, 6, None, min_x=min_x)
         assert not c.out_of_bounds, f"min_x={min_x}"
