@@ -2,7 +2,7 @@
 
 One ESPN request (``.../college-football/rankings``) carries every poll. Which one means "ranked"
 is the owner's choice (``[football] college_poll``), because the AP and the committee often
-disagree; the rank badges, the Top 25 turns and the upset alert all go through
+disagree; the rank badges and the upset alert go through
 :meth:`Polls.rank_of` so they can never disagree with each other.
 
 The scoreboard's own ``curatedRank`` is *not* used for that: the spike could not tell which poll
