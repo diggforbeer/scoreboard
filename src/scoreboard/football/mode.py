@@ -38,6 +38,7 @@ from .idle import (
 from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
 from .redzone import RedZoneWatcher
+from .scroll import is_moving, scroll_px, scroll_seconds
 from .stats import GameStats
 from .teams import (
     EMPTY_DIRECTORY,
@@ -138,6 +139,8 @@ class FootballMode:
         #: How far through its slot the chosen rotation screen is (0 to 1): a screen of several
         #: pages shares its seconds between them, so the page is read off this. Render loop only.
         self._slot_fraction = 0.0
+        #: The chosen slot's length in seconds, for a table that scrolls over it (#551).
+        self._slot_length = 0.0
         #: When this mode's idle rotation began (monotonic seconds): the app sets it so a rotation
         #: starts at the top of the turn the sports alternate in (epic #470), 0 otherwise.
         self.idle_origin = 0.0
@@ -336,6 +339,7 @@ class FootballMode:
         self.redzone.clear()
         self.upsets.clear()
         self._slot_fraction = 0.0
+        self._slot_length = 0.0
 
     @_in_scope
     def track(self) -> None:
@@ -684,6 +688,7 @@ class FootballMode:
         from .idle_screens import IDLE_SCREENS
 
         self._slot_fraction = 0.0
+        self._slot_length = 0.0
         cfg = self._football() if self._football else _no_football()
         followed = cfg.followed_teams
         for game in games:
@@ -727,7 +732,9 @@ class FootballMode:
         if favourite:
             slots = self._rotation(cfg, ctx, favourite)
             if slots:
-                screen, self._slot_fraction = _slot_at(slots, now - self.idle_origin)
+                screen, self._slot_fraction, self._slot_length = _slot_span(
+                    slots, now - self.idle_origin
+                )
                 return screen
         if not games:
             return "clock" if self._has_clock() else None
@@ -788,6 +795,11 @@ class FootballMode:
                 seconds = (
                     cfg.page_seconds * pages if cfg.page_seconds and pages > 1 else entry.seconds
                 )
+                # A table taller than the panel scrolls, and the row's seconds is a minimum: the
+                # slot lasts as long as a readable scroll needs (hockey's rule, ``scroll.py``).
+                scrolled = int(getattr(view, "scroll_rows", 0) or 0)
+                if scrolled:
+                    seconds = scroll_seconds(scrolled, seconds)
                 slots.append((entry.screen, seconds))
         scoreboard = ctx.idle.scoreboard
         if (
@@ -826,11 +838,15 @@ class FootballMode:
         view = build(self._idle_context(games, snap, now, cfg)) if build is not None else None
         pages = max(int(getattr(view, "pages", 1) or 1), 1)
         page = min(int(self._slot_fraction * pages), pages - 1)
+        rows = int(getattr(view, "scroll_rows", 0) or 0)
+        offset = self._slot_fraction * self._slot_length
         return Scene(
             kind,
             fb_game=mine if kind in ("fb_countdown", "fb_final") else None,
             fb_idle=view,
             fb_page=page,
+            scroll_px=scroll_px(rows, offset, self._slot_length) if rows else 0,
+            scrolling=bool(rows) and is_moving(rows, offset, self._slot_length),
         )
 
     def _play_scene(self, current: Any, base: Scene) -> Scene:
@@ -955,13 +971,19 @@ def _slot_at(slots: Sequence[tuple[str, float]], now: float) -> tuple[str, float
     """The slot on screen at monotonic time ``now`` and how far through it (0 to 1): a pure
     function of the clock, so a refresh that changes the slots never makes the board lose its
     place by more than one turn."""
+    screen, fraction, _ = _slot_span(slots, now)
+    return screen, fraction
+
+
+def _slot_span(slots: Sequence[tuple[str, float]], now: float) -> tuple[str, float, float]:
+    """``_slot_at`` and the slot's length in seconds, for a screen that scrolls over it."""
     total = sum(seconds for _, seconds in slots)
     at = now % total
     for screen, seconds in slots:
         if at < seconds:
-            return screen, at / seconds
+            return screen, at / seconds, seconds
         at -= seconds
-    return slots[-1][0], 0.0
+    return slots[-1][0], 0.0, slots[-1][1]
 
 
 def _no_football() -> FootballConfig:

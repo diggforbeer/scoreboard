@@ -275,3 +275,35 @@ f3 = game("TEX", "OKST", "post", 27, 24, "Final/OT", 5, name="STATUS_FINAL", ran
 final_png(f3, "TEX", "17_final_ot_two_ranked")
 f4 = game("AUB", "MIZ", "post", 20, 17, "Final", 4, name="STATUS_FINAL")
 final_png(f4, "AUB", "18_final_unranked")
+
+
+# ---- the AP Top 25 idle screen (#551) ----
+from datetime import UTC, datetime  # noqa: E402
+
+from scoreboard.display.college_idle import draw_cfb_ap  # noqa: E402
+from scoreboard.football import scroll as fscroll  # noqa: E402
+from scoreboard.football.college_rankings import polls_from_payload  # noqa: E402
+from scoreboard.football.college_views import build_ap  # noqa: E402
+from scoreboard.football.idle import Cached  # noqa: E402
+from scoreboard.football.idle_screens import IdleContext  # noqa: E402
+
+rank_payload = json.loads((FX / "college_rankings_trimmed.json").read_text())
+ap_polls = polls_from_payload(rank_payload)
+
+
+def ap_png(favourite, px, name):
+    cfg = TeamView(FootballConfig(), favourite, [], favourite)
+    now = datetime(2026, 11, 18, 12, 0, tzinfo=UTC)
+    ctx = IdleContext(0.0, now, [], IdleSnapshot(polls_cached=Cached(ap_polls, 0.0)), cfg)
+    with use_directory(FBS):
+        view = build_ap(ctx)
+        c = AsciiCanvas(128, H)
+        draw_cfb_ap(rend(), c, view, px)
+    assert not [p for p in c.out_of_bounds if p[1] >= 0 and p[1] < H], name
+    png(c, 128, name)
+    return view
+
+
+ap_view = ap_png("UGA", 0, "19_ap_top25_rest_top")
+ap_png("WAKE", 36, "20_ap_top25_mid_scroll_lead_team_listed")
+ap_png("UGA", fscroll.scroll_range(len(ap_view.rows)), "21_ap_top25_rest_bottom")
