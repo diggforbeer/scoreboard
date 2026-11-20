@@ -1416,6 +1416,12 @@ class Renderer:
 
         football_idle.draw_fb_redzone(self, canvas, game, seconds)
 
+    def draw_fb_upset(self, canvas: Any, game: Any, upset: Any, seconds: float) -> None:
+        """The upset alert: a ranked college team losing to a lower-ranked one (#557)."""
+        from . import football_upset
+
+        football_upset.draw_fb_upset(self, canvas, game, upset, seconds)
+
     def draw_fb_preview(self, canvas: Any, view: Any, now: Any) -> None:
         """The football next-game preview (#424); see ``football_idle``."""
         from . import football_idle

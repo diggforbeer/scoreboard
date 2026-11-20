@@ -522,6 +522,9 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
     return number
 
 
+#: How long the upset alert stays up: long enough to read, short enough not to hide a live game.
+UPSET_SECONDS_MIN = 4.0
+UPSET_SECONDS_MAX = 15.0
 #: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
 COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
 
@@ -564,8 +567,27 @@ class FootballConfig:
     #: committee's, which falls back to the AP until it publishes). The rank badges, the Top 25
     #: turns and the upset alert all read this one setting (#546).
     college_poll: str = "ap"
+    #: The upset alert (#557): a ranked college team losing to a lower-ranked or unranked one, from
+    #: halftime on, and an upset final. Silent. ``upset_min_gap`` is how many places lower the
+    #: leader must be ranked (1: any lower-ranked team and every unranked one).
+    upset_alert: bool = True
+    upset_seconds: float = 8.0
+    upset_min_gap: int = 1
 
     def __post_init__(self) -> None:
+        self.upset_alert = bool(self.upset_alert)
+        try:
+            seconds = float(self.upset_seconds)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-numeric football.upset_seconds %r", self.upset_seconds)
+            seconds = 8.0
+        self.upset_seconds = max(UPSET_SECONDS_MIN, min(UPSET_SECONDS_MAX, seconds))
+        try:
+            gap = int(self.upset_min_gap)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-integer football.upset_min_gap %r", self.upset_min_gap)
+            gap = 1
+        self.upset_min_gap = max(1, min(25, gap))
         poll = str(self.college_poll).strip().lower()
         if poll not in COLLEGE_POLL_CHOICES:
             log.warning("Ignoring unknown football.college_poll %r", self.college_poll)

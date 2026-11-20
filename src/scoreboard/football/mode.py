@@ -48,6 +48,7 @@ from .teams import (
     team_by_id,
     use_directory,
 )
+from .upset import UpsetWatcher
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -164,6 +165,8 @@ class FootballMode:
         self._core_sync = CoreSync()
         #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
         self.redzone = RedZoneWatcher(monotonic)
+        #: A ranked college team losing to a lower-ranked one (#557); college only.
+        self.upsets = UpsetWatcher(monotonic)
         #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here, so
         #: it lives as long as the mode and survives the board switching sport back and forth. The
         #: feed worker's thread owns it: it must not be used from the render loop.
@@ -329,6 +332,7 @@ class FootballMode:
         """
         self.director = self._make_director()
         self.redzone.clear()
+        self.upsets.clear()
         self._slot_fraction = 0.0
 
     @_in_scope
@@ -342,6 +346,13 @@ class FootballMode:
                 self._seen_live.add(game.id)
             elif game.is_final and game.id in self._seen_live:
                 self._final_since.setdefault(game.id, now)
+        if self.league == LEAGUE_COLLEGE:
+            # The upset alert watches the whole slate, whichever sport is on screen.
+            cfg = self._football() if self._football else None
+            if getattr(cfg, "upset_alert", True):
+                self.upsets.observe(
+                    self.ranked(self.snapshot.games or ()), getattr(cfg, "upset_min_gap", 1)
+                )
 
     @_in_scope
     def final_ages(self) -> dict[int, float]:
@@ -532,6 +543,7 @@ class FootballMode:
         self.rosters.clear()
         self._idle_cache.clear()
         self.redzone.clear()
+        self.upsets.clear()
         self._stats = {}
 
     @property
@@ -625,6 +637,34 @@ class FootballMode:
         game, elapsed = shown
         return Scene(
             "fb_redzone", fb_game=game, fb_elapsed=elapsed, fb_seconds=seconds, animating=True
+        )
+
+    @_in_scope
+    def upset_scene(self) -> Scene | None:
+        """The upset alert to show now, or ``None``. Any sport may be on screen: like a goal, it
+        is news wherever the board is. College only, 128px only, silent, and only if the owner
+        has not turned it off."""
+        from ..app import Scene
+
+        if self.league != LEAGUE_COLLEGE or not self._wide():
+            return None
+        cfg = self._football() if self._football else None
+        if not getattr(cfg, "upset_alert", True):
+            return None
+        seconds = float(getattr(cfg, "upset_seconds", 8.0))
+        shown = self.upsets.current(
+            self.ranked(self.snapshot.games or ()), seconds, getattr(cfg, "upset_min_gap", 1)
+        )
+        if shown is None:
+            return None
+        game, upset, elapsed = shown
+        return Scene(
+            "fb_upset",
+            fb_game=game,
+            fb_upset=upset,
+            fb_elapsed=elapsed,
+            fb_seconds=seconds,
+            animating=True,
         )
 
     # -- the idle selection (#422) -----------------------------------------------

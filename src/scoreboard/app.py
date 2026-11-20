@@ -345,6 +345,8 @@ class Scene:
     fb_stats: Any = None
     #: What an idle screen draws (#419): the view its builder in ``football/idle_screens.py`` made.
     fb_idle: Any = None
+    #: The upset an ``fb_upset`` scene announces (a ``football.upset.Upset``).
+    fb_upset: Any = None
     #: Which page of a several-page idle screen (the standings' division, then conference).
     fb_page: int = 0
     fb_elapsed: float = field(default=0.0, compare=False)
@@ -2838,6 +2840,12 @@ class ScoreboardApp:
             address_scene = self._address_scene()
             if address_scene is not None:
                 return address_scene
+        # An upset (a ranked college team losing to a lower-ranked one) is news whichever sport the
+        # board is showing, as a goal is: it takes the board for its few seconds.
+        if self._college is not None:
+            upset = self._college.upset_scene()
+            if upset is not None:
+                return upset
         mode = self._fb() if self._sport in FOOTBALL_SPORTS else None
         if mode is not None:
             return mode.scene()
@@ -3898,6 +3906,8 @@ class ScoreboardApp:
         football logo set, which holds the NFL's crests under abbreviations (``CIN``) the FBS
         reuses: until college logos exist (#541) it falls back to the text layout."""
         mode = self._fb() if self._sport == "college" else None
+        if mode is None and scene.kind == "fb_upset":
+            mode = self._college  # an upset alert over hockey or the NFL: still the FBS's teams
         if mode is None:
             self._draw_scene(scene)
             return
@@ -4006,6 +4016,8 @@ class ScoreboardApp:
             r.draw_fb_countdown(self.canvas, scene.fb_game, self.clock())
         elif scene.kind == "fb_redzone":
             r.draw_fb_redzone(self.canvas, scene.fb_game, scene.fb_elapsed)
+        elif scene.kind == "fb_upset":
+            r.draw_fb_upset(self.canvas, scene.fb_game, scene.fb_upset, scene.fb_elapsed)
         elif scene.kind == "fb_schedule":
             r.draw_fb_schedule(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind == "fb_week":
