@@ -149,6 +149,17 @@ class Current:
     elapsed: float
 
 
+def _is_score_stage(stage: Stage) -> bool:
+    """A stage a scores-only director keeps: a touchdown, field goal or other score's
+    celebration or detail, or a reversal. Not a play's animation or its words, a turnover, a coin
+    toss, a missed kick or a TV timeout's stats."""
+    if stage.stage == REVERSAL:
+        return True
+    return stage.stage in (EVENT, DETAIL) and isinstance(
+        stage.event, Touchdown | FieldGoal | GenericScore
+    )
+
+
 class Director:
     def __init__(
         self,
@@ -159,7 +170,12 @@ class Director:
         timings: Callable[[], Timings] | None = None,
         stats: Callable[[int], object | None] = lambda _game_id: None,
         on_sound: Callable[[Event], None] | None = None,
+        scores_only: bool = False,
     ) -> None:
+        #: College football shows scores and major events, not every play (the owner's call, as
+        #: hockey does): only a score's celebration and detail, and a reversal of one, are staged.
+        #: The plays are still read, to know the score changed and who scored.
+        self._scores_only = scores_only
         #: Called with each celebration that carries a sound (``Event.sound``: the lead team's
         #: touchdown or made field goal, #517) the moment it is detected, whatever is on screen.
         self._on_sound = on_sound
@@ -326,6 +342,8 @@ class Director:
         """The stages for a play; while the favourite holds the screen, another game's play is
         reduced to what is news (its celebrations, turnover alerts and reversals)."""
         stages = self._build_all(game, shown)
+        if self._scores_only:
+            stages = [s for s in stages if _is_score_stage(s)]
         if self._hold and game.id != self._preferred:
             stages = [
                 s

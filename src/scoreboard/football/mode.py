@@ -231,7 +231,12 @@ class FootballMode:
         return out
 
     def _make_director(self) -> Director:
-        return Director(*self._director_args, stats=self._stats_for, on_sound=self._on_sound)
+        return Director(
+            *self._director_args,
+            stats=self._stats_for,
+            on_sound=self._on_sound,
+            scores_only=self.league == LEAGUE_COLLEGE,
+        )
 
     def request_clear(self, scope: str) -> None:
         """Ask for the idle data (and rosters) to be forgotten: ``football`` or ``football:<item>``

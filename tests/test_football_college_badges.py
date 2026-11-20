@@ -1,4 +1,4 @@
-"""The rank badge on the football game scenes (#547): ``#5`` beside a ranked college team.
+"""The rank badge on the football game scenes (#547): the number beside a ranked college team.
 
 The badge is gold, 128px panels only, and only where it fits. Unranked teams draw exactly as they
 always did (every existing football snapshot is unchanged); these are the new ones.
@@ -43,8 +43,8 @@ def halftime(g, width=128):
 
 def test_the_badge_text_is_the_number_and_only_on_a_wide_panel():
     live = GAMES["live"]
-    assert fs.rank_badge(ranked(live, away=5).away, renderer(128)) == "#5"
-    assert fs.rank_badge(ranked(live, away=25).away, renderer(128)) == "#25"
+    assert fs.rank_badge(ranked(live, away=5).away, renderer(128)) == "5"
+    assert fs.rank_badge(ranked(live, away=25).away, renderer(128)) == "25"
     assert fs.rank_badge(ranked(live, away=5).away, renderer(64)) == ""
     assert fs.rank_badge(live.away, renderer(128)) == ""
 
@@ -97,7 +97,7 @@ def test_the_abbreviation_moves_right_for_the_badge_and_the_score_stays_put():
 
 def test_a_badge_is_dropped_rather_than_run_into_the_score():
     # The longest FBS abbreviations are four letters (TA&M, M-OH): with a two-digit score the
-    # "#25" badge still fits; with a three-digit score there is no room, so it is dropped.
+    # "25" badge still fits; with a three-digit score there is no room, so it is dropped.
     two = ranked(game("TA&M", "M-OH", "in", 38, 41), away=25, home=24)
     three = dataclasses.replace(
         two,
@@ -149,8 +149,9 @@ def test_a_single_64px_panel_never_shows_a_badge_and_draws_as_before(name):
 # -- the field band and the halftime card --------------------------------------------------------
 
 
-def test_the_field_band_shows_the_ranks_and_fits(update_snapshots):
-    g = ranked(GAMES["live"], away=5, home=12)
+def test_the_field_band_shows_the_ranks_when_there_is_room(update_snapshots):
+    # No down and distance (a kickoff, between quarters): the whole band is free for the badges.
+    g = ranked(GAMES["live_no_situation"], away=5, home=12)
     c = field(g)
     art = show("fb_field_ranked", c)
     assert not c.out_of_bounds
@@ -158,10 +159,45 @@ def test_the_field_band_shows_the_ranks_and_fits(update_snapshots):
     check_snapshot("fb_field_ranked", art, update_snapshots)
 
 
+def test_with_a_down_and_distance_the_band_drops_badges_that_would_crowd_it():
+    # The common case on a Saturday: clock, score and "2ND&3" leave no room for two badges.
+    g = ranked(GAMES["live"], away=5, home=12)
+    assert GOLD not in field(g).colors(0, 0, 127, 9)
+    assert field(g).render() == field(GAMES["live"]).render(), "it is drawn exactly as unranked"
+
+
+@pytest.mark.parametrize("name", ["live", "red_zone", "big_scores"])
+def test_the_band_score_never_runs_into_the_down_and_distance(name):
+    # Seen in a mockup: badges widened the score block into the "1ST&10" on the right.
+    base = GAMES[name]
+    for ranks in ((None, None), (5, None), (None, 12), (5, 12), (25, 24)):
+        g = ranked(base, away=ranks[0], home=ranks[1])
+        c = field(g)
+        assert not c.out_of_bounds
+        band = c.lit(0, 0, 127, 7)
+        down = [x for (x, y), rgb in band.items() if rgb in (fs.SITUATION, fs.RED_ZONE)]
+        score = [
+            x
+            for (x, y), rgb in band.items()
+            if rgb not in (fs.SITUATION, fs.RED_ZONE, fs.status_color(g))
+        ]
+        assert down and score
+        assert max(score) < min(down) - 1, (
+            f"{name} {ranks}: the score touches the down and distance"
+        )
+
+
+def test_the_rank_colour_is_not_one_the_band_already_uses():
+    used = {fs.WHITE, fs.LIVE, fs.SITUATION, fs.RED_ZONE, fs.HALFTIME, fs.FINAL, fs.PREGAME}
+    assert GOLD not in used
+    # and not near the down-and-distance yellow, which is what the first (gold) version was
+    assert sum(abs(a - b) for a, b in zip(GOLD, fs.SITUATION, strict=True)) > 150
+
+
 def test_the_band_drops_the_badges_when_the_clock_leaves_no_room_for_them():
     g = ranked(GAMES["live"], away=5, home=12)
     r = renderer(128)
-    for min_x, badges in ((0, True), (60, False)):
+    for min_x, badges in ((0, True), (66, False)):
         c = AsciiCanvas(128, H)
         fs._score(r, c, g, 6, None, min_x=min_x)
         assert not c.out_of_bounds, f"min_x={min_x}"
