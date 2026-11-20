@@ -17,6 +17,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .college_teams import CollegeTable, table_from_payloads
 from .idle import (
     Scoreboard,
     Standings,
@@ -186,6 +187,23 @@ class FootballClient:
         if payload is None:
             return None
         return standings_from_payload(payload)
+
+    def college_teams(self) -> CollegeTable | None:
+        """Every FBS team with its conference and colours (#540): two requests, ~1.9 MB.
+
+        The standings (``group=80``) say who is FBS and which conference; ``/teams`` has the
+        colours. Fetch once and keep it (the caller caches); ``None`` if either request fails, so
+        a half-built table with neutral colours is never kept for a day. NFL clients refuse.
+        """
+        if self.league != LEAGUE_COLLEGE:
+            raise ValueError("college_teams() needs a college-football client")
+        standings = self._get("/standings", {"group": "80"}, base=self.standings_url)
+        if standings is None:
+            return None
+        teams = self._get("/teams", {"limit": "1000"})
+        if teams is None:
+            return None
+        return table_from_payloads(standings, teams)
 
     def plays(self, event_id: int | str) -> list[Play] | None:
         """Every play of a game so far, in the order they happened (#353).
