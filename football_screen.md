@@ -905,6 +905,17 @@ card (4s); there is no strobe, no dropping letters and **no detail screen after 
 director gives a generic score only its event stage). A 64px panel uses smaller type and drops
 the team-name line. The sound, if any, is the sounds story's.
 
+**The favourite's safety (#530, `display/football_touchdown.py` `draw_safety`)** is the exception to
+"plainer": a safety is rare and worth marking, so it gets the touchdown's celebration with its own
+word. `draw_score` stays the registered screen and hands the favourite's safety (the title is
+`SAFETY`) on. The timeline is the touchdown's (flash and pulsing end zones, strobe, the letters
+dropping in one at a time, the team's short name fading in along the bottom, a shimmer), with no
+spiked ball, since a safety has no goal-line spike. The word is `SAFETY` alone (owner's call: no
+`+2`); at double size it is six letters, 84px, centred, and a 64px panel keeps it on one line at
+normal size. A followed team's safety and every other generic score keep the plain card. The
+animated figure (a referee's arms overhead) was mocked up and dropped: at 32px it read as a
+goalpost. Unverified against a real safety: see "Play types not yet seen".
+
 #### Order and timing for one scoring play
 
 | Step | Screen | Length |
@@ -1238,12 +1249,19 @@ stage is dropped when the queue is behind.
 | ![On downs](docs/football/turnover_on_downs.png) | |
 | Amber: neither team is the favourite; a turnover on downs. | |
 
-**The generic score** (#395; a safety for the favourite, and a followed team's two-point conversion):
+**The generic score** (#395; the favourite's two-point conversion, and a followed team's):
 
 | | |
 |---|---|
-| ![Safety](docs/football/fb_score.png) | ![Quick](docs/football/fb_score_quick.png) |
+| ![Score](docs/football/fb_score.png) | ![Quick](docs/football/fb_score_quick.png) |
 | The points, the team, the score, the first line of the play. | A followed team's: the same card, static. |
+
+**The favourite's safety** (#530; the touchdown's celebration with `SAFETY`, no spiked ball):
+
+| | |
+|---|---|
+| ![Letters](docs/football/safety_letters.png) | ![Settled](docs/football/safety.png) |
+| The letters dropping in over the strobe. | Settled: the word and the team's short name. |
 
 **The reversal** (#396; a touchdown overturned, and a long reason scrolling):
 
@@ -1512,6 +1530,8 @@ follows `horn_team`); the followed-team question above is still deferred.
       overtime gets a second `Coin Toss` play (the overtime check errored)
 - [x] Type names for QB kneel, spike, onside kick, intentional grounding: found in 2,441
       real plays (#353); see `football_api.md`
+- [x] `fb_safety` (#530): the favourite's safety, the touchdown's celebration with `SAFETY` and
+      no spiked ball
 - [~] Play types not yet seen: still a safety, a blocked kick, a free kick and a turnover
       on downs. Pick-sixes, two-point attempts and muffed punts are now seen
 - [~] What the feed does with a reviewed or reversed scoring play: **finished games

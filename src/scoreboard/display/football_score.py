@@ -12,9 +12,11 @@ than the touchdown: no strobe, no letters dropping in.
     NYG 22  WSH 17    the team's short name; the new score, the scoring team first
     sacked in end zone for a SAFETY      the first sentence of the play text
 
-The favourite's (``Scope.FULL``) opens with a short white flash (6s); a followed team's
-(``Scope.QUICK``, 4s) is the static card. No detail screen follows. A single 64px panel uses
-smaller type and drops the team-name line. The horn is not part of this story.
+The favourite's safety is the exception (#530): it gets the touchdown's celebration with its own
+word (``football_touchdown.draw_safety``), since a safety is rare and worth marking. Everything
+else is the plain card. The favourite's (``Scope.FULL``) opens with a short white flash (6s); a
+followed team's (``Scope.QUICK``, 4s) is the static card. No detail screen follows. A single 64px
+panel uses smaller type and drops the team-name line. The horn is not part of this story.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from ..football.teams import is_team, team_color
 from ..football.teams import team as football_team
 from .fonts import text_width
 from .football_plays import DIM, WHITE, event_screen, r_fit
+from .football_touchdown import draw_safety
 from .goal_light import _Buffer, _ease, _scaled
 
 if TYPE_CHECKING:
@@ -81,6 +84,9 @@ def _fit_font(r: Renderer, text: str, width: int, fonts: tuple[Any, ...]) -> Any
 @event_screen(GenericScore, EVENT)
 def draw_score(r: Renderer, canvas: Any, scene: Scene) -> None:
     event = scene.fb_event
+    if event.scope == Scope.FULL and title(scene) == "SAFETY":
+        draw_safety(r, canvas, scene)
+        return
     canvas.Clear()
     age = max(0.0, scene.fb_elapsed)
     color = team_color(event.team) if is_team(event.team) else WHITE

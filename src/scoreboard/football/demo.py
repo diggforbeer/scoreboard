@@ -368,6 +368,7 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
         98, 100, HOME, 2, (10, 26),
     )  # fmt: skip
     two_point = event(GenericScore, two_point_play, points=2, home_score=26, scope=Scope.QUICK)
+    two_point_full = event(GenericScore, two_point_play, points=2, home_score=26)
     toss = event(CoinToss, rush, HOME, kicker=AWAY)
     reversal = event(
         Reversal, td, original=touchdown, original_kind="touchdown", title="TOUCHDOWN OVERTURNED",
@@ -480,7 +481,15 @@ def _play_scenes(now: datetime) -> list[DemoStep]:
             scene("fb_event", "event", td, quick_td, at=2.0, seconds=4.0), name="touchdown_quick"
         ),
         DemoStep(
-            scene("fb_event", "event", safety_play, safety, at=1.0, seconds=6.0), name="fb_score"
+            scene("fb_event", "event", safety_play, safety, at=2.2, seconds=6.0),
+            name="safety_letters",
+        ),
+        DemoStep(
+            scene("fb_event", "event", safety_play, safety, at=4.2, seconds=6.0), name="safety"
+        ),
+        DemoStep(
+            scene("fb_event", "event", two_point_play, two_point_full, at=1.0, seconds=6.0),
+            name="fb_score",
         ),
         DemoStep(
             scene("fb_event", "event", two_point_play, two_point, at=1.0, seconds=4.0),
