@@ -444,3 +444,34 @@ cd_canvas = AsciiCanvas(128, H)
 with use_directory(FBS):
     draw_fb_countdown(rend(), cd_canvas, countdown_game, datetime(2026, 11, 22, 16, 17, tzinfo=UTC))
 png(cd_canvas, 128, "31_countdown_ranked")
+
+# the opt-in scores grid (#556): a Saturday slate, ranked games first
+from scoreboard.display.college_idle import draw_cfb_scores  # noqa: E402
+from scoreboard.football.college_views import ScoresView, scores_order  # noqa: E402
+
+grid_games = [
+    game("UTAH", "UCLA", "in", 17, 14, "3:12 - 3rd", 3, ranks=(2, 4), gid=1),
+    game("OSU", "MICH", "in", 24, 21, "Halftime", 2, name="STATUS_HALFTIME", ranks=(1, 12), gid=2),
+    game(
+        "TEX",
+        "ALA",
+        "pre",
+        0,
+        0,
+        "11/22 - 12:00 PM EST",
+        0,
+        name="STATUS_SCHEDULED",
+        ranks=(8, 7),
+        gid=3,
+    ),
+    game("ND", "MIA", "post", 31, 28, "Final", 4, name="STATUS_FINAL", ranks=(3, 5), gid=4),
+    game("UGA", "UTSA", "in", 45, 3, "1:02 - 4th", 4, ranks=(6, None), gid=5),
+    game("IU", "UTSA", "post", 30, 27, "Final/OT", 5, name="STATUS_FINAL", ranks=(11, None), gid=6),
+]
+with use_directory(FBS):
+    for page, label in ((0, "32_scores_grid_page1"), (1, "33_scores_grid_page2")):
+        view = ScoresView(scores_order(grid_games, False))
+        c = AsciiCanvas(128, H)
+        draw_cfb_scores(rend(), c, view, page)
+        assert not c.out_of_bounds, label
+        png(c, 128, label)

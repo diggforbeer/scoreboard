@@ -170,3 +170,88 @@ def _draw_conference(r: Any, canvas: Any, scene: Any, now: Any) -> None:
 def _draw_preview(r: Any, canvas: Any, scene: Any, now: Any) -> None:
     """The NFL's preview layout over a college game: the rank rides in front of each record."""
     r.draw_fb_preview(canvas, scene.fb_idle, now)
+
+
+# -- the scores grid (#556) -----------------------------------------------------------------------
+
+from ..football.models import FbGame  # noqa: E402
+from .fonts import text_width  # noqa: E402
+from .football_scenes import FINAL  # noqa: E402
+
+COLUMN_WIDTH = 32
+_AWAY_BASELINE, _HOME_BASELINE, _STATUS_BASELINE, _DETAIL_BASELINE = 7, 15, 24, 31
+
+
+def _status(r: Any, game: FbGame) -> tuple[str, str, tuple[int, int, int]]:
+    """``(status, detail, colour)`` sized for a 32px column."""
+    if game.is_final:
+        return "FINAL", "OT" if game.period > 4 else "", FINAL
+    if game.is_live:
+        if game.is_halftime:
+            return "HALF", "", AMBER
+        return game.display_clock, f"Q{game.period}" if game.period <= 4 else "OT", LIVE
+    if game.start_utc is None:
+        return "TBD", "", GREY
+    local = game.start_utc.astimezone(r.tz)
+    return f"{local.hour % 12 or 12}:{local.minute:02d}{'A' if local.hour < 12 else 'P'}", "", GREY
+
+
+def _inline_room(r: Any, game: FbGame, side: Any, x0: int, right: int) -> int:
+    """Pixels free between a team's abbreviation and its score."""
+    score = "" if game.is_pregame else str(side.score)
+    left = x0 + 1 + text_width(r.fonts.small, side.abbrev) + 1
+    stop = right - text_width(r.fonts.small, score) - 1 if score else right
+    return stop - left
+
+
+def _draw_column(r: Any, canvas: Any, game: FbGame, x0: int, right: int) -> None:
+    font, tiny = r.fonts.small, r.fonts.tiny
+    inline = all(
+        _inline_room(r, game, side, x0, right) >= text_width(tiny, str(side.rank))
+        for side in (game.away, game.home)
+        if side.rank
+    )
+    for side, baseline in ((game.away, _AWAY_BASELINE), (game.home, _HOME_BASELINE)):
+        score = "" if game.is_pregame else str(side.score)
+        color = team_color(side.abbrev) if is_team(side.abbrev) else UNKNOWN_TEAM
+        r.text(canvas, font, x0 + 1, baseline, color, side.abbrev)
+        if score:
+            r.text_right(canvas, font, right, baseline, WHITE, score)
+        if inline and side.rank:
+            gap = x0 + 1 + text_width(font, side.abbrev) + 1
+            r.text(canvas, tiny, gap, baseline, RANK_COLOR, str(side.rank))
+    status, detail, color = _status(r, game)
+    cx = (x0 + right) // 2
+    r.text_center(canvas, font, cx, _STATUS_BASELINE, color, status)
+    if not inline:
+        # Too tight beside the names: the ranks flank the bottom line, away left, home right.
+        if game.away.rank:
+            r.text(canvas, tiny, x0 + 1, _DETAIL_BASELINE, RANK_COLOR, str(game.away.rank))
+        if game.home.rank:
+            r.text_right(canvas, tiny, right, _DETAIL_BASELINE, RANK_COLOR, str(game.home.rank))
+    if detail:
+        dim = tuple(round(c * 0.5) for c in color)
+        r.text_center(canvas, tiny, cx, _DETAIL_BASELINE, dim, detail)
+
+
+def draw_cfb_scores(r: Any, canvas: Any, view: Any, page: int = 0) -> None:
+    """Four games a page, one 32px column each, away over home: the abbreviation in the team's
+    colour, its rank beside it where there is room, the score at the right, then the clock (or
+    kickoff, or ``FINAL``) with the quarter under it. A short last page is centred."""
+    canvas.Clear()
+    games = view.page(min(max(page, 0), view.pages - 1))
+    left = (r.width - len(games) * COLUMN_WIDTH) // 2
+    for i, game in enumerate(games):
+        x0 = left + i * COLUMN_WIDTH
+        if i:
+            r.vline(canvas, x0 - 1, 1, r.height - 2, DIM)
+        _draw_column(r, canvas, game, x0, x0 + COLUMN_WIDTH - 2)
+    if view.pages > 1:
+        for n in range(view.pages):
+            canvas_dim = DIM if n == page else tuple(round(c * 0.35) for c in DIM)
+            r.hline(canvas, 60 + n * 6, 61 + n * 6, r.height - 1, canvas_dim)
+
+
+@college_screen("cfb_scores")
+def _draw_scores(r: Any, canvas: Any, scene: Any, now: Any) -> None:
+    draw_cfb_scores(r, canvas, scene.fb_idle, scene.fb_page)
