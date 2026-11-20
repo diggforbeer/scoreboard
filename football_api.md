@@ -23,7 +23,8 @@ notice. Parse defensively and tolerate missing fields.
   during a game is enough.
 - `/standings` on the site API returns 404.
 - College football: `.../college-football/scoreboard` has the same shape
-  (`curatedRank` is populated), so one parser covers both leagues.
+  (`curatedRank` is populated), so one parser covers both leagues. See
+  "College football" at the end of this file for what differs.
 
 ## Scoreboard fields
 
@@ -479,3 +480,69 @@ figures for the game in progress; how far they lag a play is not measured.
 **Timeouts in the plays feed** (4 games, 2026-11-15): from an `Official Timeout` play's `wallclock` to the
 next play is 2m15s-3m (the next play is a rush, pass or kickoff); from a team `Timeout` about 55s-1m15s.
 About a third of official timeouts are listed **twice** with the same `wallclock` and clock, as two plays.
+
+## College football (spike, 2026-11-20, week 12)
+
+Checked against `site.api.espn.com/apis/site/v2/sports/football/college-football`
+and a finished game (MIZ @ UGA, event 401856883). **No game was live during the
+spike**, so live fields (`situation`, halftime, in-OT status text) are *not*
+verified; check them on the first live Saturday before building on them.
+
+| Purpose | URL |
+|---|---|
+| Scoreboard | `.../scoreboard?groups=80&limit=300` (`dates=YYYYMMDD`, `week=N&seasontype=2`; `seasontype=3` is bowls/CFP) |
+| Game detail, scoring plays | `.../summary?event=<id>` |
+| Polls | `.../rankings` (all polls in one response) |
+| Conference tables | `site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80` (the `v2` path, as for NFL; `/apis/site/v2/.../standings` is 404) |
+| Teams, colours, logos | `.../teams?limit=1000` (763 teams, all divisions) |
+
+- **Scoreboard needs `groups=80`.** Without it the default returns a curated 24
+  events; with `groups=80&limit=300` it returned all 70 FBS games of the week
+  (every game `2` competitors). `groups=80` does *not* filter `/teams`
+  (still returns everything).
+- **Cache:** scoreboard `cache-control: max-age=4`, so a 10-15 s poll is fine.
+- **Rank is on the scoreboard**: `competitors[].curatedRank.current`, **99 means
+  unranked** (not null). Which poll it follows is not stated and was not checked (UGA is #1 in both the AP and CFP lists, so it cannot tell them apart); find out before the upset alert depends on it.
+  The summary header has `competitors[].rank`.
+- **Rankings** (`/rankings`): `rankings[]` holds `cfp` (Playoff Committee, only once
+  published; present in week 12), `ap`, `usa` (AFCA Coaches), plus FCS/D2/D3 polls
+  to ignore. Each has 25 `ranks[]` with `current`, `previous`, `trend`,
+  `recordSummary`, `conference`, `points`, `firstPlaceVotes`, `team`.
+  `previous` and `trend` give the movement arrows for free. `date` and
+  `lastUpdated` say how fresh a poll is.
+- **Conference** is on each game: `competitions[0].groups` (`name`, `shortName`,
+  `isConference`), with `conferenceCompetition` true for a conference game.
+  Records carry `vs. Conf.`.
+- **Standings** (`apis/v2`, `group=80`): `children[]` is one per conference, each
+  with `standings.entries[]`; stats are a flat list with **repeated names** (the
+  same `wins` and `gamesBehind` appear once per split: overall, Home, Away, vs. Conf.),
+  so read by position/`type`, never by name alone. **Sun Belt is nested**
+  (`children` of divisions, no `standings` on the conference), so a naive loop
+  misses it. `playoffSeed` is present. The Pac-12 exists again with 8 teams.
+  This yields 124 teams without Sun Belt; the FBS list is these plus the Sun Belt's.
+- **Team identity: key by ESPN id, never abbreviation.** `OSU` is both Ohio State
+  and Oklahoma State (and `RSVT` is shared by two non-FBS teams). The NFL file
+  already keys on ids.
+- **Scoring plays** come from `summary.scoringPlays` (11 in the sample): `type.text`
+  is `Rushing Touchdown`, `Passing Touchdown`, `Field Goal Good` (more kinds, such as
+  return TDs, safeties and missed kicks, are not yet seen); also `text`
+  (scorer and kick), `awayScore`/`homeScore`, `period.number`, `clock`, `team`,
+  `scoringType`. That is the college equivalent of hockey's goal list, and gives
+  TD/FG detection without the core plays endpoint.
+- **Box score** in `summary.boxscore.teams[].statistics` has the stat names the
+  halftime summary needs (`firstDowns`, `totalYards`, `netPassingYards`,
+  `rushingYards`, `turnovers`, ...). `winprobability` has 159 points.
+- **Game state:** same as NFL (`pre`/`in`/`post`, `status.type.name`
+  `STATUS_FINAL`). Overtime finals read `Final/OT`. Competitors carry `winner`
+  once final and `linescores` per quarter.
+- **Postseason:** `seasontype=3` lists 48 bowl games already, many `TBD VS TBD`
+  with the bowl name in `notes[].headline`. Handle placeholder teams.
+- **Odds** ride along on the scoreboard (DraftKings spread, over/under, with betting
+  links). The board has no use for them; ignore the whole block.
+- **Size:** the full scoreboard was 454 KB and `/teams` 1.8 MB, so fetch teams
+  once and cache it; poll only the scoreboard.
+
+Not yet verified (needs a live Saturday): `situation` and possession fields, the
+halftime state (`STATUS_HALFTIME`?), end-of-quarter text, overtime periods
+beyond 4, whether `summary.scoringPlays` updates promptly during a game, and
+whether `curatedRank` changes mid-week when a new poll lands.
