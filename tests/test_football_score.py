@@ -1,6 +1,7 @@
 """``fb_score`` (#395): the generic score screen for a safety, a two-point conversion, or any
 scoring play with a type nothing else recognises. Events come from the real ``EventDetector``
-(an unrecognised scoring type is how a ``GenericScore`` is made)."""
+(an unrecognised scoring type is how a ``GenericScore`` is made). The favourite's safety is not
+drawn here any more: it gets its own screen (#530, ``test_football_safety.py``)."""
 
 from __future__ import annotations
 
@@ -97,7 +98,7 @@ def test_the_team_name_is_the_short_name_or_the_code():
 
 
 def test_it_shows_the_points_the_team_the_score_and_the_play_text_in_that_order():
-    c = draw(SAFETY, 1.0)
+    c = draw(TWO, 1.0)
     rows = {}
     for (_, y), col in c.pixels.items():
         rows.setdefault(y, set()).add(col)
@@ -110,28 +111,28 @@ def test_it_shows_the_points_the_team_the_score_and_the_play_text_in_that_order(
 
 
 def test_it_is_plainer_than_the_touchdown_no_strobe_and_nothing_dropping_in():
-    sizes = {len(draw(SAFETY, age).pixels) for age in (0.5, 1.0, 2.0, 4.0)}
+    sizes = {len(draw(TWO, age).pixels) for age in (0.5, 1.0, 2.0, 4.0)}
     assert len(sizes) == 1 or max(sizes) < 1500, "static after the opening"
-    assert max(len(draw(SAFETY, age).pixels) for age in (0.3, 0.5, 0.7, 0.9)) < 1500
+    assert max(len(draw(TWO, age).pixels) for age in (0.3, 0.5, 0.7, 0.9)) < 1500
 
 
 def test_the_favourites_opens_with_a_short_white_flash_and_a_followed_teams_is_static():
     assert any(c[0] > 80 and c[1] > 80 and c[2] > 80 and c != fp.WHITE
-               for c in draw(SAFETY, 0.02).pixels.values())  # fmt: skip
-    assert not any(sum(c) > 700 and c[0] < 255 for c in draw(SAFETY, 0.5).pixels.values())
+               for c in draw(TWO, 0.02).pixels.values())  # fmt: skip
+    assert not any(sum(c) > 700 and c[0] < 255 for c in draw(TWO, 0.5).pixels.values())
     quick = [draw(QUICK, age, seconds=4.0).pixels for age in (0.0, 0.5, 2.0)]
     assert quick[0] == quick[1] == quick[2]
 
 
 def test_the_headline_fades_in_for_the_favourite():
-    assert draw(SAFETY, 0.05).pixels != draw(SAFETY, 1.0).pixels
-    assert draw(SAFETY, 1.0).pixels == draw(SAFETY, 3.0).pixels
+    assert draw(TWO, 0.05).pixels != draw(TWO, 1.0).pixels
+    assert draw(TWO, 1.0).pixels == draw(TWO, 3.0).pixels
 
 
 def test_a_64px_panel_has_smaller_type_and_no_team_name_line():
-    c = draw(SAFETY, 1.0, 64)
+    c = draw(TWO, 1.0, 64)
     assert c.pixels and all(x < 64 for x, _ in c.pixels)
-    assert len(c.pixels) < len(draw(SAFETY, 1.0).pixels)
+    assert len(c.pixels) < len(draw(TWO, 1.0).pixels)
 
 
 def test_a_team_that_is_not_one_of_the_32_never_raises():
@@ -182,8 +183,8 @@ def test_a_followed_teams_is_the_quick_four_seconds():
 
 @pytest.mark.parametrize(
     "name,event,age,width,seconds",
-    [("safety", SAFETY, 1.0, 128, 6.0), ("two_point", TWO, 1.0, 128, 6.0),
-     ("quick", QUICK, 1.0, 128, 4.0), ("safety_64", SAFETY, 1.0, 64, 6.0)],
+    [("two_point", TWO, 1.0, 128, 6.0), ("quick", QUICK, 1.0, 128, 4.0),
+     ("two_point_64", TWO, 1.0, 64, 6.0)],
 )  # fmt: skip
 def test_snapshot(name, event, age, width, seconds, update_snapshots):
     check_snapshot(f"fb_score_{name}", draw(event, age, width, seconds).render(), update_snapshots)

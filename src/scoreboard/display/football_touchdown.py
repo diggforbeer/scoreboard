@@ -9,6 +9,10 @@ play (the 6s stage, ``fb_score_seconds``)::
     1.0-3.5s   TOUCHDOWN drops in one letter at a time, in the team's colour
     3.5-6.0s   a white shimmer sweeps across the letters; the team's name fades in along the bottom
 
+The favourite's **safety** (#530) is the same screen with ``SAFETY`` for the word and no spiked ball
+(``draw_safety``, reached from ``football_score.draw_score``, which stays the registered screen for
+a ``GenericScore``). It is one six-letter word, so a 64px panel keeps it on one line.
+
 A followed team's touchdown (``Scope.QUICK``) is the **quick version**: the plain score screen, a
 static card with the headline, the team and the score, no animation. On a single 64px panel the
 word wraps to two lines (``TOUCH`` / ``DOWN``) at normal size. The sound is a separate story and
@@ -33,6 +37,7 @@ if TYPE_CHECKING:
     from .renderer import Renderer
 
 WORD = "TOUCHDOWN"
+SAFETY_WORD = "SAFETY"
 FLASH_SECONDS = 0.12
 END_ZONES_END = 1.0
 STROBE_START, STROBE_END = 1.0, 3.0
@@ -59,10 +64,21 @@ def city(abbrev: str) -> str:
 
 @event_screen(Touchdown, EVENT)
 def draw_touchdown(r: Renderer, canvas: Any, scene: Scene) -> None:
-    event = scene.fb_event
-    if event.scope != Scope.FULL:
+    if scene.fb_event.scope != Scope.FULL:
         draw_quick(r, canvas, scene)
         return
+    _celebrate(r, canvas, scene, WORD, ("TOUCH", "DOWN"), spike=True)
+
+
+def draw_safety(r: Renderer, canvas: Any, scene: Scene) -> None:
+    """The favourite's safety: the touchdown's celebration with its own word and no spiked ball."""
+    _celebrate(r, canvas, scene, SAFETY_WORD, (SAFETY_WORD,), spike=False)
+
+
+def _celebrate(
+    r: Renderer, canvas: Any, scene: Scene, word: str, rows: tuple[str, ...], spike: bool
+) -> None:
+    event = scene.fb_event
     canvas.Clear()
     age = max(0.0, scene.fb_elapsed)
     color = team_rgb(event.team)
@@ -75,13 +91,13 @@ def draw_touchdown(r: Renderer, canvas: Any, scene: Scene) -> None:
         _end_zones(buf, r.width, color, age, wide)
     elif age < STROBE_END:
         _strobe(buf, color, age)
-    if BALL_FALL_START <= age < STROBE_END:
+    if spike and BALL_FALL_START <= age < STROBE_END:
         _ball(buf, scene, r.width, age)
     if age >= LETTERS_START:
         if wide:
-            _letters_wide(r, buf, color, age)
+            _letters_wide(r, buf, color, age, word)
         else:
-            _letters_narrow(r, buf, color, age)
+            _letters_narrow(r, buf, color, age, rows)
     buf.flush(canvas)
     if age >= NAME_START:
         fade = _ease((age - NAME_START) / NAME_FADE_SECONDS)
@@ -147,8 +163,8 @@ def _drop(age: float, index: int, travel: int) -> tuple[int, float]:
     return round(travel * (1 - drop)), max(0.0, 1 - (age - start) / 0.25)
 
 
-def _letters_wide(r: Renderer, buf: _Buffer, color, age: float) -> None:
-    glyphs = [_glyph(r, ch) for ch in WORD]
+def _letters_wide(r: Renderer, buf: _Buffer, color, age: float, word: str) -> None:
+    glyphs = [_glyph(r, ch) for ch in word]
     cell = max(advance for _, advance in glyphs) * TEXT_SCALE
     left = r.width // 2 - (cell * len(glyphs)) // 2
     for i, (pixels, advance) in enumerate(glyphs):
@@ -166,10 +182,12 @@ def _letters_wide(r: Renderer, buf: _Buffer, color, age: float) -> None:
                     )
 
 
-def _letters_narrow(r: Renderer, buf: _Buffer, color, age: float) -> None:
-    """``TOUCH`` over ``DOWN`` at normal size, one letter at a time."""
+def _letters_narrow(r: Renderer, buf: _Buffer, color, age: float, rows: tuple[str, ...]) -> None:
+    """``TOUCH`` over ``DOWN`` (or ``SAFETY`` alone, lower down) at normal size, one letter at a
+    time."""
     index = 0
-    for row, word in enumerate(("TOUCH", "DOWN")):
+    top = 2 if len(rows) > 1 else 9
+    for row, word in enumerate(rows):
         glyphs = [_glyph(r, ch) for ch in word]
         cell = max(advance for _, advance in glyphs)
         left = r.width // 2 - (cell * len(glyphs)) // 2
@@ -180,7 +198,7 @@ def _letters_narrow(r: Renderer, buf: _Buffer, color, age: float) -> None:
                 for px, py in pixels:
                     sweep = _shimmer_at(age, glyph_left + px)
                     lit = _towards_white(color, min(1.0, landing * 0.9 + sweep * 0.75))
-                    buf.set(glyph_left + px, 2 + row * 14 - lift + py, lit)
+                    buf.set(glyph_left + px, top + row * 14 - lift + py, lit)
             index += 1
 
 
