@@ -24,7 +24,7 @@ name: Release
 # letters, digits and hyphens, as it becomes part of the tag).
 on:
   push:
-    branches: [main, football]
+    branches: [main, football, college-football]
 
 permissions:
   contents: write
