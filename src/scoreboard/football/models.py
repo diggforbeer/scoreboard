@@ -109,6 +109,9 @@ class FbTeam:
     road_record: str = ""
     #: ``True``/``False`` once the game is decided, ``None`` before.
     winner: bool | None = None
+    #: The team's number in the chosen college poll (1-25), ``None`` if unranked or not college.
+    #: Not from the game feed: ``FootballMode.ranked`` fills it in from the polls.
+    rank: int | None = None
 
     @staticmethod
     def from_api(raw: Any) -> FbTeam:

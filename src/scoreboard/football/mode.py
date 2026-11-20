@@ -26,6 +26,7 @@ from ..important_dates import pick as pick_date
 from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
 from .idle import (
+    POLLS_TTL,
     SCHEDULE_TTL,
     STANDINGS_TTL,
     WEEK_TTL,
@@ -190,6 +191,44 @@ class FootballMode:
         if directory is not None:
             self._directory = directory
         return use_directory(directory or EMPTY_DIRECTORY)
+
+    def _chosen_poll(self) -> Any:
+        """The poll that decides "ranked" (``[football] college_poll``), or ``None``: not college,
+        no polls fetched yet, or none fresh (out of season nobody is ranked)."""
+        if self.league != LEAGUE_COLLEGE:
+            return None
+        polls = self.snapshot.idle.polls()
+        if polls is None:
+            return None
+        cfg = self._football() if self._football else None
+        return polls.chosen(getattr(cfg, "college_poll", "ap"), self._utc_now())
+
+    def rank_of(self, team_id: int | str | None) -> int | None:
+        """A team's number in the chosen poll, or ``None`` (unranked, or no poll to say)."""
+        poll = self._chosen_poll()
+        return None if poll is None or team_id is None else poll.rank_of(team_id)
+
+    def ranked(self, games: Sequence[FbGame]) -> list[FbGame]:
+        """``games`` with each team's ``rank`` filled in from the chosen poll. Ranks are not in
+        the game feed (its ``curatedRank`` follows an unknown poll), so they are applied here, at
+        read time: a new poll shows on the next frame without refetching a game."""
+        poll = self._chosen_poll()
+        if poll is None:
+            return list(games)
+        out: list[FbGame] = []
+        for game in games:
+            away, home = poll.rank_of(game.away.espn_id), poll.rank_of(game.home.espn_id)
+            if away is None and home is None:
+                out.append(game)
+                continue
+            out.append(
+                replace(
+                    game,
+                    away=replace(game.away, rank=away),
+                    home=replace(game.home, rank=home),
+                )
+            )
+        return out
 
     def _make_director(self) -> Director:
         return Director(*self._director_args, stats=self._stats_for, on_sound=self._on_sound)
@@ -407,7 +446,17 @@ class FootballMode:
             list(cfg.followed_teams) if cfg else []
         )
         mine = [t for t in dict.fromkeys(mine) if is_team(t)]
-        if any(g.is_live and any(g.involves(t) for t in mine) for g in games):
+        live_followed = any(g.is_live and any(g.involves(t) for t in mine) for g in games)
+        # The ranks are fetched at the usual pace, and once even with a followed game live (the
+        # board may have started mid-game and every badge needs them).
+        if (
+            self.league == LEAGUE_COLLEGE
+            and hasattr(client, "college_rankings")
+            and (snap.polls_cached is None or not live_followed)
+        ):
+            polls = self._idle_cache.refresh(("polls",), POLLS_TTL, client.college_rankings)
+            snap = replace(snap, polls_cached=polls or snap.polls_cached)
+        if live_followed:
             return snap
         cache = self._idle_cache
         schedules = dict(snap.schedules)
@@ -434,6 +483,7 @@ class FootballMode:
             schedules=schedules,
             standings_cached=standings,
             week_cached=week_item,
+            polls_cached=snap.polls_cached,
         )
 
     def _apply_clears(self, prev: IdleSnapshot) -> IdleSnapshot:
@@ -509,7 +559,7 @@ class FootballMode:
             return Scene("fb_connecting")
         if snap.is_stale(now):
             return Scene("fb_no_data")
-        games = snap.games or ()
+        games = self.ranked(snap.games or ())
         self.redzone.observe(games)
         idle_kind = self._idle_kind(games, snap, now)
         if idle_kind is not None:

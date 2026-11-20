@@ -37,6 +37,8 @@ log = logging.getLogger(__name__)
 SCHEDULE_TTL = 24 * 3600.0
 STANDINGS_TTL = 3600.0
 WEEK_TTL = 300.0
+#: The college polls change weekly; an hour keeps a mid-week release from waiting long.
+POLLS_TTL = 3600.0
 #: After a failed fetch, do not try again for this long.
 RETRY_SECONDS = 60.0
 #: Data older than ``STALE_FACTOR`` windows is stale: reported as missing, not shown as fresh.
@@ -391,6 +393,13 @@ class IdleSnapshot:
     schedules: Mapping[int, Cached[TeamSchedule]] = field(default_factory=dict)
     standings_cached: Cached[Standings] | None = None
     week_cached: Cached[Scoreboard] | None = None
+    #: The college polls (``None`` for the NFL). Unlike the rest, never read as "stale" by age:
+    #: the idle fetch pauses while a followed game is live, a game outlasts two hours, and a poll
+    #: only changes weekly; each poll judges its own freshness (``Poll.is_fresh``).
+    polls_cached: Cached[Any] | None = None
+
+    def polls(self) -> Any:
+        return None if self.polls_cached is None else self.polls_cached.value
 
     def schedule(self, team_id: int, now: float) -> TeamSchedule | None:
         return _fresh(self.schedules.get(team_id), SCHEDULE_TTL, now)
