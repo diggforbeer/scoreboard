@@ -801,10 +801,11 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
 #: is a sport of its own here and not a league of ``football``, because the NFL and FBS share
 #: abbreviations (``CIN``, ``HOU``, ``MIA``) *and* ESPN ids (Auburn and the Bills are both 2).
 TEAM_SPORTS = ("hockey", "football", "college")
-#: The sports the app can run today: the ones with an engine behind them. A ``college`` entry is
-#: accepted, saved and ranked, but is inert until the app runs a college feed (epic #534); the app
-#: never switches to a sport that is not in this tuple.
-RUNNING_SPORTS = ("hockey", "football")
+#: The sports the app can run: the ones with an engine behind them. The app never switches to a
+#: sport that is not in this tuple.
+RUNNING_SPORTS = ("hockey", "football", "college")
+#: The sports a ``FootballMode`` runs: the NFL's and the FBS's, each with its own feed and teams.
+FOOTBALL_SPORTS = ("football", "college")
 #: What an FBS abbreviation looks like (ESPN's: ``UGA``, ``UTSA``, ``M-OH``, ``TA&M``). The table is
 #: fetched, so a board that boots offline cannot check a name against it; this only rejects what
 #: could not be one.
