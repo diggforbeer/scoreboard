@@ -9,6 +9,10 @@ The owner's rules (2026-11-20):
   *higher*-ranked one is not.
 * **And at the final.** A ranked team that lost to a lower-ranked or unranked one gets an upset
   final, whether or not the alert fired during the game.
+* **Only for the ranked list's teams** (#588, the owner's standing rule that nothing but the teams
+  they follow takes the board): the team being upset must be the favourite or a followed team. An
+  upset between teams nobody follows never alerts, however big. ``teams`` is that list of
+  abbreviations; ``None`` (the pure-function default, used by the tests) means any game.
 
 Ranks are the chosen poll's (``FootballMode.ranked``), so the alert and the badges always agree.
 Pure functions plus a small watcher; whether the board may show it (the setting, a 128px panel)
@@ -23,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
 from .models import FbGame, FbTeam
@@ -50,11 +54,12 @@ class Upset:
     margin: int
 
 
-def upset_of(game: FbGame, min_gap: int = 1) -> Upset | None:
+def upset_of(game: FbGame, min_gap: int = 1, teams: Collection[str] | None = None) -> Upset | None:
     """The upset ``game`` is in, or ``None``.
 
     ``min_gap`` is how many places lower the leader must be ranked (1: any lower-ranked team, and
-    every unranked one). Needs ranks on the game's teams.
+    every unranked one). Needs ranks on the game's teams. ``teams`` limits it to games in which the
+    team being upset is one of those abbreviations (the ranked list's); ``None`` is any game.
     """
     if game.is_final:
         final = True
@@ -69,6 +74,8 @@ def upset_of(game: FbGame, min_gap: int = 1) -> Upset | None:
     )
     if trailing.rank is None:
         return None  # only a ranked team can be upset
+    if teams is not None and trailing.abbrev.upper() not in {t.upper() for t in teams}:
+        return None  # not a team the owner follows
     if (leading.rank or UNRANKED_KEY) - trailing.rank < max(1, min_gap):
         return None
     return Upset(trailing, leading, final, leading.score - trailing.score)
@@ -90,19 +97,35 @@ class UpsetWatcher:
         self._fired: set[tuple[int, bool]] = set()
         self._pending: deque[UpsetAlert] = deque()
         self._active: tuple[UpsetAlert, float] | None = None
+        #: The list of teams the last look used: a different list is a new baseline (#588).
+        self._teams: frozenset[str] | None = None
 
-    def observe(self, games: Sequence[FbGame], min_gap: int = 1) -> None:
-        """Look at the (ranked) slate as the feed last gave it. Cheap: call it every frame."""
+    def observe(
+        self, games: Sequence[FbGame], min_gap: int = 1, teams: Collection[str] | None = None
+    ) -> None:
+        """Look at the (ranked) slate as the feed last gave it. Cheap: call it every frame.
+
+        When ``teams`` is not the list of the last look (a team was added or removed), every game
+        is looked at afresh as a first sight, so a newly followed team that is already being upset
+        does not fire: the alert is for what happens after, like every other detector."""
         now = self._monotonic()
+        listed = None if teams is None else frozenset(t.upper() for t in teams)
+        if listed != self._teams:
+            self._teams = listed
+            self._state.clear()
         seen = set()
         for game in games:
             seen.add(game.id)
-            upset = upset_of(game, min_gap)
+            upset = upset_of(game, min_gap, listed)
             state = None if upset is None else ("final" if upset.final else "live")
             known = game.id in self._state
+            previous = self._state.get(game.id)
             self._state[game.id] = state
-            if state is None or not known:
-                continue  # no upset, or first sight (noted only)
+            if state is None or not known or state == previous:
+                # No upset; or first sight (noted only); or one that was already going on at the
+                # last look. Only a game *entering* an upset (or reaching its final) alerts: it
+                # used to alert on the second look at a game that was already in one.
+                continue
             key = (game.id, state == "final")
             if key in self._fired:
                 continue
@@ -121,7 +144,11 @@ class UpsetWatcher:
             self._fired = {k for k in self._fired if k[0] != gone}
 
     def current(
-        self, games: Sequence[FbGame], seconds: float, min_gap: int = 1
+        self,
+        games: Sequence[FbGame],
+        seconds: float,
+        min_gap: int = 1,
+        teams: Collection[str] | None = None,
     ) -> tuple[FbGame, Upset, float] | None:
         """The alert on screen as ``(game, upset, seconds in)``, starting the next queued one when
         the last has had its ``seconds``; ``None`` when there is nothing to show."""
@@ -138,7 +165,7 @@ class UpsetWatcher:
             return None
         alert, started = self._active
         game = by_id.get(alert.game_id)
-        upset = upset_of(game, min_gap) if game is not None else None
+        upset = upset_of(game, min_gap, teams) if game is not None else None
         if game is None or upset is None:
             # The lead changed back while it waited: nothing to announce any more.
             self._active = None
@@ -150,6 +177,7 @@ class UpsetWatcher:
         return len(self._pending)
 
     def clear(self) -> None:
+        self._teams = None
         self._state.clear()
         self._fired.clear()
         self._pending.clear()

@@ -355,8 +355,16 @@ class FootballMode:
             cfg = self._football() if self._football else None
             if getattr(cfg, "upset_alert", True):
                 self.upsets.observe(
-                    self.ranked(self.snapshot.games or ()), getattr(cfg, "upset_min_gap", 1)
+                    self.ranked(self.snapshot.games or ()),
+                    getattr(cfg, "upset_min_gap", 1),
+                    self._upset_teams(cfg),
                 )
+
+    @staticmethod
+    def _upset_teams(cfg: Any) -> tuple[str, ...]:
+        """The teams an upset alert may be about (#588): the ranked list's own, the favourite and
+        the followed teams. With none listed nothing alerts."""
+        return tuple(getattr(cfg, "followed_teams", ()) or ())
 
     @_in_scope
     def final_ages(self) -> dict[int, float]:
@@ -663,8 +671,9 @@ class FootballMode:
     @_in_scope
     def upset_scene(self) -> Scene | None:
         """The upset alert to show now, or ``None``. Any sport may be on screen: like a goal, it
-        is news wherever the board is. College only, 128px only, silent, and only if the owner
-        has not turned it off."""
+        is news about a team the owner follows, wherever the board is. College only, 128px only,
+        silent, only if the owner has not turned it off, and only when the team being upset is
+        in the ranked list (#588)."""
         from ..app import Scene
 
         if self.league != LEAGUE_COLLEGE or not self._wide():
@@ -674,7 +683,10 @@ class FootballMode:
             return None
         seconds = float(getattr(cfg, "upset_seconds", 8.0))
         shown = self.upsets.current(
-            self.ranked(self.snapshot.games or ()), seconds, getattr(cfg, "upset_min_gap", 1)
+            self.ranked(self.snapshot.games or ()),
+            seconds,
+            getattr(cfg, "upset_min_gap", 1),
+            self._upset_teams(cfg),
         )
         if shown is None:
             return None

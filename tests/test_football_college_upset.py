@@ -199,6 +199,67 @@ def test_a_ranked_team_falling_behind_after_the_half_alerts_with_both_teams_and_
     assert scene.fb_elapsed == 0.0 and scene.fb_seconds == 8.0
 
 
+def listed_cfg(favourite, *follow):
+    return fcfg(favourite_team=favourite, also_follow=list(follow))
+
+
+def test_a_game_between_unlisted_teams_never_alerts_however_big_the_upset():
+    rig = UpsetRig()
+    rig.mode._football = lambda: listed_cfg("ALA")  # Georgia (#1) is not on the list
+    behind(rig)
+    rig.step(away=45, home=14, period=4)
+    assert rig.alert is None
+    rig.step(away=45, home=14, period=4, state="post", name="STATUS_FINAL")
+    assert rig.alert is None, "nor the final"
+
+
+def test_a_followed_secondary_being_upset_alerts_with_a_different_primary():
+    rig = UpsetRig()
+    rig.mode._football = lambda: listed_cfg("ALA", "UGA")
+    behind(rig)
+    scene = rig.alert
+    assert scene is not None and scene.fb_upset.favourite.abbrev == "UGA"
+
+
+def test_the_listed_team_must_be_the_one_being_upset_not_the_underdog():
+    """Open question for the owner: should a followed team *pulling* an upset alert too? Not yet:
+    only the rule as stated. Missouri (unranked) is listed and beats Georgia (#1)."""
+    rig = UpsetRig()
+    rig.mode._football = lambda: listed_cfg("MIZ")
+    behind(rig)
+    assert rig.alert is None
+
+
+def test_a_newly_followed_team_already_in_an_upset_does_not_fire():
+    rig = UpsetRig()
+    rig.mode._football = lambda: listed_cfg("ALA")
+    behind(rig)
+    assert rig.alert is None
+    rig.mode._football = lambda: listed_cfg("ALA", "UGA")  # the owner adds Georgia mid-game
+    rig.step(away=21, home=14, period=3)
+    assert rig.alert is None, "it was already happening"
+    rig.step(away=24, home=21, period=4, state="post", name="STATUS_FINAL")
+    assert rig.alert is not None and rig.alert.fb_upset.final, "what happens after still does"
+
+
+def test_an_upset_that_began_before_the_team_was_followed_is_not_shown_when_it_is_added():
+    """It entered the upset while unlisted: following the team a moment later must not make the
+    board announce it."""
+    rig = UpsetRig()
+    rig.mode._football = lambda: listed_cfg("ALA")
+    behind(rig)  # Georgia falls behind: nobody listed is involved
+    rig.mode._football = lambda: listed_cfg("ALA", "UGA")
+    rig.step(away=21, home=14, period=3)
+    assert rig.show() is None
+
+
+def test_removing_a_team_from_the_list_silences_a_queued_alert():
+    rig = UpsetRig()
+    behind(rig)  # queued for UGA, the favourite
+    rig.mode._football = lambda: listed_cfg("ALA")
+    assert rig.show() is None
+
+
 def test_a_game_already_in_an_upset_when_the_board_starts_does_not_announce_it():
     rig = UpsetRig()
     rig.step(away=21, home=14, period=3)
@@ -413,12 +474,23 @@ def test_an_upset_takes_the_board_even_while_hockey_is_on_screen(backend):
     assert rig.app.select_scene().kind != "fb_upset", "after its seconds the board goes back"
 
 
-def test_an_upset_in_a_game_nobody_follows_is_still_news(backend):
-    # Only Georgia is ranked here, and Georgia is not the team being followed first.
+def test_an_upset_in_a_game_nobody_follows_is_not_news(backend):
+    """The owner's rule (#588): Georgia is #1 and being upset, but it is not in the ranked list."""
     rig = AppRig(backend, teams=(("hockey", "NSH"), ("college", "ALA")))
     rig.poll(away=14, home=14, period=3)
     rig.poll(away=21, home=14, period=3)
-    assert rig.app.select_scene().kind == "fb_upset"
+    assert rig.app.select_scene().kind != "fb_upset"
+
+
+def test_a_secondary_team_being_upset_is_news_while_the_primary_is_on(backend):
+    """The owner's example: watching the primary while a followed secondary is upset."""
+    rig = AppRig(backend, teams=(("hockey", "NSH"), ("college", "ALA"), ("college", "UGA")))
+    rig.poll(away=14, home=14, period=3)
+    assert rig.app.current_mode() == "hockey"
+    rig.poll(away=21, home=14, period=3)
+    scene = rig.app.select_scene()
+    assert rig.app.current_mode() == "hockey" and scene.kind == "fb_upset"
+    assert scene.fb_upset.favourite.abbrev == "UGA"
 
 
 def test_with_the_alert_turned_off_nothing_interrupts(backend):
