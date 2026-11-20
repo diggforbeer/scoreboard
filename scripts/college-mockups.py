@@ -241,3 +241,37 @@ u4 = game("MIZ", "UGA", "post", 24, 21, "Final", 4, name="STATUS_FINAL", ranks=(
 upset_png(u4, True, 0.0, "13_upset_final")
 u5 = game("TEX", "OKST", "post", 24, 27, "Final/OT", 5, name="STATUS_FINAL", ranks=(5, 19))
 upset_png(u5, True, 0.0, "14_upset_final_ranked_vs_ranked_ot")
+
+
+# ---- the held final (#550) ----
+from scoreboard.config import FootballConfig  # noqa: E402
+from scoreboard.football.idle import IdleSnapshot  # noqa: E402
+from scoreboard.football.idle_views import build_final  # noqa: E402
+from scoreboard.priority import TeamView  # noqa: E402
+
+
+def final_png(g, favourite, name):
+    ctx_cfg = TeamView(FootballConfig(), favourite, [], favourite)
+    from datetime import UTC, datetime
+
+    from scoreboard.football.idle_screens import IdleContext
+
+    with use_directory(FBS):
+        ctx = IdleContext(
+            0.0, datetime(2026, 11, 22, 1, 0, tzinfo=UTC), [g], IdleSnapshot(), ctx_cfg
+        )
+        view = build_final(ctx)
+        c = AsciiCanvas(128, H)
+        rend().draw_fb_final(c, view, ctx.utc)
+    assert not c.out_of_bounds, name
+    png(c, 128, name)
+
+
+f1 = game("MIZ", "UGA", "post", 17, 31, "Final", 4, name="STATUS_FINAL", ranks=(None, 3))
+final_png(f1, "UGA", "15_final_win_ranked")
+f2 = game("MIZ", "UGA", "post", 28, 24, "Final", 4, name="STATUS_FINAL", ranks=(None, 3))
+final_png(f2, "UGA", "16_final_loss_ranked_upset")
+f3 = game("TEX", "OKST", "post", 27, 24, "Final/OT", 5, name="STATUS_FINAL", ranks=(5, 19))
+final_png(f3, "TEX", "17_final_ot_two_ranked")
+f4 = game("AUB", "MIZ", "post", 20, 17, "Final", 4, name="STATUS_FINAL")
+final_png(f4, "AUB", "18_final_unranked")

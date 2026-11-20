@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from ..football.models import FbGame
 from ..football.teams import is_team, team_color
 from .fonts import text_width
-from .football_scenes import DIM, LIVE, RED_ZONE, UNKNOWN_TEAM, WHITE
+from .football_scenes import DIM, LIVE, RANK_COLOR, RED_ZONE, UNKNOWN_TEAM, WHITE
 
 if TYPE_CHECKING:
     from .renderer import Renderer
@@ -21,6 +21,9 @@ LOGO_SIZE = 16
 #: Centre of the left and right logo, as the halftime card has them.
 LEFT_X, RIGHT_DX = 14, 15
 LOGO_CY = 13
+#: The baseline of a ranked team's number under its crest on the final (the crest ends on row 19,
+#: the recap line starts on row 26).
+RANK_BASELINE = 25
 
 
 def _dimmed(color: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
@@ -185,6 +188,13 @@ def draw_fb_final(r: Renderer, canvas: Any, view: Any, now: datetime) -> None:
     home_dim = LOSER_DIM if game.home.winner is False or game.home.score < game.away.score else 1.0
     draw_side_logo(r, canvas, game.away.abbrev, LEFT_X, 12, away_dim)
     draw_side_logo(r, canvas, game.home.abbrev, r.width - RIGHT_DX, 12, home_dim)
+    # A ranked college team's number under its crest (#550), dimmed with the loser's crest. Just the
+    # number, like every other badge: a mockup of ``#3`` in the 4x6 face read as a blob.
+    for side, x, dim in ((game.away, LEFT_X, away_dim), (game.home, r.width - RIGHT_DX, home_dim)):
+        if side.rank:
+            r.text_center(
+                canvas, r.fonts.tiny, x, RANK_BASELINE, _dimmed(RANK_COLOR, dim), str(side.rank)
+            )
     r.text_center(canvas, r.fonts.tiny, cx, 7, DIM, view.status)
     r.text_center(canvas, r.fonts.large, cx, 21, WHITE, f"{game.away.score} - {game.home.score}")
     segments = recap_segments(r, view, r.width - 4)
