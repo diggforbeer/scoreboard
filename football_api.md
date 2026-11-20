@@ -553,3 +553,16 @@ Not yet verified (needs a live Saturday): `situation` and possession fields, the
 halftime state (`STATUS_HALFTIME`?), end-of-quarter text, overtime periods
 beyond 4, whether `summary.scoringPlays` updates promptly during a game, and
 whether `curatedRank` changes mid-week when a new poll lands.
+
+### Seen while building the live capture (2026-11-20)
+
+- **Payload sizes (decoded):** the FBS scoreboard with `groups=80&limit=300` is **1.29 MB** (454 KB
+  without `groups`); one game's `summary` is ~490 KB; `/rankings` ~680 KB. The board polls the
+  scoreboard every 10-15 s while a followed game is live, so this is the number to watch on a Pi 4
+  (parse time, memory, the fetch worker's slow-request log). Fetch time from a datacentre was
+  0.1-0.5 s. Not yet measured on the board itself (#558).
+- **Scoring play types seen so far** (`summary.scoringPlays[].type.text`): `Rushing Touchdown`,
+  `Passing Touchdown`, `Field Goal Good`, `Interception Return Touchdown`. Return TDs on a fumble
+  or kick, safeties and two-point plays are still unseen; `scripts/capture-college-live.py`
+  records every type it meets.
+

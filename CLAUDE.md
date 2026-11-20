@@ -119,6 +119,17 @@ The holiday overlay is sport-aware (`display/holiday.use_sport`): in football mo
 (`football/idle_views.game_holiday`, the game's own date in the board's zone) and only if that theme
 is ticked; the clock and the other football screens keep the season's holiday.
 
+## College football (`college-football` branch)
+
+College football (FBS) is its own sport in the ranked `[[teams]]` list (`sport = "college"`), run by
+a second `FootballMode` over ESPN's college feed; the NFL and FBS share abbreviations and ESPN ids,
+so every lookup goes through a per-league team directory (`football/teams.py` `use_directory`).
+Work is tracked in epics #532-#538 and done on the integration branch `college-football` (never
+`main`); boards can follow it under Software update. **An unattended session working that backlog
+follows `docs/college-loop.md`**: the queue, the per-issue steps, auto-merge on green CI, and the
+rules it never breaks. Mockups of every college screen: `python scripts/college-mockups.py`
+(images in `docs/college/`). Live-game capture: `scripts/capture-college-live.py`.
+
 ## Commands
 
 ```bash
