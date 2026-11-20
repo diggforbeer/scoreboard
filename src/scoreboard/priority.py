@@ -237,10 +237,14 @@ class Priority:
                 out.append(entry.sport)
         return out
 
-    def colour_team(self) -> TeamEntry | None:
+    def colour_team(self, sports: Sequence[str] | None = None) -> TeamEntry | None:
         """The team the clock and holiday colours follow: the overall rank 1 (a night-game slot
-        has no colours, so the first real team)."""
-        return next((e for e in self.teams if not _is_slot(e)), None)
+        has no colours, so the first real team). ``sports`` limits it to the sports whose colours
+        can be drawn (the app passes the ones it runs)."""
+        return next(
+            (e for e in self.teams if not _is_slot(e) and (sports is None or e.sport in sports)),
+            None,
+        )
 
     def _perspective(self, entry: TeamEntry, game: GameLike) -> str:
         """The team a moment is about: the ranked team itself, or for a night-game slot a ranked
