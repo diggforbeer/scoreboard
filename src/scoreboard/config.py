@@ -797,8 +797,18 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
 
 
 #: The sports a ranked team can belong to (epic #470). The abbreviations overlap (``BUF``,
-#: ``DAL``...), so a team is always a (sport, abbreviation) pair.
-TEAM_SPORTS = ("hockey", "football")
+#: ``DAL``...), so a team is always a (sport, abbreviation) pair. ``college`` is FBS football: it
+#: is a sport of its own here and not a league of ``football``, because the NFL and FBS share
+#: abbreviations (``CIN``, ``HOU``, ``MIA``) *and* ESPN ids (Auburn and the Bills are both 2).
+TEAM_SPORTS = ("hockey", "football", "college")
+#: The sports the app can run today: the ones with an engine behind them. A ``college`` entry is
+#: accepted, saved and ranked, but is inert until the app runs a college feed (epic #534); the app
+#: never switches to a sport that is not in this tuple.
+RUNNING_SPORTS = ("hockey", "football")
+#: What an FBS abbreviation looks like (ESPN's: ``UGA``, ``UTSA``, ``M-OH``, ``TA&M``). The table is
+#: fetched, so a board that boots offline cannot check a name against it; this only rejects what
+#: could not be one.
+COLLEGE_ABBREV = re.compile(r"[A-Z0-9&-]{2,6}")
 #: How many teams the ranked list holds.
 TEAMS_MAX = 12
 
@@ -812,9 +822,14 @@ class TeamEntry:
 
 
 def team_exists(sport: str, team: str) -> bool:
-    """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports)."""
+    """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports).
+
+    For ``college`` this is the shape of an FBS abbreviation only: the table is fetched, not
+    bundled, so it cannot be checked offline (``COLLEGE_ABBREV``)."""
     if sport == "hockey":
         return team in TEAM_COLORS
+    if sport == "college":
+        return bool(COLLEGE_ABBREV.fullmatch(team)) and team not in NIGHT_SLOTS
     return (
         football_team_exists(team) or team in NIGHT_SLOTS
     )  # TNF / SNF / MNF follow a night's games

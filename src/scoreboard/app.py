@@ -31,6 +31,7 @@ from .config import (
     DEFAULT_CONFIG_PATHS,
     DEFAULT_FOOTBALL_ROTATION,
     PANEL_HARDWARE_MAPPING_CHOICES,
+    RUNNING_SPORTS,
     ConfigWriteError,
     RotationEntry,
     Settings,
@@ -1047,7 +1048,7 @@ class ScoreboardApp:
     @staticmethod
     def _initial_sport(settings: Settings) -> str:
         """The sport to start on: the top-ranked team's, else hockey."""
-        return settings.teams[0].sport if settings.teams else "hockey"
+        return next((e.sport for e in settings.teams if e.sport in RUNNING_SPORTS), "hockey")
 
     @staticmethod
     def _wants(sport: str, settings: Settings) -> bool:
@@ -1082,7 +1083,7 @@ class ScoreboardApp:
         """
         if favourite == april_fools.PRANK_AS:
             return "hockey", favourite  # the April Fools prank recolours everything, as ever
-        first = self._priority().colour_team()
+        first = self._priority().colour_team(RUNNING_SPORTS)
         if first is not None:
             return first.sport, first.team
         return "hockey", ""
@@ -1184,7 +1185,7 @@ class ScoreboardApp:
             self._idle_origin = 0.0
             if self._football is not None:
                 self._football.idle_origin = 0.0
-            return priority.sports()[0]
+            return next((s for s in priority.sports() if s in RUNNING_SPORTS), "hockey")
         index, fraction = slot
         segment = segments[index]
         # The segment began ``fraction`` of its length ago: its sport times its rows from there.
