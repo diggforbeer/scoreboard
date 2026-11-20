@@ -161,3 +161,12 @@ def draw_cfb_conference(r: Any, canvas: Any, view: Any, scroll: int = 0) -> None
 @college_screen("cfb_conference")
 def _draw_conference(r: Any, canvas: Any, scene: Any, now: Any) -> None:
     draw_cfb_conference(r, canvas, scene.fb_idle, scene.scroll_px)
+
+
+# -- the lead team's next game (#554) -------------------------------------------------------------
+
+
+@college_screen("cfb_preview")
+def _draw_preview(r: Any, canvas: Any, scene: Any, now: Any) -> None:
+    """The NFL's preview layout over a college game: the rank rides in front of each record."""
+    r.draw_fb_preview(canvas, scene.fb_idle, now)

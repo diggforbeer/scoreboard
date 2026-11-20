@@ -24,6 +24,7 @@ from .idle_views import (
     StandingsView,
     WeekView,
     build_bye,
+    build_college_preview,
     build_final,
     build_preview,
     build_schedule,
@@ -136,3 +137,9 @@ def _college_cfp(ctx: IdleContext) -> PollView | None:
 def _college_conference(ctx: IdleContext) -> ConferenceView | None:
     """The lead team's conference table (#553)."""
     return build_conference(ctx)
+
+
+@idle_screen("cfb_preview")
+def _college_preview(ctx: IdleContext) -> PreviewView | None:
+    """The lead college team's next game (#554)."""
+    return build_college_preview(ctx)
