@@ -525,6 +525,10 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
 #: How long the upset alert stays up: long enough to read, short enough not to hide a live game.
 UPSET_SECONDS_MIN = 4.0
 UPSET_SECONDS_MAX = 15.0
+#: How long a Top 25 game keeps the board before the next takes its turn (#555): long enough to
+#: read a score and see the field, short enough that the games on a Saturday all get seen.
+TOP25_SECONDS_MIN = 8.0
+TOP25_SECONDS_MAX = 60.0
 #: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
 COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
 
@@ -573,9 +577,22 @@ class FootballConfig:
     upset_alert: bool = True
     upset_seconds: float = 8.0
     upset_min_gap: int = 1
+    #: Top 25 games earn turns (#555): a live game with a ranked team (by ``college_poll``) takes
+    #: the board when no followed team's game is playing, and during a followed game's halftime,
+    #: ``top25_seconds`` each (also the least a game keeps the board once it has it). It does not
+    #: make the team followed: no horn, no ding, no idle screens. College only.
+    top25_turns: bool = True
+    top25_seconds: float = 20.0
 
     def __post_init__(self) -> None:
         self.upset_alert = bool(self.upset_alert)
+        self.top25_turns = bool(self.top25_turns)
+        try:
+            turn = float(self.top25_seconds)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-numeric football.top25_seconds %r", self.top25_seconds)
+            turn = 20.0
+        self.top25_seconds = max(TOP25_SECONDS_MIN, min(TOP25_SECONDS_MAX, turn))
         try:
             seconds = float(self.upset_seconds)
         except (TypeError, ValueError):
