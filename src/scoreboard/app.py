@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 import qrcode
 
-from . import april_fools, blowout
+from . import april_fools, blowout, college_picker
 from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
@@ -2967,6 +2967,7 @@ class ScoreboardApp:
             alias_port=alias,
             cache_items=self.cache_items,
             cache_clearer=self.request_cache_clear,
+            college_source=college_picker.fetch_table,
         )
 
     def _set_admin_yield(self, yielded: bool) -> None:
