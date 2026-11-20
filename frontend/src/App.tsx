@@ -224,8 +224,29 @@ interface FootballTeamOption {
 
 // The ranked list of teams, hockey and football mixed, rank 1 first (epic #470).
 interface TeamRow {
-  sport: 'hockey' | 'football'
+  sport: 'hockey' | 'football' | 'college'
   team: string
+}
+
+// The FBS table the college picker offers (college_picker.py, #543): conferences with their
+// teams, sent by the board. ``ready`` is false until the board has fetched it from ESPN.
+interface CollegeTeamOption {
+  id: number
+  abbrev: string
+  name: string
+  short_name: string
+  color: [number, number, number]
+}
+
+interface CollegeConference {
+  name: string
+  short: string
+  teams: CollegeTeamOption[]
+}
+
+interface CollegeTeams {
+  ready: boolean
+  conferences: CollegeConference[]
 }
 
 interface TeamsConfig {
@@ -393,6 +414,7 @@ type ServerMessage =
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'teams'; data: TeamsConfig; available: TeamsAvailable; max: number }
+  | { type: 'config'; section: 'college_teams'; data: CollegeTeams }
   | { type: 'config'; section: 'dates'; data: DatesConfig; available: DatesAvailable; max: number }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
@@ -467,14 +489,139 @@ function teamLabel(row: TeamRow, available: TeamsAvailable): string {
   return available.football.find((t) => t.abbrev === row.team)?.name ?? row.team
 }
 
+// A college team's name from the picker's table, else its abbreviation (the table may not have
+// arrived yet, or the team may have left FBS).
+function collegeName(college: CollegeTeams, abbrev: string): string {
+  for (const conference of college.conferences) {
+    const found = conference.teams.find((t) => t.abbrev === abbrev)
+    if (found) return found.name
+  }
+  return abbrev
+}
+
+// The expanding conference list with a search box (#544). Conferences open and close; a search
+// filters every conference at once and opens the ones with a match. Picking a team adds it to the
+// ranked list; at the cap the teams are disabled and the reason is on the page.
+function CollegePicker({
+  college,
+  taken,
+  full,
+  max,
+  onPick,
+}: {
+  college: CollegeTeams
+  taken: (abbrev: string) => boolean
+  full: boolean
+  max: number
+  onPick: (abbrev: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const needle = query.trim().toLowerCase()
+  const matches = (t: CollegeTeamOption) =>
+    !needle ||
+    t.name.toLowerCase().includes(needle) ||
+    t.short_name.toLowerCase().includes(needle) ||
+    t.abbrev.toLowerCase().includes(needle)
+  const shown = college.conferences
+    .map((c) => ({ ...c, teams: c.teams.filter(matches) }))
+    .filter((c) => c.teams.length > 0)
+  if (!college.ready) {
+    return (
+      <p className="text-body-secondary small mb-0" id="college-loading">
+        Loading the college team list from ESPN... (the board fetches it the first time it is
+        needed)
+      </p>
+    )
+  }
+  return (
+    <div id="college-picker">
+      <input
+        type="search"
+        className="form-control mb-2"
+        id="college-search"
+        aria-label="Search college teams"
+        placeholder="Search college teams..."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {full && (
+        <div className="alert alert-warning py-2" id="college-full">
+          Your list is full ({max} teams). Remove a team above to add another.
+        </div>
+      )}
+      {shown.length === 0 && (
+        <p className="text-body-secondary small" id="college-none">
+          No college team matches &ldquo;{query}&rdquo;.
+        </p>
+      )}
+      {shown.map((conference) => {
+        const expanded = needle ? true : !!open[conference.name]
+        return (
+          <div className="mb-1" key={conference.name} data-conference={conference.name}>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm w-100 text-start d-flex justify-content-between"
+              aria-expanded={expanded}
+              onClick={() => setOpen({ ...open, [conference.name]: !open[conference.name] })}
+            >
+              <span>{conference.name}</span>
+              <span className="text-body-secondary">
+                {conference.teams.length} {expanded ? '\u25B2' : '\u25BC'}
+              </span>
+            </button>
+            {expanded && (
+              <ul className="list-group list-group-flush college-teams">
+                {conference.teams.map((t) => {
+                  const have = taken(t.abbrev)
+                  return (
+                    <li
+                      className="list-group-item d-flex align-items-center gap-2 py-1"
+                      key={t.abbrev}
+                      data-team={t.abbrev}
+                    >
+                      <span
+                        className="d-inline-block rounded-circle flex-shrink-0"
+                        style={{
+                          width: '0.8rem',
+                          height: '0.8rem',
+                          background: `rgb(${t.color.join(',')})`,
+                        }}
+                      />
+                      <span className="flex-grow-1">
+                        {t.name} ({t.abbrev})
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        aria-label={`Add ${t.name}`}
+                        disabled={have || full}
+                        onClick={() => onPick(t.abbrev)}
+                      >
+                        {have ? 'Added' : 'Add'}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function TeamsCard({
   value,
   available,
+  college,
   max,
   onChange,
 }: {
   value: TeamsConfig
   available: TeamsAvailable
+  college: CollegeTeams
   max: number
   onChange: (next: TeamsConfig) => void
 }) {
@@ -484,7 +631,9 @@ function TeamsCard({
   const nameOf = (row: TeamRow) =>
     row.sport === 'hockey'
       ? (hockeyNames[row.team] ?? row.team)
-      : (available.football.find((t) => t.abbrev === row.team)?.name ?? row.team)
+      : row.sport === 'college'
+        ? collegeName(college, row.team)
+        : (available.football.find((t) => t.abbrev === row.team)?.name ?? row.team)
   const isLead = (row: TeamRow, index: number) =>
     !isSlot(row) && teams.findIndex((t) => t.sport === row.sport && !isSlot(t)) === index
   const taken = (sport: string, team: string) => teams.some((t) => t.sport === sport && t.team === team)
@@ -494,6 +643,10 @@ function TeamsCard({
     const [row] = next.splice(index, 1)
     next.splice(index + by, 0, row)
     onChange({ teams: next })
+  }
+  const addCollege = (abbrev: string) => {
+    if (full || taken('college', abbrev)) return
+    onChange({ teams: [...teams, { sport: 'college', team: abbrev }] })
   }
   const add = () => {
     const [sport, team] = pick.split(':')
@@ -525,7 +678,15 @@ function TeamsCard({
           >
             <span className="flex-grow-1">
               {nameOf(row)} ({row.team}){' '}
-              <span className={`badge ${row.sport === 'hockey' ? 'text-bg-primary' : 'text-bg-success'}`}>
+              <span
+                className={`badge ${
+                  row.sport === 'hockey'
+                    ? 'text-bg-primary'
+                    : row.sport === 'college'
+                      ? 'text-bg-danger'
+                      : 'text-bg-success'
+                }`}
+              >
                 {row.sport}
               </span>{' '}
               {index === 0 && <span className="badge text-bg-warning teams-top">top priority</span>}{' '}
@@ -614,6 +775,14 @@ function TeamsCard({
           Add
         </button>
       </div>
+      <h3 className="h6 mt-3">College teams</h3>
+      <CollegePicker
+        college={college}
+        taken={(abbrev) => taken('college', abbrev)}
+        full={full}
+        max={max}
+        onPick={addCollege}
+      />
     </>
   )
 }
@@ -923,6 +1092,7 @@ function App() {
   )
   const [teamsAvailable, setTeamsAvailable] = useState<TeamsAvailable>({ hockey: [], football: [] })
   const [teamsMax, setTeamsMax] = useState(12)
+  const [collegeTeams, setCollegeTeams] = useState<CollegeTeams>({ ready: false, conferences: [] })
   // Whether football's section of the Idle rotation card shows: a football team is ranked
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
@@ -1077,6 +1247,7 @@ function App() {
               setTeamsAvailable(message.available)
               setTeamsMax(message.max)
             }
+            else if (message.section === 'college_teams') setCollegeTeams(message.data)
             else if (message.section === 'dates') {
               datesSave.receiveConfig(message.data)
               setDatesAvailable(message.available)
@@ -1733,6 +1904,7 @@ function App() {
             <TeamsCard
               value={teamsState.value}
               available={teamsAvailable}
+              college={collegeTeams}
               max={teamsMax}
               onChange={(next) => teamsSave.edit(next)}
             />

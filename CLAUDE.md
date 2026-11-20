@@ -1015,7 +1015,11 @@ conferences: [{name, short, teams: [{id, abbrev, name, short_name, color}]}]}`. 
 ESPN; the page gets the list by broadcast), kept in memory for a day, retried every 5 minutes after a
 failure, and kept when a refresh fails. `AdminServer(college_source=...)` installs the source
 (`fetch_table`, a throwaway college client); with none (tests, bare dev) the page sees `ready: false`.
-It does not use the live football feed's table. Not persisted to disk: a board that restarts offline
+The admin page's "My teams" card shows it as an expanding conference list with a search box (#544): a
+search filters every conference and opens the matches, a pick adds `{sport = "college", team = <ESPN
+abbreviation>}` to `[[teams]]`, and at the 12-team cap the buttons are disabled with the reason on the
+page. Its e2e tests use `tests/e2e/college_launcher.py` (the real `main()` with the trimmed table as the
+source). It does not use the live football feed's table. Not persisted to disk: a board that restarts offline
 has no list until it reaches ESPN.
 
 ## Important dates (#524)
