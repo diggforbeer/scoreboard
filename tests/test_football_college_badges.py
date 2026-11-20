@@ -149,13 +149,49 @@ def test_a_single_64px_panel_never_shows_a_badge_and_draws_as_before(name):
 # -- the field band and the halftime card --------------------------------------------------------
 
 
-def test_the_field_band_shows_the_ranks_and_fits(update_snapshots):
-    g = ranked(GAMES["live"], away=5, home=12)
+def test_the_field_band_shows_the_ranks_when_there_is_room(update_snapshots):
+    # No down and distance (a kickoff, between quarters): the whole band is free for the badges.
+    g = ranked(GAMES["live_no_situation"], away=5, home=12)
     c = field(g)
     art = show("fb_field_ranked", c)
     assert not c.out_of_bounds
     assert GOLD in c.colors(0, 0, 127, 9), "the badges are in the band at the top"
     check_snapshot("fb_field_ranked", art, update_snapshots)
+
+
+def test_with_a_down_and_distance_the_band_drops_badges_that_would_crowd_it():
+    # The common case on a Saturday: clock, score and "2ND&3" leave no room for two badges.
+    g = ranked(GAMES["live"], away=5, home=12)
+    assert GOLD not in field(g).colors(0, 0, 127, 9)
+    assert field(g).render() == field(GAMES["live"]).render(), "it is drawn exactly as unranked"
+
+
+@pytest.mark.parametrize("name", ["live", "red_zone", "big_scores"])
+def test_the_band_score_never_runs_into_the_down_and_distance(name):
+    # Seen in a mockup: badges widened the score block into the "1ST&10" on the right.
+    base = GAMES[name]
+    for ranks in ((None, None), (5, None), (None, 12), (5, 12), (25, 24)):
+        g = ranked(base, away=ranks[0], home=ranks[1])
+        c = field(g)
+        assert not c.out_of_bounds
+        band = c.lit(0, 0, 127, 7)
+        down = [x for (x, y), rgb in band.items() if rgb in (fs.SITUATION, fs.RED_ZONE)]
+        score = [
+            x
+            for (x, y), rgb in band.items()
+            if rgb not in (fs.SITUATION, fs.RED_ZONE, fs.status_color(g))
+        ]
+        assert down and score
+        assert max(score) < min(down) - 1, (
+            f"{name} {ranks}: the score touches the down and distance"
+        )
+
+
+def test_the_rank_colour_is_not_one_the_band_already_uses():
+    used = {fs.WHITE, fs.LIVE, fs.SITUATION, fs.RED_ZONE, fs.HALFTIME, fs.FINAL, fs.PREGAME}
+    assert GOLD not in used
+    # and not near the down-and-distance yellow, which is what the first (gold) version was
+    assert sum(abs(a - b) for a, b in zip(GOLD, fs.SITUATION, strict=True)) > 150
 
 
 def test_the_band_drops_the_badges_when_the_clock_leaves_no_room_for_them():
