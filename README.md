@@ -22,6 +22,7 @@
 | src/scoreboard/display/ascii.py                   |       54 |        0 |    100% |           |
 | src/scoreboard/display/date\_icons.py             |       31 |        1 |     97% |       187 |
 | src/scoreboard/display/fonts.py                   |       29 |        2 |     93% |     33-34 |
+| src/scoreboard/display/football\_ball.py          |       15 |        0 |    100% |           |
 | src/scoreboard/display/football\_cointoss.py      |       63 |        1 |     98% |       112 |
 | src/scoreboard/display/football\_fgmiss.py        |       60 |        0 |    100% |           |
 | src/scoreboard/display/football\_field.py         |       82 |        0 |    100% |           |
@@ -37,7 +38,7 @@
 | src/scoreboard/display/football\_reversal.py      |       72 |        0 |    100% |           |
 | src/scoreboard/display/football\_run.py           |       85 |        0 |    100% |           |
 | src/scoreboard/display/football\_sack.py          |       73 |        1 |     99% |        52 |
-| src/scoreboard/display/football\_scenes.py        |      127 |        1 |     99% |       164 |
+| src/scoreboard/display/football\_scenes.py        |      144 |        1 |     99% |       176 |
 | src/scoreboard/display/football\_score.py         |       65 |        1 |     98% |        69 |
 | src/scoreboard/display/football\_score\_detail.py |      111 |        3 |     97% |62, 86, 123 |
 | src/scoreboard/display/football\_stats.py         |       55 |        0 |    100% |           |
@@ -90,7 +91,7 @@
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **14331** |  **460** | **97%** |           |
+| **TOTAL**                                         | **14363** |  **460** | **97%** |           |
 
 
 ## Setup coverage badge
