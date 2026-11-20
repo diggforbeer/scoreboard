@@ -522,6 +522,10 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
     return number
 
 
+#: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
+COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
+
+
 @dataclass(slots=True)
 class FootballConfig:
     """Football mode's settings: the idle rotation, the screen lengths and the screen toggles.
@@ -556,8 +560,17 @@ class FootballConfig:
     show_final: bool = True
     #: The red zone alert over the idle screens (see ``football/redzone.py``).
     show_redzone: bool = True
+    #: Which college poll means "ranked": ``ap`` (default), ``usa`` (Coaches) or ``cfp`` (the
+    #: committee's, which falls back to the AP until it publishes). The rank badges, the Top 25
+    #: turns and the upset alert all read this one setting (#546).
+    college_poll: str = "ap"
 
     def __post_init__(self) -> None:
+        poll = str(self.college_poll).strip().lower()
+        if poll not in COLLEGE_POLL_CHOICES:
+            log.warning("Ignoring unknown football.college_poll %r", self.college_poll)
+            poll = "ap"
+        self.college_poll = poll
         self.page_seconds = _non_negative(self.page_seconds, "football.page_seconds")
         for name, (default, low, high) in FOOTBALL_TIMING_RANGES.items():
             key = f"{name}_seconds"

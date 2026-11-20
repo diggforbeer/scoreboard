@@ -17,6 +17,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .college_rankings import Polls, polls_from_payload
 from .college_teams import CollegeTable, table_from_payloads
 from .idle import (
     Scoreboard,
@@ -204,6 +205,16 @@ class FootballClient:
         if teams is None:
             return None
         return table_from_payloads(standings, teams)
+
+    def college_rankings(self) -> Polls | None:
+        """The AP, Coaches and CFP polls in one request (~680 KB: fetch hourly at most) (#546).
+
+        ``None`` is no data (a failure, or not the shape expected). NFL clients refuse.
+        """
+        if self.league != LEAGUE_COLLEGE:
+            raise ValueError("college_rankings() needs a college-football client")
+        payload = self._get("/rankings")
+        return None if payload is None else polls_from_payload(payload)
 
     def plays(self, event_id: int | str) -> list[Play] | None:
         """Every play of a game so far, in the order they happened (#353).
