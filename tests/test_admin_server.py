@@ -2408,8 +2408,19 @@ def test_sends_football_s_own_settings_without_a_rotation_of_its_own(app_dir, co
         "show_bye": True,
         "show_final": True,
         "show_redzone": True,
+        "college_poll": "ap",
+        "college_scores": "all",
+        "upset_alert": True,
+        "upset_seconds": 8.0,
+        "upset_min_gap": 1,
     }
     assert "defaults" not in message and "screens" not in message
+    assert message["college"] == {
+        "polls": ["ap", "usa", "cfp"],
+        "scores": ["all", "ranked"],
+        "upset_seconds": [4.0, 15.0],
+        "upset_min_gap": [1, 25],
+    }
 
 
 def test_saving_football_s_settings_writes_the_football_section(app_dir, config_path):
@@ -2822,3 +2833,89 @@ def test_the_dates_screen_is_a_valid_rotation_row(app_dir, config_path):
 
     assert asyncio.run(_serve_and_run(scenario)) == {"type": "saved", "section": "rotation"}
     assert [e.screen for e in Settings.load(config_path).rotation] == ["dates"]
+
+
+# -- the college settings (#565), part of the football_rotation section ---------------------------
+
+
+def test_the_college_settings_save_to_the_football_section_and_come_back(app_dir, config_path):
+    data = {
+        "college_poll": "cfp",
+        "college_scores": "ranked",
+        "upset_alert": False,
+        "upset_seconds": 12,
+        "upset_min_gap": 5,
+    }
+
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        saved = await _save_football_rotation(client, data)
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "football_rotation"}
+    assert echo["data"]["college_poll"] == "cfp" and echo["data"]["upset_seconds"] == 12.0
+    cfg = Settings.load(config_path).football
+    assert (cfg.college_poll, cfg.college_scores, cfg.upset_alert) == ("cfp", "ranked", False)
+    assert (cfg.upset_seconds, cfg.upset_min_gap) == (12.0, 5)
+
+
+@pytest.mark.parametrize(
+    ("data", "key"),
+    [
+        ({"college_poll": "bcs"}, "college_poll"),
+        ({"college_poll": 3}, "college_poll"),
+        ({"college_scores": "top10"}, "college_scores"),
+        ({"upset_alert": "yes"}, "upset_alert"),
+        ({"upset_seconds": 3.9}, "upset_seconds"),
+        ({"upset_seconds": 15.1}, "upset_seconds"),
+        ({"upset_seconds": "8"}, "upset_seconds"),
+        ({"upset_seconds": True}, "upset_seconds"),
+        ({"upset_min_gap": 0}, "upset_min_gap"),
+        ({"upset_min_gap": 26}, "upset_min_gap"),
+        ({"upset_min_gap": 2.5}, "upset_min_gap"),
+        ({"upset_min_gap": True}, "upset_min_gap"),
+    ],
+)
+def test_a_bad_college_setting_is_rejected_whole_and_writes_nothing(
+    app_dir, config_path, data, key
+):
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        # one good field rides along: a rejected save must not write it either
+        return await _save_football_rotation(client, {"college_scores": "ranked", **data})
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and key in message["message"]
+    assert "college" not in config_path.read_text() and "upset" not in config_path.read_text()
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"upset_seconds": 4}, 4.0),
+        ({"upset_seconds": 15}, 15.0),
+        ({"upset_min_gap": 1}, 1),
+        ({"upset_min_gap": 25}, 25),
+    ],
+)
+def test_the_college_limits_are_inclusive(app_dir, config_path, data, expected):
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        return await _save_football_rotation(client, data)
+
+    assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
+    cfg = Settings.load(config_path).football
+    assert expected in (cfg.upset_seconds, cfg.upset_min_gap)
+
+
+def test_a_save_without_the_college_keys_leaves_them_alone(app_dir, config_path):
+    config_path.write_text('[football]\ncollege_poll = "usa"\nupset_min_gap = 7\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        return await _save_football_rotation(client, {"final_hold_minutes": 40})
+
+    assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
+    cfg = Settings.load(config_path).football
+    assert (cfg.college_poll, cfg.upset_min_gap, cfg.final_hold_minutes) == ("usa", 7, 40.0)

@@ -294,6 +294,8 @@ from .audio import (
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
+    COLLEGE_POLL_CHOICES,
+    COLLEGE_SCORES_CHOICES,
     FLYBY_FREQUENCIES,
     FOOTBALL_TIMING_RANGES,
     GOAL_FLASH_MAX_SECONDS,
@@ -301,6 +303,8 @@ from .config import (
     PANEL_HARDWARE_MAPPING_CHOICES,
     TEAM_SPORTS,
     TEAMS_MAX,
+    UPSET_SECONDS_MAX,
+    UPSET_SECONDS_MIN,
     VALID_ROTATION_SCREENS,
     ConfigWriteError,
     Settings,
@@ -623,6 +627,18 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "show_bye": cfg.show_bye,
             "show_final": cfg.show_final,
             "show_redzone": cfg.show_redzone,
+            # The college settings (#565) ride in the same section: they are ``[football]`` too.
+            "college_poll": cfg.college_poll,
+            "college_scores": cfg.college_scores,
+            "upset_alert": cfg.upset_alert,
+            "upset_seconds": cfg.upset_seconds,
+            "upset_min_gap": cfg.upset_min_gap,
+        },
+        "college": {
+            "polls": list(COLLEGE_POLL_CHOICES),
+            "scores": list(COLLEGE_SCORES_CHOICES),
+            "upset_seconds": [UPSET_SECONDS_MIN, UPSET_SECONDS_MAX],
+            "upset_min_gap": [1, 25],
         },
         "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
@@ -1551,7 +1567,41 @@ def _coerce_football_rotation(data: object) -> dict[str, object]:
         if not isinstance(data[key], bool):
             raise ValueError(json.dumps({key: "must be true or false"}))
         values[key] = data[key]
+    _coerce_college(data, values)
     return values
+
+
+def _coerce_college(data: dict[str, object], values: dict[str, object]) -> None:
+    """The college settings of a ``football_rotation`` save (#565): a poll and a grid filter from
+    their choices, the upset alert's switch, length (4-15 s) and minimum gap (1-25 places).
+    Rejected outside the range, like ``goal_flash_seconds``; the boot TOML clamps instead."""
+    for key, choices in (
+        ("college_poll", COLLEGE_POLL_CHOICES),
+        ("college_scores", COLLEGE_SCORES_CHOICES),
+    ):
+        if key in data:
+            if data[key] not in choices:
+                raise ValueError(json.dumps({key: f"must be one of {', '.join(choices)}"}))
+            values[key] = data[key]
+    if "upset_alert" in data:
+        if not isinstance(data["upset_alert"], bool):
+            raise ValueError(json.dumps({"upset_alert": "must be true or false"}))
+        values["upset_alert"] = data["upset_alert"]
+    if "upset_seconds" in data:
+        seconds = data["upset_seconds"]
+        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+            raise ValueError(json.dumps({"upset_seconds": "must be a number of seconds"}))
+        if not UPSET_SECONDS_MIN <= seconds <= UPSET_SECONDS_MAX:
+            msg = f"must be between {UPSET_SECONDS_MIN:g} and {UPSET_SECONDS_MAX:g}"
+            raise ValueError(json.dumps({"upset_seconds": msg}))
+        values["upset_seconds"] = float(seconds)
+    if "upset_min_gap" in data:
+        gap = data["upset_min_gap"]
+        if not isinstance(gap, int) or isinstance(gap, bool):
+            raise ValueError(json.dumps({"upset_min_gap": "must be a whole number"}))
+        if not 1 <= gap <= 25:
+            raise ValueError(json.dumps({"upset_min_gap": "must be between 1 and 25"}))
+        values["upset_min_gap"] = gap
 
 
 #: The scalar half of ``[holiday]``; ``themes`` is a list, checked by
