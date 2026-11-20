@@ -20,6 +20,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .college_rankings import Polls, polls_from_payload
+from .college_standings import CollegeStandings, college_standings_from_payload
 from .college_teams import CollegeTable, directory_from_table, table_from_payloads
 from .idle import (
     Scoreboard,
@@ -213,14 +214,23 @@ class FootballClient:
         """Each conference's divisions with every team's record, seed and streak (~160 KB)."""
         if self.league != LEAGUE_NFL:
             # The college table is a different shape (conferences, the Sun Belt nested under its
-            # divisions, repeated stat names); its parser is #553. "No data" until then, so a mode
-            # asking for it every hour keeps the rest of its idle data.
-            log.debug("college standings are not parsed yet (#553)")
+            # divisions, repeated stat names): ``college_standings()``. "No data" here, so a mode
+            # asking for the NFL's every hour keeps the rest of its idle data.
             return None
         payload = self._get("/standings", {"level": "3"}, base=self.standings_url)
         if payload is None:
             return None
         return standings_from_payload(payload)
+
+    def college_standings(self) -> CollegeStandings | None:
+        """Every conference's table with each team's records, seed and streak (#553, ~2.5 MB:
+        the caller fetches it hourly at most, and only when a screen shows it). College only."""
+        if self.league != LEAGUE_COLLEGE:
+            raise ValueError("college_standings() needs a college-football client")
+        payload = self._get("/standings", {"group": "80"}, base=self.standings_url)
+        if payload is None:
+            return None
+        return college_standings_from_payload(payload)
 
     def college_teams(self) -> CollegeTable | None:
         """Every FBS team with its conference and colours (#540): two requests, ~1.9 MB.

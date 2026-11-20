@@ -176,9 +176,13 @@ def test_the_label_stays_put_while_the_rows_scroll():
 # -- in the mode --------------------------------------------------------------------------------
 
 
-def college_mode(favourite="UGA", rows=(("cfb_ap", 8.0),), now=NOW):
+def college_mode(favourite="UGA", rows=(("cfb_ap", 8.0),), now=NOW, standings=None):
     client = Feed(scoreboard(), None)
     client.session.routes["/rankings"] = __import__("test_football_plays").FakeResponse(PAYLOAD)
+    if standings is not None:
+        client.session.routes["/standings"] = __import__("test_football_plays").FakeResponse(
+            standings
+        )
     cfg = fcfg(favourite_team=favourite, rotation=[{"screen": s, "seconds": n} for s, n in rows])
     clock = {"mono": 1000.0}
     mode = FootballMode(

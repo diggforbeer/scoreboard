@@ -397,9 +397,15 @@ class IdleSnapshot:
     #: the idle fetch pauses while a followed game is live, a game outlasts two hours, and a poll
     #: only changes weekly; each poll judges its own freshness (``Poll.is_fresh``).
     polls_cached: Cached[Any] | None = None
+    #: The college conference tables (``college_standings.CollegeStandings``, #553), hourly like
+    #: the NFL's standings; ``None`` for the NFL.
+    college_standings_cached: Cached[Any] | None = None
 
     def polls(self) -> Any:
         return None if self.polls_cached is None else self.polls_cached.value
+
+    def college_standings(self, now: float) -> Any:
+        return _fresh(self.college_standings_cached, STANDINGS_TTL, now)
 
     def schedule(self, team_id: int, now: float) -> TeamSchedule | None:
         return _fresh(self.schedules.get(team_id), SCHEDULE_TTL, now)

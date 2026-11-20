@@ -115,3 +115,49 @@ def draw_cfb_ap(r: Any, canvas: Any, view: Any, scroll: int = 0) -> None:
 @college_screen("cfb_cfp")
 def _draw_poll(r: Any, canvas: Any, scene: Any, now: Any) -> None:
     draw_cfb_ap(r, canvas, scene.fb_idle, scene.scroll_px)
+
+
+# -- a conference's standings (#553) --------------------------------------------------------------
+
+#: Columns of a conference row, as offsets from ``LABEL_WIDTH``: the conference record, the overall
+#: record in brackets, the streak at the right edge.
+CONF_ABBREV_X = 12
+CONF_RECORD_X = 36
+CONF_OVERALL_X = 60
+
+
+def draw_cfb_conference(r: Any, canvas: Any, view: Any, scroll: int = 0) -> None:
+    """The lead team's conference as a scrolling table: the conference at the left, then a row
+    per team in standings order with its place, the abbreviation in the team's colour, the
+    conference record, the overall record in brackets and the streak (green a win streak, red a
+    losing one). The lead team is white with a bar beside it; the rest are grey. A team with no
+    conference record (an Independent) shows a dash. Scrolls like ``draw_cfb_ap``."""
+    canvas.Clear()
+    font = r.fonts.tiny
+    r.text_center(canvas, font, LABEL_WIDTH // 2, 12, AMBER, view.short)
+    r.text_center(canvas, font, LABEL_WIDTH // 2, 19, GREY, "CONF")
+    r.text_center(canvas, font, LABEL_WIDTH // 2, 25, GREY, "TABLE")
+    left = LABEL_WIDTH + 2
+    for i, row in enumerate(view.rows):
+        y = 1 + i * ROW_HEIGHT + (ROW_HEIGHT - 2) - scroll
+        if y < 0 or y - ROW_HEIGHT >= r.height:
+            continue  # scrolled clear of the panel
+        mine = row.abbrev == view.team
+        ink = WHITE if mine else GREY
+        r.text_right(canvas, font, left + RANK_RIGHT, y, RANK_COLOR if mine else GREY, str(i + 1))
+        if mine:
+            for dy in range(-4, 1):
+                canvas.SetPixel(LABEL_WIDTH - 1, y + dy, *WHITE)
+        color = team_color(row.abbrev) if is_team(row.abbrev) else UNKNOWN_TEAM
+        r.text(canvas, font, left + CONF_ABBREV_X, y, color, row.abbrev)
+        r.text(canvas, font, left + CONF_RECORD_X, y, ink, row.conf or "-")
+        if row.overall:
+            r.text(canvas, font, left + CONF_OVERALL_X, y, GREY, f"({row.overall})")
+        if row.streak:
+            streak = LIVE if row.streak.startswith("W") else RED_ZONE
+            r.text_right(canvas, font, r.width - POINTS_RIGHT_PAD, y, streak, row.streak)
+
+
+@college_screen("cfb_conference")
+def _draw_conference(r: Any, canvas: Any, scene: Any, now: Any) -> None:
+    draw_cfb_conference(r, canvas, scene.fb_idle, scene.scroll_px)

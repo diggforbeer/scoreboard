@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .college_views import PollView, build_ap, build_cfp
+from .college_views import ConferenceView, PollView, build_ap, build_cfp, build_conference
 from .idle_views import (
     ByeView,
     FinalView,
@@ -130,3 +130,9 @@ def _college_ap(ctx: IdleContext) -> PollView | None:
 def _college_cfp(ctx: IdleContext) -> PollView | None:
     """The committee's rankings (#552): skipped until they are published."""
     return build_cfp(ctx)
+
+
+@idle_screen("cfb_conference")
+def _college_conference(ctx: IdleContext) -> ConferenceView | None:
+    """The lead team's conference table (#553)."""
+    return build_conference(ctx)

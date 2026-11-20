@@ -8,29 +8,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .college_rankings import POLL_AP, POLL_CFP, POLL_NAMES
+from .college_standings import ConferenceRow, short_conference
 
 if TYPE_CHECKING:
     from .idle_screens import IdleContext
-
-
-#: How ESPN's conference names are shortened to fit beside a record (4 letters of room).
-CONFERENCE_SHORT = {
-    "big ten": "B1G",
-    "big 12": "B12",
-    "pac-12": "PAC",
-    "fbs indep.": "IND",
-    "american": "AAC",
-    "sun belt": "SBC",
-    "mountain west": "MWC",
-    "conference usa": "CUSA",
-    "mid-american": "MAC",
-}
-
-
-def short_conference(name: str) -> str:
-    """``Big Ten`` as ``B1G``: the known names by table, any other upper-cased and cut to 4."""
-    key = name.strip().lower()
-    return CONFERENCE_SHORT.get(key, key.upper()[:4])
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,3 +91,32 @@ def build_cfp(ctx: IdleContext) -> PollView | None:
     around week 10, so before that ESPN sends none (``None``), and last season's last table is
     older than ``FRESH_DAYS`` by the time the next season has begun."""
     return build_poll(ctx, POLL_CFP)
+
+
+@dataclass(frozen=True, slots=True)
+class ConferenceView:
+    """The lead team's conference as a scrolling table (#553)."""
+
+    #: ``Southeastern Conference``.
+    name: str
+    #: ``SEC``, for the label block.
+    short: str
+    rows: tuple[ConferenceRow, ...]
+    #: The lead college team, highlighted.
+    team: str
+
+    @property
+    def scroll_rows(self) -> int:
+        return len(self.rows)
+
+
+def build_conference(ctx: IdleContext) -> ConferenceView | None:
+    """The lead team's conference, or ``None`` (skip, never blank) when the standings are not
+    fetched yet or stale, the team is in none, or no team in it has played a game (the table is
+    all zeros before the season)."""
+    standings = ctx.idle.college_standings(ctx.now)
+    team = ctx.config.favourite_team.strip().upper()
+    table = standings.conference_of(team) if standings is not None and team else None
+    if table is None or not table.played:
+        return None
+    return ConferenceView(table.name, table.short, table.rows, team)
