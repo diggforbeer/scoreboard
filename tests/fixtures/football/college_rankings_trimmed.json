@@ -1,0 +1,1895 @@
+{
+ "rankings": [
+  {
+   "id": "21",
+   "name": "Playoff Committee Rankings",
+   "shortName": "CFP Rankings",
+   "type": "cfp",
+   "occurrence": {
+    "number": 12,
+    "type": "week",
+    "last": false,
+    "value": "12",
+    "displayValue": "Week 12"
+   },
+   "date": "2026-11-17T08:00Z",
+   "headline": "2026 NCAA Football Rankings - CFP Rankings Week 12",
+   "shortHeadline": "2026 CFP Rankings: Week 12",
+   "season": {
+    "year": 2026,
+    "startDate": "2026-02-01T08:00Z",
+    "endDate": "2027-01-28T07:59Z",
+    "displayName": "2026",
+    "type": {
+     "type": 2,
+     "name": "Regular Season",
+     "abbreviation": "reg"
+    },
+    "athletes": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/athletes?lang=en&region=us"
+    },
+    "futures": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/futures?lang=en&region=us"
+    },
+    "leaders": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/types/2/leaders?lang=en&region=us"
+    }
+   },
+   "lastUpdated": "2026-11-18T05:46Z",
+   "ranks": [
+    {
+     "current": 1,
+     "previous": 1,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "61",
+      "abbreviation": "UGA",
+      "location": "Georgia",
+      "name": "Bulldogs",
+      "nickname": "Georgia"
+     }
+    },
+    {
+     "current": 2,
+     "previous": 2,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "10-0",
+     "conference": "Big 12",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "254",
+      "abbreviation": "UTAH",
+      "location": "Utah",
+      "name": "Utes",
+      "nickname": "Utah"
+     }
+    },
+    {
+     "current": 3,
+     "previous": 3,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "333",
+      "abbreviation": "ALA",
+      "location": "Alabama",
+      "name": "Crimson Tide",
+      "nickname": "Alabama"
+     }
+    },
+    {
+     "current": 4,
+     "previous": 4,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "10-0",
+     "conference": "Big Ten",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "26",
+      "abbreviation": "UCLA",
+      "location": "UCLA",
+      "name": "Bruins",
+      "nickname": "UCLA"
+     }
+    },
+    {
+     "current": 5,
+     "previous": 6,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "8-2",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "251",
+      "abbreviation": "TEX",
+      "location": "Texas",
+      "name": "Longhorns",
+      "nickname": "Texas"
+     }
+    },
+    {
+     "current": 6,
+     "previous": 5,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-1",
+     "recordSummary": "9-1",
+     "conference": "FBS Indep.",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "87",
+      "abbreviation": "ND",
+      "location": "Notre Dame",
+      "name": "Fighting Irish",
+      "nickname": "Notre Dame"
+     }
+    },
+    {
+     "current": 7,
+     "previous": 7,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "conference": "ACC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "2390",
+      "abbreviation": "MIA",
+      "location": "Miami",
+      "name": "Hurricanes",
+      "nickname": "Miami"
+     }
+    },
+    {
+     "current": 8,
+     "previous": 9,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "9-1",
+     "conference": "Big Ten",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "84",
+      "abbreviation": "IU",
+      "location": "Indiana",
+      "name": "Hoosiers",
+      "nickname": "Indiana"
+     }
+    },
+    {
+     "current": 9,
+     "previous": 8,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-1",
+     "recordSummary": "8-2",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "2633",
+      "abbreviation": "TENN",
+      "location": "Tennessee",
+      "name": "Volunteers",
+      "nickname": "Tennessee"
+     }
+    },
+    {
+     "current": 10,
+     "previous": 10,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "conference": "Big 12",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "252",
+      "abbreviation": "BYU",
+      "location": "BYU",
+      "name": "Cougars",
+      "nickname": "BYU"
+     }
+    },
+    {
+     "current": 11,
+     "previous": 13,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "9-1",
+     "conference": "ACC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "154",
+      "abbreviation": "WAKE",
+      "location": "Wake Forest",
+      "name": "Demon Deacons",
+      "nickname": "Wake Forest"
+     }
+    },
+    {
+     "current": 12,
+     "previous": 12,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "conference": "Big 12",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "2641",
+      "abbreviation": "TTU",
+      "location": "Texas Tech",
+      "name": "Red Raiders",
+      "nickname": "Texas Tech"
+     }
+    },
+    {
+     "current": 13,
+     "previous": 16,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "7-3",
+     "conference": "Big Ten",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "2483",
+      "abbreviation": "ORE",
+      "location": "Oregon",
+      "name": "Ducks",
+      "nickname": "Oregon"
+     }
+    },
+    {
+     "current": 14,
+     "previous": 20,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+6",
+     "recordSummary": "7-3",
+     "conference": "Big Ten",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "194",
+      "abbreviation": "OSU",
+      "location": "Ohio State",
+      "name": "Buckeyes",
+      "nickname": "Ohio State"
+     }
+    },
+    {
+     "current": 15,
+     "previous": 15,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "conference": "Big Ten",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "2294",
+      "abbreviation": "IOWA",
+      "location": "Iowa",
+      "name": "Hawkeyes",
+      "nickname": "Iowa"
+     }
+    },
+    {
+     "current": 16,
+     "previous": 11,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "7-3",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "96",
+      "abbreviation": "UK",
+      "location": "Kentucky",
+      "name": "Wildcats",
+      "nickname": "Kentucky"
+     }
+    },
+    {
+     "current": 17,
+     "previous": 24,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+7",
+     "recordSummary": "9-1",
+     "conference": "Pac-12",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "68",
+      "abbreviation": "BOIS",
+      "location": "Boise State",
+      "name": "Broncos",
+      "nickname": "Boise St"
+     }
+    },
+    {
+     "current": 18,
+     "previous": 18,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "7-3",
+     "conference": "Big Ten",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "30",
+      "abbreviation": "USC",
+      "location": "USC",
+      "name": "Trojans",
+      "nickname": "USC"
+     }
+    },
+    {
+     "current": 19,
+     "previous": 23,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "7-3",
+     "conference": "Big 12",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "12",
+      "abbreviation": "ARIZ",
+      "location": "Arizona",
+      "name": "Wildcats",
+      "nickname": "Arizona"
+     }
+    },
+    {
+     "current": 20,
+     "previous": 14,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-6",
+     "recordSummary": "7-3",
+     "conference": "Big 12",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "248",
+      "abbreviation": "HOU",
+      "location": "Houston",
+      "name": "Cougars",
+      "nickname": "Houston"
+     }
+    },
+    {
+     "current": 21,
+     "previous": 17,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-4",
+     "recordSummary": "6-4",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "2579",
+      "abbreviation": "SC",
+      "location": "South Carolina",
+      "name": "Gamecocks",
+      "nickname": "South Carolina"
+     }
+    },
+    {
+     "current": 22,
+     "previous": 0,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "6-4",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "201",
+      "abbreviation": "OU",
+      "location": "Oklahoma",
+      "name": "Sooners",
+      "nickname": "Oklahoma"
+     }
+    },
+    {
+     "current": 23,
+     "previous": 0,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "7-3",
+     "conference": "ACC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "97",
+      "abbreviation": "LOU",
+      "location": "Louisville",
+      "name": "Cardinals",
+      "nickname": "Louisville"
+     }
+    },
+    {
+     "current": 24,
+     "previous": 0,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "6-4",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "57",
+      "abbreviation": "FLA",
+      "location": "Florida",
+      "name": "Gators",
+      "nickname": "Florida"
+     }
+    },
+    {
+     "current": 25,
+     "previous": 19,
+     "points": 0.0,
+     "firstPlaceVotes": 0,
+     "trend": "-6",
+     "recordSummary": "6-4",
+     "conference": "SEC",
+     "date": "2026-11-17T08:00Z",
+     "lastUpdated": "2026-11-18T05:46Z",
+     "team": {
+      "id": "145",
+      "abbreviation": "MISS",
+      "location": "Ole Miss",
+      "name": "Rebels",
+      "nickname": "Ole Miss"
+     }
+    }
+   ]
+  },
+  {
+   "id": "1",
+   "name": "AP Top 25",
+   "shortName": "AP Poll",
+   "type": "ap",
+   "occurrence": {
+    "number": 12,
+    "type": "week",
+    "last": false,
+    "value": "12",
+    "displayValue": "Week 12"
+   },
+   "date": "2026-11-16T08:00Z",
+   "headline": "2026 NCAA Football Rankings - AP Poll Week 12",
+   "shortHeadline": "2026 AP Poll: Week 12",
+   "season": {
+    "year": 2026,
+    "startDate": "2026-02-01T08:00Z",
+    "endDate": "2027-01-28T07:59Z",
+    "displayName": "2026",
+    "type": {
+     "type": 2,
+     "name": "Regular Season",
+     "abbreviation": "reg"
+    },
+    "athletes": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/athletes?lang=en&region=us"
+    },
+    "futures": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/futures?lang=en&region=us"
+    },
+    "leaders": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/types/2/leaders?lang=en&region=us"
+    }
+   },
+   "lastUpdated": "2026-11-16T22:19Z",
+   "ranks": [
+    {
+     "current": 1,
+     "previous": 1,
+     "points": 1734.0,
+     "firstPlaceVotes": 58,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "61",
+      "abbreviation": "UGA",
+      "location": "Georgia",
+      "name": "Bulldogs",
+      "nickname": "Georgia"
+     }
+    },
+    {
+     "current": 2,
+     "previous": 2,
+     "points": 1677.0,
+     "firstPlaceVotes": 10,
+     "trend": "-",
+     "recordSummary": "10-0",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "254",
+      "abbreviation": "UTAH",
+      "location": "Utah",
+      "name": "Utes",
+      "nickname": "Utah"
+     }
+    },
+    {
+     "current": 3,
+     "previous": 3,
+     "points": 1584.0,
+     "firstPlaceVotes": 2,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "87",
+      "abbreviation": "ND",
+      "location": "Notre Dame",
+      "name": "Fighting Irish",
+      "nickname": "Notre Dame"
+     }
+    },
+    {
+     "current": 4,
+     "previous": 4,
+     "points": 1552.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "10-0",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "26",
+      "abbreviation": "UCLA",
+      "location": "UCLA",
+      "name": "Bruins",
+      "nickname": "UCLA"
+     }
+    },
+    {
+     "current": 5,
+     "previous": 5,
+     "points": 1426.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "2390",
+      "abbreviation": "MIA",
+      "location": "Miami",
+      "name": "Hurricanes",
+      "nickname": "Miami"
+     }
+    },
+    {
+     "current": 6,
+     "previous": 6,
+     "points": 1384.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "84",
+      "abbreviation": "IU",
+      "location": "Indiana",
+      "name": "Hoosiers",
+      "nickname": "Indiana"
+     }
+    },
+    {
+     "current": 7,
+     "previous": 7,
+     "points": 1297.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "333",
+      "abbreviation": "ALA",
+      "location": "Alabama",
+      "name": "Crimson Tide",
+      "nickname": "Alabama"
+     }
+    },
+    {
+     "current": 8,
+     "previous": 8,
+     "points": 1290.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "251",
+      "abbreviation": "TEX",
+      "location": "Texas",
+      "name": "Longhorns",
+      "nickname": "Texas"
+     }
+    },
+    {
+     "current": 9,
+     "previous": 9,
+     "points": 1179.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "2633",
+      "abbreviation": "TENN",
+      "location": "Tennessee",
+      "name": "Volunteers",
+      "nickname": "Tennessee"
+     }
+    },
+    {
+     "current": 10,
+     "previous": 11,
+     "points": 1134.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "154",
+      "abbreviation": "WAKE",
+      "location": "Wake Forest",
+      "name": "Demon Deacons",
+      "nickname": "Wake Forest"
+     }
+    },
+    {
+     "current": 11,
+     "previous": 10,
+     "points": 1081.0,
+     "firstPlaceVotes": 0,
+     "trend": "-1",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "2641",
+      "abbreviation": "TTU",
+      "location": "Texas Tech",
+      "name": "Red Raiders",
+      "nickname": "Texas Tech"
+     }
+    },
+    {
+     "current": 12,
+     "previous": 12,
+     "points": 1038.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "252",
+      "abbreviation": "BYU",
+      "location": "BYU",
+      "name": "Cougars",
+      "nickname": "BYU"
+     }
+    },
+    {
+     "current": 13,
+     "previous": 16,
+     "points": 861.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "8-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "2294",
+      "abbreviation": "IOWA",
+      "location": "Iowa",
+      "name": "Hawkeyes",
+      "nickname": "Iowa"
+     }
+    },
+    {
+     "current": 14,
+     "previous": 18,
+     "points": 820.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "2483",
+      "abbreviation": "ORE",
+      "location": "Oregon",
+      "name": "Ducks",
+      "nickname": "Oregon"
+     }
+    },
+    {
+     "current": 15,
+     "previous": 17,
+     "points": 767.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "68",
+      "abbreviation": "BOIS",
+      "location": "Boise State",
+      "name": "Broncos",
+      "nickname": "Boise St"
+     }
+    },
+    {
+     "current": 16,
+     "previous": 21,
+     "points": 661.0,
+     "firstPlaceVotes": 0,
+     "trend": "+5",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "194",
+      "abbreviation": "OSU",
+      "location": "Ohio State",
+      "name": "Buckeyes",
+      "nickname": "Ohio State"
+     }
+    },
+    {
+     "current": 17,
+     "previous": 13,
+     "points": 599.0,
+     "firstPlaceVotes": 0,
+     "trend": "-4",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "96",
+      "abbreviation": "UK",
+      "location": "Kentucky",
+      "name": "Wildcats",
+      "nickname": "Kentucky"
+     }
+    },
+    {
+     "current": 18,
+     "previous": 15,
+     "points": 546.0,
+     "firstPlaceVotes": 0,
+     "trend": "-3",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "30",
+      "abbreviation": "USC",
+      "location": "USC",
+      "name": "Trojans",
+      "nickname": "USC"
+     }
+    },
+    {
+     "current": 19,
+     "previous": 22,
+     "points": 404.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "12",
+      "abbreviation": "ARIZ",
+      "location": "Arizona",
+      "name": "Wildcats",
+      "nickname": "Arizona"
+     }
+    },
+    {
+     "current": 20,
+     "previous": 14,
+     "points": 365.0,
+     "firstPlaceVotes": 0,
+     "trend": "-6",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "248",
+      "abbreviation": "HOU",
+      "location": "Houston",
+      "name": "Cougars",
+      "nickname": "Houston"
+     }
+    },
+    {
+     "current": 21,
+     "previous": 0,
+     "points": 357.0,
+     "firstPlaceVotes": 0,
+     "trend": "+5",
+     "recordSummary": "7-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "97",
+      "abbreviation": "LOU",
+      "location": "Louisville",
+      "name": "Cardinals",
+      "nickname": "Louisville"
+     }
+    },
+    {
+     "current": 22,
+     "previous": 0,
+     "points": 183.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "9-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "2335",
+      "abbreviation": "LIB",
+      "location": "Liberty",
+      "name": "Flames",
+      "nickname": "Liberty"
+     }
+    },
+    {
+     "current": 23,
+     "previous": 0,
+     "points": 173.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "6-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "57",
+      "abbreviation": "FLA",
+      "location": "Florida",
+      "name": "Gators",
+      "nickname": "Florida"
+     }
+    },
+    {
+     "current": 24,
+     "previous": 0,
+     "points": 138.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "8-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "235",
+      "abbreviation": "MEM",
+      "location": "Memphis",
+      "name": "Tigers",
+      "nickname": "Memphis"
+     }
+    },
+    {
+     "current": 25,
+     "previous": 19,
+     "points": 103.0,
+     "firstPlaceVotes": 0,
+     "trend": "-6",
+     "recordSummary": "6-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T22:19Z",
+     "team": {
+      "id": "145",
+      "abbreviation": "MISS",
+      "location": "Ole Miss",
+      "name": "Rebels",
+      "nickname": "Ole Miss"
+     }
+    }
+   ]
+  },
+  {
+   "id": "2",
+   "name": "AFCA Coaches Poll",
+   "shortName": "AFCA Coaches Poll",
+   "type": "usa",
+   "occurrence": {
+    "number": 12,
+    "type": "week",
+    "last": false,
+    "value": "12",
+    "displayValue": "Week 12"
+   },
+   "date": "2026-11-15T08:00Z",
+   "headline": "2026 NCAA Football Rankings - AFCA Coaches Poll Week 12",
+   "shortHeadline": "2026 AFCA Coaches Poll: Week 12",
+   "season": {
+    "year": 2026,
+    "startDate": "2026-02-01T08:00Z",
+    "endDate": "2027-01-28T07:59Z",
+    "displayName": "2026",
+    "type": {
+     "type": 2,
+     "name": "Regular Season",
+     "abbreviation": "reg"
+    },
+    "athletes": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/athletes?lang=en&region=us"
+    },
+    "futures": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/futures?lang=en&region=us"
+    },
+    "leaders": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/types/2/leaders?lang=en&region=us"
+    }
+   },
+   "lastUpdated": "2026-11-15T21:42Z",
+   "ranks": [
+    {
+     "current": 1,
+     "previous": 1,
+     "points": 1802.0,
+     "firstPlaceVotes": 58,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "61",
+      "abbreviation": "UGA",
+      "location": "Georgia",
+      "name": "Bulldogs",
+      "nickname": "Georgia"
+     }
+    },
+    {
+     "current": 2,
+     "previous": 2,
+     "points": 1729.0,
+     "firstPlaceVotes": 11,
+     "trend": "-",
+     "recordSummary": "10-0",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "254",
+      "abbreviation": "UTAH",
+      "location": "Utah",
+      "name": "Utes",
+      "nickname": "Utah"
+     }
+    },
+    {
+     "current": 3,
+     "previous": 3,
+     "points": 1630.0,
+     "firstPlaceVotes": 1,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "87",
+      "abbreviation": "ND",
+      "location": "Notre Dame",
+      "name": "Fighting Irish",
+      "nickname": "Notre Dame"
+     }
+    },
+    {
+     "current": 4,
+     "previous": 4,
+     "points": 1594.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "10-0",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "26",
+      "abbreviation": "UCLA",
+      "location": "UCLA",
+      "name": "Bruins",
+      "nickname": "UCLA"
+     }
+    },
+    {
+     "current": 5,
+     "previous": 5,
+     "points": 1540.0,
+     "firstPlaceVotes": 3,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "84",
+      "abbreviation": "IU",
+      "location": "Indiana",
+      "name": "Hoosiers",
+      "nickname": "Indiana"
+     }
+    },
+    {
+     "current": 6,
+     "previous": 6,
+     "points": 1483.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "2390",
+      "abbreviation": "MIA",
+      "location": "Miami",
+      "name": "Hurricanes",
+      "nickname": "Miami"
+     }
+    },
+    {
+     "current": 7,
+     "previous": 7,
+     "points": 1364.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "333",
+      "abbreviation": "ALA",
+      "location": "Alabama",
+      "name": "Crimson Tide",
+      "nickname": "Alabama"
+     }
+    },
+    {
+     "current": 8,
+     "previous": 8,
+     "points": 1303.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "251",
+      "abbreviation": "TEX",
+      "location": "Texas",
+      "name": "Longhorns",
+      "nickname": "Texas"
+     }
+    },
+    {
+     "current": 9,
+     "previous": 9,
+     "points": 1209.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "2633",
+      "abbreviation": "TENN",
+      "location": "Tennessee",
+      "name": "Volunteers",
+      "nickname": "Tennessee"
+     }
+    },
+    {
+     "current": 10,
+     "previous": 11,
+     "points": 1172.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "154",
+      "abbreviation": "WAKE",
+      "location": "Wake Forest",
+      "name": "Demon Deacons",
+      "nickname": "Wake Forest"
+     }
+    },
+    {
+     "current": 11,
+     "previous": 10,
+     "points": 1157.0,
+     "firstPlaceVotes": 0,
+     "trend": "-1",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "2641",
+      "abbreviation": "TTU",
+      "location": "Texas Tech",
+      "name": "Red Raiders",
+      "nickname": "Texas Tech"
+     }
+    },
+    {
+     "current": 12,
+     "previous": 12,
+     "points": 1057.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "8-2",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "252",
+      "abbreviation": "BYU",
+      "location": "BYU",
+      "name": "Cougars",
+      "nickname": "BYU"
+     }
+    },
+    {
+     "current": 13,
+     "previous": 15,
+     "points": 927.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "8-2",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "2294",
+      "abbreviation": "IOWA",
+      "location": "Iowa",
+      "name": "Hawkeyes",
+      "nickname": "Iowa"
+     }
+    },
+    {
+     "current": 14,
+     "previous": 19,
+     "points": 783.0,
+     "firstPlaceVotes": 0,
+     "trend": "+5",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "2483",
+      "abbreviation": "ORE",
+      "location": "Oregon",
+      "name": "Ducks",
+      "nickname": "Oregon"
+     }
+    },
+    {
+     "current": 15,
+     "previous": 18,
+     "points": 714.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "9-1",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "68",
+      "abbreviation": "BOIS",
+      "location": "Boise State",
+      "name": "Broncos",
+      "nickname": "Boise St"
+     }
+    },
+    {
+     "current": 16,
+     "previous": 17,
+     "points": 705.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "6-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "145",
+      "abbreviation": "MISS",
+      "location": "Ole Miss",
+      "name": "Rebels",
+      "nickname": "Ole Miss"
+     }
+    },
+    {
+     "current": 17,
+     "previous": 20,
+     "points": 644.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "194",
+      "abbreviation": "OSU",
+      "location": "Ohio State",
+      "name": "Buckeyes",
+      "nickname": "Ohio State"
+     }
+    },
+    {
+     "current": 18,
+     "previous": 13,
+     "points": 592.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "96",
+      "abbreviation": "UK",
+      "location": "Kentucky",
+      "name": "Wildcats",
+      "nickname": "Kentucky"
+     }
+    },
+    {
+     "current": 19,
+     "previous": 14,
+     "points": 534.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "30",
+      "abbreviation": "USC",
+      "location": "USC",
+      "name": "Trojans",
+      "nickname": "USC"
+     }
+    },
+    {
+     "current": 20,
+     "previous": 21,
+     "points": 399.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "12",
+      "abbreviation": "ARIZ",
+      "location": "Arizona",
+      "name": "Wildcats",
+      "nickname": "Arizona"
+     }
+    },
+    {
+     "current": 21,
+     "previous": 16,
+     "points": 312.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "248",
+      "abbreviation": "HOU",
+      "location": "Houston",
+      "name": "Cougars",
+      "nickname": "Houston"
+     }
+    },
+    {
+     "current": 22,
+     "previous": 0,
+     "points": 235.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "97",
+      "abbreviation": "LOU",
+      "location": "Louisville",
+      "name": "Cardinals",
+      "nickname": "Louisville"
+     }
+    },
+    {
+     "current": 23,
+     "previous": 22,
+     "points": 160.0,
+     "firstPlaceVotes": 0,
+     "trend": "-1",
+     "recordSummary": "6-4",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "99",
+      "abbreviation": "LSU",
+      "location": "LSU",
+      "name": "Tigers",
+      "nickname": "LSU"
+     }
+    },
+    {
+     "current": 24,
+     "previous": 0,
+     "points": 123.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "7-3",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "150",
+      "abbreviation": "DUKE",
+      "location": "Duke",
+      "name": "Blue Devils",
+      "nickname": "Duke"
+     }
+    },
+    {
+     "current": 25,
+     "previous": 0,
+     "points": 95.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "6-4",
+     "date": "2026-11-15T08:00Z",
+     "lastUpdated": "2026-11-15T21:42Z",
+     "team": {
+      "id": "57",
+      "abbreviation": "FLA",
+      "location": "Florida",
+      "name": "Gators",
+      "nickname": "Florida"
+     }
+    }
+   ]
+  },
+  {
+   "id": "20",
+   "name": "FCS Coaches Poll",
+   "shortName": "FCS Coaches Poll",
+   "type": "fcs",
+   "occurrence": {
+    "number": 12,
+    "type": "week",
+    "last": false,
+    "value": "12",
+    "displayValue": "Week 12"
+   },
+   "date": "2026-11-16T08:00Z",
+   "headline": "2026 NCAA Football Rankings - FCS Coaches Poll Week 12",
+   "shortHeadline": "2026 FCS Coaches Poll: Week 12",
+   "season": {
+    "year": 2026,
+    "startDate": "2026-02-01T08:00Z",
+    "endDate": "2027-01-28T07:59Z",
+    "displayName": "2026",
+    "type": {
+     "type": 2,
+     "name": "Regular Season",
+     "abbreviation": "reg"
+    },
+    "athletes": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/athletes?lang=en&region=us"
+    },
+    "futures": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/futures?lang=en&region=us"
+    },
+    "leaders": {
+     "$ref": "http://sports.core.api.espn.pvt/v2/sports/football/leagues/college-football/seasons/2026/types/2/leaders?lang=en&region=us"
+    }
+   },
+   "lastUpdated": "2026-11-16T19:10Z",
+   "ranks": [
+    {
+     "current": 1,
+     "previous": 1,
+     "points": 650.0,
+     "firstPlaceVotes": 26,
+     "trend": "-",
+     "recordSummary": "11-0",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2627",
+      "abbreviation": "TAR",
+      "location": "Tarleton State",
+      "name": "Texans",
+      "nickname": "Tarleton St"
+     }
+    },
+    {
+     "current": 2,
+     "previous": 2,
+     "points": 619.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "10-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "147",
+      "abbreviation": "MTST",
+      "location": "Montana State",
+      "name": "Bobcats",
+      "nickname": "Montana St"
+     }
+    },
+    {
+     "current": 3,
+     "previous": 4,
+     "points": 601.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "9-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2571",
+      "abbreviation": "SDST",
+      "location": "South Dakota State",
+      "name": "Jackrabbits",
+      "nickname": "S Dakota St"
+     }
+    },
+    {
+     "current": 4,
+     "previous": 7,
+     "points": 567.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "10-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2617",
+      "abbreviation": "SFA",
+      "location": "Stephen F. Austin",
+      "name": "Lumberjacks",
+      "nickname": "SF Austin"
+     }
+    },
+    {
+     "current": 5,
+     "previous": 8,
+     "points": 514.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "9-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2320",
+      "abbreviation": "LAM",
+      "location": "Lamar",
+      "name": "Cardinals",
+      "nickname": "Lamar"
+     }
+    },
+    {
+     "current": 6,
+     "previous": 10,
+     "points": 501.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "233",
+      "abbreviation": "SDAK",
+      "location": "South Dakota",
+      "name": "Coyotes",
+      "nickname": "South Dakota"
+     }
+    },
+    {
+     "current": 7,
+     "previous": 11,
+     "points": 478.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "9-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2382",
+      "abbreviation": "MER",
+      "location": "Mercer",
+      "name": "Bears",
+      "nickname": "Mercer"
+     }
+    },
+    {
+     "current": 8,
+     "previous": 3,
+     "points": 461.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2754",
+      "abbreviation": "YSU",
+      "location": "Youngstown State",
+      "name": "Penguins",
+      "nickname": "Youngstown St"
+     }
+    },
+    {
+     "current": 9,
+     "previous": 12,
+     "points": 396.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "149",
+      "abbreviation": "MONT",
+      "location": "Montana",
+      "name": "Grizzlies",
+      "nickname": "Montana"
+     }
+    },
+    {
+     "current": 10,
+     "previous": 5,
+     "points": 366.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2464",
+      "abbreviation": "NAU",
+      "location": "Northern Arizona",
+      "name": "Lumberjacks",
+      "nickname": "N Arizona"
+     }
+    },
+    {
+     "current": 11,
+     "previous": 12,
+     "points": 355.0,
+     "firstPlaceVotes": 0,
+     "trend": "+1",
+     "recordSummary": "7-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "155",
+      "abbreviation": "UND",
+      "location": "North Dakota",
+      "name": "Fighting Hawks",
+      "nickname": "North Dakota"
+     }
+    },
+    {
+     "current": 12,
+     "previous": 9,
+     "points": 338.0,
+     "firstPlaceVotes": 0,
+     "trend": "-3",
+     "recordSummary": "9-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2635",
+      "abbreviation": "TNTC",
+      "location": "Tennessee Tech",
+      "name": "Golden Eagles",
+      "nickname": "Tennessee Tech"
+     }
+    },
+    {
+     "current": 13,
+     "previous": 17,
+     "points": 336.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2287",
+      "abbreviation": "ILST",
+      "location": "Illinois State",
+      "name": "Redbirds",
+      "nickname": "Illinois St"
+     }
+    },
+    {
+     "current": 14,
+     "previous": 6,
+     "points": 330.0,
+     "firstPlaceVotes": 0,
+     "trend": "-8",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2046",
+      "abbreviation": "APSU",
+      "location": "Austin Peay",
+      "name": "Governors",
+      "nickname": "Austin Peay"
+     }
+    },
+    {
+     "current": 15,
+     "previous": 15,
+     "points": 329.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2329",
+      "abbreviation": "LEH",
+      "location": "Lehigh",
+      "name": "Mountain Hawks",
+      "nickname": "Lehigh"
+     }
+    },
+    {
+     "current": 16,
+     "previous": 20,
+     "points": 261.0,
+     "firstPlaceVotes": 0,
+     "trend": "+4",
+     "recordSummary": "7-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2692",
+      "abbreviation": "WEB",
+      "location": "Weber State",
+      "name": "Wildcats",
+      "nickname": "Weber St"
+     }
+    },
+    {
+     "current": 17,
+     "previous": 19,
+     "points": 243.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "8-1",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "108",
+      "abbreviation": "HARV",
+      "location": "Harvard",
+      "name": "Crimson",
+      "nickname": "Harvard"
+     }
+    },
+    {
+     "current": 18,
+     "previous": 18,
+     "points": 233.0,
+     "firstPlaceVotes": 0,
+     "trend": "-",
+     "recordSummary": "9-2",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2569",
+      "abbreviation": "SCST",
+      "location": "South Carolina State",
+      "name": "Bulldogs",
+      "nickname": "SC State"
+     }
+    },
+    {
+     "current": 19,
+     "previous": 24,
+     "points": 163.0,
+     "firstPlaceVotes": 0,
+     "trend": "+5",
+     "recordSummary": "6-5",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2000",
+      "abbreviation": "ACU",
+      "location": "Abilene Christian",
+      "name": "Wildcats",
+      "nickname": "Abilene Chrstn"
+     }
+    },
+    {
+     "current": 20,
+     "previous": 14,
+     "points": 138.0,
+     "firstPlaceVotes": 0,
+     "trend": "-6",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2405",
+      "abbreviation": "MONM",
+      "location": "Monmouth",
+      "name": "Hawks",
+      "nickname": "Monmouth"
+     }
+    },
+    {
+     "current": 21,
+     "previous": 16,
+     "points": 100.0,
+     "firstPlaceVotes": 0,
+     "trend": "-5",
+     "recordSummary": "8-3",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2097",
+      "abbreviation": "CAM",
+      "location": "Campbell",
+      "name": "Fighting Camels",
+      "nickname": "Campbell"
+     }
+    },
+    {
+     "current": 22,
+     "previous": 25,
+     "points": 99.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "7-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "399",
+      "abbreviation": "ALB",
+      "location": "UAlbany",
+      "name": "Great Danes",
+      "nickname": "UAlbany"
+     }
+    },
+    {
+     "current": 23,
+     "previous": 0,
+     "points": 73.0,
+     "firstPlaceVotes": 0,
+     "trend": "+3",
+     "recordSummary": "7-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "302",
+      "abbreviation": "UCD",
+      "location": "UC Davis",
+      "name": "Aggies",
+      "nickname": "UC Davis"
+     }
+    },
+    {
+     "current": 24,
+     "previous": 0,
+     "points": 57.0,
+     "firstPlaceVotes": 0,
+     "trend": "+2",
+     "recordSummary": "7-4",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "2916",
+      "abbreviation": "UIW",
+      "location": "Incarnate Word",
+      "name": "Cardinals",
+      "nickname": "Incarnate Word"
+     }
+    },
+    {
+     "current": 25,
+     "previous": 21,
+     "points": 46.0,
+     "firstPlaceVotes": 0,
+     "trend": "-4",
+     "recordSummary": "6-5",
+     "date": "2026-11-16T08:00Z",
+     "lastUpdated": "2026-11-16T19:10Z",
+     "team": {
+      "id": "304",
+      "abbreviation": "IDST",
+      "location": "Idaho State",
+      "name": "Bengals",
+      "nickname": "Idaho St"
+     }
+    }
+   ]
+  }
+ ],
+ "latestSeason": {
+  "year": 2026
+ },
+ "latestWeek": {
+  "number": 12,
+  "type": "week",
+  "last": false,
+  "value": "12",
+  "displayValue": "Week 12"
+ }
+}
