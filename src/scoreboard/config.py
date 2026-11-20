@@ -602,8 +602,9 @@ class FootballConfig:
     #: alert read this one setting (#546).
     college_poll: str = "ap"
     #: The upset alert (#557): a ranked college team losing to a lower-ranked or unranked one, from
-    #: halftime on, and an upset final. Silent. ``upset_min_gap`` is how many places lower the
-    #: leader must be ranked (1: any lower-ranked team and every unranked one).
+    #: halftime on, and an upset final. Only for a team in the ranked list (#588). Silent.
+    #: ``upset_min_gap`` is how many places lower the leader must be ranked (1: any lower-ranked
+    #: team and every unranked one).
     upset_alert: bool = True
     upset_seconds: float = 8.0
     upset_min_gap: int = 1

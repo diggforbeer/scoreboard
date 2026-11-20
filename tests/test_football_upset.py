@@ -143,6 +143,17 @@ def test_a_game_already_in_an_upset_when_first_seen_does_not_alert():
     assert w.waiting == 0 and w.current([ahead()], 8) is None
 
 
+def test_a_game_already_in_an_upset_stays_silent_on_every_later_look_too():
+    """Every frame looks at the slate: noting it at first sight must not fire on the second."""
+    w, _ = watcher()
+    for _ in range(5):
+        w.observe([ahead()])
+    assert w.waiting == 0
+    w.observe([ahead(score=(14, 14))])
+    w.observe([ahead()])
+    assert w.waiting == 1, "leaving the upset and entering it again is a transition"
+
+
 def test_entering_an_upset_alerts_once_and_shows_for_its_seconds():
     w, clock = watcher()
     w.observe([level()])
@@ -248,3 +259,77 @@ def test_the_gap_setting_reaches_the_watcher():
     w.observe([close((14, 14))], min_gap=3)
     w.observe([close((7, 21))], min_gap=3)
     assert w.waiting == 0, "#6 is not three places below #5"
+
+
+# -- only the ranked list's teams (#588) ----------------------------------------------------------
+
+
+def test_the_team_being_upset_must_be_one_the_owner_follows():
+    g = ahead()  # NYG (#5, away) trails WSH (unranked) 7-21
+    assert upset_of(g, 1, ["NYG"]) is not None
+    assert upset_of(g, 1, ["nyg", "DAL"]) is not None, "case does not matter"
+    assert upset_of(g, 1, ["WSH"]) is None, "the underdog is listed, the upset team is not"
+    assert upset_of(g, 1, ["DAL"]) is None, "a game between two unlisted teams, however big"
+    assert upset_of(g, 1, []) is None, "nobody listed, nothing alerts"
+    assert upset_of(g, 1, None) is not None, "the pure default is any game"
+    assert (
+        upset_of(dataclasses.replace(g, away=dataclasses.replace(g.away, score=0)), 1, ["DAL"])
+        is None
+    )
+
+
+def test_the_final_follows_the_same_list():
+    lost = final((5, 21), (None, 24))
+    assert upset_of(lost, 1, ["NYG"]).final
+    assert upset_of(lost, 1, ["DAL"]) is None
+
+
+def test_a_game_between_unlisted_teams_never_queues_an_alert():
+    w, _ = watcher()
+    w.observe([level()], teams=["DAL"])
+    w.observe([ahead()], teams=["DAL"])
+    assert w.waiting == 0 and w.current([ahead()], 8, teams=["DAL"]) is None
+
+
+def test_a_listed_team_being_upset_alerts():
+    w, _ = watcher()
+    w.observe([level()], teams=["NYG"])
+    w.observe([ahead()], teams=["NYG"])
+    assert w.waiting == 1
+    _game, u, seconds = w.current([ahead()], 8, teams=["NYG"])
+    assert u.favourite.abbrev == "NYG" and seconds == 0.0
+
+
+def test_a_newly_listed_team_already_in_an_upset_does_not_fire():
+    w, _ = watcher()
+    w.observe([level()], teams=["DAL"])
+    w.observe([ahead()], teams=["DAL"])  # an upset, but nobody follows NYG
+    w.observe([ahead()], teams=["DAL", "NYG"])  # NYG is added to the list now
+    assert w.waiting == 0, "re-baselined: what was already happening is not announced"
+    w.observe([ahead()], teams=["DAL", "NYG"])
+    assert w.waiting == 0
+
+
+def test_a_newly_listed_team_alerts_for_what_happens_after():
+    w, _ = watcher()
+    w.observe([ahead()], teams=["DAL"])
+    w.observe([ahead()], teams=["DAL", "NYG"])
+    w.observe([final((5, 21), (None, 24))], teams=["DAL", "NYG"])
+    assert w.waiting == 1, "the final is a transition after the baseline"
+
+
+def test_a_removed_team_drops_its_queued_alert():
+    w, _ = watcher()
+    w.observe([level()], teams=["NYG"])
+    w.observe([ahead()], teams=["NYG"])
+    assert w.waiting == 1
+    assert w.current([ahead()], 8, teams=["DAL"]) is None, "no longer listed: nothing to announce"
+
+
+def test_the_list_is_remembered_so_an_unchanged_list_does_not_rebaseline():
+    w, _ = watcher()
+    w.observe([level()], teams=["NYG"])
+    w.observe([ahead()], teams=["NYG"])
+    assert w.waiting == 1
+    w.observe([ahead()], teams=["NYG"])
+    assert w.waiting == 1, "the same list, the same state: no second alert"
