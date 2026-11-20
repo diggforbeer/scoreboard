@@ -14,6 +14,9 @@ brighter accent or a lifted shade of the same hue.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -95,22 +98,81 @@ _TEAMS: tuple[FootballTeam, ...] = (
     ),  # burgundy -> gold
 )
 
-TEAMS: dict[str, FootballTeam] = {t.abbrev: t for t in _TEAMS}
-_BY_ID: dict[int, FootballTeam] = {t.espn_id: t for t in _TEAMS}
+
+@dataclass(frozen=True, slots=True)
+class Directory:
+    """One league's teams: looked up by abbreviation or by ESPN id.
+
+    The NFL's 32 and the FBS's ~138 share abbreviations (``CIN``, ``HOU``, ``MIA``) and ESPN ids
+    (Auburn and the Bills are both 2), so a lookup is only meaningful *inside* a league. The
+    module-level functions below (``team``, ``team_by_id``, ``team_color``, ``is_team``...) answer
+    from the **active** directory: the NFL's unless a ``use_directory`` block says otherwise, so
+    the ~20 files that call them need not know there are two leagues.
+    """
+
+    league: str
+    by_abbrev: Mapping[str, FootballTeam]
+    by_id: Mapping[int, FootballTeam]
+
+    @staticmethod
+    def of(league: str, teams: Iterable[FootballTeam]) -> Directory:
+        listed = tuple(teams)
+        return Directory(
+            league,
+            {t.abbrev: t for t in listed},
+            {t.espn_id: t for t in listed},
+        )
+
+    def __len__(self) -> int:
+        return len(self.by_abbrev)
+
+
+NFL_DIRECTORY = Directory.of("nfl", _TEAMS)
+#: A league with no teams yet (the college table is fetched). Every lookup misses, so a game is
+#: drawn with the plain "unknown team" look rather than with another league's colours.
+EMPTY_DIRECTORY = Directory("none", {}, {})
+
+TEAMS: dict[str, FootballTeam] = dict(NFL_DIRECTORY.by_abbrev)
+_BY_ID: dict[int, FootballTeam] = dict(NFL_DIRECTORY.by_id)
 
 #: The abbreviations the favourite and followed pickers accept (#348).
 ABBREVIATIONS: tuple[str, ...] = tuple(sorted(TEAMS))
 
+_ACTIVE: ContextVar[Directory] = ContextVar("football_directory", default=NFL_DIRECTORY)
+
+
+@contextmanager
+def use_directory(directory: Directory) -> Iterator[None]:
+    """Resolve every lookup in this module against ``directory`` inside the block (``holiday.
+    use_sport`` is the same idea for colours). Context-local, so a worker thread sees the NFL's
+    unless it enters its own block: the client does that for its own parsing."""
+    token = _ACTIVE.set(directory)
+    try:
+        yield
+    finally:
+        _ACTIVE.reset(token)
+
+
+def active_directory() -> Directory:
+    return _ACTIVE.get()
+
 
 class UnknownTeamError(KeyError):
-    """An abbreviation or id that is not one of the 32 football teams."""
+    """An abbreviation or id that is not one of the active league's teams."""
 
     def __str__(self) -> str:  # KeyError would repr() the message
         return str(self.args[0])
 
 
 def is_team(abbrev: str) -> bool:
-    return str(abbrev).strip().upper() in TEAMS
+    """Whether ``abbrev`` is a team of the active league (the NFL's unless told otherwise)."""
+    return str(abbrev).strip().upper() in _ACTIVE.get().by_abbrev
+
+
+def is_nfl_team(abbrev: str) -> bool:
+    """Whether ``abbrev`` is one of the 32 NFL clubs, whatever league is active (the config's
+    validation of a ``football`` entry must never depend on what is being drawn)."""
+    return str(abbrev).strip().upper() in NFL_DIRECTORY.by_abbrev
 
 
 #: The night games a ranked list can follow as if they were teams: ``TNF``, ``SNF`` and ``MNF`` are
@@ -144,7 +206,7 @@ def team(abbrev: str) -> FootballTeam:
     """The team for an abbreviation (case and spaces ignored); raises if unknown."""
     key = str(abbrev).strip().upper()
     try:
-        return TEAMS[key]
+        return _ACTIVE.get().by_abbrev[key]
     except KeyError:
         raise UnknownTeamError(f"{abbrev!r} is not a football team abbreviation") from None
 
@@ -152,7 +214,7 @@ def team(abbrev: str) -> FootballTeam:
 def team_by_id(espn_id: int | str) -> FootballTeam:
     """The team for an ESPN team id, given as an int or the string the feed uses."""
     try:
-        return _BY_ID[int(espn_id)]
+        return _ACTIVE.get().by_id[int(espn_id)]
     except (KeyError, TypeError, ValueError):
         raise UnknownTeamError(f"{espn_id!r} is not an ESPN football team id") from None
 

@@ -24,6 +24,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from .teams import Directory, FootballTeam
+
 log = logging.getLogger(__name__)
 
 RGB = tuple[int, int, int]
@@ -270,3 +272,27 @@ def table_from_payloads(standings: Any, teams: Any) -> CollegeTable | None:
     if not built:
         return None
     return CollegeTable(tuple(sorted(built.values(), key=lambda t: (t.conference, t.name))))
+
+
+def directory_from_table(table: CollegeTable) -> Directory:
+    """The table as a lookup directory the football code can use in place of the NFL's.
+
+    A college team becomes a ``FootballTeam`` (what every football screen already draws):
+    ``city`` is the school (``Michigan State``), ``name`` the short form upper-cased for the
+    panel. Inside ``use_directory`` the abbreviation and id lookups then resolve to FBS teams.
+    """
+    return Directory.of(
+        "college-football",
+        (
+            FootballTeam(
+                abbrev=t.abbrev,
+                espn_id=t.espn_id,
+                city=t.location,
+                nickname=t.nickname,
+                name=t.name,
+                color=t.color,
+                secondary=t.secondary,
+            )
+            for t in table.teams
+        ),
+    )

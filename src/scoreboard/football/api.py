@@ -11,14 +11,16 @@ off-season). The caller can tell the two apart, which the staleness logic needs.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Callable
+from functools import wraps
+from typing import Any, TypeVar
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .college_rankings import Polls, polls_from_payload
-from .college_teams import CollegeTable, table_from_payloads
+from .college_teams import CollegeTable, directory_from_table, table_from_payloads
 from .idle import (
     Scoreboard,
     Standings,
@@ -30,6 +32,7 @@ from .idle import (
 from .models import FbGame, Play
 from .people import RosterPlayer, roster_from_payload
 from .stats import GameStats, stats_from_summary
+from .teams import NFL_DIRECTORY, Directory, use_directory
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +81,29 @@ TIMEOUT = (5.0, 5.0)
 MIN_POLL_SECONDS = 10.0
 
 
+_R = TypeVar("_R")
+
+
+def _in_league(method: Callable[..., _R | None]) -> Callable[..., _R | None]:
+    """Run a parsing method with this client's league as the active team directory.
+
+    The models look teams up by ESPN id and abbreviation, and those collide between the NFL and
+    FBS, so a college client must parse inside its own directory whatever thread it runs on. A
+    college client with no team table yet fetches it first, and answers ``None`` (no data) if it
+    cannot: parsing without one would mark every team unknown, or worse, resolve it to the NFL's.
+    """
+
+    @wraps(method)
+    def scoped(self: FootballClient, *args: Any, **kwargs: Any) -> _R | None:
+        directory = self._league_directory()
+        if directory is None:
+            return None
+        with use_directory(directory):
+            return method(self, *args, **kwargs)
+
+    return scoped
+
+
 def _build_session() -> requests.Session:
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
@@ -111,6 +137,9 @@ class FootballClient:
         if league not in LEAGUES:
             raise ValueError(f"unknown football league {league!r}; expected one of {LEAGUES}")
         self.league = league
+        #: The teams this client parses against: the NFL's from the start, the FBS's once the
+        #: table has been fetched (``college_teams``).
+        self._directory: Directory | None = NFL_DIRECTORY if league == LEAGUE_NFL else None
         # An explicit URL wins (tests point these at a fake); otherwise the league decides.
         self.base_url = (base_url or league_base_url(league)).rstrip("/")
         self.core_url = (core_url or league_core_url(league)).rstrip("/")
@@ -131,6 +160,7 @@ class FootballClient:
     def __exit__(self, *_exc: object) -> None:
         self.close()
 
+    @_in_league
     def scoreboard(
         self, date: str | None = None, week: int | None = None, season_type: int | None = None
     ) -> Scoreboard | None:
@@ -168,6 +198,7 @@ class FootballClient:
         """The whole week's games in one request (``week=N&seasontype=T``) and its byes."""
         return self.scoreboard(week=number, season_type=season_type)
 
+    @_in_league
     def schedule(self, team_id: int | str) -> TeamSchedule | None:
         """A team's regular-season schedule and bye week (~300 KB: fetch daily at most).
 
@@ -204,7 +235,16 @@ class FootballClient:
         teams = self._get("/teams", {"limit": "1000"})
         if teams is None:
             return None
-        return table_from_payloads(standings, teams)
+        table = table_from_payloads(standings, teams)
+        if table is not None:
+            self._directory = directory_from_table(table)
+        return table
+
+    def _league_directory(self) -> Directory | None:
+        """The directory to parse with, fetching the college table first if it is needed."""
+        if self._directory is None and self.college_teams() is None:
+            return None
+        return self._directory
 
     def college_rankings(self) -> Polls | None:
         """The AP, Coaches and CFP polls in one request (~680 KB: fetch hourly at most) (#546).
@@ -216,6 +256,7 @@ class FootballClient:
         payload = self._get("/rankings")
         return None if payload is None else polls_from_payload(payload)
 
+    @_in_league
     def plays(self, event_id: int | str) -> list[Play] | None:
         """Every play of a game so far, in the order they happened (#353).
 
@@ -236,6 +277,7 @@ class FootballClient:
         """The team stats from the last :meth:`plays` call for this game, or ``None``."""
         return self._stats.get(str(event_id))
 
+    @_in_league
     def core_plays(self, event_id: int | str) -> list[Play] | None:
         """A game's plays from the **core** feed, each with its ``participants`` (#354).
 
@@ -269,6 +311,7 @@ class FootballClient:
                 plays[play.id] = play
         return sorted(plays.values(), key=Play.sort_key)
 
+    @_in_league
     def roster(self, team_id: int | str) -> dict[int, RosterPlayer] | None:
         """A team's roster by athlete id (jersey, name, position), or ``None`` on failure (#354)."""
         payload = self._get(f"/teams/{team_id}/roster")
