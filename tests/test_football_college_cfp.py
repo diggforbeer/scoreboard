@@ -100,7 +100,7 @@ def test_the_slot_scrolls_like_the_aps_and_is_skipped_without_the_poll():
     clock["mono"] = 1000.0 + total / 2
     scene = mode.scene()
     assert scene.kind == "cfb_cfp" and scene.scrolling and 0 < scene.scroll_px < 119
-    clock["mono"] = 1000.0 + total
+    clock["mono"] = 1000.0 + total - 0.5  # in the rest at the bottom, before the wrap
     assert mode.scene().scroll_px == 119
     away, _ = college_mode(rows=(("cfb_cfp", 8.0),), now=NOW + timedelta(days=60))
     assert away.scene().kind != "cfb_cfp"

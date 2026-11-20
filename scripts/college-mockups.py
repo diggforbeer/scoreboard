@@ -323,3 +323,31 @@ with use_directory(FBS):
         c = AsciiCanvas(128, H)
         draw_cfb_ap(rend(), c, cfp_view, px)
         png(c, 128, name)
+
+
+# ---- the conference standings idle screen (#553): real standings, captured 2026-11-20 ----
+from scoreboard.display.college_idle import draw_cfb_conference  # noqa: E402
+from scoreboard.football.college_standings import college_standings_from_payload  # noqa: E402
+from scoreboard.football.college_views import build_conference  # noqa: E402
+
+conf_standings = college_standings_from_payload(
+    json.loads((FX / "college_conference_standings_trimmed.json").read_text())
+)
+
+
+def conference_png(favourite, px, name):
+    cfg = TeamView(FootballConfig(), favourite, [], favourite)
+    snap = IdleSnapshot(college_standings_cached=Cached(conf_standings, 0.0))
+    ctx = IdleContext(0.0, datetime(2026, 11, 20, 12, 0, tzinfo=UTC), [], snap, cfg)
+    with use_directory(FBS):
+        view = build_conference(ctx)
+        c = AsciiCanvas(128, H)
+        draw_cfb_conference(rend(), c, view, px)
+    png(c, 128, name)
+    return view
+
+
+conference_png("UTSA", 0, "24_conference_american_rest_top")
+conference_png("USF", 40, "25_conference_american_mid_scroll_lead_team_listed")
+conference_png("ND", 0, "26_conference_independents_two_teams_no_conference_record")
+conference_png("GASO", 0, "27_conference_sun_belt_nested_merged_by_seed")

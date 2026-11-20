@@ -493,6 +493,18 @@ class FootballMode:
         standings = snap.standings_cached
         if mine and hasattr(client, "standings"):
             standings = cache.refresh(("standings",), STANDINGS_TTL, client.standings) or standings
+        college_table = snap.college_standings_cached
+        if (
+            self.league == LEAGUE_COLLEGE
+            and mine
+            and hasattr(client, "college_standings")
+            and any(entry.screen == "cfb_conference" for entry in self._entries())
+        ):
+            # ~2.5 MB, so only for a board that lists the conference table, and hourly.
+            college_table = (
+                cache.refresh(("college_standings",), STANDINGS_TTL, client.college_standings)
+                or college_table
+            )
         week_item = snap.week_cached
         if scoreboard is not None and scoreboard.week is not None and hasattr(client, "week"):
             number, kind = scoreboard.week, scoreboard.season_type or 2
@@ -506,6 +518,7 @@ class FootballMode:
             standings_cached=standings,
             week_cached=week_item,
             polls_cached=snap.polls_cached,
+            college_standings_cached=college_table,
         )
 
     def _apply_clears(self, prev: IdleSnapshot) -> IdleSnapshot:
