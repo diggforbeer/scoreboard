@@ -15,7 +15,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .college_views import ConferenceView, PollView, build_ap, build_cfp, build_conference
+from .college_views import (
+    ConferenceView,
+    PollView,
+    ScoresView,
+    build_ap,
+    build_cfp,
+    build_conference,
+    build_scores,
+)
 from .idle_views import (
     ByeView,
     FinalView,
@@ -143,3 +151,9 @@ def _college_conference(ctx: IdleContext) -> ConferenceView | None:
 def _college_preview(ctx: IdleContext) -> PreviewView | None:
     """The lead college team's next game (#554)."""
     return build_college_preview(ctx)
+
+
+@idle_screen("cfb_scores")
+def _college_scores(ctx: IdleContext) -> ScoresView | None:
+    """The opt-in scores grid (#556): the slate already polled, four games a page."""
+    return build_scores(ctx)

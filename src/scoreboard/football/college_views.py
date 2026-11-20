@@ -4,7 +4,9 @@ polls and the slate, with no drawing. ``idle_screens.py`` registers each builder
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from .college_rankings import POLL_AP, POLL_CFP, POLL_NAMES
@@ -12,6 +14,7 @@ from .college_standings import ConferenceRow, short_conference
 
 if TYPE_CHECKING:
     from .idle_screens import IdleContext
+    from .models import FbGame
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,3 +123,45 @@ def build_conference(ctx: IdleContext) -> ConferenceView | None:
     if table is None or not table.played:
         return None
     return ConferenceView(table.name, table.short, table.rows, team)
+
+
+# -- the scores grid (#556) -----------------------------------------------------------------------
+
+#: Games on one frame of the grid: four 32px columns across the 128px chain (idle screens are 128px
+#: only), the same as hockey's ``scores_grid``.
+SCORES_PER_PAGE = 4
+
+
+@dataclass(frozen=True, slots=True)
+class ScoresView:
+    """The slate for the scores grid, ranked games first, in pages of ``SCORES_PER_PAGE``."""
+
+    games: tuple[FbGame, ...]
+
+    @property
+    def pages(self) -> int:
+        return max(-(-len(self.games) // SCORES_PER_PAGE), 1)
+
+    def page(self, number: int) -> tuple[FbGame, ...]:
+        start = number * SCORES_PER_PAGE
+        return self.games[start : start + SCORES_PER_PAGE]
+
+
+def _best_rank(game: FbGame) -> int:
+    ranks = [t.rank for t in (game.away, game.home) if t.rank]
+    return min(ranks) if ranks else 99
+
+
+def scores_order(games: Sequence[FbGame], ranked_only: bool) -> tuple[FbGame, ...]:
+    """Games with a ranked team first (best rank leading), then the rest; each group in kickoff
+    order, so the order is steady while a game's score changes. ``ranked_only`` drops the rest."""
+    far = datetime.max.replace(tzinfo=UTC)
+    picked = [g for g in games if _best_rank(g) < 99 or not ranked_only]
+    return tuple(sorted(picked, key=lambda g: (_best_rank(g), g.start_utc or far, g.id)))
+
+
+def build_scores(ctx: IdleContext) -> ScoresView | None:
+    """The scoreboard already polled, filtered by ``football.college_scores``; ``None`` with
+    nothing to list (the slot is skipped, never shown blank)."""
+    games = scores_order(ctx.games, getattr(ctx.config, "college_scores", "all") == "ranked")
+    return ScoresView(games) if games else None

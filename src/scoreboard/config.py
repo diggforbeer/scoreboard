@@ -561,6 +561,9 @@ UPSET_SECONDS_MIN = 4.0
 UPSET_SECONDS_MAX = 15.0
 #: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
 COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
+#: Which games the opt-in college scores grid (``cfb_scores``, #556) lists: every game on the
+#: slate, or only those with a team in the chosen poll. Either way ranked games come first.
+COLLEGE_SCORES_CHOICES = ("all", "ranked")
 
 
 @dataclass(slots=True)
@@ -601,6 +604,8 @@ class FootballConfig:
     #: committee's, which falls back to the AP until it publishes). The rank badges and the upset
     #: alert read this one setting (#546).
     college_poll: str = "ap"
+    #: The college scores grid's filter (``all`` games or the ``ranked`` ones, #556).
+    college_scores: str = "all"
     #: The upset alert (#557): a ranked college team losing to a lower-ranked or unranked one, from
     #: halftime on, and an upset final. Only for a team in the ranked list (#588). Silent.
     #: ``upset_min_gap`` is how many places lower the leader must be ranked (1: any lower-ranked
@@ -628,6 +633,11 @@ class FootballConfig:
             log.warning("Ignoring unknown football.college_poll %r", self.college_poll)
             poll = "ap"
         self.college_poll = poll
+        scores = str(self.college_scores).strip().lower()
+        if scores not in COLLEGE_SCORES_CHOICES:
+            log.warning("Ignoring unknown football.college_scores %r", self.college_scores)
+            scores = "all"
+        self.college_scores = scores
         self.page_seconds = _non_negative(self.page_seconds, "football.page_seconds")
         for name, (default, low, high) in FOOTBALL_TIMING_RANGES.items():
             key = f"{name}_seconds"
