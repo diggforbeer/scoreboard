@@ -31,11 +31,34 @@ from .stats import GameStats, stats_from_summary
 
 log = logging.getLogger(__name__)
 
-BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
-#: The core API: per-play ``participants`` (who did it) and the ``Coin Toss`` play (#354).
-CORE_URL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl"
-#: The standings live on ``/apis/v2/``, not ``/apis/site/v2/`` (football_api.md, "Between games").
-STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/football/nfl"
+#: ESPN's league slugs. The college feed has the NFL's shape, so one client serves both (#539).
+LEAGUE_NFL = "nfl"
+LEAGUE_COLLEGE = "college-football"
+LEAGUES = (LEAGUE_NFL, LEAGUE_COLLEGE)
+
+
+def league_base_url(league: str) -> str:
+    """The site API for ``league``: scoreboard, summary, teams, roster."""
+    return f"https://site.api.espn.com/apis/site/v2/sports/football/{league}"
+
+
+def league_core_url(league: str) -> str:
+    """The core API: per-play ``participants`` (who did it) and the ``Coin Toss`` play (#354)."""
+    return f"https://sports.core.api.espn.com/v2/sports/football/leagues/{league}"
+
+
+def league_standings_url(league: str) -> str:
+    """The standings live on ``/apis/v2/``, not ``/apis/site/v2/`` (football_api.md)."""
+    return f"https://site.api.espn.com/apis/v2/sports/football/{league}"
+
+
+BASE_URL = league_base_url(LEAGUE_NFL)
+CORE_URL = league_core_url(LEAGUE_NFL)
+STANDINGS_URL = league_standings_url(LEAGUE_NFL)
+#: ESPN group 80 is FBS. Without it the college scoreboard returns a curated 24 games; with it
+#: every FBS game of the week (``football_api.md``, "College football"). ``limit`` is lifted
+#: because the default page can cut a full Saturday short.
+COLLEGE_SCOREBOARD_PARAMS = {"groups": "80", "limit": "300"}
 #: Plays asked for per core page. A game has 150-200, so one page covers it; longer ones follow
 #: ``pageCount``.
 CORE_PAGE_LIMIT = 300
@@ -76,13 +99,20 @@ def _build_session() -> requests.Session:
 class FootballClient:
     def __init__(
         self,
-        base_url: str = BASE_URL,
+        base_url: str | None = None,
         timeout: float | tuple[float, float] = TIMEOUT,
         session: requests.Session | None = None,
-        core_url: str = CORE_URL,
+        core_url: str | None = None,
+        league: str = LEAGUE_NFL,
+        standings_url: str | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.core_url = core_url.rstrip("/")
+        if league not in LEAGUES:
+            raise ValueError(f"unknown football league {league!r}; expected one of {LEAGUES}")
+        self.league = league
+        # An explicit URL wins (tests point these at a fake); otherwise the league decides.
+        self.base_url = (base_url or league_base_url(league)).rstrip("/")
+        self.core_url = (core_url or league_core_url(league)).rstrip("/")
+        self.standings_url = (standings_url or league_standings_url(league)).rstrip("/")
         self.timeout = timeout
         self.session = session or _build_session()
         #: The last failure, or ``""`` after a success. For the admin page's status.
@@ -108,7 +138,9 @@ class FootballClient:
         or 3) asks for a whole week. ``None`` is no data, as for ``scores``; an empty slate gives
         a ``Scoreboard`` with no games.
         """
-        params: dict[str, str] = {}
+        params: dict[str, str] = (
+            dict(COLLEGE_SCOREBOARD_PARAMS) if self.league == LEAGUE_COLLEGE else {}
+        )
         if date:
             params["dates"] = date
         if week is not None:
@@ -146,7 +178,11 @@ class FootballClient:
 
     def standings(self) -> Standings | None:
         """Each conference's divisions with every team's record, seed and streak (~160 KB)."""
-        payload = self._get("/standings", {"level": "3"}, base=STANDINGS_URL)
+        if self.league != LEAGUE_NFL:
+            # The college table is a different shape (conferences, Sun Belt nested under its
+            # divisions, repeated stat names); its parser is #553.
+            raise NotImplementedError("college standings are not parsed yet (#553)")
+        payload = self._get("/standings", {"level": "3"}, base=self.standings_url)
         if payload is None:
             return None
         return standings_from_payload(payload)
