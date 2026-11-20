@@ -283,7 +283,7 @@ from datetime import UTC, datetime  # noqa: E402
 from scoreboard.display.college_idle import draw_cfb_ap  # noqa: E402
 from scoreboard.football import scroll as fscroll  # noqa: E402
 from scoreboard.football.college_rankings import polls_from_payload  # noqa: E402
-from scoreboard.football.college_views import build_ap  # noqa: E402
+from scoreboard.football.college_views import build_ap, build_cfp  # noqa: E402
 from scoreboard.football.idle import Cached  # noqa: E402
 from scoreboard.football.idle_screens import IdleContext  # noqa: E402
 
@@ -307,3 +307,19 @@ def ap_png(favourite, px, name):
 ap_view = ap_png("UGA", 0, "19_ap_top25_rest_top")
 ap_png("WAKE", 36, "20_ap_top25_mid_scroll_lead_team_listed")
 ap_png("UGA", fscroll.scroll_range(len(ap_view.rows)), "21_ap_top25_rest_bottom")
+
+
+# ---- the CFP rankings idle screen (#552): the AP's layout, the conference at the right ----
+cfp_ctx = IdleContext(
+    0.0,
+    datetime(2026, 11, 18, 12, 0, tzinfo=UTC),
+    [],
+    IdleSnapshot(polls_cached=Cached(ap_polls, 0.0)),
+    TeamView(FootballConfig(), "TEX", [], "TEX"),
+)
+with use_directory(FBS):
+    cfp_view = build_cfp(cfp_ctx)
+    for px, name in ((0, "22_cfp_rankings_rest_top"), (24, "23_cfp_rankings_mid_scroll_lead_team")):
+        c = AsciiCanvas(128, H)
+        draw_cfb_ap(rend(), c, cfp_view, px)
+        png(c, 128, name)

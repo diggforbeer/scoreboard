@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .college_views import PollView, build_ap
+from .college_views import PollView, build_ap, build_cfp
 from .idle_views import (
     ByeView,
     FinalView,
@@ -124,3 +124,9 @@ def _schedule(ctx: IdleContext) -> ScheduleView | None:
 def _college_ap(ctx: IdleContext) -> PollView | None:
     """The AP Top 25 (#551): college boards only, because only a college board lists the name."""
     return build_ap(ctx)
+
+
+@idle_screen("cfb_cfp")
+def _college_cfp(ctx: IdleContext) -> PollView | None:
+    """The committee's rankings (#552): skipped until they are published."""
+    return build_cfp(ctx)
