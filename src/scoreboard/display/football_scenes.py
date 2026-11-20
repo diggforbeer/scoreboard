@@ -84,12 +84,12 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
         badge = rank_badge(side, r)
         if badge:
             # The abbreviation moves right to make room, unless that would run into the score.
-            shift = text_width(r.fonts.tiny, badge) + 2
+            shift = text_width(r.fonts.small, badge) + 2
             score_left = (
                 x0 + half - 3 - (0 if game.is_pregame else text_width(font, str(side.score)))
             )
             if x + shift + text_width(font, side.abbrev) + 1 <= score_left:
-                r.text(canvas, r.fonts.tiny, x, score_baseline, RANK_COLOR, badge)
+                r.text(canvas, r.fonts.small, x, score_baseline, RANK_COLOR, badge)
                 x += shift
         label_x[id(side)] = x
         r.text(canvas, font, x, score_baseline, side_color(side), side.abbrev)
