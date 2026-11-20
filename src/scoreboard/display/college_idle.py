@@ -74,17 +74,19 @@ def _movement(r: Any, canvas: Any, x: int, y: int, movement: int | None) -> None
 
 
 def draw_cfb_ap(r: Any, canvas: Any, view: Any, scroll: int = 0) -> None:
-    """The AP Top 25 as a scrolling table: the poll's name at the left, then a row per team with
-    its rank, the movement since the last poll, the abbreviation in the team's colour, the record
-    and the points. The lead team is white (its rank in the badge colour) with a bar beside it; the
+    """A ranking poll (the AP Top 25, the committee's rankings) as a scrolling table: the poll's
+    name at the left, then a row per team with its rank, the movement since the last poll, the
+    abbreviation in the team's colour, the record and the points (the conference, where the poll
+    has no points). The lead team is white (its rank in the badge colour) with a bar beside it; the
     rest are grey.
     ``scroll`` shifts the rows up by that many pixels; the label stays put, rows partly off the
     panel are drawn and clipped."""
     canvas.Clear()
     font = r.fonts.tiny
-    r.text_center(canvas, font, LABEL_WIDTH // 2, 12, AMBER, "AP")
-    r.text_center(canvas, font, LABEL_WIDTH // 2, 19, GREY, "TOP")
-    r.text_center(canvas, font, LABEL_WIDTH // 2, 25, GREY, "25")
+    head, middle, tail = view.label
+    r.text_center(canvas, font, LABEL_WIDTH // 2, 12, AMBER, head)
+    r.text_center(canvas, font, LABEL_WIDTH // 2, 19, GREY, middle)
+    r.text_center(canvas, font, LABEL_WIDTH // 2, 25, GREY, tail)
     left = LABEL_WIDTH + 2
     for i, row in enumerate(view.rows):
         y = 1 + i * ROW_HEIGHT + (ROW_HEIGHT - 2) - scroll
@@ -103,10 +105,13 @@ def draw_cfb_ap(r: Any, canvas: Any, view: Any, scroll: int = 0) -> None:
         color = team_color(row.abbrev) if known else UNKNOWN_TEAM
         r.text(canvas, font, left + ABBREV_X, y, color, row.abbrev)
         r.text(canvas, font, left + RECORD_X, y, ink, row.record)
-        if row.points:
-            r.text_right(canvas, font, r.width - POINTS_RIGHT_PAD, y, ink, f"{row.points:,}")
+        # The right edge: the AP's points, or the conference where the poll has none.
+        side = f"{row.points:,}" if row.points else row.conference
+        if side:
+            r.text_right(canvas, font, r.width - POINTS_RIGHT_PAD, y, ink, side)
 
 
 @college_screen("cfb_ap")
-def _draw_ap(r: Any, canvas: Any, scene: Any, now: Any) -> None:
+@college_screen("cfb_cfp")
+def _draw_poll(r: Any, canvas: Any, scene: Any, now: Any) -> None:
     draw_cfb_ap(r, canvas, scene.fb_idle, scene.scroll_px)
