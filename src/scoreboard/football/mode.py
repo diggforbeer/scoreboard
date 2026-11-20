@@ -172,6 +172,8 @@ class FootballMode:
         #: feed worker's thread owns it: it must not be used from the render loop.
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
+        #: The Top 25 game on screen and when its turn began (#555); render loop only.
+        self._top25_turn: tuple[int, float] | None = None
 
     @property
     def directory(self) -> Directory | None:
@@ -696,8 +698,10 @@ class FootballMode:
             return None  # the favourite's own game always wins
         # A followed team's (or, with nobody followed, any) live game takes the screen, but only
         # after the favourite's countdown and final below: those keep their place.
-        others_live = any(any(g.involves(t) for t in followed) for g in playing) or (
-            bool(playing) and not followed
+        others_live = (
+            any(any(g.involves(t) for t in followed) for g in playing)
+            or (bool(playing) and not followed)
+            or bool(self._top25_games(playing, cfg))
         )
         wide = self._wide()
         if not wide:
@@ -854,10 +858,26 @@ class FootballMode:
         followed = cfg.followed_teams if cfg else []
         favourite = cfg.favourite_team if cfg else ""
         favourite_game = next((g for g in games if favourite and g.involves(favourite)), None)
-        if favourite_game is not None and favourite_game.is_live:
+        top = self._top25_games(games, cfg)
+        # The favourite's live game holds the screen, except at its half when a Top 25 game is
+        # playing: that is dead air, and the ranked games take it (#555).
+        if (
+            favourite_game is not None
+            and favourite_game.is_live
+            and not (top and favourite_game.is_halftime)
+        ):
+            self._top25_turn = None
             return favourite_game
         pool = [g for g in games if any(g.involves(t) for t in followed)]
         live = [g for g in pool if g.is_live]
+        if top and not any(not g.is_halftime for g in live):
+            # No followed game has a ball in play: the live followed games (all at the half) and
+            # the Top 25 games share the screen, followed first.
+            if favourite_game is not None and favourite_game in live:
+                live.remove(favourite_game)
+                live.insert(0, favourite_game)
+            return self._top25_pick([*live, *top], now, cfg)
+        self._top25_turn = None
         pool = live or pool or list(games)
         if favourite_game is not None and favourite_game in pool:
             pool.remove(favourite_game)
@@ -865,6 +885,48 @@ class FootballMode:
         seconds = self._scoreboard().rotate_seconds if self._scoreboard else DEFAULT_ROTATE_SECONDS
         turn = int(now // max(seconds, 1.0)) % len(pool)
         return pool[turn]
+
+    def _top25_games(self, games: Sequence[FbGame], cfg: Any) -> list[FbGame]:
+        """The live games that earn a turn for a ranked team (#555), best first, or ``[]``.
+
+        ``games`` carry their ranks (``ranked``), so "ranked" is the owner's chosen poll like every
+        other rank on the board. A game a followed team is in is not one of these: it has the
+        board by its own rules. Order: two ranked teams before one, then the better rank, then the
+        game id, so the order is the same on every frame."""
+        if cfg is None or not getattr(cfg, "top25_turns", False):
+            return []
+        followed = cfg.followed_teams
+        found = [
+            g
+            for g in games
+            if g.is_live
+            and (g.away.rank or g.home.rank)
+            and not any(g.involves(t) for t in followed)
+        ]
+
+        def order(g: FbGame) -> tuple[int, int, int]:
+            ranks = [r for r in (g.away.rank, g.home.rank) if r]
+            return (-len(ranks), min(ranks), g.id)
+
+        return sorted(found, key=order)
+
+    def _top25_pick(self, candidates: Sequence[FbGame], now: float, cfg: Any) -> FbGame:
+        """The game whose turn it is among ``candidates`` (the order above), one turn of
+        ``top25_seconds`` each. A game keeps the board for its whole turn even if the order
+        changes under it (a minimum dwell, so a score or a new poll never flip-flops the screen);
+        the next turn goes to the game after it in the order, wrapping. A game that has left the
+        list (it ended) hands over at once, to the first."""
+        ids = [g.id for g in candidates]
+        seconds = float(getattr(cfg, "top25_seconds", 20.0))
+        current = self._top25_turn
+        if current is not None and current[0] in ids and now - current[1] < seconds:
+            return candidates[ids.index(current[0])]
+        if current is not None and current[0] in ids:
+            at = (ids.index(current[0]) + 1) % len(ids)
+        else:
+            at = 0
+        self._top25_turn = (ids[at], now)
+        return candidates[at]
 
 
 def resting_kind(game: FbGame) -> str:
