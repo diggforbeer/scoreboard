@@ -29,6 +29,7 @@ from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
 from .button import Button
 from .config import (
+    DEFAULT_COLLEGE_ROTATION,
     DEFAULT_CONFIG_PATHS,
     DEFAULT_FOOTBALL_ROTATION,
     FOOTBALL_SPORTS,
@@ -45,6 +46,7 @@ from .config import (
 from .delay import DelayQueue
 from .display import goal_light
 from .display import penalty as penalty_screen
+from .display.college_idle import COLLEGE_DRAWERS
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
@@ -1230,7 +1232,14 @@ class ScoreboardApp:
         """The sports with something to show now, best-ranked lead first: a sport whose slate is
         empty (the offseason, or its feed is down) sits out of the idle rotation."""
         football_games = self._football.snapshot.games if self._football is not None else None
-        have = {"hockey": bool(self._hockey_priority_games()), "football": bool(football_games)}
+        college_games = self._college.snapshot.games if self._college is not None else None
+        have = {
+            "hockey": bool(self._hockey_priority_games()),
+            "football": bool(football_games),
+            # College only counts with a row it can draw now: its screens arrive one by one (#551+)
+            # and a segment with none would hold the board on the plain scoreboards.
+            "college": bool(college_games) and self._college.has_idle_rows(),
+        }
         order = self._priority().sports() or ["hockey", "football"]
         return [sport for sport in order if have.get(sport)]
 
@@ -2686,8 +2695,14 @@ class ScoreboardApp:
             if sport == "hockey":
                 rows += self._default_rotation()
             else:
-                rows += [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+                rows += self._football_default(sport)
         return rows
+
+    @staticmethod
+    def _football_default(sport: str) -> list[RotationEntry]:
+        """A football-style sport's built-in idle rotation: the NFL's, or college's (#579)."""
+        defaults = DEFAULT_COLLEGE_ROTATION if sport == "college" else DEFAULT_FOOTBALL_ROTATION
+        return [RotationEntry(s, sec) for s, sec in defaults]
 
     def _sport_rotation(self, sport: str) -> list[RotationEntry]:
         """The rows ``sport`` shows: its current segment's while the sports alternate, else its own
@@ -2702,7 +2717,7 @@ class ScoreboardApp:
                 return rows
         if sport == "hockey":
             return self._default_rotation()
-        return [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+        return self._football_default(sport)
 
     def _effective_rotation(self) -> list[RotationEntry]:
         return self._sport_rotation("hockey")
@@ -4032,6 +4047,8 @@ class ScoreboardApp:
             r.draw_fb_preview(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
+        elif scene.kind in COLLEGE_DRAWERS:
+            COLLEGE_DRAWERS[scene.kind](r, self.canvas, scene, self.clock())
         elif scene.kind == "clock":
             sport, abbrev = self._colour_scheme(favourite, clock=True)
             with self._colour_context(sport):

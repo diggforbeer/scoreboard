@@ -351,6 +351,24 @@ def test_rotation_save_rejects_an_unknown_screen(app_dir, config_path):
     assert config_path.read_text() == ""
 
 
+def test_rotation_save_accepts_college_screens_and_rejects_unknown_ones(app_dir, config_path):
+    """#579: the college football screens are their own names (and a sport of their own)."""
+
+    async def scenario(client, rows):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
+        return json.loads(await client.recv())
+
+    good = [{"screen": "cfb_ap", "seconds": 8}, {"screen": "cfb_preview", "seconds": 6}]
+    assert asyncio.run(_serve_and_run(lambda c: scenario(c, good))) == {
+        "type": "saved",
+        "section": "rotation",
+    }
+    assert 'screen = "cfb_ap"' in config_path.read_text()
+    bad = asyncio.run(_serve_and_run(lambda c: scenario(c, [{"screen": "cfb_nope", "seconds": 8}])))
+    assert bad["type"] == "error" and "row 1" in bad["message"]
+
+
 @pytest.mark.parametrize("seconds", [0, -5, "five", True])
 def test_rotation_save_rejects_non_positive_or_non_numeric_seconds(app_dir, config_path, seconds):
     async def scenario(client):

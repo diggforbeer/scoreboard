@@ -309,6 +309,13 @@ VALID_ROTATION_SCREENS = (
     "fb_standings",
     "fb_week",
     "fb_schedule",
+    "cfb_preview",
+    "cfb_ap",
+    "cfb_cfp",
+    "cfb_conference",
+    "cfb_week",
+    "cfb_schedule",
+    "cfb_scores",
 )
 
 #: Rotation screen names a release renamed: still accepted in a saved config, mapped to the
@@ -319,6 +326,19 @@ ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 #: ``fb_bye``, ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself
 #: when they apply (a bye week, the kickoff window, the hold after a game).
 FOOTBALL_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule")
+#: The college football screens the same list can hold (#579): their own names, because the NFL's
+#: ``fb_*`` rows belong to the NFL (``screen_sport``) and the idle alternation gives college a
+#: segment of its own. Which of them are drawn is up to ``football/idle_screens.py``: a name with
+#: nothing registered (the screens arrive with #551-#556) is skipped, never shown blank.
+COLLEGE_SCREENS = (
+    "cfb_preview",
+    "cfb_ap",
+    "cfb_cfp",
+    "cfb_conference",
+    "cfb_week",
+    "cfb_schedule",
+    "cfb_scores",
+)
 #: Football's screens plus the clock, which both sports draw: what football's default rotation is
 #: made of.
 FOOTBALL_ROTATION_SCREENS = (*FOOTBALL_SCREENS, "clock")
@@ -329,11 +349,13 @@ SHARED_SCREENS = ("clock", "dates")
 
 
 def screen_sport(screen: str) -> str:
-    """Which sport shows a rotation screen: ``football``, ``hockey``, or ``shared`` (the clock and
-    the owner's important dates, which either sport draws and which take the sport of the rows
-    around them)."""
+    """Which sport shows a rotation screen: ``football``, ``college``, ``hockey``, or ``shared``
+    (the clock and the owner's important dates, which any sport draws and which take the sport of
+    the rows around them)."""
     if screen in FOOTBALL_SCREENS:
         return "football"
+    if screen in COLLEGE_SCREENS:
+        return "college"
     return "shared" if screen in SHARED_SCREENS else "hockey"
 
 
@@ -359,6 +381,18 @@ DEFAULT_FOOTBALL_ROTATION: tuple[tuple[str, float], ...] = (
     ("fb_standings", 8.0),
     ("fb_week", 10.0),
     ("fb_schedule", 8.0),
+    ("clock", 6.0),
+)
+#: What college's part of the idle rotation is when ``[[rotation]]`` is absent or empty (#579): the
+#: next game, the AP Top 25, the conference table, the week's games, the schedule, the clock. The
+#: CFP rankings and the scores grid are opt-in, like the other grids. A name whose screen is not
+#: built yet is skipped, so each screen joins the default by arriving.
+DEFAULT_COLLEGE_ROTATION: tuple[tuple[str, float], ...] = (
+    ("cfb_preview", 8.0),
+    ("cfb_ap", 8.0),
+    ("cfb_conference", 8.0),
+    ("cfb_week", 10.0),
+    ("cfb_schedule", 8.0),
     ("clock", 6.0),
 )
 

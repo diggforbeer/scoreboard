@@ -733,6 +733,20 @@ class FootballMode:
             return "clock" if self._has_clock() else None
         return None
 
+    def has_idle_rows(self) -> bool:
+        """Whether the idle rotation has a row that can be drawn right now (the render loop's, for
+        the app's sport alternation): a registered screen with something to show, or the
+        owner's important dates. A mode with none has nothing for its turn, and the board
+        skips it rather than sit on the plain scoreboards."""
+        cfg = self._football() if self._football else _no_football()
+        snap = self.snapshot
+        if not snap.has_data or not cfg.favourite_team or not self._wide():
+            return False
+        with self.scope():
+            games = self.ranked(snap.games or ())
+            ctx = self._idle_context(games, snap, self._monotonic(), cfg)
+            return bool(self._rotation(cfg, ctx, cfg.favourite_team))
+
     def _in_countdown(self, game: FbGame, cfg: FootballConfig) -> bool:
         if not game.is_pregame or game.start_utc is None:
             return False
