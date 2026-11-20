@@ -2690,3 +2690,13 @@ def test_demo_in_football_mode_loops_the_football_steps_and_stays_silent(fake_ba
     assert [c[0].kind for c in calls] == [s.scene.kind for s in steps[:2]]
     assert all(c[0].kind.startswith("fb_") for c in calls)
     assert horn == []
+
+
+def test_the_app_builds_its_admin_server_with_the_college_team_source(fake_backend, games):
+    """The picker's FBS table (#543) comes from ``college_picker.fetch_table``, installed by the
+    app; without it the admin page would always see ``ready: false``."""
+    from scoreboard import college_picker
+
+    app = ScoreboardApp(Settings(), client=FakeClient(games), backend=fake_backend)
+    assert app.admin_server is not None
+    assert app.admin_server._college_source is college_picker.fetch_table

@@ -280,7 +280,7 @@ from websockets.asyncio.server import ServerConnection, serve
 from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
-from . import updater
+from . import college_picker, updater
 from .audio import (
     DEFAULT_STEM,
     DING_STEM,
@@ -310,6 +310,7 @@ from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
 from .football import teams as football_teams
+from .football.college_teams import CollegeTable
 from .hostname import (
     apply_hostname,
     current_hostname,
@@ -372,6 +373,12 @@ FRAME_POLL_SECONDS = float(os.environ.get("SCOREBOARD_ADMIN_FRAME_POLL", "0.25")
 #: broadcast to all of them, unlike everything else here, which only ever
 #: replies to whoever sent the request.
 _clients: set[ServerConnection] = set()
+
+#: Where the college picker's team table comes from (#543): set by ``AdminServer`` on a real
+#: device, ``None`` (nothing fetched, the page sees ``ready: false``) in tests and bare dev runs.
+COLLEGE_SOURCE: Callable[[], CollegeTable | None] | None = None
+_college_list = college_picker.CollegeTeamList()
+_college_task: asyncio.Task[None] | None = None
 
 #: Logs tab (#197). Overridable so tests can substitute a fake journalctl.
 JOURNAL_COMMAND = ["journalctl"]
@@ -986,6 +993,29 @@ async def _send_teams_config(
 ) -> None:
     settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_teams_payload(settings)))
+
+
+def _college_teams_payload() -> dict[str, object]:
+    """The FBS table as conferences with their teams (#543), for the college picker."""
+    return {"type": "config", "section": "college_teams", "data": _college_list.payload}
+
+
+async def _send_college_teams(connection: ServerConnection) -> None:
+    """Send the cached list (``ready: false`` until there is one) and, if it is due, start the
+    fetch on a worker thread: a connect never waits on ESPN. The page gets the list by broadcast
+    when it lands."""
+    global _college_task
+    await connection.send(json.dumps(_college_teams_payload()))
+    if _college_list.due(COLLEGE_SOURCE) and (_college_task is None or _college_task.done()):
+        _college_task = asyncio.create_task(_load_college_teams())
+
+
+async def _load_college_teams() -> None:
+    source = COLLEGE_SOURCE
+    if source is None:
+        return
+    if await asyncio.to_thread(_college_list.refresh, source) and _clients:
+        await _broadcast(_college_teams_payload())
 
 
 async def _send_dates_config(
@@ -1762,6 +1792,8 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_teams_config(connection, settings)
         # And the important dates (#524), last again for the same reason.
         await _send_dates_config(connection, settings)
+        # And the college picker's team list (#543), last once more.
+        await _send_college_teams(connection)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:
@@ -2018,7 +2050,9 @@ class AdminServer:
         alias_port: int = 0,
         cache_items: Callable[[], list[dict[str, Any]]] | None = None,
         cache_clearer: Callable[[str], bool] | None = None,
+        college_source: Callable[[], CollegeTable | None] | None = None,
     ) -> None:
+        self._college_source = college_source
         self._config_path = config_path
         self._port = port
         #: A second listener for the same page (#292): port 80 is the address,
@@ -2042,6 +2076,8 @@ class AdminServer:
 
     def start(self) -> None:
         global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER, MIRROR, CACHE_ITEMS, CACHE_CLEARER
+        global COLLEGE_SOURCE
+        COLLEGE_SOURCE = self._college_source
         CACHE_ITEMS = self._cache_items
         CACHE_CLEARER = self._cache_clearer
         CONFIG_PATH = self._config_path
