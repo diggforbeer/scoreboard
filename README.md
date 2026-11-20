@@ -39,11 +39,11 @@
 | src/scoreboard/display/football\_run.py           |       85 |        0 |    100% |           |
 | src/scoreboard/display/football\_sack.py          |       73 |        1 |     99% |        52 |
 | src/scoreboard/display/football\_scenes.py        |      144 |        1 |     99% |       176 |
-| src/scoreboard/display/football\_score.py         |       65 |        1 |     98% |        69 |
+| src/scoreboard/display/football\_score.py         |       69 |        1 |     99% |        72 |
 | src/scoreboard/display/football\_score\_detail.py |      111 |        3 |     97% |62, 86, 123 |
 | src/scoreboard/display/football\_stats.py         |       55 |        0 |    100% |           |
 | src/scoreboard/display/football\_stoppage.py      |      105 |        1 |     99% |        45 |
-| src/scoreboard/display/football\_touchdown.py     |      130 |        1 |     99% |        90 |
+| src/scoreboard/display/football\_touchdown.py     |      136 |        1 |     99% |       106 |
 | src/scoreboard/display/football\_turnover.py      |       92 |        0 |    100% |           |
 | src/scoreboard/display/goal\_light.py             |      167 |        1 |     99% |       157 |
 | src/scoreboard/display/holiday.py                 |      801 |        2 |     99% | 179, 1719 |
@@ -59,7 +59,7 @@
 | src/scoreboard/fetcher.py                         |      128 |        2 |     98% |  178, 228 |
 | src/scoreboard/football/\_\_init\_\_.py           |        0 |        0 |    100% |           |
 | src/scoreboard/football/api.py                    |      156 |        0 |    100% |           |
-| src/scoreboard/football/demo.py                   |      182 |        0 |    100% |           |
+| src/scoreboard/football/demo.py                   |      183 |        0 |    100% |           |
 | src/scoreboard/football/director.py               |      233 |        9 |     96% |195, 210, 255, 270, 277, 304, 384, 398, 420 |
 | src/scoreboard/football/events.py                 |      211 |        9 |     96% |270, 297, 306, 350, 354-357, 412 |
 | src/scoreboard/football/geometry.py               |       91 |        0 |    100% |           |
@@ -91,7 +91,7 @@
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **14363** |  **460** | **97%** |           |
+| **TOTAL**                                         | **14374** |  **460** | **97%** |           |
 
 
 ## Setup coverage badge
