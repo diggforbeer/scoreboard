@@ -60,6 +60,17 @@ const HOCKEY_ROTATION_SCREENS = ROTATION_SCREENS.filter(
 )
 // The football screens the same list can hold (config.py's FOOTBALL_SCREENS); the clock is shared.
 const FOOTBALL_ROTATION_SCREENS = ['fb_preview', 'fb_standings', 'fb_week', 'fb_schedule'] as const
+// The college football screens (config.py's COLLEGE_SCREENS): their own names, and a turn of their
+// own beside the NFL's. One not built yet is skipped by the board.
+const COLLEGE_ROTATION_SCREENS = [
+  'cfb_preview',
+  'cfb_ap',
+  'cfb_cfp',
+  'cfb_conference',
+  'cfb_week',
+  'cfb_schedule',
+  'cfb_scores',
+] as const
 // One cached thing on the Cache tab (cache_view.py): what it is, how old, and its data.
 interface CacheItem {
   key: string
@@ -1762,7 +1773,7 @@ function App() {
           {rotation ? (
             <form onSubmit={flushOnSubmit(rotationSave)}>
               <p className="text-body-secondary small">
-                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
+                Screens shown when nothing you follow is on, in this order, the sports mixed.
                 Consecutive rows of one sport show together, then the board moves to the other
                 sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
                 Empty falls back to each sport's built-in default.
@@ -1790,7 +1801,14 @@ function App() {
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="Both sports">
+                    <optgroup label="College football">
+                      {COLLEGE_ROTATION_SCREENS.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All sports">
                       {SHARED_ROTATION_SCREENS.map((screen) => (
                         <option key={screen} value={screen}>
                           {screen}

@@ -270,12 +270,22 @@ def test_a_sport_with_nothing_to_show_has_its_rows_skipped_and_neighbours_merge(
 
 
 def test_every_hockey_screen_is_hockeys_and_every_football_screen_footballs():
-    from scoreboard.config import FOOTBALL_SCREENS, VALID_ROTATION_SCREENS, screen_sport
+    from scoreboard.config import (
+        COLLEGE_SCREENS,
+        FOOTBALL_SCREENS,
+        VALID_ROTATION_SCREENS,
+        screen_sport,
+    )
 
     for screen in VALID_ROTATION_SCREENS:
-        expected = (
-            F if screen in FOOTBALL_SCREENS else ("shared" if screen in ("clock", "dates") else H)
-        )
+        if screen in COLLEGE_SCREENS:
+            expected = "college"  # their own sport since #579, tested in test_college_rotation
+        else:
+            expected = (
+                F
+                if screen in FOOTBALL_SCREENS
+                else ("shared" if screen in ("clock", "dates") else H)
+            )
         assert screen_sport(screen) == expected, screen
     assert set(FOOTBALL_SCREENS) <= set(VALID_ROTATION_SCREENS)
 
