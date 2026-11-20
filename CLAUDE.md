@@ -1022,6 +1022,15 @@ page. Its e2e tests use `tests/e2e/college_launcher.py` (the real `main()` with 
 source). It does not use the live football feed's table. Not persisted to disk: a board that restarts offline
 has no list until it reaches ESPN.
 
+## College settings on the admin page (#565)
+
+The Display tab's "College football" card (shown when a college team is ranked) edits `college_poll`,
+`college_scores` (the `cfb_scores` grid's filter), `upset_alert`, `upset_seconds` (4-15) and
+`upset_min_gap` (1-25). They are `[football]` keys, so they ride in the existing `football_rotation`
+section (no new connect message): `_coerce_college` rejects a bad choice or an out-of-range number
+whole, and the payload's `college` block carries the choices and ranges the page's inputs use. The
+help text says the alert is silent and only for teams in the ranked list (#588).
+
 ## Important dates (#524)
 
 `[[dates]]` (up to `DATES_MAX` = 10) is the owner's list of birthdays, anniversaries and other days;

@@ -117,6 +117,16 @@ def admin_page_college(tmp_path):
 
 
 @pytest.fixture
+def admin_page_college_ranked(tmp_path):
+    """A board with a college team ranked, so the College football settings card shows (#565)."""
+    yield from _run_admin(
+        tmp_path,
+        [sys.executable, "-m", "scoreboard.admin_server"],
+        '[[teams]]\nsport = "college"\nteam = "ALA"\n',
+    )
+
+
+@pytest.fixture
 def admin_page_college_full(tmp_path):
     """As ``admin_page_college``, with a ranked list already at the cap of 12."""
     from scoreboard.display.teams import TEAM_COLORS
@@ -808,6 +818,125 @@ def test_college_picker_fits_a_phone(admin_page_college):
             page.wait_for_selector("#college-picker", timeout=15000)
             page.fill("#college-search", "tigers")
             box = page.locator("#college-picker").bounding_box()
+            assert box and box["x"] >= 0 and box["x"] + box["width"] <= 375
+            assert page.evaluate("document.documentElement.scrollWidth") <= 375
+        finally:
+            browser.close()
+
+
+# -- the College football settings card (#565) -----------------------------------------------------
+
+
+def _open_display(page, url):
+    page.goto(url)
+    page.get_by_role("button", name="Display", exact=True).click()
+
+
+def test_the_college_settings_card_shows_only_when_a_college_team_is_ranked(
+    admin_page, admin_page_college_ranked
+):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _open_display(page, admin_page_college_ranked.url)
+            page.locator("#college-settings").wait_for(timeout=15000)
+            assert page.locator("#college-poll").input_value() == "ap"
+            assert page.locator("#college-upset-alert").is_checked()
+        finally:
+            browser.close()
+
+
+def test_the_college_settings_card_is_absent_with_no_college_team(admin_page):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _open_display(page, admin_page.url)
+            page.locator("#sb-rotate_seconds").wait_for(timeout=15000)
+            assert page.locator("#college-settings").count() == 0
+        finally:
+            browser.close()
+
+
+def test_college_settings_autosave_to_the_football_section(admin_page_college_ranked):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _open_display(page, admin_page_college_ranked.url)
+            page.locator("#college-settings").wait_for(timeout=15000)
+            page.select_option("#college-poll", "cfp")
+            page.wait_for_selector("text=saved ✓", timeout=15000)
+            _wait_until(
+                lambda: admin_page_college_ranked.config()["football"]["college_poll"] == "cfp"
+            )
+            page.select_option("#college-scores", "ranked")
+            page.locator("#college-upset-alert").uncheck()
+            page.fill("#college-upset-seconds", "12")
+            page.fill("#college-upset-gap", "5")
+            wanted = {
+                "college_poll": "cfp",
+                "college_scores": "ranked",
+                "upset_alert": False,
+                "upset_seconds": 12,
+                "upset_min_gap": 5,
+            }
+            # the page saves the whole football object, so compare just these five
+            _wait_until(
+                lambda: (
+                    {
+                        k: v
+                        for k, v in admin_page_college_ranked.config()["football"].items()
+                        if k in wanted
+                    }
+                    == wanted
+                )
+            )
+            # the teams list is untouched by a football save
+            assert admin_page_college_ranked.config()["teams"] == [
+                {"sport": "college", "team": "ALA"}
+            ]
+        finally:
+            browser.close()
+
+
+def test_an_out_of_range_college_value_is_refused_and_not_written(admin_page_college_ranked):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _open_display(page, admin_page_college_ranked.url)
+            field = page.locator("#college-upset-seconds")
+            field.wait_for(timeout=15000)
+            assert field.get_attribute("min") == "4" and field.get_attribute("max") == "15"
+            assert page.locator("#college-upset-gap").get_attribute("max") == "25"
+            field.fill("99")
+            page.wait_for_selector("text=must be between 4 and 15", timeout=15000)
+            assert "upset_seconds" not in admin_page_college_ranked.config_path.read_text()
+        finally:
+            browser.close()
+
+
+def test_the_college_settings_card_fits_a_phone(admin_page_college_ranked):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": 375, "height": 700})
+            _open_display(page, admin_page_college_ranked.url)
+            card = page.locator("#college-settings")
+            card.wait_for(timeout=15000)
+            box = card.bounding_box()
             assert box and box["x"] >= 0 and box["x"] + box["width"] <= 375
             assert page.evaluate("document.documentElement.scrollWidth") <= 375
         finally:

@@ -215,6 +215,31 @@ interface FootballRotationConfig {
   show_bye: boolean
   show_final: boolean
   show_redzone: boolean
+  // The college settings (#565), also ``[football]``.
+  college_poll: string
+  college_scores: string
+  upset_alert: boolean
+  upset_seconds: number
+  upset_min_gap: number
+}
+
+// What the board says the college controls may hold (admin_server.py's ``college`` block).
+interface CollegeChoices {
+  polls: string[]
+  scores: string[]
+  upset_seconds: [number, number]
+  upset_min_gap: [number, number]
+}
+
+const COLLEGE_POLL_LABELS: Record<string, string> = {
+  ap: 'AP Top 25 (default)',
+  usa: 'Coaches Poll',
+  cfp: 'CFP Rankings (falls back to the AP until published)',
+}
+
+const COLLEGE_SCORES_LABELS: Record<string, string> = {
+  all: 'Every game on the slate',
+  ranked: 'Only games with a ranked team',
 }
 
 interface FootballTeamOption {
@@ -426,6 +451,7 @@ type ServerMessage =
       section: 'football_rotation'
       data: FootballRotationConfig
       timing_ranges: Record<string, [number, number, number]>
+      college: CollegeChoices
     }
   | {
       type: 'config'
@@ -1097,6 +1123,7 @@ function App() {
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
+  const showsCollege = rankedSports.includes('college')
 
   const [datesState, datesSave] = useAutosave<DatesConfig>(
     (v) => save('dates', v),
@@ -1139,6 +1166,7 @@ function App() {
   )
   const footballRotation = footballRotationState.value
   const [footballTimingRanges, setFootballTimingRanges] = useState<Record<string, [number, number, number]>>({})
+  const [collegeChoices, setCollegeChoices] = useState<CollegeChoices | null>(null)
 
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
     (v) => save('holiday', v),
@@ -1261,6 +1289,7 @@ function App() {
             else if (message.section === 'football_rotation') {
               footballRotationSave.receiveConfig(message.data)
               setFootballTimingRanges(message.timing_ranges)
+              setCollegeChoices(message.college)
             }
             else if (message.section === 'holiday') {
               holidaySave.receiveConfig(message.data)
@@ -2251,6 +2280,137 @@ function App() {
 
       </div>
       <div className="col-lg-6">
+
+      {showsCollege && footballRotation && collegeChoices && (
+        <div className="card mb-4" id="college-settings">
+          <div className="card-body">
+            <h2 className="card-title h5">College football</h2>
+            <form onSubmit={flushOnSubmit(footballRotationSave)}>
+              <div className="row g-3">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-poll">
+                    Which poll means &ldquo;ranked&rdquo;
+                  </label>
+                  <select
+                    className="form-select"
+                    id="college-poll"
+                    value={footballRotation.college_poll}
+                    onChange={(e) =>
+                      footballRotationSave.edit({ ...footballRotation, college_poll: e.target.value })
+                    }
+                  >
+                    {collegeChoices.polls.map((poll) => (
+                      <option key={poll} value={poll}>
+                        {COLLEGE_POLL_LABELS[poll] ?? poll}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-text">
+                    The rank numbers on the screens and the upset alert all follow this one poll.
+                  </div>
+                </div>
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-scores">
+                    Scores grid shows
+                  </label>
+                  <select
+                    className="form-select"
+                    id="college-scores"
+                    value={footballRotation.college_scores}
+                    onChange={(e) =>
+                      footballRotationSave.edit({
+                        ...footballRotation,
+                        college_scores: e.target.value,
+                      })
+                    }
+                  >
+                    {collegeChoices.scores.map((choice) => (
+                      <option key={choice} value={choice}>
+                        {COLLEGE_SCORES_LABELS[choice] ?? choice}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-text">
+                    For the <code>cfb_scores</code> screen in the Idle rotation; ranked games come
+                    first either way.
+                  </div>
+                </div>
+              </div>
+              <div className="form-check mt-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="college-upset-alert"
+                  checked={footballRotation.upset_alert}
+                  onChange={(e) =>
+                    footballRotationSave.edit({ ...footballRotation, upset_alert: e.target.checked })
+                  }
+                />
+                <label className="form-check-label" htmlFor="college-upset-alert">
+                  Upset alert
+                </label>
+                <div className="form-text">
+                  When a ranked team in your list is losing to a lower-ranked or unranked one from
+                  halftime on, or has lost, the board interrupts with a card naming both teams.
+                  It is silent, and only for teams in your list.
+                </div>
+              </div>
+              <div className="row g-3 mt-1">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-upset-seconds">
+                    Alert stays up for (seconds)
+                  </label>
+                  <input
+                    className="form-control"
+                    id="college-upset-seconds"
+                    type="number"
+                    step="any"
+                    min={collegeChoices.upset_seconds[0]}
+                    max={collegeChoices.upset_seconds[1]}
+                    value={footballRotation.upset_seconds}
+                    onChange={(e) =>
+                      numberEdit(footballRotationSave, e, {
+                        ...footballRotation,
+                        upset_seconds: Number(e.target.value),
+                      })
+                    }
+                    onBlur={footballRotationSave.flush}
+                  />
+                  <div className="form-text">
+                    {collegeChoices.upset_seconds[0]} to {collegeChoices.upset_seconds[1]}.
+                  </div>
+                </div>
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-upset-gap">
+                    Smallest upset (places)
+                  </label>
+                  <input
+                    className="form-control"
+                    id="college-upset-gap"
+                    type="number"
+                    step="1"
+                    min={collegeChoices.upset_min_gap[0]}
+                    max={collegeChoices.upset_min_gap[1]}
+                    value={footballRotation.upset_min_gap}
+                    onChange={(e) =>
+                      numberEdit(footballRotationSave, e, {
+                        ...footballRotation,
+                        upset_min_gap: Number(e.target.value),
+                      })
+                    }
+                    onBlur={footballRotationSave.flush}
+                  />
+                  <div className="form-text">
+                    How many places lower the leading team must be ranked. 1 is any lower-ranked
+                    team and every unranked one; with 5, a #3 team losing to a #6 does not alert but
+                    losing to a #8 does.
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showsFootball && footballRotation && (
         <div className="card mb-4">
