@@ -131,6 +131,33 @@ def test_the_band_turns_red_in_the_red_zone():
     assert fs.RED_ZONE in band_colors(c) and fs.SITUATION not in band_colors(c)
 
 
+def test_the_band_marks_the_team_with_the_ball_and_the_mark_swaps_on_a_turnover():
+    """WSH is away (left of the band's score), NYG home (right of it)."""
+    from scoreboard.display import football_ball as fb
+
+    def leather(c):
+        return sorted(x for (x, y), rgb in c.pixels.items() if rgb == fb.LEATHER and y < FIELD_TOP)
+
+    home, _ = field(situation(40, offence="NYG"))
+    away, _ = field(situation(40, offence="WSH"))
+    none, _ = field(None)
+    h, a = leather(home), leather(away)
+    assert h and a and not leather(none)
+    assert len(h) == len(a) and min(h) > max(a)  # the home ball sits right of the away one
+
+
+def test_the_band_ball_does_not_move_the_text_between_possessions():
+    from scoreboard.display import football_ball as fb
+
+    def text_only(c):
+        return {k: v for k, v in c.pixels.items() if k[1] < FIELD_TOP and v not in (fb.LEATHER,)}
+
+    home, _ = field(situation(40, offence="NYG"))
+    away, _ = field(situation(40, offence="WSH"))
+    keep = lambda c: {k: v for k, v in text_only(c).items() if v != fb.LACES}  # noqa: E731
+    assert keep(home) == keep(away)
+
+
 @pytest.mark.parametrize(
     "detail,expected",
     [("12:24 - 3rd", "3RD 12:24"), ("2:01 - 4th", "4TH 2:01"), ("0:05 - 1st", "1ST 0:05"),

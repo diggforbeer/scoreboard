@@ -201,6 +201,17 @@ def test_the_down_and_distance_shows_only_while_live_and_tints_in_the_red_zone()
         assert fs.SITUATION not in draw(name).colors(0, 14, 127, 21)
 
 
+def test_the_scoreboard_marks_the_team_with_the_ball_only_while_live():
+    from scoreboard.display import football_ball as fb
+
+    def ball_x(name):
+        return [x for (x, y), rgb in draw(name).pixels.items() if rgb == fb.LEATHER]
+
+    live = ball_x("live")  # NYG (home, right half) has it
+    assert live and min(live) > 64
+    assert not ball_x("final") and not ball_x("pregame") and not ball_x("halftime")
+
+
 def test_a_team_that_is_not_one_of_the_32_is_drawn_plain():
     c = draw("unknown_team")
     assert fs.UNKNOWN_TEAM in c.colors(0, 0, 62, 14)

@@ -127,21 +127,7 @@ def draw_fb_field(r: Renderer, canvas: Any, game: FbGame) -> None:
     if sit is not None and sit.yard_line is not None:
         if side is not None:
             ff.draw_markers(r, canvas, layout, sit.yard_line, sit.distance or 0, side)
-        if side is not None:
-            from ..football.geometry import HOME, drive_direction
-            from . import football_ball as fball
-
-            drive = drive_direction(side)
-            team = game.home if side == HOME else game.away
-            fball.draw_drive_ball(
-                canvas,
-                layout.px(sit.yard_line),
-                layout.mid_y,
-                drive,
-                side_color(team),
-            )
-        else:
-            ff.draw_ball(canvas, layout, sit.yard_line)
+        ff.draw_ball(canvas, layout, sit.yard_line)
     _band(r, canvas, game, sit, in_red_zone, side)
 
 
