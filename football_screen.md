@@ -1294,6 +1294,12 @@ open for the owner's review:
   With 14px end zones the playing field is exactly **100px for 100 yards**, one
   pixel a yard, which makes the maths and the animation easy. The team with the
   ball has its logo at full brightness and the other is dimmed.
+- **A small football marks the team with the ball (#528).** The dimmed logo alone read as "one logo
+  is dim", so a ball sprite (5x3 in the field band, 9x5 on the text scoreboard while live; 128px
+  only) sits beside the possessing team's abbreviation, in `display/football_ball.py`. Both band
+  slots are reserved so the text does not jump on a turnover. Decided from mock-ups of a header ball
+  (kept) and a ball with drive chevrons on the line of scrimmage (dropped: it did not read at LED
+  size). Open: a 64px fallback (an underline was suggested), and how it reads on a real panel (#4).
 - **Logo sizes and variant (decided in #349, from contact sheets of the real logos on turf):**
   **12px** in each end zone, **16px** for the larger uses (coin toss, score detail), the
   **dark** variant (the Giants' navy crest all but vanishes in ESPN's default art on turf; the
