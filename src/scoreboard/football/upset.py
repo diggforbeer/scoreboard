@@ -58,8 +58,9 @@ def upset_of(game: FbGame, min_gap: int = 1, teams: Collection[str] | None = Non
     """The upset ``game`` is in, or ``None``.
 
     ``min_gap`` is how many places lower the leader must be ranked (1: any lower-ranked team, and
-    every unranked one). Needs ranks on the game's teams. ``teams`` limits it to games in which the
-    team being upset is one of those abbreviations (the ranked list's); ``None`` is any game.
+    every unranked one). Needs ranks on the game's teams. ``teams`` limits it to games with one of
+    those abbreviations (the ranked list's) on either side, the team being upset or the one
+    pulling the upset (#599); ``None`` is any game.
     """
     if game.is_final:
         final = True
@@ -74,8 +75,10 @@ def upset_of(game: FbGame, min_gap: int = 1, teams: Collection[str] | None = Non
     )
     if trailing.rank is None:
         return None  # only a ranked team can be upset
-    if teams is not None and trailing.abbrev.upper() not in {t.upper() for t in teams}:
-        return None  # not a team the owner follows
+    if teams is not None and not {trailing.abbrev.upper(), leading.abbrev.upper()} & {
+        t.upper() for t in teams
+    }:
+        return None  # neither team is one the owner follows
     if (leading.rank or UNRANKED_KEY) - trailing.rank < max(1, min_gap):
         return None
     return Upset(trailing, leading, final, leading.score - trailing.score)

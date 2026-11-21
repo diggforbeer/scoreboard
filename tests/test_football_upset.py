@@ -2,6 +2,7 @@
 
 * From halftime on, never in the first half.
 * A ranked team trailing a lower-ranked or unranked one (unranked is below every rank).
+* Only when a team in the owner's list is one of the two, being upset or pulling it (#599).
 * And an upset final: a ranked team that lost to a lower-ranked or unranked one.
 """
 
@@ -264,11 +265,12 @@ def test_the_gap_setting_reaches_the_watcher():
 # -- only the ranked list's teams (#588) ----------------------------------------------------------
 
 
-def test_the_team_being_upset_must_be_one_the_owner_follows():
+def test_one_of_the_two_teams_must_be_one_the_owner_follows():
     g = ahead()  # NYG (#5, away) trails WSH (unranked) 7-21
-    assert upset_of(g, 1, ["NYG"]) is not None
+    assert upset_of(g, 1, ["NYG"]) is not None, "the team being upset is listed"
     assert upset_of(g, 1, ["nyg", "DAL"]) is not None, "case does not matter"
-    assert upset_of(g, 1, ["WSH"]) is None, "the underdog is listed, the upset team is not"
+    assert upset_of(g, 1, ["WSH"]) is not None, "the team pulling the upset is listed (#599)"
+    assert upset_of(g, 1, ["wsh"]).underdog.abbrev == "WSH"
     assert upset_of(g, 1, ["DAL"]) is None, "a game between two unlisted teams, however big"
     assert upset_of(g, 1, []) is None, "nobody listed, nothing alerts"
     assert upset_of(g, 1, None) is not None, "the pure default is any game"
@@ -298,6 +300,40 @@ def test_a_listed_team_being_upset_alerts():
     assert w.waiting == 1
     _game, u, seconds = w.current([ahead()], 8, teams=["NYG"])
     assert u.favourite.abbrev == "NYG" and seconds == 0.0
+
+
+def test_a_listed_team_pulling_an_upset_alerts_live_and_at_the_final():
+    """Both directions (#599): WSH (unranked, listed) beats NYG (#5)."""
+    w, _ = watcher()
+    w.observe([level()], teams=["WSH"])
+    w.observe([ahead()], teams=["WSH"])
+    assert w.waiting == 1
+    _game, u, _s = w.current([ahead()], 8, teams=["WSH"])
+    assert (u.favourite.abbrev, u.underdog.abbrev, u.final) == ("NYG", "WSH", False)
+    w.observe([final((5, 21), (None, 24))], teams=["WSH"])
+    assert w.waiting == 1, "and the final"
+    assert w.current([final((5, 21), (None, 24))], 8, teams=["WSH"])[1].final
+
+
+def test_a_listed_team_that_is_winning_without_an_upset_never_alerts():
+    """WSH is listed and leads, but NYG (unranked) is not an upset victim: nothing to announce."""
+    w, _ = watcher()
+    quiet = made(away=(None, 7), home=(None, 21))
+    w.observe([quiet], teams=["WSH"])
+    w.observe([made(away=(None, 7), home=(None, 28))], teams=["WSH"])
+    assert w.waiting == 0
+    # a listed ranked team leading a lower-ranked one is the ordinary result, not an upset
+    w.observe([made(away=(6, 7), home=(5, 21))], teams=["WSH"])
+    w.observe([made(away=(6, 7), home=(5, 28))], teams=["WSH"])
+    assert w.waiting == 0
+
+
+def test_a_listed_team_pulling_an_upset_still_follows_the_gap_setting():
+    w, _ = watcher()
+    close = lambda s: made(away=(5, s[0]), home=(6, s[1]))  # noqa: E731
+    w.observe([close((14, 14))], min_gap=3, teams=["WSH"])
+    w.observe([close((7, 21))], min_gap=3, teams=["WSH"])
+    assert w.waiting == 0, "#6 is not three places below #5, listed or not"
 
 
 def test_a_newly_listed_team_already_in_an_upset_does_not_fire():

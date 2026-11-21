@@ -221,13 +221,17 @@ def test_a_followed_secondary_being_upset_alerts_with_a_different_primary():
     assert scene is not None and scene.fb_upset.favourite.abbrev == "UGA"
 
 
-def test_the_listed_team_must_be_the_one_being_upset_not_the_underdog():
-    """Open question for the owner: should a followed team *pulling* an upset alert too? Not yet:
-    only the rule as stated. Missouri (unranked) is listed and beats Georgia (#1)."""
+def test_a_listed_team_pulling_an_upset_alerts_too_in_both_directions():
+    """Owner's decision (#599): Missouri (unranked) is listed and beats Georgia (#1). The card is
+    the same, naming both teams, and the final follows."""
     rig = UpsetRig()
     rig.mode._football = lambda: listed_cfg("MIZ")
     behind(rig)
-    assert rig.alert is None
+    scene = rig.alert
+    assert scene is not None
+    assert (scene.fb_upset.favourite.abbrev, scene.fb_upset.underdog.abbrev) == ("UGA", "MIZ")
+    rig.step(away=45, home=14, period=4, state="post", name="STATUS_FINAL")
+    assert rig.alert is not None and rig.alert.fb_upset.final
 
 
 def test_a_newly_followed_team_already_in_an_upset_does_not_fire():
