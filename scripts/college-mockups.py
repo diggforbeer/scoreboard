@@ -102,7 +102,7 @@ def game(*a, ranks=(None, None), **k):
 
 def sit(possession_abbrev, yard, down="2nd & 6", red=False):
     return {
-        "down": 2,
+        "down": int(down[0]),
         "distance": 6,
         "yardLine": yard,
         "downDistanceText": f"{down} at X {yard}",
@@ -475,3 +475,18 @@ with use_directory(FBS):
         draw_cfb_scores(rend(), c, view, page)
         assert not c.out_of_bounds, label
         png(c, 128, label)
+
+# the red zone (#562): ESPN's isRedZone flag, as sent. The field tints the 20 yards the offence
+# attacks and the down and distance turns red; the scoreboard turns the same text red.
+rz_away = game(
+    "CLEM", "DUKE", "in", 10, 7, "9:30 - 4th", 4, sit("CLEM", 9, "1st & Goal", red=True), gid=7
+)
+rz_home = game(
+    "CLEM", "DUKE", "in", 17, 10, "1:51 - 4th", 4, sit("DUKE", 91, "1st & Goal", red=True), gid=8
+)
+rz_no_flag = game("CLEM", "DUKE", "in", 10, 7, "9:30 - 4th", 4, sit("CLEM", 13, "2nd & 3"), gid=9)
+draw(128, lambda r, c, g: r.draw_fb_field(c, g), rz_away, "34_red_zone_field_clemson_driving")
+draw(128, lambda r, c, g: r.draw_fb_field(c, g), rz_home, "35_red_zone_field_duke_driving")
+draw(128, lambda r, c, g: r.draw_fb_scores(c, g), rz_away, "36_red_zone_scoreboard")
+draw(128, lambda r, c, g: r.draw_fb_field(c, g), rz_no_flag, "37_inside_20_flag_off_stays_plain")
+draw(64, lambda r, c, g: r.draw_fb_field(c, g), rz_away, "38_red_zone_field_single_panel_64px")

@@ -129,6 +129,12 @@ Work is tracked in epics #532-#538 and done on the integration branch `college-f
 follows `docs/college-loop.md`**: the queue, the per-issue steps, auto-merge on green CI, and the
 rules it never breaks. Mockups of every college screen: `python scripts/college-mockups.py`
 (images in `docs/college/`). Live-game capture: `scripts/capture-college-live.py`.
+The red zone marker (#562) is the NFL's drawing on the live field/scoreboard, driven by ESPN's `isRedZone`
+**as sent** (never derived from the yard line: the flag was not seen true in the one live game captured);
+no flag, no possessor or no situation draws nothing. On the field band a long down (`1ST&GOAL`) shrinks to
+`1&G` / `2&7` only when four-letter college abbreviations and a wide score leave no room for it. After a
+game, replay the final `summary` through the director (`tests/test_football_replay_clemson_duke.py`)
+instead of capturing live: a capture only runs while an agent turn does.
 
 ## Commands
 
