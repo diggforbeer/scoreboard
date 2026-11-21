@@ -2350,9 +2350,10 @@ function App() {
                   Upset alert
                 </label>
                 <div className="form-text">
-                  When a ranked team in your list is losing to a lower-ranked or unranked one from
-                  halftime on, or has lost, the board interrupts with a card naming both teams.
-                  It is silent, and only for teams in your list.
+                  When a ranked team is losing to a lower-ranked or unranked one from halftime on, or
+                  has lost, and one of the two is in your list (your team being upset, or your team
+                  pulling the upset), the board interrupts with a card naming both teams. It is
+                  silent, and a game with neither team in your list never alerts.
                 </div>
               </div>
               <div className="row g-3 mt-1">

@@ -607,7 +607,8 @@ class FootballConfig:
     #: The college scores grid's filter (``all`` games or the ``ranked`` ones, #556).
     college_scores: str = "all"
     #: The upset alert (#557): a ranked college team losing to a lower-ranked or unranked one, from
-    #: halftime on, and an upset final. Only for a team in the ranked list (#588). Silent.
+    #: halftime on, and an upset final. Only when a team in the ranked list is one of the two (the
+    #: one being upset or the one pulling the upset, #588, #599). Silent.
     #: ``upset_min_gap`` is how many places lower the leader must be ranked (1: any lower-ranked
     #: team and every unranked one).
     upset_alert: bool = True

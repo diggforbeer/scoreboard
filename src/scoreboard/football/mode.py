@@ -362,8 +362,9 @@ class FootballMode:
 
     @staticmethod
     def _upset_teams(cfg: Any) -> tuple[str, ...]:
-        """The teams an upset alert may be about (#588): the ranked list's own, the favourite and
-        the followed teams. With none listed nothing alerts."""
+        """The teams an upset alert may be about (#588, #599): the ranked list's own, the favourite
+        and the followed teams, as the team being upset or the one pulling the upset. With none
+        listed nothing alerts."""
         return tuple(getattr(cfg, "followed_teams", ()) or ())
 
     @_in_scope
