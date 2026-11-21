@@ -259,3 +259,161 @@ def test_the_real_source_builds_the_table_through_a_college_client(monkeypatch):
     table = college_picker.fetch_table()
     assert table is not None and len(table) == len(TABLE)
     assert [c[0] for c in table.conferences()] == [c[0] for c in TABLE.conferences()]
+
+
+# -- kept on disk ---------------------------------------------------------------------------------
+
+
+class Wall:
+    def __init__(self, now=1_800_000_000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+def kept(tmp_path, **kw):
+    """A list that keeps its data in ``tmp_path`` (the clocks are fakes)."""
+    clock, wall = kw.pop("clock", Clock()), kw.pop("wall", Wall())
+    listing = college_picker.CollegeTeamList(clock, wall)
+    listing.use_file(tmp_path / "state" / "college-teams.json")
+    return listing, clock, wall
+
+
+def write_file(path, payload, saved_at):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"saved_at": saved_at, "payload": payload}))
+
+
+def test_a_fetched_list_is_saved_with_the_time_it_was_fetched(tmp_path):
+    listing, _, wall = kept(tmp_path)
+    assert listing.refresh(Source(TABLE))
+    saved = json.loads((tmp_path / "state" / "college-teams.json").read_text())
+    assert saved["saved_at"] == wall.now
+    assert saved["payload"] == listing.payload == college_picker.payload_from_table(TABLE)
+    assert not list((tmp_path / "state").glob("*.tmp")), "no half-written neighbour is left"
+
+
+def test_a_restart_with_no_network_serves_the_saved_list_at_once(tmp_path):
+    first, _, _ = kept(tmp_path)
+    first.refresh(Source(TABLE))
+    restarted, _, _ = kept(tmp_path)  # a new process, nothing in memory
+    assert restarted.payload == college_picker.payload_from_table(TABLE)
+    assert restarted.due(Source()) is False, "a fresh file is not fetched again"
+
+
+def test_the_age_of_a_saved_list_carries_across_a_restart(tmp_path):
+    path = tmp_path / "state" / "college-teams.json"
+    payload = college_picker.payload_from_table(TABLE)
+    write_file(path, payload, 1_800_000_000.0 - college_picker.TTL_SECONDS - 60)
+    stale, _, _ = kept(tmp_path)
+    assert stale.payload == payload, "an old list is still better than none"
+    assert stale.due(Source()) is True, "but it is refreshed in the background"
+
+
+def test_a_refresh_that_fails_keeps_the_saved_list_and_the_file(tmp_path):
+    path = tmp_path / "state" / "college-teams.json"
+    write_file(path, college_picker.payload_from_table(TABLE), 1_800_000_000.0 - 10**6)
+    listing, _, _ = kept(tmp_path)
+    assert listing.refresh(Source(None)) is False
+    assert listing.payload["ready"] is True
+    assert json.loads(path.read_text())["payload"]["ready"] is True
+
+
+def test_a_clock_that_went_backwards_makes_the_file_look_new_not_from_the_future(tmp_path):
+    path = tmp_path / "state" / "college-teams.json"
+    write_file(path, college_picker.payload_from_table(TABLE), 1_800_000_000.0 + 10**7)
+    listing, clock, _ = kept(tmp_path)
+    assert listing.payload["ready"] is True and listing.due(Source()) is False
+    clock.now += college_picker.TTL_SECONDS + 1
+    assert listing.due(Source()) is True, "it is refreshed a day later like any other"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{not json",
+        "[]",
+        json.dumps({"saved_at": 1.0}),
+        json.dumps({"saved_at": "soon", "payload": {}}),
+        json.dumps({"saved_at": 1.0, "payload": {"ready": True, "conferences": []}}),
+        json.dumps({"saved_at": 1.0, "payload": {"ready": False, "conferences": []}}),
+        json.dumps({"saved_at": 1.0, "payload": {"ready": True, "conferences": "x"}}),
+    ],
+)
+def test_a_missing_or_damaged_file_is_ignored_and_never_raises(tmp_path, content):
+    path = tmp_path / "state" / "college-teams.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(content)
+    listing, _, _ = kept(tmp_path)
+    assert listing.payload == college_picker.NOT_READY
+    empty, _, _ = kept(tmp_path / "elsewhere")  # no file at all
+    assert empty.payload == college_picker.NOT_READY
+
+
+def test_one_incomplete_team_makes_the_whole_file_untrusted(tmp_path):
+    payload = college_picker.payload_from_table(TABLE)
+    del payload["conferences"][0]["teams"][0]["color"]
+    write_file(tmp_path / "state" / "college-teams.json", payload, 1_800_000_000.0)
+    listing, _, _ = kept(tmp_path)
+    assert listing.payload == college_picker.NOT_READY
+
+
+def test_a_file_that_cannot_be_written_is_logged_and_the_list_still_works(tmp_path, caplog):
+    blocker = tmp_path / "state"
+    blocker.write_text("a file where the directory should be")
+    listing = college_picker.CollegeTeamList(Clock(), Wall())
+    listing.use_file(blocker / "college-teams.json")
+    with caplog.at_level(logging.WARNING):
+        assert listing.refresh(Source(TABLE)) is True
+    assert listing.payload["ready"] is True
+    assert any("Could not save the college team list" in r.message for r in caplog.records)
+
+
+def test_with_no_file_configured_nothing_is_written(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    listing = college_picker.CollegeTeamList(Clock(), Wall())
+    listing.use_file(None)
+    assert listing.refresh(Source(TABLE)) is True
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_list_already_in_memory_is_not_replaced_by_an_older_file(tmp_path):
+    path = tmp_path / "state" / "college-teams.json"
+    listing = college_picker.CollegeTeamList(Clock(), Wall())
+    listing.refresh(Source(TABLE))  # in memory, no file yet
+    other = college_picker.payload_from_table(TABLE)
+    other["conferences"] = other["conferences"][:1]
+    write_file(path, other, 1_800_000_000.0 - 5000)
+    listing.use_file(path)
+    assert len(listing.payload["conferences"]) == len(TABLE.conferences())
+
+
+def test_the_admin_server_loads_the_file_it_is_given_and_the_page_is_ready_offline(fresh, tmp_path):
+    path = tmp_path / "state" / "college-teams.json"
+    write_file(path, college_picker.payload_from_table(TABLE), time_now())
+    server = admin_server.AdminServer(
+        config_path=str(tmp_path / "scoreboard.toml"),
+        port=0,
+        host="localhost",
+        college_source=Source(RuntimeError("no network")),
+        college_cache=path,
+    )
+    server.start()
+    try:
+        message = serve_and_run(last_message)
+    finally:
+        server.stop()
+    assert message["data"]["ready"] is True
+    assert len(message["data"]["conferences"]) == len(TABLE.conferences())
+
+
+def time_now():
+    import time
+
+    return time.time()
+
+
+def test_the_real_cache_file_is_in_var_lib_unless_the_environment_says_otherwise():
+    assert str(college_picker.CACHE_FILE).endswith("/college-teams.json")
+    assert "college-teams" in college_picker.CACHE_FILE.name

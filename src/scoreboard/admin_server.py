@@ -2113,8 +2113,10 @@ class AdminServer:
         cache_items: Callable[[], list[dict[str, Any]]] | None = None,
         cache_clearer: Callable[[str], bool] | None = None,
         college_source: Callable[[], CollegeTable | None] | None = None,
+        college_cache: Path | None = None,
     ) -> None:
         self._college_source = college_source
+        self._college_cache = college_cache
         self._config_path = config_path
         self._port = port
         #: A second listener for the same page (#292): port 80 is the address,
@@ -2140,6 +2142,7 @@ class AdminServer:
         global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER, MIRROR, CACHE_ITEMS, CACHE_CLEARER
         global COLLEGE_SOURCE
         COLLEGE_SOURCE = self._college_source
+        _college_list.use_file(self._college_cache)
         CACHE_ITEMS = self._cache_items
         CACHE_CLEARER = self._cache_clearer
         CONFIG_PATH = self._config_path
