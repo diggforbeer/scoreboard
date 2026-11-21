@@ -1025,8 +1025,21 @@ The admin page's "My teams" card shows it as an expanding conference list with a
 search filters every conference and opens the matches, a pick adds `{sport = "college", team = <ESPN
 abbreviation>}` to `[[teams]]`, and at the 12-team cap the buttons are disabled with the reason on the
 page. Its e2e tests use `tests/e2e/college_launcher.py` (the real `main()` with the trimmed table as the
-source). It does not use the live football feed's table. Not persisted to disk: a board that restarts offline
-has no list until it reaches ESPN.
+source). It does not use the live football feed's table. The list is **kept on disk**
+(`college_picker.CACHE_FILE`, `/var/lib/scoreboard/college-teams.json`, `SCOREBOARD_COLLEGE_TEAMS_FILE` to
+override; `AdminServer(college_cache=...)` turns it on, so tests and bare dev stay in memory): the payload
+plus the wall-clock time it was fetched, written atomically after each successful fetch. A restarted
+board serves it at once, even offline; one older than a day is refreshed in the background. A missing,
+unreadable or wrongly shaped file is ignored (`valid_payload` checks every team), and an unwritable one is
+only logged.
+
+**College crests (#541, #605)** are fetched at image build time like the football ones, never committed
+(`assets/logos/college/[0-9]*/` is git-ignored; `college/overrides/` is committed): `build-image.yml` has a
+best-effort restore / fetch / save / warn group (`scripts/fetch-logos.py --sport college`, cache keyed on that
+script and `football/college_teams.py`), and the layer's logo install already copies all of `assets/logos`.
+A failed fetch warns and college screens fall back to abbreviations. `tests/test_college_logos_shipping.py`
+pins the whole chain. Like the football crests they are in the image only, not the in-app update bundle, so
+an already-flashed board gets them on a reflash.
 
 ## College settings on the admin page (#565)
 

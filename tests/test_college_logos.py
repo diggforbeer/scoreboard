@@ -83,7 +83,9 @@ def test_cin_is_a_different_crest_in_each_league(monkeypatch, tmp_path):
 def test_a_team_with_no_college_crest_is_none_so_the_screen_falls_back_to_text(
     monkeypatch, tmp_path
 ):
-    monkeypatch.setenv("SCOREBOARD_COLLEGE_LOGO_DIR", str(tmp_path))
+    # Only the empty directory is searched: the repo's assets/logos/college and the image's
+    # /usr/share path would find a real crest on any machine that has fetched them.
+    monkeypatch.setattr("scoreboard.display.logos.default_directories", lambda *a, **k: [tmp_path])
     assert LogoSet("college", "dark").get("UGA", 12) is None
 
 

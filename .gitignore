@@ -35,6 +35,8 @@ scoreboard.local.toml
 assets/logos/[0-9]*/
 # Football logos (#349): the same, one level down, under football/. football/overrides/ is committed.
 assets/logos/football/[0-9]*/
+# College logos (#541, #605): the same under college/. college/overrides/ is committed.
+assets/logos/college/[0-9]*/
 
 # team-specific goal horns are a user drop-in slot -- real recordings,
 # likely copyrighted, same reasoning as logos not being redistributed.

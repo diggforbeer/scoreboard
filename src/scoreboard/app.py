@@ -2975,6 +2975,7 @@ class ScoreboardApp:
             cache_items=self.cache_items,
             cache_clearer=self.request_cache_clear,
             college_source=college_picker.fetch_table,
+            college_cache=college_picker.CACHE_FILE,
         )
 
     def _set_admin_yield(self, yielded: bool) -> None:
