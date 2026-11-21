@@ -360,7 +360,14 @@ class FbGame:
     @property
     def is_halftime(self) -> bool:
         """Live, but between halves: no ball in play, so no field to show (#378)."""
-        return self.is_live and "HALF" in self.status_name.upper()
+        if not self.is_live:
+            return False
+        if "HALF" in self.status_name.upper():
+            return True
+        # Real feed, Clemson at Duke 2026-11-20: for about 20 s after the 2nd quarter ends the
+        # status is still STATUS_IN_PROGRESS with the detail "End of 2nd Quarter" (clock 0:00),
+        # before it turns STATUS_HALFTIME. There is no ball in play in that window either.
+        return self.period == 2 and self.detail.strip().lower().startswith("end of 2nd")
 
     @property
     def is_live(self) -> bool:
