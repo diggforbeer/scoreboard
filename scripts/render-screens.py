@@ -142,6 +142,7 @@ def capture(app: ScoreboardApp, step) -> Frame:
     scene = step.scene
     app._clock_box[0] = {"christmas_tree": DECEMBER, "thanksgiving": NOVEMBER}.get(scene.kind, NOW)
     app._set_demo_logos(step.use_logos)
+    app._demo_college = step.college
     app._start_demo_holiday(step)
     app._start_demo_shootout(step)
     app._start_demo_goal(step)
@@ -226,6 +227,8 @@ def _render(real_logos: bool, sport: str) -> dict[str, Image.Image]:
                     size: LogoLibrary([base / str(size) / "dark"], size) for size in (12, 16)
                 }
                 app.renderer.football_logos = LogoSet("football", "dark", libraries)
+            # The docs show a college crest-less text layout: no real crests are committed.
+            app.renderer.college_logos = None
             steps = football_demo_steps(NOW)
         else:
             steps = demo_steps("NSH", NOW)

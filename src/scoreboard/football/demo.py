@@ -16,6 +16,7 @@ from typing import Any
 
 from ..app import Scene
 from ..demo import DemoStep
+from .college_demo import college_demo_steps
 from .events import CoinToss, Event, FieldGoal, GenericScore, Scope, Touchdown, Turnover
 from .models import FbGame, Play
 from .pacing import animation_seconds
@@ -749,4 +750,5 @@ def football_demo_steps(now: datetime) -> list[DemoStep]:
         step("fb_field", "fb_field", live),
         step("fb_field", "fb_field_redzone", red),
         *_play_scenes(now),
+        *college_demo_steps(now),
     ]
