@@ -459,6 +459,14 @@ Football mode (the `football` branch) has its own logos, fetched the same way fr
 `assets/logos/football/`, also git-ignored. They are kept apart from the hockey art because abbreviations
 such as `BUF`, `CAR`, `DAL`, `DET` and `MIN` are different teams in each league.
 
+College football (the `college-football` branch) is its own sport in the same list: on the admin page's **My
+teams** card, search the FBS or open a conference and pick a school (`sport = "college"`, `team` is ESPN's
+abbreviation). A ranked school shows its AP or committee number, the board gets the AP Top 25, the playoff
+rankings, the conference table, the next game and an opt-in scores grid, and an upset alert fires only for a
+game with one of your teams in it. `scripts/fetch-logos.py --sport college` fetches the crests (12px and 16px,
+git-ignored, kept apart from the NFL's because `CIN` and `BUF` are different teams). `scoreboard --demo --sport
+football` ends with every college screen; pictures are in [football_screen.md](football_screen.md).
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE). Bundled BDF fonts come from

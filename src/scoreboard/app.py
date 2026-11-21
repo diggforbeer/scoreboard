@@ -656,6 +656,8 @@ class ScoreboardApp:
         self.holiday_overlay = HolidayOverlay()
         self._overlay_animating = False
         self._demo_drawing = False
+        #: The demo step being drawn is a college one (#559): the demo's FBS directory and logos.
+        self._demo_college = False
         self._demo_holiday: Holiday | None = None
         self._running = False
         #: The sport the board is running right now (#346). Only
@@ -806,6 +808,7 @@ class ScoreboardApp:
                 if not self._running:
                     break
                 self._set_demo_logos(step.use_logos)
+                self._demo_college = step.college
                 self._start_demo_holiday(step)
                 self._start_demo_shootout(step)
                 self._start_demo_goal(step)
@@ -985,6 +988,7 @@ class ScoreboardApp:
             self._demo_step_index += 1
             self._demo_next_step_at = now + DEMO_SCENE_SECONDS
             self._set_demo_logos(step.use_logos)
+            self._demo_college = step.college
             self._start_demo_holiday(step)
             self._start_demo_shootout(step)
             self._start_demo_goal(step)
@@ -3925,6 +3929,9 @@ class ScoreboardApp:
         college logo set (#541) in place of the football one, which holds the NFL's crests under
         abbreviations (``CIN``) the FBS reuses; a college team with no crest file falls back to
         the text layout, as any team does."""
+        if self._demo_college:
+            self._draw_demo_college(scene)
+            return
         mode = self._fb() if self._sport == "college" else None
         if mode is None and scene.kind == "fb_upset":
             mode = self._college  # an upset alert over hockey or the NFL: still the FBS's teams
@@ -3935,6 +3942,20 @@ class ScoreboardApp:
         self.renderer.football_logos = self.renderer.college_logos
         try:
             with mode.scope():
+                self._draw_scene(scene)
+        finally:
+            self.renderer.football_logos = saved
+
+    def _draw_demo_college(self, scene: Scene) -> None:
+        """A college demo step: the demo's own FBS directory (the real table needs ESPN) and the
+        college logo set."""
+        from .football.college_demo import DEMO_DIRECTORY
+        from .football.teams import use_directory
+
+        saved = self.renderer.football_logos
+        self.renderer.football_logos = self.renderer.college_logos
+        try:
+            with use_directory(DEMO_DIRECTORY):
                 self._draw_scene(scene)
         finally:
             self.renderer.football_logos = saved

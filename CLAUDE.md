@@ -1052,6 +1052,16 @@ them wins, as for hockey and the NFL; nothing is hand-made yet and no crest is e
 with no crest falls back to the text layout. Not shipped in the image or built by CI yet (workflow and image-layer
 changes are the owner's: tracked as an issue).
 
+## College demo and docs (#559)
+
+`scoreboard --demo --sport football` ends with the college steps (`football/college_demo.py`, appended in
+`football_demo_steps`): every college screen with made-up rankings. The real FBS table needs ESPN, so the demo
+carries a small directory of its own (`DEMO_DIRECTORY`: real schools and LED-tuned colours, no artwork). A step
+has `DemoStep.college = True`; the loops set `app._demo_college` per step and `draw_scene` then draws it in that
+directory with `renderer.college_logos`. Images are `docs/football/cfb_*.png`, rendered with no crests (never
+committed), shown in `football_screen.md`'s "College screens"; `docs/college/` still holds the real-capture
+mockups. A new college screen adds a step here and a row in that section.
+
 ## Important dates (#524)
 
 `[[dates]]` (up to `DATES_MAX` = 10) is the owner's list of birthdays, anniversaries and other days;
