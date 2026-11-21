@@ -294,6 +294,8 @@ from .audio import (
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
+    CFP_FIELD_MAX,
+    CFP_FIELD_MIN,
     COLLEGE_POLL_CHOICES,
     COLLEGE_SCORES_CHOICES,
     FLYBY_FREQUENCIES,
@@ -633,12 +635,14 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "upset_alert": cfg.upset_alert,
             "upset_seconds": cfg.upset_seconds,
             "upset_min_gap": cfg.upset_min_gap,
+            "cfp_field": cfg.cfp_field,
         },
         "college": {
             "polls": list(COLLEGE_POLL_CHOICES),
             "scores": list(COLLEGE_SCORES_CHOICES),
             "upset_seconds": [UPSET_SECONDS_MIN, UPSET_SECONDS_MAX],
             "upset_min_gap": [1, 25],
+            "cfp_field": [CFP_FIELD_MIN, CFP_FIELD_MAX],
         },
         "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
@@ -1602,6 +1606,14 @@ def _coerce_college(data: dict[str, object], values: dict[str, object]) -> None:
         if not 1 <= gap <= 25:
             raise ValueError(json.dumps({"upset_min_gap": "must be between 1 and 25"}))
         values["upset_min_gap"] = gap
+    if "cfp_field" in data:
+        size = data["cfp_field"]
+        if not isinstance(size, int) or isinstance(size, bool):
+            raise ValueError(json.dumps({"cfp_field": "must be a whole number"}))
+        if not CFP_FIELD_MIN <= size <= CFP_FIELD_MAX:
+            msg = f"must be between {CFP_FIELD_MIN} and {CFP_FIELD_MAX}"
+            raise ValueError(json.dumps({"cfp_field": msg}))
+        values["cfp_field"] = size
 
 
 #: The scalar half of ``[holiday]``; ``themes`` is a list, checked by

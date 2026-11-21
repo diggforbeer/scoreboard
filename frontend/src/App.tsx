@@ -221,6 +221,7 @@ interface FootballRotationConfig {
   upset_alert: boolean
   upset_seconds: number
   upset_min_gap: number
+  cfp_field: number
 }
 
 // What the board says the college controls may hold (admin_server.py's ``college`` block).
@@ -229,6 +230,7 @@ interface CollegeChoices {
   scores: string[]
   upset_seconds: [number, number]
   upset_min_gap: [number, number]
+  cfp_field: [number, number]
 }
 
 const COLLEGE_POLL_LABELS: Record<string, string> = {
@@ -2354,6 +2356,33 @@ function App() {
                   has lost, and one of the two is in your list (your team being upset, or your team
                   pulling the upset), the board interrupts with a card naming both teams. It is
                   silent, and a game with neither team in your list never alerts.
+                </div>
+              </div>
+              <div className="row g-3 mt-1">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-cfp-field">
+                    Playoff field (teams)
+                  </label>
+                  <input
+                    className="form-control"
+                    id="college-cfp-field"
+                    type="number"
+                    step="1"
+                    min={collegeChoices.cfp_field[0]}
+                    max={collegeChoices.cfp_field[1]}
+                    value={footballRotation.cfp_field}
+                    onChange={(e) =>
+                      numberEdit(footballRotationSave, e, {
+                        ...footballRotation,
+                        cfp_field: Number(e.target.value),
+                      })
+                    }
+                    onBlur={footballRotationSave.flush}
+                  />
+                  <div className="form-text">
+                    A line on the CFP Rankings screen after this many teams. 12 is the 12-team
+                    playoff; change it if the format does.
+                  </div>
                 </div>
               </div>
               <div className="row g-3 mt-1">

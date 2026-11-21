@@ -558,6 +558,11 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
 
 #: How long the upset alert stays up: long enough to read, short enough not to hide a live game.
 UPSET_SECONDS_MIN = 4.0
+#: The playoff cut on the college CFP rankings screen (#585): teams in the field, so the line sits
+#: after this rank. 12 is the 12-team playoff; the bounds leave room for a change of format.
+CFP_FIELD_DEFAULT = 12
+CFP_FIELD_MIN = 4
+CFP_FIELD_MAX = 16
 UPSET_SECONDS_MAX = 15.0
 #: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
 COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
@@ -614,6 +619,8 @@ class FootballConfig:
     upset_alert: bool = True
     upset_seconds: float = 8.0
     upset_min_gap: int = 1
+    #: The line on the CFP rankings screen after this many teams (#585).
+    cfp_field: int = CFP_FIELD_DEFAULT
 
     def __post_init__(self) -> None:
         self.upset_alert = bool(self.upset_alert)
@@ -629,6 +636,12 @@ class FootballConfig:
             log.warning("Ignoring non-integer football.upset_min_gap %r", self.upset_min_gap)
             gap = 1
         self.upset_min_gap = max(1, min(25, gap))
+        try:
+            field_size = int(self.cfp_field)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-integer football.cfp_field %r", self.cfp_field)
+            field_size = CFP_FIELD_DEFAULT
+        self.cfp_field = max(CFP_FIELD_MIN, min(CFP_FIELD_MAX, field_size))
         poll = str(self.college_poll).strip().lower()
         if poll not in COLLEGE_POLL_CHOICES:
             log.warning("Ignoring unknown football.college_poll %r", self.college_poll)

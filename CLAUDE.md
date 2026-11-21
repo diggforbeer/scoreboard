@@ -1032,10 +1032,12 @@ has no list until it reaches ESPN.
 
 The Display tab's "College football" card (shown when a college team is ranked) edits `college_poll`,
 `college_scores` (the `cfb_scores` grid's filter), `upset_alert`, `upset_seconds` (4-15) and
-`upset_min_gap` (1-25). They are `[football]` keys, so they ride in the existing `football_rotation`
+`upset_min_gap` (1-25) and `cfp_field` (4-16, default 12: the playoff cut, #585). They are `[football]` keys, so they ride in the existing `football_rotation`
 section (no new connect message): `_coerce_college` rejects a bad choice or an out-of-range number
 whole, and the payload's `college` block carries the choices and ranges the page's inputs use. The
-help text says the alert is silent and only for games with a team of the ranked list in them, either
+`cfp_field` draws a one-pixel red rule (`college_idle.CUT_LINE`, the hockey playoff line's colour) in the
+spacer row under the last team in the field on the `cfb_cfp` screen only (`PollView.cut`; the AP has none),
+scrolling with the table. The help text says the alert is silent and only for games with a team of the ranked list in them, either
 way: a listed team being upset or a listed team pulling the upset (#588, #599; neither listed, nothing).
 
 ## Important dates (#524)

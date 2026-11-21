@@ -325,6 +325,22 @@ with use_directory(FBS):
         png(c, 128, name)
 
 
+# the playoff cut (#585): a one-pixel line after the last team in the field, `cfp_field` of them
+with use_directory(FBS):
+    for field, px, name in (
+        (12, 56, "39_cfp_cut_line_after_12_mid_scroll"),
+        (4, 0, "40_cfp_cut_line_after_4_at_rest"),
+    ):
+        view = build_cfp(
+            dataclasses.replace(
+                cfp_ctx, config=TeamView(FootballConfig(cfp_field=field), "TEX", [], "TEX")
+            )
+        )
+        c = AsciiCanvas(128, H)
+        draw_cfb_ap(rend(), c, view, px)
+        png(c, 128, name)
+
+
 # ---- the conference standings idle screen (#553): real standings, captured 2026-11-20 ----
 from scoreboard.display.college_idle import draw_cfb_conference  # noqa: E402
 from scoreboard.football.college_standings import college_standings_from_payload  # noqa: E402

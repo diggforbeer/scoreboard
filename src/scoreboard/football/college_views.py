@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from ..config import CFP_FIELD_DEFAULT
 from .college_rankings import POLL_AP, POLL_CFP, POLL_NAMES
 from .college_standings import ConferenceRow, short_conference
 
@@ -45,6 +46,9 @@ class PollView:
     rows: tuple[PollRow, ...]
     #: The lead college team, highlighted when it is in the poll.
     team: str
+    #: A line is drawn after this many rows (the playoff cut on the committee's screen); 0 draws
+    #: none, as for the AP.
+    cut: int = 0
 
     @property
     def scroll_rows(self) -> int:
@@ -56,7 +60,7 @@ class PollView:
 POLL_LABELS = {POLL_AP: ("AP", "TOP", "25"), POLL_CFP: ("CFP", "RANK", "25")}
 
 
-def build_poll(ctx: IdleContext, key: str) -> PollView | None:
+def build_poll(ctx: IdleContext, key: str, cut: int = 0) -> PollView | None:
     """The poll ``key`` as a view, or ``None`` when there is no fresh copy of it: not fetched yet,
     or older than ``FRESH_DAYS`` (out of season), so the screen is skipped rather than shown blank.
     ``chosen()`` is not used: the AP's screen is the AP's whatever ``college_poll`` says."""
@@ -82,6 +86,7 @@ def build_poll(ctx: IdleContext, key: str) -> PollView | None:
         label=POLL_LABELS[key],
         rows=rows,
         team=ctx.config.favourite_team.strip().upper(),
+        cut=cut,
     )
 
 
@@ -93,7 +98,7 @@ def build_cfp(ctx: IdleContext) -> PollView | None:
     """The Playoff Committee's rankings (#552), only once they exist for this season: they start
     around week 10, so before that ESPN sends none (``None``), and last season's last table is
     older than ``FRESH_DAYS`` by the time the next season has begun."""
-    return build_poll(ctx, POLL_CFP)
+    return build_poll(ctx, POLL_CFP, cut=getattr(ctx.config, "cfp_field", CFP_FIELD_DEFAULT))
 
 
 @dataclass(frozen=True, slots=True)
