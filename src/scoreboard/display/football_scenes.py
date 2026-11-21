@@ -165,8 +165,16 @@ def _band(
         down = (_tight(sit.short_down_distance_text) if wide else _compact_down(sit)).upper()
     color = RED_ZONE if in_red_zone else SITUATION
     right = r._fit_text(font, down, r.width // 2 - 2) if down else ""
-    left_room = r.width - text_width(font, right) - 3 - (60 if wide else 0)
-    clock = r._fit_text(font, band_clock(game, r), max(left_room, 8))
+    full_clock = band_clock(game, r)
+
+    def clock_room(text: str) -> int:
+        return r.width - text_width(font, text) - 3 - (60 if wide else 0)
+
+    if wide and right and text_width(font, full_clock) > clock_room(right):
+        # ``1ST&GOAL`` leaves 33px, and ``4TH 10:30`` needs 36: the clock was cut to ``4TH 1...``,
+        # which reads as a minute left. A long down shrinks to ``1&G`` before the time is cut.
+        right = _squeezed_down(sit)
+    clock = r._fit_text(font, full_clock, max(clock_room(right), 8))
     if wide and right:
         # Four-letter college abbreviations and a two-digit score leave no room for a long down
         # (``1ST&GOAL``); it shrinks to ``1&G`` / ``2&7`` rather than printing over the score.

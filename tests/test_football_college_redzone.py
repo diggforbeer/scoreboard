@@ -217,3 +217,24 @@ def test_goal_to_go_shrinks_to_the_down_and_a_g_and_other_downs_to_down_and_dist
     )
     assert _squeezed_down(goal) == "1&G"
     assert _squeezed_down(other) == "3&7"
+
+
+# -- the clock is never cut (found checking the NFL: it has been wrong there all along) ------------
+
+
+def clock_columns(c: AsciiCanvas):
+    """The columns the band's game clock lit (it is drawn in the live-game colour)."""
+    return sorted({x for (x, y), rgb in c.pixels.items() if y <= 6 and rgb == fs.LIVE})
+
+
+@pytest.mark.parametrize("short", ["10:30 - 4th", "15:00 - 1st", "12:24 - 3rd"])
+def test_a_goal_to_go_down_does_not_cut_a_two_digit_minute_clock(short):
+    # 1ST&GOAL left 33px for ``4TH 10:30`` (36px): it read ``4TH 1...``, a minute left.
+    goal = college_game(sit(CLEM, red=True), short=short, a=3, h=0)
+    plain = college_game(
+        sit(CLEM, red=False, yard=40, text="3rd & 7 at DUKE 40", short="3rd & 7"),
+        short=short,
+        a=3,
+        h=0,
+    )
+    assert clock_columns(field(goal)) == clock_columns(field(plain)), "the whole clock is drawn"
