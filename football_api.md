@@ -566,3 +566,36 @@ whether `curatedRank` changes mid-week when a new poll lands.
   or kick, safeties and two-point plays are still unseen; `scripts/capture-college-live.py`
   records every type it meets.
 
+
+### First live game: Clemson at Duke (2026-11-20, captured from 9:08 to 9:21 PM ET)
+
+Event 401858303, final 20-10 Clemson. The capture process died at halftime (it does not survive
+between agent turns), so only the end of the first half was recorded live; the final is from the
+`summary` fetched afterwards. Trimmed real events are in `tests/fixtures/football/live/`.
+
+* **The half ends in three steps, not one.** `0:05 - 2nd Quarter` (`STATUS_IN_PROGRESS`), then
+  `End of 2nd Quarter` (still `STATUS_IN_PROGRESS`, clock `0:00`) for about 20 seconds, then
+  `STATUS_HALFTIME` / `Halftime`. `FbGame.is_halftime` now treats the middle step as halftime too
+  (period 2 and a detail starting `End of 2nd`).
+* **`situation` is sparse, and shifts shape.** Seen: `possession` null at halftime and between
+  plays, the id string (`"150"`) otherwise; `downDistanceText` and `shortDownDistanceText` null
+  while `down`/`distance` are set (`2` and `10`), then filled (`1st & 10 at DUKE 22`,
+  `possessionText` `DUKE 22`) a poll later. `lastPlay` was `"End of Half."`. `isRedZone` stayed
+  false for the whole captured half: still not seen true. The model already reads every one of
+  these as optional.
+* **`scoringPlays` appeared within seconds.** The 36-yard field goal (Q2 0:17) was in
+  `summary.scoringPlays` at the first poll after it (clock 0:13 on the scoreboard). Types seen:
+  `Field Goal Good`, `Rushing Touchdown`; nothing new. Each entry has period, clock, team,
+  `awayScore`/`homeScore` and text.
+* **Running scores in `scoringPlays` can be wrong.** In Oregon at Michigan State the same day, a
+  Q3 0:00 entry read 18-0 straight after a 25-7 one. Never use those running scores; the board
+  already takes who scored from the score change on the scoreboard.
+* **Win probability is in the summary.** `winprobability` (188 points for this game, `playId` and
+  `homeWinPercentage`): Duke began at 0.80 and fell to 0.0. `pickcenter` and `odds` carry the
+  pre-game line. Not used by anything yet: an upset by odds (not by rank) is a possible alert,
+  an owner's call.
+* **Drives:** 26, with results `PUNT FG TD INT DOWNS MISSED FG END OF HALF END OF QUARTER`.
+* **Ranks:** both teams `curatedRank` 99 on the scoreboard and no rank in the summary header;
+  the same feed ranked Oregon 13 that night, so 99 does mean unranked.
+* **Capture lesson:** `summary` is only fetched every 30 s, so most observation rows have no
+  summary fields (by design, not a failure).
