@@ -36,7 +36,7 @@ class Logo:
 #: The sports with logos. Football and hockey abbreviations overlap (``BUF``, ``CAR``, ``DAL``,
 #: ``DET``, ``MIN`` ...) and mean different teams, so each sport has its own directories and its own
 #: library: ``BUF`` is never looked up across them.
-SPORTS = ("hockey", "football")
+SPORTS = ("hockey", "football", "college")
 
 
 def default_directories(size: int, variant: str, sport: str = "hockey") -> list[Path]:
@@ -50,14 +50,20 @@ def default_directories(size: int, variant: str, sport: str = "hockey") -> list[
         raise ValueError(f"unknown sport {sport!r}; expected one of {SPORTS}")
     dirs: list[Path] = []
     env = os.environ.get(
-        "SCOREBOARD_LOGO_DIR" if sport == "hockey" else "SCOREBOARD_FOOTBALL_LOGO_DIR"
+        {
+            "hockey": "SCOREBOARD_LOGO_DIR",
+            "football": "SCOREBOARD_FOOTBALL_LOGO_DIR",
+            "college": "SCOREBOARD_COLLEGE_LOGO_DIR",
+        }[sport]
     )
     if env:
         dirs.append(Path(env))
     repo_root = Path(__file__).resolve().parents[3]
-    if sport == "football":
-        system = Path("/usr/share/scoreboard/logos/football")
-        assets = repo_root / "assets" / "logos" / "football"
+    if sport in ("football", "college"):
+        # College art (#541) sits beside the NFL's under its own name: the FBS and the NFL share
+        # abbreviations (``CIN``, ``MIA``) that mean different teams.
+        system = Path("/usr/share/scoreboard/logos") / sport
+        assets = repo_root / "assets" / "logos" / sport
         return [
             *dirs,
             system / "overrides" / str(size) / variant,

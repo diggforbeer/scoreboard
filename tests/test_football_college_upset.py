@@ -510,13 +510,14 @@ def test_no_college_team_ranked_means_no_college_feed_and_no_alert(backend):
     assert rig.app.select_scene().kind != "fb_upset"
 
 
-def test_the_alert_is_drawn_with_the_fbs_teams_and_without_the_nfl_logos(backend):
+def test_the_alert_is_drawn_with_the_fbs_teams_and_the_college_logos_not_the_nfls(backend):
     rig = AppRig(backend)
     rig.poll(away=14, home=14, period=3)
     rig.poll(away=21, home=14, period=3)
     app = rig.app
-    sentinel = object()
+    sentinel, college_set = object(), object()
     app.renderer.football_logos = sentinel
+    app.renderer.college_logos = college_set
     seen = {}
 
     def spy(scene):
@@ -529,7 +530,7 @@ def test_the_alert_is_drawn_with_the_fbs_teams_and_without_the_nfl_logos(backend
 
     app._draw_scene = spy
     app.draw_scene(app.select_scene())
-    assert seen["kind"] == "fb_upset" and seen["logos"] is None and seen["uga"]
+    assert seen["kind"] == "fb_upset" and seen["logos"] is college_set and seen["uga"]
     assert seen["directory"].league == "college-football"
     assert app.renderer.football_logos is sentinel and nfl.active_directory() is nfl.NFL_DIRECTORY
 

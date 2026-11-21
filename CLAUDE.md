@@ -1040,6 +1040,18 @@ spacer row under the last team in the field on the `cfb_cfp` screen only (`PollV
 scrolling with the table. The help text says the alert is silent and only for games with a team of the ranked list in them, either
 way: a listed team being upset or a listed team pulling the upset (#588, #599; neither listed, nothing).
 
+## College logos (#541)
+
+College crests live under `assets/logos/college/<size>/dark/<ABBR>.png` (12px and 16px, git-ignored like the
+NFL's; `SCOREBOARD_COLLEGE_LOGO_DIR`, `/usr/share/scoreboard/logos/college`), fetched by `python
+scripts/fetch-logos.py --sport college` from ESPN by id. Both of ESPN's variants are downloaded per team and the
+brighter-reading one kept (`best_variant`, ties keep `500-dark`), then `lift_dim`. `overrides/<size>/dark/` beside
+them wins, as for hockey and the NFL; nothing is hand-made yet and no crest is ever committed. A separate
+`renderer.college_logos` set (`LogoSet("college")`) stands in for `football_logos` while a college scene is drawn
+(`draw_scene`, restored in `finally`), because `CIN`, `BUF` and others are different teams in each league; a team
+with no crest falls back to the text layout. Not shipped in the image or built by CI yet (workflow and image-layer
+changes are the owner's: tracked as an issue).
+
 ## Important dates (#524)
 
 `[[dates]]` (up to `DATES_MAX` = 10) is the owner's list of birthdays, anniversaries and other days;
