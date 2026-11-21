@@ -497,6 +497,7 @@ class ScoreboardApp:
             logos=logos,
         )
         self.renderer.football_logos = self._make_football_logos(settings)
+        self.renderer.college_logos = self._make_football_logos(settings, "college")
         self.games: list[Game] = []
         self.index = 0
         #: Fetch results waiting out ``broadcast_delay_seconds`` (#301), and the
@@ -1023,12 +1024,13 @@ class ScoreboardApp:
     # -- data ------------------------------------------------------------
 
     @staticmethod
-    def _make_football_logos(settings: Settings) -> LogoSet | None:
-        """The football logo set, or ``None`` with logos switched off (#349). Cheap: the files
-        are only read when a screen first asks for a team at a size."""
+    def _make_football_logos(settings: Settings, sport: str = "football") -> LogoSet | None:
+        """The football logo set (``sport`` ``football``, the NFL's) or the FBS's (``college``,
+        #541), or ``None`` with logos switched off (#349). Cheap: the files are only read when a
+        screen first asks for a team at a size, and a team with no file is just the text layout."""
         if not settings.scoreboard.show_logos:
             return None
-        return LogoSet("football", settings.scoreboard.logo_variant)
+        return LogoSet(sport, settings.scoreboard.logo_variant)
 
     def _new_football(self, sport: str = "football") -> FootballMode:
         """A football mode over the live settings, for the NFL (``football``) or the FBS
@@ -1670,6 +1672,7 @@ class ScoreboardApp:
                 )
             self.renderer.logos = logos
             self.renderer.football_logos = self._make_football_logos(new_settings)
+            self.renderer.college_logos = self._make_football_logos(new_settings, "college")
 
         if auto_brightness_changed:
             # Same lazy probe as __init__: only touch the I2C bus when the
@@ -3918,9 +3921,10 @@ class ScoreboardApp:
         return dataclasses.replace(scene, **changes) if changes else scene
 
     def draw_scene(self, scene: Scene) -> None:
-        """Draw ``scene``. A college scene is drawn in the FBS's team directory and without the
-        football logo set, which holds the NFL's crests under abbreviations (``CIN``) the FBS
-        reuses: until college logos exist (#541) it falls back to the text layout."""
+        """Draw ``scene``. A college scene is drawn in the FBS's team directory and with the
+        college logo set (#541) in place of the football one, which holds the NFL's crests under
+        abbreviations (``CIN``) the FBS reuses; a college team with no crest file falls back to
+        the text layout, as any team does."""
         mode = self._fb() if self._sport == "college" else None
         if mode is None and scene.kind == "fb_upset":
             mode = self._college  # an upset alert over hockey or the NFL: still the FBS's teams
@@ -3928,7 +3932,7 @@ class ScoreboardApp:
             self._draw_scene(scene)
             return
         saved = self.renderer.football_logos
-        self.renderer.football_logos = None
+        self.renderer.football_logos = self.renderer.college_logos
         try:
             with mode.scope():
                 self._draw_scene(scene)

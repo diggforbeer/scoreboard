@@ -73,6 +73,9 @@ class Renderer:
         #: The football's logos at several sizes (#349), kept apart from the hockey's because the
         #: abbreviations overlap. ``None`` with logos switched off or in hockey mode.
         self.football_logos: LogoSet | None = None
+        #: The FBS's crests (#541), swapped in for ``football_logos`` while a college scene is
+        #: drawn.
+        self.college_logos: LogoSet | None = None
         self._colors: dict[tuple[int, int, int], Any] = {}
         #: goal_light's GOAL letters, rasterised once.
         self.goal_glyphs: dict[str, Any] = {}

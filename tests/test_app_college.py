@@ -203,12 +203,15 @@ def test_a_college_game_with_a_colliding_id_is_read_as_the_fbs_team(backend):
 # -- drawing -----------------------------------------------------------------------------------
 
 
-def test_a_college_scene_is_drawn_without_the_nfl_logos_and_in_the_fbs_directory(backend):
+def test_a_college_scene_is_drawn_with_the_college_logos_in_the_fbs_directory(backend):
+    """Never the NFL's crests (``CIN`` is a different team in each league): the college set (#541)
+    stands in while it is drawn, and the NFL's is put back."""
     rig = CollegeRig(backend, [("college", "UGA")])
     rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
     app = rig.app
-    sentinel = object()
-    app.renderer.football_logos = sentinel
+    nfl_set, college_set = object(), object()
+    app.renderer.football_logos = nfl_set
+    app.renderer.college_logos = college_set
     seen = {}
 
     def spy(scene):
@@ -218,9 +221,30 @@ def test_a_college_scene_is_drawn_without_the_nfl_logos_and_in_the_fbs_directory
 
     app._draw_scene = spy
     app.draw_scene(app.select_scene())
-    assert seen["logos"] is None and seen["uga"] and seen["directory"].league == "college-football"
-    assert app.renderer.football_logos is sentinel, "put back afterwards"
+    assert seen["logos"] is college_set and seen["logos"] is not nfl_set
+    assert seen["uga"] and seen["directory"].league == "college-football"
+    assert app.renderer.football_logos is nfl_set, "put back afterwards"
+    assert app.renderer.college_logos is college_set
     assert nfl.active_directory() is nfl.NFL_DIRECTORY
+
+
+def test_with_logos_off_a_college_scene_is_drawn_without_any(backend):
+    rig = CollegeRig(backend, [("college", "UGA")])
+    rig.poll(SPORT_MIN_DWELL_SECONDS + 1)
+    app = rig.app
+    app.renderer.football_logos = object()
+    app.renderer.college_logos = None
+    seen = {}
+    app._draw_scene = lambda scene: seen.update(logos=app.renderer.football_logos)
+    app.draw_scene(app.select_scene())
+    assert seen["logos"] is None
+
+
+def test_the_app_builds_a_college_logo_set_beside_the_nfls(backend):
+    rig = CollegeRig(backend, [("college", "UGA")])
+    renderer = rig.app.renderer
+    assert renderer.college_logos is not None and renderer.college_logos.sport == "college"
+    assert renderer.football_logos.sport == "football"
 
 
 def test_an_nfl_scene_is_still_drawn_with_its_logos_and_directory(backend):
