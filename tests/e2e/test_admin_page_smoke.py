@@ -881,12 +881,14 @@ def test_college_settings_autosave_to_the_football_section(admin_page_college_ra
             page.locator("#college-upset-alert").uncheck()
             page.fill("#college-upset-seconds", "12")
             page.fill("#college-upset-gap", "5")
+            page.fill("#college-cfp-field", "8")
             wanted = {
                 "college_poll": "cfp",
                 "college_scores": "ranked",
                 "upset_alert": False,
                 "upset_seconds": 12,
                 "upset_min_gap": 5,
+                "cfp_field": 8,
             }
             # the page saves the whole football object, so compare just these five
             _wait_until(
@@ -919,6 +921,8 @@ def test_an_out_of_range_college_value_is_refused_and_not_written(admin_page_col
             field.wait_for(timeout=15000)
             assert field.get_attribute("min") == "4" and field.get_attribute("max") == "15"
             assert page.locator("#college-upset-gap").get_attribute("max") == "25"
+            cfp = page.locator("#college-cfp-field")
+            assert (cfp.get_attribute("min"), cfp.get_attribute("max")) == ("4", "16")
             field.fill("99")
             page.wait_for_selector("text=must be between 4 and 15", timeout=15000)
             assert "upset_seconds" not in admin_page_college_ranked.config_path.read_text()

@@ -37,6 +37,9 @@ from ..football.teams import is_team, team_color  # noqa: E402
 from .football_scenes import DIM, LIVE, RANK_COLOR, RED_ZONE, UNKNOWN_TEAM, WHITE  # noqa: E402
 
 AMBER = (255, 176, 0)
+#: The playoff cut's rule: the colour of the hockey tables' playoff line, so it reads as the same
+#: thing (``renderer.PLAYOFF_LINE``).
+CUT_LINE = (150, 40, 40)
 #: A row that is not the lead team's: light enough to read at a distance, below the white of
 #: the lead team's (``DIM`` is the colour of a status line and was too dark for a table).
 GREY = (170, 170, 170)
@@ -109,6 +112,13 @@ def draw_cfb_ap(r: Any, canvas: Any, view: Any, scroll: int = 0) -> None:
         side = f"{row.points:,}" if row.points else row.conference
         if side:
             r.text_right(canvas, font, r.width - POINTS_RIGHT_PAD, y, ink, side)
+    cut = getattr(view, "cut", 0)
+    if 0 < cut < len(view.rows):
+        # The spacer pixel row under the last team in the field: no row shifts for it.
+        line_y = cut * ROW_HEIGHT - 1 - scroll
+        if 0 <= line_y < r.height:
+            for x in range(LABEL_WIDTH, r.width):
+                canvas.SetPixel(x, line_y, *CUT_LINE)
 
 
 @college_screen("cfb_ap")

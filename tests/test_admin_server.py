@@ -2413,6 +2413,7 @@ def test_sends_football_s_own_settings_without_a_rotation_of_its_own(app_dir, co
         "upset_alert": True,
         "upset_seconds": 8.0,
         "upset_min_gap": 1,
+        "cfp_field": 12,
     }
     assert "defaults" not in message and "screens" not in message
     assert message["college"] == {
@@ -2420,6 +2421,7 @@ def test_sends_football_s_own_settings_without_a_rotation_of_its_own(app_dir, co
         "scores": ["all", "ranked"],
         "upset_seconds": [4.0, 15.0],
         "upset_min_gap": [1, 25],
+        "cfp_field": [4, 16],
     }
 
 
@@ -2845,6 +2847,7 @@ def test_the_college_settings_save_to_the_football_section_and_come_back(app_dir
         "upset_alert": False,
         "upset_seconds": 12,
         "upset_min_gap": 5,
+        "cfp_field": 8,
     }
 
     async def scenario(client):
@@ -2857,7 +2860,7 @@ def test_the_college_settings_save_to_the_football_section_and_come_back(app_dir
     assert echo["data"]["college_poll"] == "cfp" and echo["data"]["upset_seconds"] == 12.0
     cfg = Settings.load(config_path).football
     assert (cfg.college_poll, cfg.college_scores, cfg.upset_alert) == ("cfp", "ranked", False)
-    assert (cfg.upset_seconds, cfg.upset_min_gap) == (12.0, 5)
+    assert (cfg.upset_seconds, cfg.upset_min_gap, cfg.cfp_field) == (12.0, 5, 8)
 
 
 @pytest.mark.parametrize(
@@ -2875,6 +2878,11 @@ def test_the_college_settings_save_to_the_football_section_and_come_back(app_dir
         ({"upset_min_gap": 26}, "upset_min_gap"),
         ({"upset_min_gap": 2.5}, "upset_min_gap"),
         ({"upset_min_gap": True}, "upset_min_gap"),
+        ({"cfp_field": 3}, "cfp_field"),
+        ({"cfp_field": 17}, "cfp_field"),
+        ({"cfp_field": 12.5}, "cfp_field"),
+        ({"cfp_field": "12"}, "cfp_field"),
+        ({"cfp_field": True}, "cfp_field"),
     ],
 )
 def test_a_bad_college_setting_is_rejected_whole_and_writes_nothing(
@@ -2897,6 +2905,8 @@ def test_a_bad_college_setting_is_rejected_whole_and_writes_nothing(
         ({"upset_seconds": 15}, 15.0),
         ({"upset_min_gap": 1}, 1),
         ({"upset_min_gap": 25}, 25),
+        ({"cfp_field": 4}, 4),
+        ({"cfp_field": 16}, 16),
     ],
 )
 def test_the_college_limits_are_inclusive(app_dir, config_path, data, expected):
@@ -2906,7 +2916,7 @@ def test_the_college_limits_are_inclusive(app_dir, config_path, data, expected):
 
     assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
     cfg = Settings.load(config_path).football
-    assert expected in (cfg.upset_seconds, cfg.upset_min_gap)
+    assert expected in (cfg.upset_seconds, cfg.upset_min_gap, cfg.cfp_field)
 
 
 def test_a_save_without_the_college_keys_leaves_them_alone(app_dir, config_path):
