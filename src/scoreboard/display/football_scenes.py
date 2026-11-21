@@ -165,10 +165,16 @@ def _band(
         down = (_tight(sit.short_down_distance_text) if wide else _compact_down(sit)).upper()
     color = RED_ZONE if in_red_zone else SITUATION
     right = r._fit_text(font, down, r.width // 2 - 2) if down else ""
-    if right:
-        r.text_right(canvas, font, r.width - 1, baseline, color, right)
     left_room = r.width - text_width(font, right) - 3 - (60 if wide else 0)
     clock = r._fit_text(font, band_clock(game, r), max(left_room, 8))
+    if wide and right:
+        # Four-letter college abbreviations and a two-digit score leave no room for a long down
+        # (``1ST&GOAL``); it shrinks to ``1&G`` / ``2&7`` rather than printing over the score.
+        min_x = 1 + text_width(font, clock) + 3
+        if not _score_fits(r, game, min_x, r.width - 1 - text_width(font, right) - 2):
+            right = _squeezed_down(sit)
+    if right:
+        r.text_right(canvas, font, r.width - 1, baseline, color, right)
     r.text(canvas, font, 1, baseline, status_color(game), clock)
     if wide:
         # The score sits between the clock on the left and the down and distance on the right.
@@ -196,11 +202,45 @@ def _tight(text: str) -> str:
     return text.replace(" & ", "&") if len(text) > 7 else text
 
 
+def _squeezed_down(sit: Any) -> str:
+    """``1&G`` for goal to go, else ``2&7``: the shortest form that still says what it is."""
+    if sit.down is None:
+        return _compact_down(sit)
+    if "goal" in sit.short_down_distance_text.lower():
+        return f"{sit.down}&G"
+    return _compact_down(sit)
+
+
 def _compact_down(sit: Any) -> str:
     """``2&7`` for a 64px band; empty when there is no down."""
     if sit.down is None or sit.distance is None:
         return sit.short_down_distance_text
     return f"{sit.down}&{sit.distance}"
+
+
+def _score_parts(
+    r: Renderer, game: FbGame, badges: bool
+) -> list[tuple[str, str, tuple[int, int, int], int]]:
+    """(kind, text, colour, gap after) for the band's score: a badge, the abbreviation, then the
+    score, per team."""
+    out: list[tuple[str, str, tuple[int, int, int], int]] = []
+    for side, between in ((game.away, 3), (game.home, 0)):
+        badge = rank_badge(side, r) if badges else ""
+        if badge:
+            out.append(("badge", badge, RANK_COLOR, 1))
+        out.append(("abbrev", side.abbrev, side_color(side), 1))
+        out.append(("score", str(side.score), WHITE, between))
+    return out
+
+
+def _score_fits(r: Renderer, game: FbGame, min_x: int, max_x: int) -> bool:
+    """Whether the band's score fits between ``min_x`` and ``max_x`` even with no badges."""
+    from . import football_ball as fball
+
+    font = r.fonts.tiny
+    ball_w = fball.sprite_width(fball.SMALL) + 1
+    total = sum(text_width(font, t) + g for _, t, _, g in _score_parts(r, game, False)) + 2 * ball_w
+    return max((r.width - total) // 2, min_x) + total <= max_x
 
 
 def _score(
@@ -220,22 +260,10 @@ def _score(
 
     font = r.fonts.tiny
     ball_w = fball.sprite_width(fball.SMALL) + 1
-
-    def items(badges: bool) -> list[tuple[str, str, tuple[int, int, int], int]]:
-        # (kind, text, colour, gap after): a badge, the abbreviation, then the score, per team
-        out: list[tuple[str, str, tuple[int, int, int], int]] = []
-        for side, between in ((game.away, 3), (game.home, 0)):
-            badge = rank_badge(side, r) if badges else ""
-            if badge:
-                out.append(("badge", badge, RANK_COLOR, 1))
-            out.append(("abbrev", side.abbrev, side_color(side), 1))
-            out.append(("score", str(side.score), WHITE, between))
-        return out
-
     limit = r.width if max_x is None else max_x
 
     def placed(badges: bool) -> tuple[list[tuple[str, str, tuple[int, int, int], int]], int, int]:
-        parts = items(badges)
+        parts = _score_parts(r, game, badges)
         total = sum(text_width(font, t) + gap for _, t, _, gap in parts) + 2 * ball_w
         return parts, total, max((r.width - total) // 2, min_x)
 
