@@ -293,7 +293,7 @@ def _score(
 def draw_fb_halftime(r: Renderer, canvas: Any, game: FbGame) -> None:
     """The halftime card (#388): what the board holds on from the end of the half until play
     resumes. ``HALFTIME`` in the large font, both teams' logos at the edges (128px only, 16px,
-    else their abbreviations) and the score under it."""
+    else their abbreviations) and the score under it. Never a rank badge (owner's call)."""
     canvas.Clear()
     wide = r.width >= 128
     cx = r.width // 2
@@ -313,23 +313,16 @@ def draw_fb_halftime(r: Renderer, canvas: Any, game: FbGame) -> None:
             else:
                 r.text_center(canvas, r.fonts.small, x, 19, side_color(side), side.abbrev)
 
-    def halftime_parts(badges: bool) -> list[tuple[str, tuple[int, int, int], int]]:
-        out: list[tuple[str, tuple[int, int, int], int]] = []
-        for side, between in ((game.away, 6), (game.home, 0)):
-            badge = rank_badge(side, r) if badges else ""
-            if badge:
-                out.append((badge, RANK_COLOR, 2))
-            out.append((side.abbrev, side_color(side), 2))
-            out.append((str(side.score), WHITE, between))
-        return out
-
+    # No rank badges here, by the owner's call (2026-11-22, from a real board at the half of
+    # Georgia at South Carolina): the card is about the score, and a number before each team made
+    # the line cluttered. Every other college screen keeps its badges.
+    parts: list[tuple[str, tuple[int, int, int], int]] = []
+    for side, between in ((game.away, 6), (game.home, 0)):
+        parts.append((side.abbrev, side_color(side), 2))
+        parts.append((str(side.score), WHITE, between))
     font = r.fonts.small
-    parts = halftime_parts(True)
     total = sum(text_width(font, t) + gap for t, _, gap in parts)
-    if total > r.width - 2:  # a long score on a narrow panel: drop the badges, then the font
-        parts = halftime_parts(False)
-        total = sum(text_width(font, t) + gap for t, _, gap in parts)
-    if total > r.width - 2:
+    if total > r.width - 2:  # a long score on a narrow panel: drop to the smaller font
         font = r.fonts.tiny
         total = sum(text_width(font, t) + gap for t, _, gap in parts)
     x = max(0, (r.width - total) // 2)

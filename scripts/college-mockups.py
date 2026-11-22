@@ -139,9 +139,9 @@ draw(128, lambda r, c, g: r.draw_fb_field(c, g), g2, "03_field_with_ranks")
 g3b = game("TEX", "ALA", "in", 17, 20, "11:42 - 4th", 4, ranks=(5, 3))
 draw(128, lambda r, c, g: r.draw_fb_field(c, g), g3b, "03b_field_with_ranks_no_down")
 
-# 4. halftime card
+# 4. halftime card: never a rank (owner's call, 2026-11-22), even for a ranked team
 g4 = game("UGA", "AUB", "in", 21, 10, "Halftime", 2, name="STATUS_HALFTIME", ranks=(1, None))
-draw(128, lambda r, c, g: r.draw_fb_halftime(c, g), g4, "04_halftime_ranked")
+draw(128, lambda r, c, g: r.draw_fb_halftime(c, g), g4, "04_halftime_no_rank")
 
 # 5. pregame
 g5 = game(
