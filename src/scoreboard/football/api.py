@@ -11,6 +11,7 @@ off-season). The caller can tell the two apart, which the staleness logic needs.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
@@ -21,7 +22,15 @@ from urllib3.util.retry import Retry
 
 from .college_rankings import Polls, polls_from_payload
 from .college_standings import CollegeStandings, college_standings_from_payload
-from .college_teams import CollegeTable, directory_from_table, table_from_payloads
+from .college_teams import (
+    TABLE_MAX_AGE_SECONDS,
+    CollegeTable,
+    directory_from_table,
+    read_table,
+    table_file,
+    table_from_payloads,
+    write_table,
+)
 from .idle import (
     Scoreboard,
     Standings,
@@ -134,10 +143,15 @@ class FootballClient:
         core_url: str | None = None,
         league: str = LEAGUE_NFL,
         standings_url: str | None = None,
+        keep_table: bool = False,
     ) -> None:
         if league not in LEAGUES:
             raise ValueError(f"unknown football league {league!r}; expected one of {LEAGUES}")
         self.league = league
+        #: Keep the FBS table on disk (``college_teams.table_file``): the running board does, so
+        #: a restart answers at once instead of waiting on ESPN's two big requests. Off for tests
+        #: and one-off clients.
+        self.keep_table = keep_table and league == LEAGUE_COLLEGE
         #: The teams this client parses against: the NFL's from the start, the FBS's once the
         #: table has been fetched (``college_teams``).
         self._directory: Directory | None = NFL_DIRECTORY if league == LEAGUE_NFL else None
@@ -250,6 +264,8 @@ class FootballClient:
         table = table_from_payloads(standings, teams)
         if table is not None:
             self._directory = directory_from_table(table)
+            if self.keep_table:
+                write_table(table_file(), table)
         return table
 
     @property
@@ -259,8 +275,17 @@ class FootballClient:
 
     def _league_directory(self) -> Directory | None:
         """The directory to parse with, fetching the college table first if it is needed."""
-        if self._directory is None and self.college_teams() is None:
-            return None
+        if self._directory is not None:
+            return self._directory
+        kept = read_table(table_file()) if self.keep_table else None
+        if kept is not None and time.time() - kept[1] < TABLE_MAX_AGE_SECONDS:
+            self._directory = directory_from_table(kept[0])
+            return self._directory
+        if self.college_teams() is None:
+            if kept is None:
+                return None
+            log.warning("ESPN's team table is unreachable: using the one kept on disk")
+            self._directory = directory_from_table(kept[0])
         return self._directory
 
     def college_rankings(self) -> Polls | None:

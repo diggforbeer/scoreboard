@@ -60,6 +60,12 @@ def update_snapshots(request) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _college_table_file(tmp_path, monkeypatch):
+    """The feed keeps its FBS table on disk; a test must never touch the real /var/lib one."""
+    monkeypatch.setenv("SCOREBOARD_COLLEGE_TABLE_FILE", str(tmp_path / "college-table.json"))
+
+
+@pytest.fixture(autouse=True)
 def _restore_idle_screens():
     """A test may register stand-in idle screens (``test_football_idle_selection.register``); they
     must never outlive it, or a later test on the same worker draws a fake view (a bool) instead
