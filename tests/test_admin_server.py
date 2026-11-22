@@ -2408,7 +2408,7 @@ def test_sends_football_s_own_settings_without_a_rotation_of_its_own(app_dir, co
         "show_bye": True,
         "show_final": True,
         "show_redzone": True,
-        "college_poll": "ap",
+        "college_poll": "cfp",
         "college_scores": "all",
         "upset_alert": True,
         "upset_seconds": 8.0,

@@ -201,13 +201,15 @@ class FootballMode:
     def _chosen_poll(self) -> Any:
         """The poll that decides "ranked" (``[football] college_poll``), or ``None``: not college,
         no polls fetched yet, or none fresh (out of season nobody is ranked)."""
+        from ..config import COLLEGE_POLL_DEFAULT
+
         if self.league != LEAGUE_COLLEGE:
             return None
         polls = self.snapshot.idle.polls()
         if polls is None:
             return None
         cfg = self._football() if self._football else None
-        return polls.chosen(getattr(cfg, "college_poll", "ap"), self._utc_now())
+        return polls.chosen(getattr(cfg, "college_poll", COLLEGE_POLL_DEFAULT), self._utc_now())
 
     def rank_of(self, team_id: int | str | None) -> int | None:
         """A team's number in the chosen poll, or ``None`` (unranked, or no poll to say)."""

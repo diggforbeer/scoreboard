@@ -98,6 +98,7 @@ def ctx(
         if week_games
         else None,
     )
+    cfg.setdefault("college_poll", "ap")  # the snapshots were made with the AP's numbers
     return IdleContext(0.0, now, list(games), snap, fcfg(favourite_team=favourite, **cfg))
 
 

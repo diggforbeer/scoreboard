@@ -234,9 +234,9 @@ interface CollegeChoices {
 }
 
 const COLLEGE_POLL_LABELS: Record<string, string> = {
-  ap: 'AP Top 25 (default)',
+  ap: 'AP Top 25',
   usa: 'Coaches Poll',
-  cfp: 'CFP Rankings (falls back to the AP until published)',
+  cfp: 'CFP Rankings (AP until the committee publishes) (default)',
 }
 
 const COLLEGE_SCORES_LABELS: Record<string, string> = {

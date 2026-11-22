@@ -154,6 +154,7 @@ class UpsetRig:
     def __init__(self, wide=True, league="college-football", **cfg):
         self.client = Feed(board(), FakeResponse(load("college_rankings_trimmed.json")))
         self.clock = {"mono": 1000.0, "now": datetime(2026, 11, 20, 12, 0, tzinfo=UTC)}
+        cfg.setdefault("college_poll", "ap")  # these tests are about the rule, on the AP's numbers
         self.settings = settings = fcfg(favourite_team="UGA", **cfg)
         self.mode = FootballMode(
             lambda: ScoreboardConfig(),

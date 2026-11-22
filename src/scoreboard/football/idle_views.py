@@ -191,10 +191,13 @@ def _decided(abbrev: str) -> bool:
 def _rank_in(ctx: IdleContext, abbrev: str) -> int | None:
     """``abbrev``'s number in the chosen poll, from the cached polls (``None``: unranked, no
     poll, or a team the directory does not know)."""
+    from ..config import COLLEGE_POLL_DEFAULT
+
     polls = ctx.idle.polls()
     if polls is None or not _known(abbrev):
         return None
-    return polls.rank_of(team(abbrev).espn_id, getattr(ctx.config, "college_poll", "ap"), ctx.utc)
+    choice = getattr(ctx.config, "college_poll", COLLEGE_POLL_DEFAULT)
+    return polls.rank_of(team(abbrev).espn_id, choice, ctx.utc)
 
 
 def _bye_next_week(ctx: IdleContext, schedule: Any, favourite: str) -> int | None:
