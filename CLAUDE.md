@@ -1055,6 +1055,8 @@ spacer row under the last team in the field on the `cfb_cfp` screen only (`PollV
 scrolling with the table. The help text says the alert is silent and only for games with a team of the ranked list in them, either
 way: a listed team being upset or a listed team pulling the upset (#588, #599; neither listed, nothing).
 
+**The feed's own FBS table is kept on disk too** (`college_teams.table_file`, `/var/lib/scoreboard/college-table.json`, `SCOREBOARD_COLLEGE_TABLE_FILE` to override; conftest points it at a tmp path): a college client has no team directory until it has the table (two requests, ~1.9 MB), and until then it answers no data, so a restart mid-game left the board on the idle scroll (seen 2026-11-22, Georgia at South Carolina). `FootballClient(keep_table=True)` (the running board's college client, via `FootballMode`'s default factory) uses a kept table younger than a week with no request, refreshes an older one, and uses the stale one if ESPN is unreachable; a file of the wrong shape is ignored whole. Tests and one-off clients keep nothing.
+
 ## College logos (#541)
 
 College crests live under `assets/logos/college/<size>/dark/<ABBR>.png` (12px and 16px, git-ignored like the
