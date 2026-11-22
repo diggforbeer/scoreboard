@@ -1057,6 +1057,7 @@ scrolling with the table. The help text says the alert is silent and only for ga
 way: a listed team being upset or a listed team pulling the upset (#588, #599; neither listed, nothing).
 
 **The feed's own FBS table is kept on disk too** (`college_teams.table_file`, `/var/lib/scoreboard/college-table.json`, `SCOREBOARD_COLLEGE_TABLE_FILE` to override; conftest points it at a tmp path): a college client has no team directory until it has the table (two requests, ~1.9 MB), and until then it answers no data, so a restart mid-game left the board on the idle scroll (seen 2026-11-22, Georgia at South Carolina). `FootballClient(keep_table=True)` (the running board's college client, via `FootballMode`'s default factory) uses a kept table younger than a week with no request, refreshes an older one, and uses the stale one if ESPN is unreachable; a file of the wrong shape is ignored whole. Tests and one-off clients keep nothing.
+**`run()` starts every football-style feed at boot** (`_fb_modes()`), not only the one on screen. It started only the NFL's, so a board whose first-listed team was hockey never started the college feed: the priority layer reads each feed's slate to learn that a ranked team's game is live, so the college feed could never ask for the board, and a restart mid-game (Georgia at South Carolina, 2026-11-21) left it on hockey's idle scroll. The log showed it: no college lines after the restart and no `Switching sport` line. `tests/test_app_college.py` pins it.
 
 ## College logos (#541)
 
