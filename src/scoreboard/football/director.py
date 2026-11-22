@@ -151,9 +151,9 @@ class Current:
 
 def _is_score_stage(stage: Stage) -> bool:
     """A stage a scores-only director keeps: a touchdown, field goal or other score's
-    celebration or detail, or a reversal. Not a play's animation or its words, a turnover, a coin
-    toss, a missed kick or a TV timeout's stats."""
-    if stage.stage == REVERSAL:
+    celebration or detail, a reversal, or the team stats over a timeout (the only break it
+    shows). Not a play's animation or its words, a turnover, a coin toss or a missed kick."""
+    if stage.stage in (REVERSAL, STATS):
         return True
     return stage.stage in (EVENT, DETAIL) and isinstance(
         stage.event, Touchdown | FieldGoal | GenericScore
@@ -171,11 +171,15 @@ class Director:
         stats: Callable[[int], object | None] = lambda _game_id: None,
         on_sound: Callable[[Event], None] | None = None,
         scores_only: bool = False,
+        stats_at_timeouts: bool = False,
     ) -> None:
         #: College football shows scores and major events, not every play (the owner's call, as
         #: hockey does): only a score's celebration and detail, and a reversal of one, are staged.
         #: The plays are still read, to know the score changed and who scored.
         self._scores_only = scores_only
+        #: College (owner's call, 2026-11-22): the feed does not mark official timeouts, every
+        #: stoppage is "Timeout <team>", so every timeout is a break that gets the team stats.
+        self._breaks = (*STATS_BREAKS, PlayKind.TIMEOUT) if stats_at_timeouts else STATS_BREAKS
         #: Called with each celebration that carries a sound (``Event.sound``: the lead team's
         #: touchdown or made field goal, #517) the moment it is detected, whatever is on screen.
         self._on_sound = on_sound
@@ -355,7 +359,7 @@ class Director:
     def _build_all(self, game: FbGame, shown: Shown) -> list[Stage]:
         timings = self._timings().clamped()
         play = shown.play
-        if play.kind in STATS_BREAKS:
+        if play.kind in self._breaks:
             # The feed often lists the same stoppage twice (same clock): show it once.
             key = (play.kind, play.period, play.clock)
             if self._last_break.get(game.id) == key:
@@ -400,7 +404,7 @@ class Director:
                 out.extend(self._event_stages(event, stage, timings, undone))
         for reversal in already:
             out.append(stage(REVERSAL, timings.reversal, reversal))
-        if play.kind in STATS_BREAKS and self._stats(game.id) is not None:
+        if play.kind in self._breaks and self._stats(game.id) is not None:
             # A TV timeout: the split team stats take the screen instead of the sentence, which
             # only repeats the card just shown ("Official Timeout at 11:12.").
             out.append(dataclasses.replace(stage(STATS, timings.stats), speed=1.0, hold=True))

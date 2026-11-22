@@ -1,0 +1,175 @@
+{
+ "note": "Trimmed real ESPN summary (boxscore team stats only): Georgia at South Carolina, 2026-11-21, 3rd quarter 5:33, during a timeout.",
+ "boxscore": {
+  "teams": [
+   {
+    "homeAway": "away",
+    "team": {
+     "abbreviation": "UGA",
+     "id": "61"
+    },
+    "statistics": [
+     {
+      "name": "firstDowns",
+      "label": "1st Downs",
+      "displayValue": "13"
+     },
+     {
+      "name": "thirdDownEff",
+      "label": "3rd down efficiency",
+      "displayValue": "1-6"
+     },
+     {
+      "name": "fourthDownEff",
+      "label": "4th down efficiency",
+      "displayValue": "1-1"
+     },
+     {
+      "name": "totalYards",
+      "label": "Total Yards",
+      "displayValue": "261"
+     },
+     {
+      "name": "netPassingYards",
+      "label": "Passing",
+      "displayValue": "178"
+     },
+     {
+      "name": "completionAttempts",
+      "label": "Comp/Att",
+      "displayValue": "12/17"
+     },
+     {
+      "name": "yardsPerPass",
+      "label": "Yards per pass",
+      "displayValue": "10.5"
+     },
+     {
+      "name": "rushingYards",
+      "label": "Rushing",
+      "displayValue": "83"
+     },
+     {
+      "name": "rushingAttempts",
+      "label": "Rushing Attempts",
+      "displayValue": "26"
+     },
+     {
+      "name": "yardsPerRushAttempt",
+      "label": "Yards per rush",
+      "displayValue": "3.2"
+     },
+     {
+      "name": "totalPenaltiesYards",
+      "label": "Penalties",
+      "displayValue": "4-37"
+     },
+     {
+      "name": "turnovers",
+      "label": "Turnovers",
+      "displayValue": "0"
+     },
+     {
+      "name": "fumblesLost",
+      "label": "Fumbles lost",
+      "displayValue": "0"
+     },
+     {
+      "name": "interceptions",
+      "label": "Interceptions thrown",
+      "displayValue": "0"
+     },
+     {
+      "name": "possessionTime",
+      "label": "Possession",
+      "displayValue": "23:56"
+     }
+    ]
+   },
+   {
+    "homeAway": "home",
+    "team": {
+     "abbreviation": "SC",
+     "id": "2579"
+    },
+    "statistics": [
+     {
+      "name": "firstDowns",
+      "label": "1st Downs",
+      "displayValue": "9"
+     },
+     {
+      "name": "thirdDownEff",
+      "label": "3rd down efficiency",
+      "displayValue": "3-8"
+     },
+     {
+      "name": "fourthDownEff",
+      "label": "4th down efficiency",
+      "displayValue": "0-0"
+     },
+     {
+      "name": "totalYards",
+      "label": "Total Yards",
+      "displayValue": "137"
+     },
+     {
+      "name": "netPassingYards",
+      "label": "Passing",
+      "displayValue": "76"
+     },
+     {
+      "name": "completionAttempts",
+      "label": "Comp/Att",
+      "displayValue": "9/14"
+     },
+     {
+      "name": "yardsPerPass",
+      "label": "Yards per pass",
+      "displayValue": "5.4"
+     },
+     {
+      "name": "rushingYards",
+      "label": "Rushing",
+      "displayValue": "61"
+     },
+     {
+      "name": "rushingAttempts",
+      "label": "Rushing Attempts",
+      "displayValue": "17"
+     },
+     {
+      "name": "yardsPerRushAttempt",
+      "label": "Yards per rush",
+      "displayValue": "3.6"
+     },
+     {
+      "name": "totalPenaltiesYards",
+      "label": "Penalties",
+      "displayValue": "5-35"
+     },
+     {
+      "name": "turnovers",
+      "label": "Turnovers",
+      "displayValue": "0"
+     },
+     {
+      "name": "fumblesLost",
+      "label": "Fumbles lost",
+      "displayValue": "0"
+     },
+     {
+      "name": "interceptions",
+      "label": "Interceptions thrown",
+      "displayValue": "0"
+     },
+     {
+      "name": "possessionTime",
+      "label": "Possession",
+      "displayValue": "15:31"
+     }
+    ]
+   }
+  ]
+ }
+}
