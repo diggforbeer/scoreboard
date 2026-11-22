@@ -372,6 +372,28 @@ def test_football_team_sound_beats_the_default_and_hockey_horns_are_apart(tmp_pa
     assert player.path_for("BUF") == tmp_path / "BUF.wav"
 
 
+def test_college_has_one_my_team_slot_per_kind_and_ignores_per_school_files(tmp_path):
+    """#612: the college slot, else the shipped football default; a school's own file (and the NFL
+    team of the same abbreviation) never plays for college."""
+    touch(tmp_path / "_football_td.wav")
+    touch(tmp_path / "football_BUF_td.wav")
+    player = GoalHornPlayer([tmp_path])
+    assert player.football_path("BUF", "td", college=True) == tmp_path / "_football_td.wav"
+    mine = touch(tmp_path / "_college_td.wav")
+    assert player.football_path("BUF", "td", college=True) == mine
+    assert player.football_path("DAL", "td", college=True) == mine, "whoever the lead team is"
+    assert player.football_path("BUF", "td") == tmp_path / "football_BUF_td.wav", "NFL unchanged"
+    assert player.football_path("BUF", "fg", college=True) is None
+    assert player.football_path("BUF", "safety", college=True) is None
+
+
+def test_play_football_college_launches_the_slot(tmp_path):
+    runner = RecordingRunner()
+    mine = touch(tmp_path / "_college_fg.wav")
+    assert GoalHornPlayer([tmp_path], runner=runner).play_football("SC", "fg", True) is True
+    assert runner.calls == [["aplay", "-q", str(mine)]]
+
+
 def test_football_kind_must_be_td_or_fg(tmp_path):
     touch(tmp_path / "_football_td.wav")
     assert GoalHornPlayer([tmp_path]).football_path("BUF", "safety") is None

@@ -175,6 +175,8 @@ function hornLabel(team: string, available: TeamsAvailable): string {
   if (team === 'default') return 'Default horn'
   if (team === 'wah_wah') return 'Wah-wah (opponent scores)'
   if (team === 'ding') return 'Ding (followed team scores)'
+  if (team === 'cfb_td') return 'College football: my team scores a touchdown'
+  if (team === 'cfb_fg') return 'College football: my team kicks a field goal'
   if (team.startsWith('fb_')) {
     const [head, abbrev] = team.split(':')
     const kind = head === 'fb_td' ? 'touchdown' : 'field goal'
@@ -3307,7 +3309,8 @@ function App() {
             Upload a WAV or MP3 (up to 30 seconds, max 8 MB) to replace the default horn, or to give one team its
             own. A team's own horn always wins over the default. Football has its own touchdown
             and field-goal sounds, kept apart from the hockey horns; only your top football
-            team's touchdowns and field goals play one.
+            team's touchdowns and field goals play one. College football has two slots for your
+            top college team, whoever it is (a fight song, say), so there is no school list to scroll.
           </p>
 
           {hornList.length > 0 ? (
@@ -3379,6 +3382,10 @@ function App() {
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
                 <option value="ding">Ding (followed team scores)</option>
+                <optgroup label="College football: my team">
+                  <option value="cfb_td">My team scores a touchdown</option>
+                  <option value="cfb_fg">My team kicks a field goal</option>
+                </optgroup>
                 <optgroup label="Hockey goal horns">
                   {HOCKEY_TEAMS.map(([code, name]) => (
                     <option key={code} value={code}>
