@@ -122,6 +122,8 @@ class FootballMode:
         #: The league's teams: fixed for the NFL; for college, the FBS table the feed's client
         #: fetched (set from its thread, read by the render loop: one reference swap).
         self._directory: Directory | None = None
+        #: When each game's halftime was first seen (monotonic), for the halftime cycle (#549).
+        self._half_since: dict[int, float] = {}
         self._scoreboard = scoreboard
         self._on_sound = on_sound
         #: The owner's important dates inside their window (#524), nearest first: what the shared
@@ -641,8 +643,38 @@ class FootballMode:
         hold = self._is_favourite(game) and game.is_live and not game.is_halftime
         current = self.director.current(game.id, hold=hold)
         if current is None:
-            return base
+            return self._halftime_cycle(game, base, now) or base
         return self._play_scene(current, base)
+
+    def _halftime_cycle(self, game: FbGame, base: Scene, now: float) -> Scene | None:
+        """College halftime (#549): the card, then the team stats' pages, round again for as long
+        as the half lasts; a pure function of how long the half has run. ``None`` (the plain
+        card) for anything else, or until the stats have arrived. A score screen never gets
+        here: ``current`` is only None when nothing is being played out."""
+        from ..app import Scene
+        from .director import STATS
+
+        if not game.is_halftime:
+            self._half_since.pop(game.id, None)
+            return None
+        since = self._half_since.setdefault(game.id, now)
+        stats = self._stats_for(game.id) if self.league == LEAGUE_COLLEGE else None
+        if stats is None:
+            return None
+        page = self.director.stats_page_seconds()
+        cycle = HALFTIME_CARD_SECONDS + stats.pages * page
+        t = (now - since) % cycle
+        if t < HALFTIME_CARD_SECONDS:
+            return None
+        return Scene(
+            "fb_event",
+            fb_game=game,
+            fb_stats=stats,
+            fb_stage=STATS,
+            fb_elapsed=t - HALFTIME_CARD_SECONDS,
+            fb_seconds=page,
+            animating=True,
+        )
 
     def _favourite_game(self, games: Sequence[FbGame]) -> FbGame | None:
         favourite = self._football().favourite_team if self._football else ""
@@ -944,6 +976,10 @@ class FootballMode:
         cfg = self._football() if self._football else None
         followed = cfg.followed_teams if cfg else []
         return [g for g in games if any(g.involves(t) for t in followed)]
+
+
+#: How long the halftime card holds before the team stats' pages take their turns (#549).
+HALFTIME_CARD_SECONDS = 15.0
 
 
 def resting_kind(game: FbGame) -> str:

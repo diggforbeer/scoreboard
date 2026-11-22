@@ -172,7 +172,11 @@ def test_only_a_college_mode_turns_it_on():
         return FootballMode(lambda: ScoreboardConfig(), client_factory=lambda: None, league=league)
 
     college, nfl = mode("college-football"), mode("nfl")
-    assert college.director._breaks == (*dr.STATS_BREAKS, dr.PlayKind.TIMEOUT)
+    assert college.director._breaks == (
+        *dr.STATS_BREAKS,
+        dr.PlayKind.TIMEOUT,
+        dr.PlayKind.END_PERIOD,
+    )
     assert nfl.director._breaks == dr.STATS_BREAKS
 
 
