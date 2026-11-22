@@ -566,6 +566,11 @@ CFP_FIELD_MAX = 16
 UPSET_SECONDS_MAX = 15.0
 #: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
 COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
+#: The default is the committee's, which is the AP's until the committee publishes (about week 10):
+#: ``Polls.chosen`` falls back to the AP, so early in the season this *is* the AP, and from the
+#: committee's first release the rank numbers follow the poll that decides the playoff (owner's
+#: call, 2026-11-22, after the AP left South Carolina unranked in a game ESPN called #21).
+COLLEGE_POLL_DEFAULT = "cfp"
 #: Which games the opt-in college scores grid (``cfb_scores``, #556) lists: every game on the
 #: slate, or only those with a team in the chosen poll. Either way ranked games come first.
 COLLEGE_SCORES_CHOICES = ("all", "ranked")
@@ -608,7 +613,7 @@ class FootballConfig:
     #: Which college poll means "ranked": ``ap`` (default), ``usa`` (Coaches) or ``cfp`` (the
     #: committee's, which falls back to the AP until it publishes). The rank badges and the upset
     #: alert read this one setting (#546).
-    college_poll: str = "ap"
+    college_poll: str = COLLEGE_POLL_DEFAULT
     #: The college scores grid's filter (``all`` games or the ``ranked`` ones, #556).
     college_scores: str = "all"
     #: The upset alert (#557): a ranked college team losing to a lower-ranked or unranked one, from
@@ -645,7 +650,7 @@ class FootballConfig:
         poll = str(self.college_poll).strip().lower()
         if poll not in COLLEGE_POLL_CHOICES:
             log.warning("Ignoring unknown football.college_poll %r", self.college_poll)
-            poll = "ap"
+            poll = COLLEGE_POLL_DEFAULT
         self.college_poll = poll
         scores = str(self.college_scores).strip().lower()
         if scores not in COLLEGE_SCORES_CHOICES:

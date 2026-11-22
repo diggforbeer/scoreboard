@@ -141,6 +141,27 @@ def test_out_of_season_nobody_is_ranked():
     assert polls.chosen("ap", summer) is None and polls.rank_of(GEORGIA, "cfp", summer) is None
 
 
+def test_the_default_setting_is_the_ap_until_the_committee_publishes_then_the_committees():
+    # Owner's call (2026-11-22): a board that never touched the setting follows the AP early in
+    # the season and the committee from its first release on. South Carolina was the example:
+    # #21 in the committee's rankings, unranked in the AP, in a game ESPN called #21.
+    default = FootballConfig().college_poll
+    data = payload()
+    cfp_only = {p["type"]: p for p in data["rankings"]}["cfp"]
+    team = next(
+        e["team"]["id"]
+        for e in cfp_only["ranks"]
+        if cr.polls_from_payload(data).get("ap").rank_of(e["team"]["id"]) is None
+    )
+    before = dict(data, rankings=[p for p in data["rankings"] if p["type"] != "cfp"])
+    early = cr.polls_from_payload(before)
+    assert early.chosen(default, NOW) is early.get("ap"), "no committee rankings yet: the AP's"
+    assert early.rank_of(team, default, NOW) is None
+    later = cr.polls_from_payload(data)
+    assert later.chosen(default, NOW) is later.get("cfp"), "the committee has published"
+    assert later.rank_of(team, default, NOW) == later.get("cfp").rank_of(team) is not None
+
+
 def test_an_unknown_choice_means_the_ap(polls):
     assert polls.chosen("bogus", NOW) is polls.get("ap")
 
@@ -200,9 +221,10 @@ def test_a_failed_request_is_none_and_an_nfl_client_refuses():
 # -- the setting ---------------------------------------------------------------------
 
 
-def test_the_poll_setting_defaults_to_the_ap():
-    assert FootballConfig().college_poll == "ap"
-    assert Settings.from_dict({}).football.college_poll == "ap"
+def test_the_poll_setting_defaults_to_the_committee_which_is_the_ap_until_it_publishes():
+    # Owner's call (2026-11-22): AP until the CFP rankings come out, then the committee's.
+    assert FootballConfig().college_poll == "cfp"
+    assert Settings.from_dict({}).football.college_poll == "cfp"
 
 
 @pytest.mark.parametrize("value", ["ap", "usa", "cfp"])
@@ -213,6 +235,6 @@ def test_each_poll_is_a_valid_setting(value):
 def test_the_setting_is_forgiving_about_case_and_falls_back_on_nonsense(caplog):
     assert FootballConfig(college_poll=" CFP ").college_poll == "cfp"
     with caplog.at_level("WARNING"):
-        assert FootballConfig(college_poll="espn").college_poll == "ap"
-        assert FootballConfig(college_poll=7).college_poll == "ap"
+        assert FootballConfig(college_poll="espn").college_poll == "cfp"
+        assert FootballConfig(college_poll=7).college_poll == "cfp"
     assert "unknown football.college_poll" in caplog.text

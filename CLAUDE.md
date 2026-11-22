@@ -1044,7 +1044,7 @@ an already-flashed board gets them on a reflash.
 
 ## College settings on the admin page (#565)
 
-The Display tab's "College football" card (shown when a college team is ranked) edits `college_poll`,
+The Display tab's "College football" card (shown when a college team is ranked) edits `college_poll` (default `cfp`, `config.COLLEGE_POLL_DEFAULT`: the committee's rankings, which are the AP's until the committee publishes around week 10, then its own; owner's call, 2026-11-22, after the AP left South Carolina unranked in a game ESPN called #21; a board that saved `ap` explicitly keeps it),
 `college_scores` (the `cfb_scores` grid's filter), `upset_alert`, `upset_seconds` (4-15) and
 `upset_min_gap` (1-25) and `cfp_field` (4-16, default 12: the playoff cut, #585). They are `[football]` keys, so they ride in the existing `football_rotation`
 section (no new connect message): `_coerce_college` rejects a bad choice or an out-of-range number

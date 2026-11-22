@@ -843,7 +843,8 @@ def test_the_college_settings_card_shows_only_when_a_college_team_is_ranked(
             page = browser.new_page()
             _open_display(page, admin_page_college_ranked.url)
             page.locator("#college-settings").wait_for(timeout=15000)
-            assert page.locator("#college-poll").input_value() == "ap"
+            # the default: the committee's rankings, which are the AP's until it publishes
+            assert page.locator("#college-poll").input_value() == "cfp"
             assert page.locator("#college-upset-alert").is_checked()
         finally:
             browser.close()
@@ -872,10 +873,10 @@ def test_college_settings_autosave_to_the_football_section(admin_page_college_ra
             page = browser.new_page()
             _open_display(page, admin_page_college_ranked.url)
             page.locator("#college-settings").wait_for(timeout=15000)
-            page.select_option("#college-poll", "cfp")
+            page.select_option("#college-poll", "ap")  # not the default: a real edit
             page.wait_for_selector("text=saved ✓", timeout=15000)
             _wait_until(
-                lambda: admin_page_college_ranked.config()["football"]["college_poll"] == "cfp"
+                lambda: admin_page_college_ranked.config()["football"]["college_poll"] == "ap"
             )
             page.select_option("#college-scores", "ranked")
             page.locator("#college-upset-alert").uncheck()
@@ -883,7 +884,7 @@ def test_college_settings_autosave_to_the_football_section(admin_page_college_ra
             page.fill("#college-upset-gap", "5")
             page.fill("#college-cfp-field", "8")
             wanted = {
-                "college_poll": "cfp",
+                "college_poll": "ap",
                 "college_scores": "ranked",
                 "upset_alert": False,
                 "upset_seconds": 12,
