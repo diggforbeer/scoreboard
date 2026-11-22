@@ -20,8 +20,13 @@ panel (navy, black, dark green) is lifted, as ``teams.py`` and ``display/teams.p
 from __future__ import annotations
 
 import colorsys
+import contextlib
+import json
 import logging
+import os
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .teams import Directory, FootballTeam
@@ -296,3 +301,117 @@ def directory_from_table(table: CollegeTable) -> Directory:
             for t in table.teams
         ),
     )
+
+
+# -- the table kept on disk (a restart must not wait on ESPN) -------------------------------------
+
+#: A kept table is used without asking ESPN while it is younger than this; an older one is
+#: refreshed, and used anyway if ESPN cannot be reached (a conference move happens once a year).
+TABLE_MAX_AGE_SECONDS = 7 * 24 * 3600.0
+
+
+def table_file() -> Path:
+    """Where the feed's FBS table is kept: persistent across reflash and in-app updates.
+    Read each time so a test can point it elsewhere with ``SCOREBOARD_COLLEGE_TABLE_FILE``."""
+    return Path(
+        os.environ.get("SCOREBOARD_COLLEGE_TABLE_FILE", "/var/lib/scoreboard/college-table.json")
+    )
+
+
+def _rgb_list(value: Any) -> RGB | None:
+    ok = (
+        isinstance(value, list)
+        and len(value) == 3
+        and all(isinstance(c, int) and not isinstance(c, bool) and 0 <= c <= 255 for c in value)
+    )
+    return (value[0], value[1], value[2]) if ok else None
+
+
+def table_to_data(table: CollegeTable) -> list[dict[str, Any]]:
+    return [
+        {
+            "espn_id": t.espn_id,
+            "abbrev": t.abbrev,
+            "location": t.location,
+            "nickname": t.nickname,
+            "short_name": t.short_name,
+            "name": t.name,
+            "conference": t.conference,
+            "conference_short": t.conference_short,
+            "color": list(t.color),
+            "secondary": list(t.secondary),
+        }
+        for t in table.teams
+    ]
+
+
+def table_from_data(data: Any) -> CollegeTable | None:
+    """The table back from :func:`table_to_data`'s list, or ``None`` if anything is not exactly
+    the shape written: a kept file is only trusted whole."""
+    if not isinstance(data, list) or not data:
+        return None
+    teams: list[CollegeTeam] = []
+    for row in data:
+        if not isinstance(row, dict):
+            return None
+        espn_id = row.get("espn_id")
+        strings = [row.get(k) for k in ("abbrev", "location", "name", "conference")]
+        color, secondary = _rgb_list(row.get("color")), _rgb_list(row.get("secondary"))
+        if (
+            not isinstance(espn_id, int)
+            or isinstance(espn_id, bool)
+            or not all(isinstance(v, str) and v for v in strings)
+            or not all(
+                isinstance(row.get(k), str) for k in ("nickname", "short_name", "conference_short")
+            )
+            or color is None
+            or secondary is None
+        ):
+            return None
+        teams.append(
+            CollegeTeam(
+                espn_id=espn_id,
+                abbrev=row["abbrev"],
+                location=row["location"],
+                nickname=row["nickname"],
+                short_name=row["short_name"],
+                name=row["name"],
+                conference=row["conference"],
+                conference_short=row["conference_short"],
+                color=color,
+                secondary=secondary,
+            )
+        )
+    return CollegeTable(tuple(teams))
+
+
+def read_table(path: Path) -> tuple[CollegeTable, float] | None:
+    """The kept table and when it was saved (wall clock), or ``None`` if there is none or it is
+    unreadable or the wrong shape (logged, never raised)."""
+    try:
+        raw = json.loads(path.read_text())
+        saved_at = float(raw["saved_at"])
+        table = table_from_data(raw["teams"])
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError, KeyError, TypeError):
+        log.warning("Ignoring the unreadable college team table %s", path)
+        return None
+    if table is None:
+        log.warning("Ignoring the college team table %s: not the expected shape", path)
+        return None
+    return table, saved_at
+
+
+def write_table(path: Path, table: CollegeTable, wall: float | None = None) -> None:
+    """Keep ``table`` atomically (a neighbour file, then a rename). Never raises."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        saved_at = time.time() if wall is None else wall
+        tmp.write_text(json.dumps({"saved_at": saved_at, "teams": table_to_data(table)}))
+        os.replace(tmp, path)
+    except OSError:
+        log.warning("Could not save the college team table to %s", path, exc_info=True)
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)

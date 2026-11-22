@@ -116,7 +116,7 @@ class FootballMode:
             from .api import FootballClient
 
             def client_factory() -> Any:
-                return FootballClient(league=league)
+                return FootballClient(league=league, keep_table=league != "nfl")
 
         self.league = league
         #: The league's teams: fixed for the NFL; for college, the FBS table the feed's client
