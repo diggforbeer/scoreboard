@@ -52,8 +52,8 @@ def test_the_badge_text_is_the_number_and_only_on_a_wide_panel():
 # -- the text scoreboard ------------------------------------------------------------------------
 
 
-def test_a_ranked_matchup_draws_both_badges_beside_the_abbreviations(update_snapshots):
-    g = ranked(GAMES["live"], away=5, home=12)
+def test_a_ranked_pregame_draws_both_badges_beside_the_abbreviations(update_snapshots):
+    g = ranked(GAMES["pregame"], away=5, home=12)
     c = scores(g)
     art = show("fb_scores_ranked", c)
     assert not c.out_of_bounds
@@ -67,7 +67,7 @@ def test_a_ranked_matchup_draws_both_badges_beside_the_abbreviations(update_snap
 
 
 def test_only_the_ranked_team_gets_a_badge(update_snapshots):
-    g = ranked(GAMES["live"], away=3)
+    g = ranked(GAMES["pregame"], away=3)
     c = scores(g)
     art = show("fb_scores_ranked_one", c)
     assert GOLD in c.colors(0, 0, 62, 14) and GOLD not in c.colors(64, 0, 127, 14)
@@ -86,31 +86,22 @@ def _team_xs(canvas, x0, x1):
     ]
 
 
-def test_the_abbreviation_moves_right_for_the_badge_and_the_score_stays_put():
-    plain, with_badge = scores(GAMES["live"]), scores(ranked(GAMES["live"], away=5, home=5))
+def test_the_abbreviation_moves_right_for_the_badge():
+    plain, with_badge = scores(GAMES["pregame"]), scores(ranked(GAMES["pregame"], away=5, home=5))
     for x0, x1 in ((0, 62), (64, 127)):
-        assert with_badge.bbox(x0, 0, x1, 14).x1 == plain.bbox(x0, 0, x1, 14).x1, (
-            "the score is right-aligned and does not move"
-        )
         assert min(_team_xs(with_badge, x0, x1)) > min(_team_xs(plain, x0, x1))
 
 
-def test_a_badge_is_dropped_rather_than_run_into_the_score():
-    # The longest FBS abbreviations are four letters (TA&M, M-OH): with a two-digit score the
-    # "25" badge still fits; with a three-digit score there is no room, so it is dropped.
-    two = ranked(game("TA&M", "M-OH", "in", 38, 41), away=25, home=24)
-    three = dataclasses.replace(
-        two,
-        away=dataclasses.replace(two.away, score=138),
-        home=dataclasses.replace(two.home, score=141),
-    )
-    assert GOLD in scores(two).colors(0, 0, 62, 14) and GOLD in scores(two).colors(64, 0, 127, 14)
-    c = scores(three)
-    assert not c.out_of_bounds
-    assert GOLD not in c.colors(0, 0, 127, 14), "no room: the badges are dropped, not squeezed"
-    for x0, x1 in ((0, 62), (64, 127)):
-        whites = [x for (x, y), rgb in c.lit(x0, 0, x1, 14).items() if rgb == fs.WHITE]
-        assert max(_team_xs(c, x0, x1)) < min(whites), "abbreviation then score, no overlap"
+@pytest.mark.parametrize("name", ["live", "red_zone", "big_scores"])
+def test_a_live_game_never_shows_a_rank_on_the_scoreboard_or_the_field_band(name):
+    # Owner's call (2026-11-22): too cluttered while the game is on. Drawn exactly as unranked.
+    base = GAMES[name]
+    for away, home in ((4, 17), (1, None), (None, 21), (25, 24)):
+        g = ranked(base, away=away, home=home)
+        assert scores(g).render() == scores(base).render()
+        assert field(g).render() == field(base).render()
+        assert GOLD not in scores(g).colors(0, 0, 127, H - 1)
+        assert GOLD not in field(g).colors(0, 0, 127, H - 1)
 
 
 def test_a_pregame_has_badges_and_no_scores():
@@ -149,23 +140,6 @@ def test_a_single_64px_panel_never_shows_a_badge_and_draws_as_before(name):
 # -- the field band and the halftime card --------------------------------------------------------
 
 
-def test_the_field_band_shows_the_ranks_when_there_is_room(update_snapshots):
-    # No down and distance (a kickoff, between quarters): the whole band is free for the badges.
-    g = ranked(GAMES["live_no_situation"], away=5, home=12)
-    c = field(g)
-    art = show("fb_field_ranked", c)
-    assert not c.out_of_bounds
-    assert GOLD in c.colors(0, 0, 127, 9), "the badges are in the band at the top"
-    check_snapshot("fb_field_ranked", art, update_snapshots)
-
-
-def test_with_a_down_and_distance_the_band_drops_badges_that_would_crowd_it():
-    # The common case on a Saturday: clock, score and "2ND&3" leave no room for two badges.
-    g = ranked(GAMES["live"], away=5, home=12)
-    assert GOLD not in field(g).colors(0, 0, 127, 9)
-    assert field(g).render() == field(GAMES["live"]).render(), "it is drawn exactly as unranked"
-
-
 @pytest.mark.parametrize("name", ["live", "red_zone", "big_scores"])
 def test_the_band_score_never_runs_into_the_down_and_distance(name):
     # Seen in a mockup: badges widened the score block into the "1ST&10" on the right.
@@ -194,16 +168,6 @@ def test_the_rank_colour_is_not_one_the_band_already_uses():
     assert sum(abs(a - b) for a, b in zip(GOLD, fs.SITUATION, strict=True)) > 150
 
 
-def test_the_band_drops_the_badges_when_the_clock_leaves_no_room_for_them():
-    g = ranked(GAMES["live"], away=5, home=12)
-    r = renderer(128)
-    for min_x, badges in ((0, True), (66, False)):
-        c = AsciiCanvas(128, H)
-        fs._score(r, c, g, 6, None, min_x=min_x)
-        assert not c.out_of_bounds, f"min_x={min_x}"
-        assert (GOLD in c.colors(0, 0, 127, 9)) is badges, f"min_x={min_x}"
-
-
 def test_the_field_band_without_ranks_is_unchanged():
     g = GAMES["live"]
     assert field(g).render() == field(ranked(g)).render()
@@ -221,10 +185,8 @@ def test_the_halftime_card_never_shows_a_rank():
             assert GOLD not in c.colors(0, 0, width - 1, H - 1)
 
 
-def test_the_ranks_are_still_drawn_on_the_scoreboard_and_the_field_band():
-    assert GOLD in scores(ranked(GAMES["live"], away=4, home=17)).colors(0, 0, 127, 20)
-    g = ranked(GAMES["live_no_situation"], away=5, home=12)
-    assert GOLD in field(g).colors(0, 0, 127, 9)
+def test_the_ranks_are_still_drawn_on_a_pregame_scoreboard():
+    assert GOLD in scores(ranked(GAMES["pregame"], away=4, home=17)).colors(0, 0, 127, 20)
 
 
 def test_the_game_helper_builds_unranked_teams():

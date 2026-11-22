@@ -81,7 +81,7 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
     label_x: dict[int, int] = {}
     for side, x0 in ((game.away, 0), (game.home, half)):
         x = x0 + 3
-        badge = rank_badge(side, r)
+        badge = "" if game.is_live else rank_badge(side, r)  # none in a live game
         if badge:
             # The abbreviation moves right to make room, unless that would run into the score.
             shift = text_width(r.fonts.small, badge) + 2
@@ -268,16 +268,15 @@ def _score(
 
     font = r.fonts.tiny
     ball_w = fball.sprite_width(fball.SMALL) + 1
-    limit = r.width if max_x is None else max_x
 
     def placed(badges: bool) -> tuple[list[tuple[str, str, tuple[int, int, int], int]], int, int]:
         parts = _score_parts(r, game, badges)
         total = sum(text_width(font, t) + gap for _, t, _, gap in parts) + 2 * ball_w
         return parts, total, max((r.width - total) // 2, min_x)
 
-    parts, total, x = placed(True)
-    if x + total > limit:  # no room for the badges between the clock and the down: drop them
-        parts, total, x = placed(False)
+    # No rank badges on a live game (owner's call, 2026-11-22: too cluttered); `badges` stays for
+    # the layout helpers' sake.
+    parts, _total, x = placed(False)
     teams = iter((AWAY, HOME))
     holder = None
     for kind, text, color, gap in parts:

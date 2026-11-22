@@ -1289,14 +1289,14 @@ names as their mockups, which they replaced.
 
 ## College screens (#559)
 
-The `college-football` branch adds the FBS as its own sport in the ranked `[[teams]]` list (`sport = "college"`). It shares the football screens above, with the poll number in front of a ranked team (the 128px layout; a single 64px panel has no room), plus the screens below. The pictures are `scoreboard --demo --sport football`'s college steps (`football/college_demo.py`: real schools and colours, made-up rankings and scores), drawn without crests, which are never committed; a board with the college logos fetched (`scripts/fetch-logos.py --sport college`) draws them in the same places. Mockups from real ESPN captures are in `docs/college/` (`python scripts/college-mockups.py`).
+The `college-football` branch adds the FBS as its own sport in the ranked `[[teams]]` list (`sport = "college"`). It shares the football screens above, with the poll number in front of a ranked team on the screens that are not a live game (the 128px layout; a single 64px panel has no room). A live game's scoreboard and field band carry no number (owner's call, 2026-11-22: too cluttered), plus the screens below. The pictures are `scoreboard --demo --sport football`'s college steps (`football/college_demo.py`: real schools and colours, made-up rankings and scores), drawn without crests, which are never committed; a board with the college logos fetched (`scripts/fetch-logos.py --sport college`) draws them in the same places. Mockups from real ESPN captures are in `docs/college/` (`python scripts/college-mockups.py`).
 
 | | |
 |---|---|
 | ![cfb_scores_ranked](docs/football/cfb_scores_ranked.png) | ![cfb_scores_two_ranked](docs/football/cfb_scores_two_ranked.png) |
-| `cfb_scores_ranked`: A live game: the rank rides in front of each ranked team (`1 UGA`); the possession ball, down and distance below. | `cfb_scores_two_ranked`: Two ranked teams: both carry their number. |
+| `cfb_scores_ranked`: A live game with ranked teams: no numbers, by the owner's call; the possession ball, down and distance below. | `cfb_scores_two_ranked`: Two ranked teams, live: still no numbers. |
 | ![cfb_field](docs/football/cfb_field.png) | ![cfb_field_redzone](docs/football/cfb_field_redzone.png) |
-| `cfb_field`: The field band with the ranks, the same band the NFL uses. | `cfb_field_redzone`: The red zone: the 20 yards the offence attacks tint and the down and distance turns red (ESPN's `isRedZone`, as sent). |
+| `cfb_field`: The field band, the same band the NFL uses (no ranks while live). | `cfb_field_redzone`: The red zone: the 20 yards the offence attacks tint and the down and distance turns red (ESPN's `isRedZone`, as sent). |
 | ![cfb_halftime](docs/football/cfb_halftime.png) | ![cfb_scores_pregame](docs/football/cfb_scores_pregame.png) |
 | `cfb_halftime`: Halftime for a ranked team. | `cfb_scores_pregame`: A game still to come, ranks at the teams. |
 | ![cfb_countdown](docs/football/cfb_countdown.png) | ![cfb_touchdown](docs/football/cfb_touchdown.png) |
