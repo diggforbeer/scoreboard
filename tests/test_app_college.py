@@ -131,6 +131,20 @@ def test_a_ranked_college_team_builds_the_college_mode_beside_the_others(backend
     assert only._football is None and only._college is not None
 
 
+def test_run_starts_every_feed_so_a_college_game_can_ask_for_the_board(backend, monkeypatch):
+    """A restart mid-game with hockey ranked first left the college feed unstarted: nothing read
+    its slate, so the board never learned the ranked team's game was live (2026-11-22)."""
+    from scoreboard.football.mode import FootballMode
+
+    started = []
+    monkeypatch.setattr(FootballMode, "start", lambda self: started.append(self.league))
+    rig = CollegeRig(backend, [("hockey", NSH), ("football", "TEN"), ("college", "UGA")])
+    assert rig.sport == "hockey", "the board starts on the first-listed sport"
+    rig.app.sleep = lambda _seconds: setattr(rig.app, "_running", False)
+    rig.app.run()
+    assert sorted(started) == ["college-football", "nfl"]
+
+
 def test_the_board_starts_on_a_college_team_that_is_ranked_first(backend):
     assert CollegeRig(backend, [("college", "UGA"), ("hockey", NSH)]).sport == "college"
     assert CollegeRig(backend, [("hockey", NSH), ("college", "UGA")]).sport == "hockey"

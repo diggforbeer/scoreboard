@@ -734,8 +734,12 @@ class ScoreboardApp:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "HOCKEY", "CONNECTING")
         self.swap_canvas()
-        if self._football is not None:
-            self._football.start()
+        # Every football-style feed that exists, not only the one on screen: the priority layer
+        # reads each one's slate to learn that a ranked team's game is live, so a college feed
+        # that waited to be on screen could never ask for the screen (a restart mid-game left the
+        # board on hockey's idle scroll while South Carolina played).
+        for mode in self._fb_modes():
+            mode.start()
 
         next_poll = 0.0
         next_rotate = 0.0
