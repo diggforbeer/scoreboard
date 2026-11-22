@@ -1056,6 +1056,8 @@ spacer row under the last team in the field on the `cfb_cfp` screen only (`PollV
 scrolling with the table. The help text says the alert is silent and only for games with a team of the ranked list in them, either
 way: a listed team being upset or a listed team pulling the upset (#588, #599; neither listed, nothing).
 
+**`run()` starts every football-style feed at boot** (`_fb_modes()`), not only the one on screen. It started only the NFL's, so a board whose first-listed team was hockey never started the college feed: the priority layer reads each feed's slate to learn that a ranked team's game is live, so the college feed could never ask for the board, and a restart mid-game (Georgia at South Carolina, 2026-11-21) left it on hockey's idle scroll. The log showed it: no college lines after the restart and no `Switching sport` line. `tests/test_app_college.py` pins it.
+
 ## College logos (#541)
 
 College crests live under `assets/logos/college/<size>/dark/<ABBR>.png` (12px and 16px, git-ignored like the
