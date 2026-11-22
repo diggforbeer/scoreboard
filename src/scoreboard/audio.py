@@ -41,6 +41,12 @@ def football_team_stem(abbrev: str, kind: str) -> str:
     return f"football_{abbrev.strip().upper()}_{kind}"
 
 
+def college_stem(kind: str) -> str:
+    """College football's "my team" slot (#612): one upload per kind for whoever the lead college
+    team is, not one per school (130+ of them, and the abbreviations overlap with the NFL's)."""
+    return f"_college_{kind}"
+
+
 #: Horn file extensions, in lookup order within one directory. WAV plays
 #: through aplay, MP3 through mpg123 (#208) -- aplay can't decode MP3.
 HORN_EXTENSIONS: tuple[str, ...] = (".wav", ".mp3")
@@ -147,10 +153,13 @@ class GoalHornPlayer:
         """The followed-team ding: uploads and drop-ins first, then the shipped file."""
         return self._find(DING_STEM)
 
-    def football_path(self, abbrev: str, kind: str) -> Path | None:
-        """The team's own touchdown / field-goal sound, else that kind's default."""
+    def football_path(self, abbrev: str, kind: str, college: bool = False) -> Path | None:
+        """The team's own touchdown / field-goal sound, else that kind's default. College has no
+        per-team files: its "my team" slot, else the shipped football default."""
         if kind not in FOOTBALL_KINDS:
             return None
+        if college:
+            return self._find(college_stem(kind), football_default_stem(kind))
         return self._find(football_team_stem(abbrev, kind), football_default_stem(kind))
 
     def _find(self, *stems: str) -> Path | None:
@@ -173,12 +182,13 @@ class GoalHornPlayer:
             return False
         return self._launch(path)
 
-    def play_football(self, abbrev: str, kind: str) -> bool:
-        """Launch ``abbrev``'s touchdown (``td``) or field-goal (``fg``) sound. Never raises."""
+    def play_football(self, abbrev: str, kind: str, college: bool = False) -> bool:
+        """Launch ``abbrev``'s touchdown (``td``) or field-goal (``fg``) sound (college: the "my
+        team" slot, #612). Never raises."""
         self.last_error = ""
         if not self.enabled:
             return False
-        path = self.football_path(abbrev, kind)
+        path = self.football_path(abbrev, kind, college)
         if path is None:
             log.warning("No football %s sound for %s and no default available", kind, abbrev)
             return False

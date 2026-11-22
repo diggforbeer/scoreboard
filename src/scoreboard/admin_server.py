@@ -288,6 +288,7 @@ from .audio import (
     HORN_EXTENSIONS,
     WAH_WAH_STEM,
     GoalHornPlayer,
+    college_stem,
     football_default_stem,
     football_team_stem,
     upload_directory,
@@ -1184,6 +1185,13 @@ def _football_key(team: object) -> tuple[str, str] | None:
     return kind, abbrev
 
 
+def _college_key(team: object) -> str | None:
+    """``"td"`` / ``"fg"`` for the college "my team" slots ``cfb_td`` / ``cfb_fg`` (#612)."""
+    if isinstance(team, str) and team.startswith("cfb_") and team[4:] in FOOTBALL_KINDS:
+        return team[4:]
+    return None
+
+
 def _horn_stem(team: object) -> str:
     """The on-disk stem for ``team`` -- the shipped default slot
     (``"default"``), the opponent-goal sting (``"wah_wah"``, #307), the followed-team ding
@@ -1199,6 +1207,9 @@ def _horn_stem(team: object) -> str:
         return WAH_WAH_STEM
     if team == "ding":
         return DING_STEM
+    college = _college_key(team)
+    if college is not None:
+        return college_stem(college)
     football = _football_key(team)
     if football is not None:
         kind, abbrev = football
@@ -1274,6 +1285,7 @@ def _list_uploaded_horns() -> list[dict[str, str]]:
         ("default", DEFAULT_STEM),
         ("wah_wah", WAH_WAH_STEM),
         ("ding", DING_STEM),
+        *((f"cfb_{kind}", college_stem(kind)) for kind in FOOTBALL_KINDS),
         *((t, t) for t in TEAM_COLORS),
         *(
             (f"fb_{kind}" + (f":{a}" if a else ""), stem)
@@ -1386,6 +1398,13 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
         if horn.ding_path() is None:
             return False, "No ding file found."
         if horn.play_ding(force=True):
+            return True, ""
+        return False, horn.last_error or "The player command failed to launch."
+    college = _college_key(team)
+    if college is not None:
+        if horn.football_path("", college, college=True) is None:
+            return False, "No college football sound file found, and no default is available."
+        if horn.play_football("", college, college=True):
             return True, ""
         return False, horn.last_error or "The player command failed to launch."
     football = _football_key(team)

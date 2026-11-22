@@ -2703,6 +2703,49 @@ def test_upload_football_sounds_are_stored_apart_from_the_hockey_horn(
     assert player.football_path("BUF", "fg") == upload_dir / "football_BUF_fg.wav"
 
 
+def test_the_college_my_team_slots_upload_list_and_are_found_by_the_player(
+    app_dir, config_path, upload_dir
+):
+    """#612: two slots, no school in the key; the shipped football default sits behind them."""
+    assert _upload("cfb_td", _wav_b64())["name"] == "_college_td.wav"
+    assert _upload("cfb_fg", _wav_b64())["name"] == "_college_fg.wav"
+    listed = admin_server._list_uploaded_horns()
+    assert {"team": "cfb_td", "filename": "_college_td.wav"} in listed
+    assert {"team": "cfb_fg", "filename": "_college_fg.wav"} in listed
+    from scoreboard.audio import GoalHornPlayer
+
+    player = GoalHornPlayer.default()
+    assert player.football_path("SC", "td", college=True) == upload_dir / "_college_td.wav"
+    assert player.football_path("SC", "td") != upload_dir / "_college_td.wav", "NFL never uses it"
+    assert admin_server._delete_horn("cfb_td") is True
+    assert not (upload_dir / "_college_td.wav").exists()
+
+
+@pytest.mark.parametrize("team", ["cfb_xx", "cfb_", "cfb_td:SC", "cfb_../x"])
+def test_the_college_slots_reject_any_other_key(app_dir, config_path, upload_dir, team):
+    assert _upload(team, _wav_b64())["type"] == "error"
+
+
+def test_play_horn_plays_the_college_slot(app_dir, config_path, tmp_path, monkeypatch):
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "_college_td.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "cfb_td"}))
+        return json.loads(await client.recv())
+
+    reply = asyncio.run(_serve_and_run(scenario))
+    assert reply["played"] is True and calls[0][-1].endswith("_college_td.wav")
+
+
 @pytest.mark.parametrize("team", ["fb_td:ZZZ", "fb_xx", "fb_td:../x", "fb_"])
 def test_upload_football_sound_rejects_unknown_keys(app_dir, config_path, upload_dir, team):
     reply = _upload(team, _wav_b64())

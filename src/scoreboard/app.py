@@ -1051,7 +1051,7 @@ class ScoreboardApp:
             delay_seconds=self._delay_seconds,
             utc_now=self.clock,
             wide=lambda: self.renderer.width >= 128,
-            on_sound=self._on_football_sound,
+            on_sound=lambda event: self._on_football_sound(event, college),
             dates=self._dates_views,
             league="college-football" if college else "nfl",
         )
@@ -1072,7 +1072,7 @@ class ScoreboardApp:
             sport, self.settings.football, self._owner, self._sport_rotation(sport)
         )
 
-    def _on_football_sound(self, event: FbEvent) -> None:
+    def _on_football_sound(self, event: FbEvent, college: bool = False) -> None:
         """The lead football team's touchdown or made field goal (#517): its own sound, else the
         default. Same rules as the hockey horn: the audio switch, volume and button mute apply."""
         kind = "td" if isinstance(event, Touchdown) else "fg"
@@ -1080,7 +1080,7 @@ class ScoreboardApp:
         if self._horn_muted():
             log.info("Sounds muted by button press; not playing the football sound")
             return
-        self.horn.play_football(event.team, kind)
+        self.horn.play_football(event.team, kind, college)
 
     def current_mode(self) -> str:
         """``hockey`` or ``football``: the one place that says which sport is running (#346)."""
