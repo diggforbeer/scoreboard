@@ -209,19 +209,22 @@ def test_the_field_band_without_ranks_is_unchanged():
     assert field(g).render() == field(ranked(g)).render()
 
 
-def test_the_halftime_card_shows_the_ranks_on_the_score_line(update_snapshots):
-    g = ranked(GAMES["halftime"], away=4, home=17)
-    c = halftime(g)
-    art = show("fb_halftime_ranked", c)
-    assert not c.out_of_bounds
-    assert GOLD in c.colors(0, 22, 127, 31)
-    check_snapshot("fb_halftime_ranked", art, update_snapshots)
-
-
-def test_halftime_without_ranks_and_on_64px_are_unchanged():
+def test_the_halftime_card_never_shows_a_rank():
+    # Owner's call after seeing it on a real board (Georgia at South Carolina, 2026-11-22): the
+    # score line was cluttered with a number before each team. Ranks stay on every other screen.
     g = GAMES["halftime"]
-    assert halftime(g).render() == halftime(ranked(g)).render()
-    assert halftime(ranked(g, away=4, home=17), 64).render() == halftime(g, 64).render()
+    for width in (128, 64):
+        plain = halftime(g, width)
+        for away, home in ((4, 17), (1, None), (None, 21), (25, 25)):
+            c = halftime(ranked(g, away=away, home=home), width)
+            assert c.render() == plain.render()
+            assert GOLD not in c.colors(0, 0, width - 1, H - 1)
+
+
+def test_the_ranks_are_still_drawn_on_the_scoreboard_and_the_field_band():
+    assert GOLD in scores(ranked(GAMES["live"], away=4, home=17)).colors(0, 0, 127, 20)
+    g = ranked(GAMES["live_no_situation"], away=5, home=12)
+    assert GOLD in field(g).colors(0, 0, 127, 9)
 
 
 def test_the_game_helper_builds_unranked_teams():
