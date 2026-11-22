@@ -506,3 +506,11 @@ draw(128, lambda r, c, g: r.draw_fb_field(c, g), rz_home, "35_red_zone_field_duk
 draw(128, lambda r, c, g: r.draw_fb_scores(c, g), rz_away, "36_red_zone_scoreboard")
 draw(128, lambda r, c, g: r.draw_fb_field(c, g), rz_no_flag, "37_inside_20_flag_off_stays_plain")
 draw(64, lambda r, c, g: r.draw_fb_field(c, g), rz_away, "38_red_zone_field_single_panel_64px")
+
+# every college timeout shows the team stats (owner's call, 2026-11-22): the real Georgia at South
+# Carolina numbers, both pages, in college's own rows (no yards per play or sacks in that feed).
+from test_football_college_timeout_stats import STATS as TIMEOUT_STATS  # noqa: E402
+from test_football_college_timeout_stats import draw as stats_draw  # noqa: E402
+
+for _name, _elapsed in (("41_timeout_stats_page1", 1.0), ("42_timeout_stats_page2", 13.0)):
+    png(stats_draw(_elapsed, stats=TIMEOUT_STATS), 128, _name)

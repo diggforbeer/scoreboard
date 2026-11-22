@@ -32,7 +32,7 @@ from .idle import (
 )
 from .models import FbGame, Play
 from .people import RosterPlayer, roster_from_payload
-from .stats import GameStats, stats_from_summary
+from .stats import COLLEGE_PAGES, PAGES, GameStats, stats_from_summary
 from .teams import NFL_DIRECTORY, Directory, use_directory
 
 log = logging.getLogger(__name__)
@@ -287,7 +287,8 @@ class FootballClient:
         if payload is None:
             return None
         # The same payload carries the team stats: keep them so showing them is no extra request.
-        self._stats[str(event_id)] = stats_from_summary(payload)
+        layout = COLLEGE_PAGES if self.league == LEAGUE_COLLEGE else PAGES
+        self._stats[str(event_id)] = stats_from_summary(payload, layout)
         return plays_from_summary(payload)
 
     def team_stats(self, event_id: int | str) -> GameStats | None:

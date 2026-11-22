@@ -129,6 +129,7 @@ Work is tracked in epics #532-#538 and done on the integration branch `college-f
 follows `docs/college-loop.md`**: the queue, the per-issue steps, auto-merge on green CI, and the
 rules it never breaks. Mockups of every college screen: `python scripts/college-mockups.py`
 (images in `docs/college/`). Live-game capture: `scripts/capture-college-live.py`.
+Every college timeout gets the team-stats card (owner's call, 2026-11-22): the college feed has no "Official Timeout" (every stoppage is "Timeout <team>", TV ones included), so `Director(stats_at_timeouts=True)` (set by `FootballMode` for college only; the NFL is unchanged) puts the STATS stage on a `TIMEOUT` play, held until the next play, in a scores-only director too (`_is_score_stage`). College has its own rows (`stats.COLLEGE_PAGES`: no yards per play or sacks in its boxscore; `GameStats.layout`). Mockups 41-42 in `docs/college/`.
 The halftime card never shows rank badges (owner's call, 2026-11-22, seen on a real board: a number before each team cluttered the score line); the scoreboard, the field band and the other screens keep theirs.
 The red zone marker (#562) is the NFL's drawing on the live field/scoreboard, driven by ESPN's `isRedZone`
 **as sent** (never derived from the yard line: the flag was not seen true in the one live game captured);

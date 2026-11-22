@@ -48,6 +48,25 @@ PAGES: tuple[tuple[StatRow, ...], ...] = (
     ),
 )
 
+#: College's table: its feed has no yards per play and no sacks (``summary`` boxscore, seen on
+#: Georgia at South Carolina, 2026-11-21), so the rows are the ones it does carry, 5 a page.
+COLLEGE_PAGES: tuple[tuple[StatRow, ...], ...] = (
+    (
+        StatRow("totalYards", "TOTAL YDS"),
+        StatRow("netPassingYards", "PASSING"),
+        StatRow("rushingYards", "RUSHING"),
+        StatRow("yardsPerPass", "YDS/PASS"),
+        StatRow("firstDowns", "1ST DOWNS"),
+    ),
+    (
+        StatRow("thirdDownEff", "3RD DOWN", RATIO),
+        StatRow("fourthDownEff", "4TH DOWN", RATIO),
+        StatRow("turnovers", "TURNOVERS", LOWER),
+        StatRow("totalPenaltiesYards", "PENALTIES", LOWER),
+        StatRow("possessionTime", "POSSESSION"),
+    ),
+)
+
 # A minus only counts at the start of a number ("-2" yards), not as the dash in "4-5".
 _NUMBER = re.compile(r"(?<!\d)-?\d+(?:\.\d+)?")
 _COUNTS = re.compile(r"\d+")
@@ -59,6 +78,8 @@ class GameStats:
 
     away: dict[str, str]
     home: dict[str, str]
+    #: The pages of rows to draw (the NFL's by default, ``COLLEGE_PAGES`` for a college game).
+    layout: tuple[tuple[StatRow, ...], ...] = PAGES
 
     def value(self, side: str, key: str) -> str:
         """The text for a side (``"away"`` / ``"home"``); ``"-"`` when the feed has none."""
@@ -79,11 +100,11 @@ class GameStats:
 
     @property
     def pages(self) -> int:
-        return len(PAGES)
+        return len(self.layout)
 
     def usable(self) -> bool:
         """True when the feed gave enough to be worth a screen (not a game with no snaps yet)."""
-        first = PAGES[0][0].key
+        first = self.layout[0][0].key
         return bool(self.away.get(first)) and bool(self.home.get(first))
 
 
@@ -118,7 +139,9 @@ def _score(raw: str, better: str) -> float | None:
     return float(nums[0]) if nums else None
 
 
-def stats_from_summary(payload: dict[str, Any]) -> GameStats | None:
+def stats_from_summary(
+    payload: dict[str, Any], layout: tuple[tuple[StatRow, ...], ...] = PAGES
+) -> GameStats | None:
     """The team stats in a site ``summary`` payload, or ``None`` when it has none.
 
     Sides are matched by ``homeAway``, never by order. A key the feed lists twice (it does for
@@ -142,5 +165,5 @@ def stats_from_summary(payload: dict[str, Any]) -> GameStats | None:
         sides[team["homeAway"]] = values
     if "home" not in sides or "away" not in sides:
         return None
-    stats = GameStats(away=sides["away"], home=sides["home"])
+    stats = GameStats(away=sides["away"], home=sides["home"], layout=layout)
     return stats if stats.usable() else None

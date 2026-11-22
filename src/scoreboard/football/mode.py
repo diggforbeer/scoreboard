@@ -244,6 +244,7 @@ class FootballMode:
             stats=self._stats_for,
             on_sound=self._on_sound,
             scores_only=self.league == LEAGUE_COLLEGE,
+            stats_at_timeouts=self.league == LEAGUE_COLLEGE,
         )
 
     def request_clear(self, scope: str) -> None:
