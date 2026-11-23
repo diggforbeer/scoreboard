@@ -1309,7 +1309,7 @@ class Renderer:
         """The holiday rotation screen in November (like the December tree): a turkey on the
         left, the countdown to Thanksgiving on the right, the top line in the favourite's colour.
 
-        ``egg`` is the very rare turkey run (#516), ``("turkey", age)`` from ``turkey_egg``.
+        ``egg`` is the turkey run (#516), ``("turkey", age)`` from ``ScoreboardApp._turkey_egg``.
         """
         from .holiday import (
             THANKSGIVING_TEXT,

@@ -953,13 +953,18 @@ fire 1 in 1440 windows), playing from the window's top for its own length, so th
 no setting. Only the squirrel and the fire hold the fast animation loop (`_egg_animating`). Tests
 draw them with an explicit `egg=` and assert structure only (no snapshots, again like the blowout).
 Hardware cost at 20fps on a Pi 4 is unverified (#4).
-The **Thanksgiving turkey run** (#516) is the same family on the `thanksgiving` screen:
-`holiday.turkey_egg()` (1 in 360 windows, 8 s), `turkey_pose`/`turkey_patches`/`turkey_feathers`/
-`turkey_text_shake`, drawn by `Renderer.draw_thanksgiving(..., egg)`. The turkey is startled, bolts
-right across the countdown (shaking the lettering, blanking 4x5 patches of it, shedding feathers) and
-wanders back from the right; each patch heals at its own time. The lettering is *overdrawn* (black
-patches), not recorded, because the real binding's `DrawText` never reaches Python `SetPixel`.
-Skipped on a single 64px panel. Same fences and no-snapshots rule as the tree eggs.
+The **Thanksgiving turkey run** (#516) is the same family on the `thanksgiving` screen, but paced
+differently: by the owner's call it follows the Holiday Cheer **`flyby_frequency`** like the fly-bys
+(rare ~1/h, occasional ~20 min, frequent ~10 min), not a wall-clock roll. `ScoreboardApp._turkey_egg()`
+keeps a timer drawn from the same gap range (`_turkey_gap`, half to 1.5x the average, from
+`holiday_overlay.rng`); the run (8 s) starts the first time the screen is drawn once the timer is due,
+so it is seen at that frequency even though the screen is only up part of the time. `turkey_pose`/
+`turkey_patches`/`turkey_feathers`/`turkey_text_shake` are pure functions of the run's age, drawn by
+`Renderer.draw_thanksgiving(..., egg)`. The turkey is startled, bolts right across the countdown
+(shaking the lettering, blanking 4x5 patches of it, shedding feathers) and wanders back from the
+right; each patch heals at its own time. The lettering is *overdrawn* (black patches), not recorded,
+because the real binding's `DrawText` never reaches Python `SetPixel`. Skipped on a single 64px
+panel. Same fences and no-snapshots rule as the tree eggs, which still use the fixed wall-clock roll.
 
 **To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools|turkey]`** (`eggs.py`,
 `ScoreboardApp.run_eggs`): a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and
