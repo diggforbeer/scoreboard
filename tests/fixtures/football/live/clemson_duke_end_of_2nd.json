@@ -1,0 +1,615 @@
+{
+ "id": "401858303",
+ "uid": "s:20~l:23~e:401858303",
+ "date": "2026-11-21T00:30Z",
+ "name": "Clemson Tigers at Duke Blue Devils",
+ "shortName": "CLEM @ DUKE",
+ "season": {
+  "year": 2026,
+  "type": 2,
+  "slug": "regular-season"
+ },
+ "week": {
+  "number": 12
+ },
+ "competitions": [
+  {
+   "id": "401858303",
+   "uid": "s:20~l:23~e:401858303~c:401858303",
+   "date": "2026-11-21T00:30Z",
+   "attendance": 0,
+   "type": {
+    "id": "1",
+    "abbreviation": "STD"
+   },
+   "timeValid": true,
+   "dateValid": true,
+   "neutralSite": false,
+   "conferenceCompetition": true,
+   "playByPlayAvailable": true,
+   "recent": true,
+   "venue": {
+    "id": "3982",
+    "fullName": "Wallace Wade Stadium",
+    "address": {
+     "city": "Durham",
+     "state": "NC",
+     "country": "USA"
+    },
+    "indoor": false
+   },
+   "competitors": [
+    {
+     "id": "150",
+     "uid": "s:20~l:23~t:150",
+     "type": "team",
+     "order": 0,
+     "homeAway": "home",
+     "team": {
+      "id": "150",
+      "uid": "s:20~l:23~t:150",
+      "location": "Duke",
+      "name": "Blue Devils",
+      "abbreviation": "DUKE",
+      "displayName": "Duke Blue Devils",
+      "shortDisplayName": "Duke",
+      "color": "00539b",
+      "alternateColor": "ffffff",
+      "isActive": true,
+      "venue": {
+       "id": "3982"
+      },
+      "links": [
+       {
+        "rel": [
+         "clubhouse",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/_/id/150/duke-blue-devils",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "clubhouse",
+         "mobile",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/_/id/150/duke-blue-devils",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/roster/_/id/150",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:23~t:150&section=roster",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/stats/_/id/150",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:23~t:150&section=stats",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/schedule/_/id/150",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:23~t:150&section=scores",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/150.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/150.png",
+      "conferenceId": "1"
+     },
+     "score": "0",
+     "linescores": [
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 1
+      },
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 2
+      }
+     ],
+     "statistics": [],
+     "curatedRank": {
+      "current": 99
+     },
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "overall",
+       "type": "total",
+       "summary": "7-3"
+      },
+      {
+       "name": "Home",
+       "abbreviation": "Home",
+       "type": "homerecord",
+       "summary": "4-1"
+      },
+      {
+       "name": "Away",
+       "abbreviation": "Away",
+       "type": "awayrecord",
+       "summary": "3-2"
+      },
+      {
+       "name": "vs. Conf.",
+       "abbreviation": "CONF",
+       "type": "vsconf",
+       "summary": "4-3"
+      }
+     ]
+    },
+    {
+     "id": "228",
+     "uid": "s:20~l:23~t:228",
+     "type": "team",
+     "order": 1,
+     "homeAway": "away",
+     "team": {
+      "id": "228",
+      "uid": "s:20~l:23~t:228",
+      "location": "Clemson",
+      "name": "Tigers",
+      "abbreviation": "CLEM",
+      "displayName": "Clemson Tigers",
+      "shortDisplayName": "Clemson",
+      "color": "f56600",
+      "alternateColor": "ffffff",
+      "isActive": true,
+      "venue": {
+       "id": "3836"
+      },
+      "links": [
+       {
+        "rel": [
+         "clubhouse",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/_/id/228/clemson-tigers",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "clubhouse",
+         "mobile",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/_/id/228/clemson-tigers",
+        "text": "Clubhouse",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/roster/_/id/228",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "roster",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:23~t:228&section=roster",
+        "text": "Roster",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/stats/_/id/228",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "stats",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:23~t:228&section=stats",
+        "text": "Statistics",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "desktop",
+         "team"
+        ],
+        "href": "https://www.espn.com/college-football/team/schedule/_/id/228",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       },
+       {
+        "rel": [
+         "schedule",
+         "sportscenter",
+         "app",
+         "team"
+        ],
+        "href": "sportscenter://x-callback-url/showClubhouse?uid=s:20~l:23~t:228&section=scores",
+        "text": "Schedule",
+        "isExternal": false,
+        "isPremium": false
+       }
+      ],
+      "logo": "https://a.espncdn.com/i/teamlogos/ncaa/500/228.png",
+      "logoDark": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/228.png",
+      "conferenceId": "1"
+     },
+     "score": "3",
+     "linescores": [
+      {
+       "value": 0.0,
+       "displayValue": "0",
+       "period": 1
+      },
+      {
+       "value": 3.0,
+       "displayValue": "3",
+       "period": 2
+      }
+     ],
+     "statistics": [],
+     "curatedRank": {
+      "current": 99
+     },
+     "records": [
+      {
+       "name": "overall",
+       "abbreviation": "overall",
+       "type": "total",
+       "summary": "6-4"
+      },
+      {
+       "name": "Home",
+       "abbreviation": "Home",
+       "type": "homerecord",
+       "summary": "3-3"
+      },
+      {
+       "name": "Away",
+       "abbreviation": "Away",
+       "type": "awayrecord",
+       "summary": "3-1"
+      },
+      {
+       "name": "vs. Conf.",
+       "abbreviation": "CONF",
+       "type": "vsconf",
+       "summary": "4-3"
+      }
+     ]
+    }
+   ],
+   "notes": [],
+   "situation": {
+    "lastPlay": {
+     "id": "401858303405",
+     "type": {
+      "id": "65",
+      "text": "End of Half",
+      "abbreviation": "EH"
+     },
+     "text": "End of Half.",
+     "scoreValue": 0,
+     "team": {
+      "id": "150"
+     },
+     "probability": {
+      "tiePercentage": 0.0,
+      "homeWinPercentage": 0.6204,
+      "awayWinPercentage": 0.37960000000000005,
+      "secondsLeft": 1800
+     },
+     "statYardage": 0,
+     "drive": {
+      "description": "1 play, -1 yard, 0:13",
+      "start": {
+       "yardLine": 22,
+       "text": "DUKE 22"
+      },
+      "end": {
+       "yardLine": 21,
+       "text": "DUKE 21"
+      },
+      "timeElapsed": {
+       "displayValue": "0:13"
+      },
+      "result": "END OF HALF"
+     },
+     "start": {
+      "yardLine": 22,
+      "team": {
+       "id": "150"
+      }
+     },
+     "end": {
+      "yardLine": 21,
+      "team": {
+       "id": "150"
+      }
+     }
+    },
+    "down": 2,
+    "yardLine": 21,
+    "distance": 10,
+    "isRedZone": false,
+    "homeTimeouts": 1,
+    "awayTimeouts": 1,
+    "possession": "150"
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 2,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "End of 2nd Quarter",
+     "shortDetail": "End of 2nd"
+    }
+   },
+   "broadcasts": [
+    {
+     "market": "national",
+     "names": [
+      "ESPN"
+     ]
+    }
+   ],
+   "leaders": [
+    {
+     "name": "passingYards",
+     "displayName": "Passing Leader",
+     "shortDisplayName": "PASS",
+     "abbreviation": "PYDS",
+     "leaders": [
+      {
+       "displayValue": "8/15, 74 YDS",
+       "value": 74.0,
+       "athlete": {
+        "id": "5081434",
+        "fullName": "Trent Pearman",
+        "displayName": "Trent Pearman",
+        "shortName": "T. Pearman",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/college-football/player/_/id/5081434/trent-pearman"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/college-football/players/full/5081434.png",
+        "jersey": "14",
+        "position": {
+         "abbreviation": "QB"
+        },
+        "team": {
+         "id": "228"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "228"
+       }
+      }
+     ]
+    },
+    {
+     "name": "rushingYards",
+     "displayName": "Rushing Leader",
+     "shortDisplayName": "RUSH",
+     "abbreviation": "RYDS",
+     "leaders": [
+      {
+       "displayValue": "9 CAR, 52 YDS",
+       "value": 52.0,
+       "athlete": {
+        "id": "5210003",
+        "fullName": "Chris Denson",
+        "displayName": "Chris Denson",
+        "shortName": "C. Denson",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/college-football/player/_/id/5210003/chris-denson"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/college-football/players/full/5210003.png",
+        "jersey": "15",
+        "position": {
+         "abbreviation": "QB"
+        },
+        "team": {
+         "id": "228"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "228"
+       }
+      }
+     ]
+    },
+    {
+     "name": "receivingYards",
+     "displayName": "Receiving Leader",
+     "shortDisplayName": "REC",
+     "abbreviation": "RECYDS",
+     "leaders": [
+      {
+       "displayValue": "3 REC, 44 YDS",
+       "value": 44.0,
+       "athlete": {
+        "id": "5081131",
+        "fullName": "Javen Nicholas",
+        "displayName": "Javen Nicholas",
+        "shortName": "J. Nicholas",
+        "links": [
+         {
+          "rel": [
+           "playercard",
+           "desktop",
+           "athlete"
+          ],
+          "href": "https://www.espn.com/college-football/player/_/id/5081131/javen-nicholas"
+         }
+        ],
+        "headshot": "https://a.espncdn.com/i/headshots/college-football/players/full/5081131.png",
+        "jersey": "5",
+        "position": {
+         "abbreviation": "WR"
+        },
+        "team": {
+         "id": "150"
+        },
+        "active": true
+       },
+       "team": {
+        "id": "150"
+       }
+      }
+     ]
+    }
+   ],
+   "groups": {
+    "id": "1",
+    "name": "Atlantic Coast Conference",
+    "shortName": "ACC",
+    "isConference": true
+   },
+   "format": {
+    "regulation": {
+     "periods": 4
+    }
+   },
+   "startDate": "2026-11-21T00:30Z",
+   "broadcast": "ESPN",
+   "geoBroadcasts": [
+    {
+     "type": {
+      "id": "1",
+      "shortName": "TV"
+     },
+     "market": {
+      "id": "1",
+      "type": "National"
+     },
+     "media": {
+      "shortName": "ESPN",
+      "logo": "https://a.espncdn.com/guid/335fd2d2-97b9-336b-81ee-573eb6bdcffc/logos/default.png",
+      "darkLogo": ""
+     },
+     "lang": "en",
+     "region": "us"
+    }
+   ],
+   "highlights": []
+  }
+ ],
+ "status": {
+  "clock": 0.0,
+  "displayClock": "0:00",
+  "period": 2,
+  "type": {
+   "id": "2",
+   "name": "STATUS_IN_PROGRESS",
+   "state": "in",
+   "completed": false,
+   "description": "In Progress",
+   "detail": "End of 2nd Quarter",
+   "shortDetail": "End of 2nd"
+  }
+ }
+}

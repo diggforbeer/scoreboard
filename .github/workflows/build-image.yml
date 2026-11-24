@@ -201,6 +201,44 @@ jobs:
         if: steps.football-logos.outcome == 'failure'
         run: echo "::warning title=football logos::Could not fetch the football logos; this image falls back to team abbreviations in football mode"
 
+      # College logos (#541, #605): football's recipe over the ~134 FBS teams, one more best-effort
+      # step so a failed fetch warns and the image falls back to abbreviations in college mode.
+      # The layer's logo install copies all of assets/logos, so nothing else ships them.
+      - name: Restore college logos
+        id: college-logo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            scoreboard/assets/logos/college/12
+            scoreboard/assets/logos/college/16
+          key: >-
+            logos-college-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
+            'scoreboard/src/scoreboard/football/college_teams.py') }}
+
+      - name: Rasterise college logos
+        id: college-logos
+        if: steps.college-logo-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        working-directory: scoreboard
+        run: |
+          python3 -m pip install --user --quiet pillow requests
+          python3 scripts/fetch-logos.py --sport college
+
+      - name: Save college logos
+        if: steps.college-logos.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            scoreboard/assets/logos/college/12
+            scoreboard/assets/logos/college/16
+          key: >-
+            logos-college-${{ hashFiles('scoreboard/scripts/fetch-logos.py',
+            'scoreboard/src/scoreboard/football/college_teams.py') }}
+
+      - name: Warn that the college logos could not be fetched
+        if: steps.college-logos.outcome == 'failure'
+        run: echo "::warning title=college logos::Could not fetch the college logos; this image falls back to team abbreviations in college mode"
+
       # Node never touches the image itself -- same "build tools are
       # CI-only" stance as the rgbmatrix compiler toolchain purged post-
       # build below. frontend/dist is a plain build product the layer's

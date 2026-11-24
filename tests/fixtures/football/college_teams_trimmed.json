@@ -1,0 +1,1831 @@
+{
+ "sports": [
+  {
+   "leagues": [
+    {
+     "teams": [
+      {
+       "team": {
+        "id": "2000",
+        "abbreviation": "ACU",
+        "displayName": "Abilene Christian Wildcats",
+        "location": "Abilene Christian",
+        "name": "Wildcats",
+        "nickname": "Abilene Chrstn",
+        "shortDisplayName": "Abilene Chrstn",
+        "color": "592d82",
+        "alternateColor": "b1b3b3"
+       }
+      },
+      {
+       "team": {
+        "id": "2005",
+        "abbreviation": "AF",
+        "displayName": "Air Force Falcons",
+        "location": "Air Force",
+        "name": "Falcons",
+        "nickname": "Air Force",
+        "shortDisplayName": "Air Force",
+        "color": "003594",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2006",
+        "abbreviation": "AKR",
+        "displayName": "Akron Zips",
+        "location": "Akron",
+        "name": "Zips",
+        "nickname": "Akron",
+        "shortDisplayName": "Akron",
+        "color": "041e42",
+        "alternateColor": "c5b783"
+       }
+      },
+      {
+       "team": {
+        "id": "333",
+        "abbreviation": "ALA",
+        "displayName": "Alabama Crimson Tide",
+        "location": "Alabama",
+        "name": "Crimson Tide",
+        "nickname": "Alabama",
+        "shortDisplayName": "Alabama",
+        "color": "9e1b32",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2026",
+        "abbreviation": "APP",
+        "displayName": "App State Mountaineers",
+        "location": "App State",
+        "name": "Mountaineers",
+        "nickname": "App State",
+        "shortDisplayName": "App State",
+        "color": "000000",
+        "alternateColor": "ffcd00"
+       }
+      },
+      {
+       "team": {
+        "id": "9",
+        "abbreviation": "ASU",
+        "displayName": "Arizona State Sun Devils",
+        "location": "Arizona State",
+        "name": "Sun Devils",
+        "nickname": "Arizona St",
+        "shortDisplayName": "Arizona St",
+        "color": "ffc627",
+        "alternateColor": "8c1d40"
+       }
+      },
+      {
+       "team": {
+        "id": "12",
+        "abbreviation": "ARIZ",
+        "displayName": "Arizona Wildcats",
+        "location": "Arizona",
+        "name": "Wildcats",
+        "nickname": "Arizona",
+        "shortDisplayName": "Arizona",
+        "color": "cc0033",
+        "alternateColor": "003366"
+       }
+      },
+      {
+       "team": {
+        "id": "8",
+        "abbreviation": "ARK",
+        "displayName": "Arkansas Razorbacks",
+        "location": "Arkansas",
+        "name": "Razorbacks",
+        "nickname": "Arkansas",
+        "shortDisplayName": "Arkansas",
+        "color": "a32136",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2032",
+        "abbreviation": "ARST",
+        "displayName": "Arkansas State Red Wolves",
+        "location": "Arkansas State",
+        "name": "Red Wolves",
+        "nickname": "Arkansas St",
+        "shortDisplayName": "Arkansas St",
+        "color": "cc092f",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "349",
+        "abbreviation": "ARMY",
+        "displayName": "Army Black Knights",
+        "location": "Army",
+        "name": "Black Knights",
+        "nickname": "Army",
+        "shortDisplayName": "Army",
+        "color": "000000",
+        "alternateColor": "d3bc8d"
+       }
+      },
+      {
+       "team": {
+        "id": "2",
+        "abbreviation": "AUB",
+        "displayName": "Auburn Tigers",
+        "location": "Auburn",
+        "name": "Tigers",
+        "nickname": "Auburn",
+        "shortDisplayName": "Auburn",
+        "color": "002b5c",
+        "alternateColor": "f26522"
+       }
+      },
+      {
+       "team": {
+        "id": "252",
+        "abbreviation": "BYU",
+        "displayName": "BYU Cougars",
+        "location": "BYU",
+        "name": "Cougars",
+        "nickname": "BYU",
+        "shortDisplayName": "BYU",
+        "color": "0047ba",
+        "alternateColor": "002e5d"
+       }
+      },
+      {
+       "team": {
+        "id": "2050",
+        "abbreviation": "BALL",
+        "displayName": "Ball State Cardinals",
+        "location": "Ball State",
+        "name": "Cardinals",
+        "nickname": "Ball State",
+        "shortDisplayName": "Ball State",
+        "color": "ba0c2f",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "239",
+        "abbreviation": "BAY",
+        "displayName": "Baylor Bears",
+        "location": "Baylor",
+        "name": "Bears",
+        "nickname": "Baylor",
+        "shortDisplayName": "Baylor",
+        "color": "154734",
+        "alternateColor": "ffb81c"
+       }
+      },
+      {
+       "team": {
+        "id": "68",
+        "abbreviation": "BOIS",
+        "displayName": "Boise State Broncos",
+        "location": "Boise State",
+        "name": "Broncos",
+        "nickname": "Boise St",
+        "shortDisplayName": "Boise St",
+        "color": "0033a0",
+        "alternateColor": "d64309"
+       }
+      },
+      {
+       "team": {
+        "id": "103",
+        "abbreviation": "BC",
+        "displayName": "Boston College Eagles",
+        "location": "Boston College",
+        "name": "Eagles",
+        "nickname": "Boston College",
+        "shortDisplayName": "Boston College",
+        "color": "8c2232",
+        "alternateColor": "dbcca6"
+       }
+      },
+      {
+       "team": {
+        "id": "189",
+        "abbreviation": "BGSU",
+        "displayName": "Bowling Green Falcons",
+        "location": "Bowling Green",
+        "name": "Falcons",
+        "nickname": "Bowling Green",
+        "shortDisplayName": "Bowling Green",
+        "color": "fd5000",
+        "alternateColor": "4f2c1d"
+       }
+      },
+      {
+       "team": {
+        "id": "2084",
+        "abbreviation": "BUF",
+        "displayName": "Buffalo Bulls",
+        "location": "Buffalo",
+        "name": "Bulls",
+        "nickname": "Buffalo",
+        "shortDisplayName": "Buffalo",
+        "color": "005bbb",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "25",
+        "abbreviation": "CAL",
+        "displayName": "California Golden Bears",
+        "location": "California",
+        "name": "Golden Bears",
+        "nickname": "California",
+        "shortDisplayName": "California",
+        "color": "041e42",
+        "alternateColor": "ffc72c"
+       }
+      },
+      {
+       "team": {
+        "id": "2117",
+        "abbreviation": "CMU",
+        "displayName": "Central Michigan Chippewas",
+        "location": "Central Michigan",
+        "name": "Chippewas",
+        "nickname": "C Michigan",
+        "shortDisplayName": "C Michigan",
+        "color": "4c0027",
+        "alternateColor": "fbab18"
+       }
+      },
+      {
+       "team": {
+        "id": "2429",
+        "abbreviation": "CLT",
+        "displayName": "Charlotte 49ers",
+        "location": "Charlotte",
+        "name": "49ers",
+        "nickname": "Charlotte",
+        "shortDisplayName": "Charlotte",
+        "color": "005035",
+        "alternateColor": "a49665"
+       }
+      },
+      {
+       "team": {
+        "id": "2132",
+        "abbreviation": "CIN",
+        "displayName": "Cincinnati Bearcats",
+        "location": "Cincinnati",
+        "name": "Bearcats",
+        "nickname": "Cincinnati",
+        "shortDisplayName": "Cincinnati",
+        "color": "000000",
+        "alternateColor": "e00122"
+       }
+      },
+      {
+       "team": {
+        "id": "228",
+        "abbreviation": "CLEM",
+        "displayName": "Clemson Tigers",
+        "location": "Clemson",
+        "name": "Tigers",
+        "nickname": "Clemson",
+        "shortDisplayName": "Clemson",
+        "color": "f56600",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "324",
+        "abbreviation": "CCU",
+        "displayName": "Coastal Carolina Chanticleers",
+        "location": "Coastal Carolina",
+        "name": "Chanticleers",
+        "nickname": "Coastal",
+        "shortDisplayName": "Coastal",
+        "color": "006f71",
+        "alternateColor": "a27752"
+       }
+      },
+      {
+       "team": {
+        "id": "38",
+        "abbreviation": "COLO",
+        "displayName": "Colorado Buffaloes",
+        "location": "Colorado",
+        "name": "Buffaloes",
+        "nickname": "Colorado",
+        "shortDisplayName": "Colorado",
+        "color": "cfb87c",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "36",
+        "abbreviation": "CSU",
+        "displayName": "Colorado State Rams",
+        "location": "Colorado State",
+        "name": "Rams",
+        "nickname": "Colorado St",
+        "shortDisplayName": "Colorado St",
+        "color": "004c23",
+        "alternateColor": "c8c372"
+       }
+      },
+      {
+       "team": {
+        "id": "48",
+        "abbreviation": "DEL",
+        "displayName": "Delaware Blue Hens",
+        "location": "Delaware",
+        "name": "Blue Hens",
+        "nickname": "Delaware",
+        "shortDisplayName": "Delaware",
+        "color": "00539f",
+        "alternateColor": "ffd200"
+       }
+      },
+      {
+       "team": {
+        "id": "150",
+        "abbreviation": "DUKE",
+        "displayName": "Duke Blue Devils",
+        "location": "Duke",
+        "name": "Blue Devils",
+        "nickname": "Duke",
+        "shortDisplayName": "Duke",
+        "color": "00539b",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "151",
+        "abbreviation": "ECU",
+        "displayName": "East Carolina Pirates",
+        "location": "East Carolina",
+        "name": "Pirates",
+        "nickname": "East Carolina",
+        "shortDisplayName": "East Carolina",
+        "color": "582c83",
+        "alternateColor": "ffc72c"
+       }
+      },
+      {
+       "team": {
+        "id": "2199",
+        "abbreviation": "EMU",
+        "displayName": "Eastern Michigan Eagles",
+        "location": "Eastern Michigan",
+        "name": "Eagles",
+        "nickname": "E Michigan",
+        "shortDisplayName": "E Michigan",
+        "color": "006938",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2226",
+        "abbreviation": "FAU",
+        "displayName": "Florida Atlantic Owls",
+        "location": "Florida Atlantic",
+        "name": "Owls",
+        "nickname": "FAU",
+        "shortDisplayName": "FAU",
+        "color": "003366",
+        "alternateColor": "cc0000"
+       }
+      },
+      {
+       "team": {
+        "id": "57",
+        "abbreviation": "FLA",
+        "displayName": "Florida Gators",
+        "location": "Florida",
+        "name": "Gators",
+        "nickname": "Florida",
+        "shortDisplayName": "Florida",
+        "color": "0021a5",
+        "alternateColor": "fa4616"
+       }
+      },
+      {
+       "team": {
+        "id": "2229",
+        "abbreviation": "FIU",
+        "displayName": "Florida International Panthers",
+        "location": "Florida International",
+        "name": "Panthers",
+        "nickname": "FIU",
+        "shortDisplayName": "FIU",
+        "color": "091f3f",
+        "alternateColor": "c3993f"
+       }
+      },
+      {
+       "team": {
+        "id": "52",
+        "abbreviation": "FSU",
+        "displayName": "Florida State Seminoles",
+        "location": "Florida State",
+        "name": "Seminoles",
+        "nickname": "Florida St",
+        "shortDisplayName": "Florida St",
+        "color": "782f40",
+        "alternateColor": "ceb888"
+       }
+      },
+      {
+       "team": {
+        "id": "278",
+        "abbreviation": "FRES",
+        "displayName": "Fresno State Bulldogs",
+        "location": "Fresno State",
+        "name": "Bulldogs",
+        "nickname": "Fresno St",
+        "shortDisplayName": "Fresno St",
+        "color": "b1102b",
+        "alternateColor": "13284c"
+       }
+      },
+      {
+       "team": {
+        "id": "61",
+        "abbreviation": "UGA",
+        "displayName": "Georgia Bulldogs",
+        "location": "Georgia",
+        "name": "Bulldogs",
+        "nickname": "Georgia",
+        "shortDisplayName": "Georgia",
+        "color": "ba0c2f",
+        "alternateColor": "2c2a29"
+       }
+      },
+      {
+       "team": {
+        "id": "290",
+        "abbreviation": "GASO",
+        "displayName": "Georgia Southern Eagles",
+        "location": "Georgia Southern",
+        "name": "Eagles",
+        "nickname": "GA Southern",
+        "shortDisplayName": "GA Southern",
+        "color": "041e42",
+        "alternateColor": "a3aaae"
+       }
+      },
+      {
+       "team": {
+        "id": "2247",
+        "abbreviation": "GAST",
+        "displayName": "Georgia State Panthers",
+        "location": "Georgia State",
+        "name": "Panthers",
+        "nickname": "Georgia St",
+        "shortDisplayName": "Georgia St",
+        "color": "0039a6",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "59",
+        "abbreviation": "GT",
+        "displayName": "Georgia Tech Yellow Jackets",
+        "location": "Georgia Tech",
+        "name": "Yellow Jackets",
+        "nickname": "Georgia Tech",
+        "shortDisplayName": "Georgia Tech",
+        "color": "b3a369",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "62",
+        "abbreviation": "HAW",
+        "displayName": "Hawai'i Rainbow Warriors",
+        "location": "Hawai'i",
+        "name": "Rainbow Warriors",
+        "nickname": "Hawai'i",
+        "shortDisplayName": "Hawai'i",
+        "color": "005737",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "248",
+        "abbreviation": "HOU",
+        "displayName": "Houston Cougars",
+        "location": "Houston",
+        "name": "Cougars",
+        "nickname": "Houston",
+        "shortDisplayName": "Houston",
+        "color": "c8102e",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "356",
+        "abbreviation": "ILL",
+        "displayName": "Illinois Fighting Illini",
+        "location": "Illinois",
+        "name": "Fighting Illini",
+        "nickname": "Illinois",
+        "shortDisplayName": "Illinois",
+        "color": "ff5f05",
+        "alternateColor": "13294b"
+       }
+      },
+      {
+       "team": {
+        "id": "84",
+        "abbreviation": "IU",
+        "displayName": "Indiana Hoosiers",
+        "location": "Indiana",
+        "name": "Hoosiers",
+        "nickname": "Indiana",
+        "shortDisplayName": "Indiana",
+        "color": "970310",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2294",
+        "abbreviation": "IOWA",
+        "displayName": "Iowa Hawkeyes",
+        "location": "Iowa",
+        "name": "Hawkeyes",
+        "nickname": "Iowa",
+        "shortDisplayName": "Iowa",
+        "color": "231f20",
+        "alternateColor": "fcd116"
+       }
+      },
+      {
+       "team": {
+        "id": "66",
+        "abbreviation": "ISU",
+        "displayName": "Iowa State Cyclones",
+        "location": "Iowa State",
+        "name": "Cyclones",
+        "nickname": "Iowa State",
+        "shortDisplayName": "Iowa State",
+        "color": "ae192d",
+        "alternateColor": "ffc72a"
+       }
+      },
+      {
+       "team": {
+        "id": "55",
+        "abbreviation": "JXST",
+        "displayName": "Jacksonville State Gamecocks",
+        "location": "Jacksonville State",
+        "name": "Gamecocks",
+        "nickname": "Jax State",
+        "shortDisplayName": "Jax State",
+        "color": "cc0000",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "256",
+        "abbreviation": "JMU",
+        "displayName": "James Madison Dukes",
+        "location": "James Madison",
+        "name": "Dukes",
+        "nickname": "James Madison",
+        "shortDisplayName": "James Madison",
+        "color": "450084",
+        "alternateColor": "cbb677"
+       }
+      },
+      {
+       "team": {
+        "id": "2305",
+        "abbreviation": "KU",
+        "displayName": "Kansas Jayhawks",
+        "location": "Kansas",
+        "name": "Jayhawks",
+        "nickname": "Kansas",
+        "shortDisplayName": "Kansas",
+        "color": "0051ba",
+        "alternateColor": "e8000d"
+       }
+      },
+      {
+       "team": {
+        "id": "2306",
+        "abbreviation": "KSU",
+        "displayName": "Kansas State Wildcats",
+        "location": "Kansas State",
+        "name": "Wildcats",
+        "nickname": "Kansas St",
+        "shortDisplayName": "Kansas St",
+        "color": "330a57",
+        "alternateColor": "e2e3e4"
+       }
+      },
+      {
+       "team": {
+        "id": "338",
+        "abbreviation": "KENN",
+        "displayName": "Kennesaw State Owls",
+        "location": "Kennesaw State",
+        "name": "Owls",
+        "nickname": "Kennesaw St",
+        "shortDisplayName": "Kennesaw St",
+        "color": "fdbb30",
+        "alternateColor": "0b1315"
+       }
+      },
+      {
+       "team": {
+        "id": "2309",
+        "abbreviation": "KENT",
+        "displayName": "Kent State Golden Flashes",
+        "location": "Kent State",
+        "name": "Golden Flashes",
+        "nickname": "Kent State",
+        "shortDisplayName": "Kent State",
+        "color": "002664",
+        "alternateColor": "eaab00"
+       }
+      },
+      {
+       "team": {
+        "id": "96",
+        "abbreviation": "UK",
+        "displayName": "Kentucky Wildcats",
+        "location": "Kentucky",
+        "name": "Wildcats",
+        "nickname": "Kentucky",
+        "shortDisplayName": "Kentucky",
+        "color": "0033a0",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "99",
+        "abbreviation": "LSU",
+        "displayName": "LSU Tigers",
+        "location": "LSU",
+        "name": "Tigers",
+        "nickname": "LSU",
+        "shortDisplayName": "LSU",
+        "color": "461d76",
+        "alternateColor": "fdd023"
+       }
+      },
+      {
+       "team": {
+        "id": "2335",
+        "abbreviation": "LIB",
+        "displayName": "Liberty Flames",
+        "location": "Liberty",
+        "name": "Flames",
+        "nickname": "Liberty",
+        "shortDisplayName": "Liberty",
+        "color": "0a254e",
+        "alternateColor": "b72025"
+       }
+      },
+      {
+       "team": {
+        "id": "309",
+        "abbreviation": "UL",
+        "displayName": "Louisiana Ragin' Cajuns",
+        "location": "Louisiana",
+        "name": "Ragin' Cajuns",
+        "nickname": "Louisiana",
+        "shortDisplayName": "Louisiana",
+        "color": "ce181e",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "2348",
+        "abbreviation": "LT",
+        "displayName": "Louisiana Tech Bulldogs",
+        "location": "Louisiana Tech",
+        "name": "Bulldogs",
+        "nickname": "Louisiana Tech",
+        "shortDisplayName": "Louisiana Tech",
+        "color": "003087",
+        "alternateColor": "cb333b"
+       }
+      },
+      {
+       "team": {
+        "id": "97",
+        "abbreviation": "LOU",
+        "displayName": "Louisville Cardinals",
+        "location": "Louisville",
+        "name": "Cardinals",
+        "nickname": "Louisville",
+        "shortDisplayName": "Louisville",
+        "color": "c9001f",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "276",
+        "abbreviation": "MRSH",
+        "displayName": "Marshall Thundering Herd",
+        "location": "Marshall",
+        "name": "Thundering Herd",
+        "nickname": "Marshall",
+        "shortDisplayName": "Marshall",
+        "color": "00b140",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "120",
+        "abbreviation": "MD",
+        "displayName": "Maryland Terrapins",
+        "location": "Maryland",
+        "name": "Terrapins",
+        "nickname": "Maryland",
+        "shortDisplayName": "Maryland",
+        "color": "ce1126",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "113",
+        "abbreviation": "MASS",
+        "displayName": "Massachusetts Minutemen",
+        "location": "Massachusetts",
+        "name": "Minutemen",
+        "nickname": "UMass",
+        "shortDisplayName": "UMass",
+        "color": "881c1c",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "235",
+        "abbreviation": "MEM",
+        "displayName": "Memphis Tigers",
+        "location": "Memphis",
+        "name": "Tigers",
+        "nickname": "Memphis",
+        "shortDisplayName": "Memphis",
+        "color": "004991",
+        "alternateColor": "8e908f"
+       }
+      },
+      {
+       "team": {
+        "id": "193",
+        "abbreviation": "M-OH",
+        "displayName": "Miami (OH) RedHawks",
+        "location": "Miami (OH)",
+        "name": "RedHawks",
+        "nickname": "Miami OH",
+        "shortDisplayName": "Miami OH",
+        "color": "c41230",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2390",
+        "abbreviation": "MIA",
+        "displayName": "Miami Hurricanes",
+        "location": "Miami",
+        "name": "Hurricanes",
+        "nickname": "Miami",
+        "shortDisplayName": "Miami",
+        "color": "f47423",
+        "alternateColor": "035131"
+       }
+      },
+      {
+       "team": {
+        "id": "127",
+        "abbreviation": "MSU",
+        "displayName": "Michigan State Spartans",
+        "location": "Michigan State",
+        "name": "Spartans",
+        "nickname": "Michigan St",
+        "shortDisplayName": "Michigan St",
+        "color": "173f35",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "130",
+        "abbreviation": "MICH",
+        "displayName": "Michigan Wolverines",
+        "location": "Michigan",
+        "name": "Wolverines",
+        "nickname": "Michigan",
+        "shortDisplayName": "Michigan",
+        "color": "00274c",
+        "alternateColor": "ffcb05"
+       }
+      },
+      {
+       "team": {
+        "id": "2393",
+        "abbreviation": "MTSU",
+        "displayName": "Middle Tennessee Blue Raiders",
+        "location": "Middle Tennessee",
+        "name": "Blue Raiders",
+        "nickname": "MTSU",
+        "shortDisplayName": "MTSU",
+        "color": "036eb7",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "135",
+        "abbreviation": "MINN",
+        "displayName": "Minnesota Golden Gophers",
+        "location": "Minnesota",
+        "name": "Golden Gophers",
+        "nickname": "Minnesota",
+        "shortDisplayName": "Minnesota",
+        "color": "5e0a2f",
+        "alternateColor": "fab41c"
+       }
+      },
+      {
+       "team": {
+        "id": "344",
+        "abbreviation": "MSST",
+        "displayName": "Mississippi State Bulldogs",
+        "location": "Mississippi State",
+        "name": "Bulldogs",
+        "nickname": "Mississippi St",
+        "shortDisplayName": "Mississippi St",
+        "color": "5d1725",
+        "alternateColor": "c1c6c8"
+       }
+      },
+      {
+       "team": {
+        "id": "2623",
+        "abbreviation": "MOST",
+        "displayName": "Missouri State Bears",
+        "location": "Missouri State",
+        "name": "Bears",
+        "nickname": "Missouri St",
+        "shortDisplayName": "Missouri St",
+        "color": "5e0009",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "142",
+        "abbreviation": "MIZ",
+        "displayName": "Missouri Tigers",
+        "location": "Missouri",
+        "name": "Tigers",
+        "nickname": "Missouri",
+        "shortDisplayName": "Missouri",
+        "color": "f1b82d",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "152",
+        "abbreviation": "NCSU",
+        "displayName": "NC State Wolfpack",
+        "location": "NC State",
+        "name": "Wolfpack",
+        "nickname": "NC State",
+        "shortDisplayName": "NC State",
+        "color": "cc0000",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2426",
+        "abbreviation": "NAVY",
+        "displayName": "Navy Midshipmen",
+        "location": "Navy",
+        "name": "Midshipmen",
+        "nickname": "Navy",
+        "shortDisplayName": "Navy",
+        "color": "00225b",
+        "alternateColor": "b5a67c"
+       }
+      },
+      {
+       "team": {
+        "id": "158",
+        "abbreviation": "NEB",
+        "displayName": "Nebraska Cornhuskers",
+        "location": "Nebraska",
+        "name": "Cornhuskers",
+        "nickname": "Nebraska",
+        "shortDisplayName": "Nebraska",
+        "color": "e31937",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2440",
+        "abbreviation": "NEV",
+        "displayName": "Nevada Wolf Pack",
+        "location": "Nevada",
+        "name": "Wolf Pack",
+        "nickname": "Nevada",
+        "shortDisplayName": "Nevada",
+        "color": "041e42",
+        "alternateColor": "8a8d8f"
+       }
+      },
+      {
+       "team": {
+        "id": "167",
+        "abbreviation": "UNM",
+        "displayName": "New Mexico Lobos",
+        "location": "New Mexico",
+        "name": "Lobos",
+        "nickname": "New Mexico",
+        "shortDisplayName": "New Mexico",
+        "color": "ba0c2f",
+        "alternateColor": "a7a8aa"
+       }
+      },
+      {
+       "team": {
+        "id": "166",
+        "abbreviation": "NMSU",
+        "displayName": "New Mexico State Aggies",
+        "location": "New Mexico State",
+        "name": "Aggies",
+        "nickname": "New Mexico St",
+        "shortDisplayName": "New Mexico St",
+        "color": "7e141b",
+        "alternateColor": "231f20"
+       }
+      },
+      {
+       "team": {
+        "id": "153",
+        "abbreviation": "UNC",
+        "displayName": "North Carolina Tar Heels",
+        "location": "North Carolina",
+        "name": "Tar Heels",
+        "nickname": "North Carolina",
+        "shortDisplayName": "North Carolina",
+        "color": "7bafd4",
+        "alternateColor": "13294b"
+       }
+      },
+      {
+       "team": {
+        "id": "2449",
+        "abbreviation": "NDSU",
+        "displayName": "North Dakota State Bison",
+        "location": "North Dakota State",
+        "name": "Bison",
+        "nickname": "N Dakota St",
+        "shortDisplayName": "N Dakota St",
+        "color": "01402A",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "249",
+        "abbreviation": "UNT",
+        "displayName": "North Texas Mean Green",
+        "location": "North Texas",
+        "name": "Mean Green",
+        "nickname": "North Texas",
+        "shortDisplayName": "North Texas",
+        "color": "068f33",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2459",
+        "abbreviation": "NIU",
+        "displayName": "Northern Illinois Huskies",
+        "location": "Northern Illinois",
+        "name": "Huskies",
+        "nickname": "N Illinois",
+        "shortDisplayName": "N Illinois",
+        "color": "c8102e",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "77",
+        "abbreviation": "NU",
+        "displayName": "Northwestern Wildcats",
+        "location": "Northwestern",
+        "name": "Wildcats",
+        "nickname": "Northwestern",
+        "shortDisplayName": "Northwestern",
+        "color": "492f92",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "87",
+        "abbreviation": "ND",
+        "displayName": "Notre Dame Fighting Irish",
+        "location": "Notre Dame",
+        "name": "Fighting Irish",
+        "nickname": "Notre Dame",
+        "shortDisplayName": "Notre Dame",
+        "color": "062340",
+        "alternateColor": "c99700"
+       }
+      },
+      {
+       "team": {
+        "id": "195",
+        "abbreviation": "OHIO",
+        "displayName": "Ohio Bobcats",
+        "location": "Ohio",
+        "name": "Bobcats",
+        "nickname": "Ohio",
+        "shortDisplayName": "Ohio",
+        "color": "154734",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "194",
+        "abbreviation": "OSU",
+        "displayName": "Ohio State Buckeyes",
+        "location": "Ohio State",
+        "name": "Buckeyes",
+        "nickname": "Ohio State",
+        "shortDisplayName": "Ohio State",
+        "color": "ba0c2f",
+        "alternateColor": "a8adb4"
+       }
+      },
+      {
+       "team": {
+        "id": "3161",
+        "abbreviation": "OSU",
+        "displayName": "Ohio State Newark Titans",
+        "location": "Ohio State Newark",
+        "name": "Titans",
+        "nickname": "Osunewark",
+        "shortDisplayName": "Osunewark",
+        "color": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "201",
+        "abbreviation": "OU",
+        "displayName": "Oklahoma Sooners",
+        "location": "Oklahoma",
+        "name": "Sooners",
+        "nickname": "Oklahoma",
+        "shortDisplayName": "Oklahoma",
+        "color": "990000",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "197",
+        "abbreviation": "OKST",
+        "displayName": "Oklahoma State Cowboys",
+        "location": "Oklahoma State",
+        "name": "Cowboys",
+        "nickname": "Oklahoma St",
+        "shortDisplayName": "Oklahoma St",
+        "color": "fe5c00",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "295",
+        "abbreviation": "ODU",
+        "displayName": "Old Dominion Monarchs",
+        "location": "Old Dominion",
+        "name": "Monarchs",
+        "nickname": "Old Dominion",
+        "shortDisplayName": "Old Dominion",
+        "color": "003768",
+        "alternateColor": "a1d2f1"
+       }
+      },
+      {
+       "team": {
+        "id": "145",
+        "abbreviation": "MISS",
+        "displayName": "Ole Miss Rebels",
+        "location": "Ole Miss",
+        "name": "Rebels",
+        "nickname": "Ole Miss",
+        "shortDisplayName": "Ole Miss",
+        "color": "13294b",
+        "alternateColor": "cf142b"
+       }
+      },
+      {
+       "team": {
+        "id": "2483",
+        "abbreviation": "ORE",
+        "displayName": "Oregon Ducks",
+        "location": "Oregon",
+        "name": "Ducks",
+        "nickname": "Oregon",
+        "shortDisplayName": "Oregon",
+        "color": "00934b",
+        "alternateColor": "fff41b"
+       }
+      },
+      {
+       "team": {
+        "id": "204",
+        "abbreviation": "ORST",
+        "displayName": "Oregon State Beavers",
+        "location": "Oregon State",
+        "name": "Beavers",
+        "nickname": "Oregon St",
+        "shortDisplayName": "Oregon St",
+        "color": "dc4405",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "213",
+        "abbreviation": "PSU",
+        "displayName": "Penn State Nittany Lions",
+        "location": "Penn State",
+        "name": "Nittany Lions",
+        "nickname": "Penn State",
+        "shortDisplayName": "Penn State",
+        "color": "061440",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "221",
+        "abbreviation": "PITT",
+        "displayName": "Pittsburgh Panthers",
+        "location": "Pittsburgh",
+        "name": "Panthers",
+        "nickname": "Pitt",
+        "shortDisplayName": "Pitt",
+        "color": "003594",
+        "alternateColor": "ffb81c"
+       }
+      },
+      {
+       "team": {
+        "id": "2509",
+        "abbreviation": "PUR",
+        "displayName": "Purdue Boilermakers",
+        "location": "Purdue",
+        "name": "Boilermakers",
+        "nickname": "Purdue",
+        "shortDisplayName": "Purdue",
+        "color": "ceb888",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "242",
+        "abbreviation": "RICE",
+        "displayName": "Rice Owls",
+        "location": "Rice",
+        "name": "Owls",
+        "nickname": "Rice",
+        "shortDisplayName": "Rice",
+        "color": "00205b",
+        "alternateColor": "c1c6c8"
+       }
+      },
+      {
+       "team": {
+        "id": "164",
+        "abbreviation": "RUTG",
+        "displayName": "Rutgers Scarlet Knights",
+        "location": "Rutgers",
+        "name": "Scarlet Knights",
+        "nickname": "Rutgers",
+        "shortDisplayName": "Rutgers",
+        "color": "ce0e2d",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2567",
+        "abbreviation": "SMU",
+        "displayName": "SMU Mustangs",
+        "location": "SMU",
+        "name": "Mustangs",
+        "nickname": "SMU",
+        "shortDisplayName": "SMU",
+        "color": "a80000",
+        "alternateColor": "0033a1"
+       }
+      },
+      {
+       "team": {
+        "id": "16",
+        "abbreviation": "SAC",
+        "displayName": "Sacramento State Hornets",
+        "location": "Sacramento State",
+        "name": "Hornets",
+        "nickname": "Sacramento St",
+        "shortDisplayName": "Sacramento St",
+        "color": "00573C",
+        "alternateColor": "cdb97d"
+       }
+      },
+      {
+       "team": {
+        "id": "2534",
+        "abbreviation": "SHSU",
+        "displayName": "Sam Houston Bearkats",
+        "location": "Sam Houston",
+        "name": "Bearkats",
+        "nickname": "Sam Houston",
+        "shortDisplayName": "Sam Houston",
+        "color": "f56423",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "21",
+        "abbreviation": "SDSU",
+        "displayName": "San Diego State Aztecs",
+        "location": "San Diego State",
+        "name": "Aztecs",
+        "nickname": "San Diego St",
+        "shortDisplayName": "San Diego St",
+        "color": "a6192e",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "23",
+        "abbreviation": "SJSU",
+        "displayName": "San Jos\u00e9 State Spartans",
+        "location": "San Jos\u00e9 State",
+        "name": "Spartans",
+        "nickname": "San Jos\u00e9 St",
+        "shortDisplayName": "San Jos\u00e9 St",
+        "color": "0038a8",
+        "alternateColor": "ffb81a"
+       }
+      },
+      {
+       "team": {
+        "id": "6",
+        "abbreviation": "USA",
+        "displayName": "South Alabama Jaguars",
+        "location": "South Alabama",
+        "name": "Jaguars",
+        "nickname": "South Alabama",
+        "shortDisplayName": "South Alabama",
+        "color": "00205b",
+        "alternateColor": "bf0d3e"
+       }
+      },
+      {
+       "team": {
+        "id": "2579",
+        "abbreviation": "SC",
+        "displayName": "South Carolina Gamecocks",
+        "location": "South Carolina",
+        "name": "Gamecocks",
+        "nickname": "South Carolina",
+        "shortDisplayName": "South Carolina",
+        "color": "73000a",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "58",
+        "abbreviation": "USF",
+        "displayName": "South Florida Bulls",
+        "location": "South Florida",
+        "name": "Bulls",
+        "nickname": "South Florida",
+        "shortDisplayName": "South Florida",
+        "color": "006747",
+        "alternateColor": "cfc493"
+       }
+      },
+      {
+       "team": {
+        "id": "2572",
+        "abbreviation": "USM",
+        "displayName": "Southern Miss Golden Eagles",
+        "location": "Southern Miss",
+        "name": "Golden Eagles",
+        "nickname": "Southern Miss",
+        "shortDisplayName": "Southern Miss",
+        "color": "ffc72c",
+        "alternateColor": "231f20"
+       }
+      },
+      {
+       "team": {
+        "id": "24",
+        "abbreviation": "STAN",
+        "displayName": "Stanford Cardinal",
+        "location": "Stanford",
+        "name": "Cardinal",
+        "nickname": "Stanford",
+        "shortDisplayName": "Stanford",
+        "color": "8c1515",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "183",
+        "abbreviation": "SYR",
+        "displayName": "Syracuse Orange",
+        "location": "Syracuse",
+        "name": "Orange",
+        "nickname": "Syracuse",
+        "shortDisplayName": "Syracuse",
+        "color": "000e54",
+        "alternateColor": "ff431b"
+       }
+      },
+      {
+       "team": {
+        "id": "2628",
+        "abbreviation": "TCU",
+        "displayName": "TCU Horned Frogs",
+        "location": "TCU",
+        "name": "Horned Frogs",
+        "nickname": "TCU",
+        "shortDisplayName": "TCU",
+        "color": "4d1979",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "218",
+        "abbreviation": "TEM",
+        "displayName": "Temple Owls",
+        "location": "Temple",
+        "name": "Owls",
+        "nickname": "Temple",
+        "shortDisplayName": "Temple",
+        "color": "a41e35",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2633",
+        "abbreviation": "TENN",
+        "displayName": "Tennessee Volunteers",
+        "location": "Tennessee",
+        "name": "Volunteers",
+        "nickname": "Tennessee",
+        "shortDisplayName": "Tennessee",
+        "color": "ff8200",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "245",
+        "abbreviation": "TA&M",
+        "displayName": "Texas A&M Aggies",
+        "location": "Texas A&M",
+        "name": "Aggies",
+        "nickname": "Texas A&M",
+        "shortDisplayName": "Texas A&M",
+        "color": "500000",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "251",
+        "abbreviation": "TEX",
+        "displayName": "Texas Longhorns",
+        "location": "Texas",
+        "name": "Longhorns",
+        "nickname": "Texas",
+        "shortDisplayName": "Texas",
+        "color": "af5c37",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "326",
+        "abbreviation": "TXST",
+        "displayName": "Texas State Bobcats",
+        "location": "Texas State",
+        "name": "Bobcats",
+        "nickname": "Texas St",
+        "shortDisplayName": "Texas St",
+        "color": "501214",
+        "alternateColor": "6a5638"
+       }
+      },
+      {
+       "team": {
+        "id": "2641",
+        "abbreviation": "TTU",
+        "displayName": "Texas Tech Red Raiders",
+        "location": "Texas Tech",
+        "name": "Red Raiders",
+        "nickname": "Texas Tech",
+        "shortDisplayName": "Texas Tech",
+        "color": "da291c",
+        "alternateColor": "000000"
+       }
+      },
+      {
+       "team": {
+        "id": "2649",
+        "abbreviation": "TOL",
+        "displayName": "Toledo Rockets",
+        "location": "Toledo",
+        "name": "Rockets",
+        "nickname": "Toledo",
+        "shortDisplayName": "Toledo",
+        "color": "0b2240",
+        "alternateColor": "ffcd00"
+       }
+      },
+      {
+       "team": {
+        "id": "2653",
+        "abbreviation": "TROY",
+        "displayName": "Troy Trojans",
+        "location": "Troy",
+        "name": "Trojans",
+        "nickname": "Troy",
+        "shortDisplayName": "Troy",
+        "color": "862633",
+        "alternateColor": "b1b1b1"
+       }
+      },
+      {
+       "team": {
+        "id": "2655",
+        "abbreviation": "TULN",
+        "displayName": "Tulane Green Wave",
+        "location": "Tulane",
+        "name": "Green Wave",
+        "nickname": "Tulane",
+        "shortDisplayName": "Tulane",
+        "color": "006747",
+        "alternateColor": "418fde"
+       }
+      },
+      {
+       "team": {
+        "id": "202",
+        "abbreviation": "TLSA",
+        "displayName": "Tulsa Golden Hurricane",
+        "location": "Tulsa",
+        "name": "Golden Hurricane",
+        "nickname": "Tulsa",
+        "shortDisplayName": "Tulsa",
+        "color": "003595",
+        "alternateColor": "d0b787"
+       }
+      },
+      {
+       "team": {
+        "id": "5",
+        "abbreviation": "UAB",
+        "displayName": "UAB Blazers",
+        "location": "UAB",
+        "name": "Blazers",
+        "nickname": "UAB",
+        "shortDisplayName": "UAB",
+        "color": "1a5632",
+        "alternateColor": "fdb913"
+       }
+      },
+      {
+       "team": {
+        "id": "2116",
+        "abbreviation": "UCF",
+        "displayName": "UCF Knights",
+        "location": "UCF",
+        "name": "Knights",
+        "nickname": "UCF",
+        "shortDisplayName": "UCF",
+        "color": "000000",
+        "alternateColor": "b4a169"
+       }
+      },
+      {
+       "team": {
+        "id": "26",
+        "abbreviation": "UCLA",
+        "displayName": "UCLA Bruins",
+        "location": "UCLA",
+        "name": "Bruins",
+        "nickname": "UCLA",
+        "shortDisplayName": "UCLA",
+        "color": "2774ae",
+        "alternateColor": "f2a900"
+       }
+      },
+      {
+       "team": {
+        "id": "41",
+        "abbreviation": "CONN",
+        "displayName": "UConn Huskies",
+        "location": "UConn",
+        "name": "Huskies",
+        "nickname": "UConn",
+        "shortDisplayName": "UConn",
+        "color": "0c2340",
+        "alternateColor": "a2aaad"
+       }
+      },
+      {
+       "team": {
+        "id": "2433",
+        "abbreviation": "ULM",
+        "displayName": "UL Monroe Warhawks",
+        "location": "UL Monroe",
+        "name": "Warhawks",
+        "nickname": "UL Monroe",
+        "shortDisplayName": "UL Monroe",
+        "color": "840029",
+        "alternateColor": "fdb913"
+       }
+      },
+      {
+       "team": {
+        "id": "2439",
+        "abbreviation": "UNLV",
+        "displayName": "UNLV Rebels",
+        "location": "UNLV",
+        "name": "Rebels",
+        "nickname": "UNLV",
+        "shortDisplayName": "UNLV",
+        "color": "cf0a2c",
+        "alternateColor": "cac8c8"
+       }
+      },
+      {
+       "team": {
+        "id": "30",
+        "abbreviation": "USC",
+        "displayName": "USC Trojans",
+        "location": "USC",
+        "name": "Trojans",
+        "nickname": "USC",
+        "shortDisplayName": "USC",
+        "color": "9d2235",
+        "alternateColor": "ffc72c"
+       }
+      },
+      {
+       "team": {
+        "id": "2638",
+        "abbreviation": "UTEP",
+        "displayName": "UTEP Miners",
+        "location": "UTEP",
+        "name": "Miners",
+        "nickname": "UTEP",
+        "shortDisplayName": "UTEP",
+        "color": "ff8200",
+        "alternateColor": "041e42"
+       }
+      },
+      {
+       "team": {
+        "id": "2636",
+        "abbreviation": "UTSA",
+        "displayName": "UTSA Roadrunners",
+        "location": "UTSA",
+        "name": "Roadrunners",
+        "nickname": "UTSA",
+        "shortDisplayName": "UTSA",
+        "color": "0c2340",
+        "alternateColor": "f15a22"
+       }
+      },
+      {
+       "team": {
+        "id": "328",
+        "abbreviation": "USU",
+        "displayName": "Utah State Aggies",
+        "location": "Utah State",
+        "name": "Aggies",
+        "nickname": "Utah State",
+        "shortDisplayName": "Utah State",
+        "color": "0f2439",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "254",
+        "abbreviation": "UTAH",
+        "displayName": "Utah Utes",
+        "location": "Utah",
+        "name": "Utes",
+        "nickname": "Utah",
+        "shortDisplayName": "Utah",
+        "color": "be0000",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "238",
+        "abbreviation": "VAN",
+        "displayName": "Vanderbilt Commodores",
+        "location": "Vanderbilt",
+        "name": "Commodores",
+        "nickname": "Vanderbilt",
+        "shortDisplayName": "Vanderbilt",
+        "color": "000000",
+        "alternateColor": "cfae70"
+       }
+      },
+      {
+       "team": {
+        "id": "258",
+        "abbreviation": "UVA",
+        "displayName": "Virginia Cavaliers",
+        "location": "Virginia",
+        "name": "Cavaliers",
+        "nickname": "Virginia",
+        "shortDisplayName": "Virginia",
+        "color": "232d4b",
+        "alternateColor": "f84c1e"
+       }
+      },
+      {
+       "team": {
+        "id": "259",
+        "abbreviation": "VT",
+        "displayName": "Virginia Tech Hokies",
+        "location": "Virginia Tech",
+        "name": "Hokies",
+        "nickname": "Virginia Tech",
+        "shortDisplayName": "Virginia Tech",
+        "color": "6a2c3e",
+        "alternateColor": "cf4520"
+       }
+      },
+      {
+       "team": {
+        "id": "154",
+        "abbreviation": "WAKE",
+        "displayName": "Wake Forest Demon Deacons",
+        "location": "Wake Forest",
+        "name": "Demon Deacons",
+        "nickname": "Wake Forest",
+        "shortDisplayName": "Wake Forest",
+        "color": "ceb888",
+        "alternateColor": "2c2a29"
+       }
+      },
+      {
+       "team": {
+        "id": "264",
+        "abbreviation": "WASH",
+        "displayName": "Washington Huskies",
+        "location": "Washington",
+        "name": "Huskies",
+        "nickname": "Washington",
+        "shortDisplayName": "Washington",
+        "color": "33006f",
+        "alternateColor": "e8d3a2"
+       }
+      },
+      {
+       "team": {
+        "id": "265",
+        "abbreviation": "WSU",
+        "displayName": "Washington State Cougars",
+        "location": "Washington State",
+        "name": "Cougars",
+        "nickname": "Washington St",
+        "shortDisplayName": "Washington St",
+        "color": "a60f2d",
+        "alternateColor": "4d4d4d"
+       }
+      },
+      {
+       "team": {
+        "id": "277",
+        "abbreviation": "WVU",
+        "displayName": "West Virginia Mountaineers",
+        "location": "West Virginia",
+        "name": "Mountaineers",
+        "nickname": "West Virginia",
+        "shortDisplayName": "West Virginia",
+        "color": "eaaa00",
+        "alternateColor": "002855"
+       }
+      },
+      {
+       "team": {
+        "id": "98",
+        "abbreviation": "WKU",
+        "displayName": "Western Kentucky Hilltoppers",
+        "location": "Western Kentucky",
+        "name": "Hilltoppers",
+        "nickname": "Western KY",
+        "shortDisplayName": "Western KY",
+        "color": "e13a3e",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2711",
+        "abbreviation": "WMU",
+        "displayName": "Western Michigan Broncos",
+        "location": "Western Michigan",
+        "name": "Broncos",
+        "nickname": "W Michigan",
+        "shortDisplayName": "W Michigan",
+        "color": "532e1f",
+        "alternateColor": "f1c500"
+       }
+      },
+      {
+       "team": {
+        "id": "275",
+        "abbreviation": "WIS",
+        "displayName": "Wisconsin Badgers",
+        "location": "Wisconsin",
+        "name": "Badgers",
+        "nickname": "Wisconsin",
+        "shortDisplayName": "Wisconsin",
+        "color": "a00000",
+        "alternateColor": "ffffff"
+       }
+      },
+      {
+       "team": {
+        "id": "2751",
+        "abbreviation": "WYO",
+        "displayName": "Wyoming Cowboys",
+        "location": "Wyoming",
+        "name": "Cowboys",
+        "nickname": "Wyoming",
+        "shortDisplayName": "Wyoming",
+        "color": "492f24",
+        "alternateColor": "ffc425"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

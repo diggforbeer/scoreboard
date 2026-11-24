@@ -27,7 +27,7 @@ A team is always a (sport, abbreviation) pair: ``BUF`` is Buffalo in both league
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import IntEnum
@@ -237,10 +237,13 @@ class Priority:
                 out.append(entry.sport)
         return out
 
-    def colour_team(self) -> TeamEntry | None:
+    def colour_team(self, usable: Callable[[TeamEntry], bool] | None = None) -> TeamEntry | None:
         """The team the clock and holiday colours follow: the overall rank 1 (a night-game slot
-        has no colours, so the first real team)."""
-        return next((e for e in self.teams if not _is_slot(e)), None)
+        has no colours, so the first real team). ``usable`` skips a team whose colours cannot be
+        drawn yet (a college team before the FBS table has loaded)."""
+        return next(
+            (e for e in self.teams if not _is_slot(e) and (usable is None or usable(e))), None
+        )
 
     def _perspective(self, entry: TeamEntry, game: GameLike) -> str:
         """The team a moment is about: the ranked team itself, or for a night-game slot a ranked

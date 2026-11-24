@@ -149,6 +149,17 @@ class Current:
     elapsed: float
 
 
+def _is_score_stage(stage: Stage) -> bool:
+    """A stage a scores-only director keeps: a touchdown, field goal or other score's
+    celebration or detail, a reversal, or the team stats over a timeout (the only break it
+    shows). Not a play's animation or its words, a turnover, a coin toss or a missed kick."""
+    if stage.stage in (REVERSAL, STATS):
+        return True
+    return stage.stage in (EVENT, DETAIL) and isinstance(
+        stage.event, Touchdown | FieldGoal | GenericScore
+    )
+
+
 class Director:
     def __init__(
         self,
@@ -159,7 +170,22 @@ class Director:
         timings: Callable[[], Timings] | None = None,
         stats: Callable[[int], object | None] = lambda _game_id: None,
         on_sound: Callable[[Event], None] | None = None,
+        scores_only: bool = False,
+        stats_at_timeouts: bool = False,
     ) -> None:
+        #: College football shows scores and major events, not every play (the owner's call, as
+        #: hockey does): only a score's celebration and detail, and a reversal of one, are staged.
+        #: The plays are still read, to know the score changed and who scored.
+        self._scores_only = scores_only
+        #: College (owner's call, 2026-11-22): the feed does not mark official timeouts, every
+        #: stoppage is "Timeout <team>", so every timeout is a break that gets the team stats.
+        #: It also gets the end of the 1st and 3rd quarters (#549): a break of several minutes
+        #: (the end of the 2nd is the halftime card's, the end of the 4th is the game's).
+        self._breaks = (
+            (*STATS_BREAKS, PlayKind.TIMEOUT, PlayKind.END_PERIOD)
+            if stats_at_timeouts
+            else STATS_BREAKS
+        )
         #: Called with each celebration that carries a sound (``Event.sound``: the lead team's
         #: touchdown or made field goal, #517) the moment it is detected, whatever is on screen.
         self._on_sound = on_sound
@@ -326,6 +352,8 @@ class Director:
         """The stages for a play; while the favourite holds the screen, another game's play is
         reduced to what is news (its celebrations, turnover alerts and reversals)."""
         stages = self._build_all(game, shown)
+        if self._scores_only:
+            stages = [s for s in stages if _is_score_stage(s)]
         if self._hold and game.id != self._preferred:
             stages = [
                 s
@@ -334,10 +362,22 @@ class Director:
             ]
         return stages
 
+    def _is_break(self, play: Play) -> bool:
+        """A stoppage that gets the team stats. A quarter end only counts after the 1st and 3rd:
+        the half has its own card and nothing follows the 4th."""
+        if play.kind not in self._breaks:
+            return False
+        return play.kind is not PlayKind.END_PERIOD or play.period in (1, 3)
+
+    def stats_page_seconds(self) -> float:
+        """One page of the team stats, as the owner set it (the halftime cycle uses it too)."""
+        return self._timings().clamped().stats
+
     def _build_all(self, game: FbGame, shown: Shown) -> list[Stage]:
         timings = self._timings().clamped()
         play = shown.play
-        if play.kind in STATS_BREAKS:
+        is_break = self._is_break(play)
+        if is_break:
             # The feed often lists the same stoppage twice (same clock): show it once.
             key = (play.kind, play.period, play.clock)
             if self._last_break.get(game.id) == key:
@@ -382,7 +422,7 @@ class Director:
                 out.extend(self._event_stages(event, stage, timings, undone))
         for reversal in already:
             out.append(stage(REVERSAL, timings.reversal, reversal))
-        if play.kind in STATS_BREAKS and self._stats(game.id) is not None:
+        if is_break and self._stats(game.id) is not None:
             # A TV timeout: the split team stats take the screen instead of the sentence, which
             # only repeats the card just shown ("Official Timeout at 11:12.").
             out.append(dataclasses.replace(stage(STATS, timings.stats), speed=1.0, hold=True))

@@ -1287,6 +1287,33 @@ names as their mockups, which they replaced.
 `scripts/football-mockups.py` stops rewriting it. When the last mockup is replaced, delete
 `scripts/football-mockups.py` and this paragraph's mockups section.
 
+## College screens (#559)
+
+The `college-football` branch adds the FBS as its own sport in the ranked `[[teams]]` list (`sport = "college"`). It shares the football screens above, with the poll number in front of a ranked team on the screens that are not a live game (the 128px layout; a single 64px panel has no room). A live game's scoreboard and field band carry no number (owner's call, 2026-11-22: too cluttered), plus the screens below. The pictures are `scoreboard --demo --sport football`'s college steps (`football/college_demo.py`: real schools and colours, made-up rankings and scores), drawn without crests, which are never committed; a board with the college logos fetched (`scripts/fetch-logos.py --sport college`) draws them in the same places. Mockups from real ESPN captures are in `docs/college/` (`python scripts/college-mockups.py`).
+
+| | |
+|---|---|
+| ![cfb_scores_ranked](docs/football/cfb_scores_ranked.png) | ![cfb_scores_two_ranked](docs/football/cfb_scores_two_ranked.png) |
+| `cfb_scores_ranked`: A live game with ranked teams: no numbers, by the owner's call; the possession ball, down and distance below. | `cfb_scores_two_ranked`: Two ranked teams, live: still no numbers. |
+| ![cfb_field](docs/football/cfb_field.png) | ![cfb_field_redzone](docs/football/cfb_field_redzone.png) |
+| `cfb_field`: The field band, the same band the NFL uses (no ranks while live). | `cfb_field_redzone`: The red zone: the 20 yards the offence attacks tint and the down and distance turns red (ESPN's `isRedZone`, as sent). |
+| ![cfb_halftime](docs/football/cfb_halftime.png) | ![cfb_scores_pregame](docs/football/cfb_scores_pregame.png) |
+| `cfb_halftime`: Halftime for a ranked team. | `cfb_scores_pregame`: A game still to come, ranks at the teams. |
+| ![cfb_countdown](docs/football/cfb_countdown.png) | ![cfb_touchdown](docs/football/cfb_touchdown.png) |
+| `cfb_countdown`: The kickoff countdown, the poll numbers in front of the records. | `cfb_touchdown`: The touchdown screen, in the college team's colours. |
+| ![cfb_touchdown_detail](docs/football/cfb_touchdown_detail.png) | ![cfb_field_goal](docs/football/cfb_field_goal.png) |
+| `cfb_touchdown_detail`: The score detail that follows it. | `cfb_field_goal`: A made field goal. |
+| ![cfb_upset](docs/football/cfb_upset.png) | ![cfb_upset_final](docs/football/cfb_upset_final.png) |
+| `cfb_upset`: The upset alert: a ranked team trailing a lower-ranked or unranked one, for a listed team (either side). | `cfb_upset_final`: The same as a final, lost in overtime. |
+| ![cfb_final](docs/football/cfb_final.png) | ![cfb_ap](docs/football/cfb_ap.png) |
+| `cfb_final`: The held final for the lead team. | `cfb_ap`: The AP Top 25, scrolling: rank, movement, record, points; the lead team highlighted. |
+| ![cfb_cfp](docs/football/cfb_cfp.png) | ![cfb_conference](docs/football/cfb_conference.png) |
+| `cfb_cfp`: The College Football Playoff rankings: the AP's layout with the conference, and a red line after the last team in the field (`cfp_field`, default 12). | `cfb_conference`: The lead team's conference table, scrolling: seed, conference record, overall record, streak. |
+| ![cfb_preview](docs/football/cfb_preview.png) | ![cfb_scores_grid](docs/football/cfb_scores_grid.png) |
+| `cfb_preview`: The lead team's next game, with both teams' numbers and records. | `cfb_scores_grid`: The opt-in scores grid, ranked games first (page 1 of 2). |
+| ![cfb_scores_grid_page2](docs/football/cfb_scores_grid_page2.png) |  |
+| `cfb_scores_grid_page2`: Page 2: the rest of the slate. |  |
+
 ## Mockups
 
 First drafts of how the screens look on the 128x32 panel (and a few at one 64x32
@@ -1562,6 +1589,7 @@ follows `horn_team`); the followed-team question above is still deferred.
 - [~] Mockups: `fb_touchdown` (128px and 64px), `fb_score_detail`, `fb_fieldgoal`
       (favourite and opponent), `fb_fg_miss`, `fb_turnover`, `fb_reversal` drawn at
       128px. Still to draw at 64px: all but the touchdown
+- [x] College demo steps, images and this section (#559); the college findings are in `football_api.md`
 - [~] Which non-sport screens and idle-rotation entries carry over to the football mode: proposed in `screens_not_during_games.md`, awaiting the owner
 
 ### Build (after the design is agreed)

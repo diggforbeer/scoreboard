@@ -10,7 +10,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, tzinfo
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from .teams import is_team, team, team_by_id
@@ -105,6 +105,9 @@ class PreviewView:
     #: ``5-3-1``; empty when the game is not in a scoreboard the board has.
     away_record: str = ""
     home_record: str = ""
+    #: A college team's number in the chosen poll (#554); ``None`` unranked, and always for the NFL.
+    away_rank: int | None = None
+    home_rank: int | None = None
 
 
 def _known(abbrev: str) -> bool:
@@ -174,6 +177,134 @@ def build_preview(ctx: IdleContext) -> PreviewView | None:
         week=week_label(season_type, week, start, calendar),
         away_record=event.away.record if event is not None else "",
         home_record=event.home.record if event is not None else "",
+    )
+
+
+#: What ESPN calls a team that is not decided yet (a bowl before its teams are chosen).
+PLACEHOLDERS = frozenset({"", "TBD", "TBA"})
+
+
+def _decided(abbrev: str) -> bool:
+    return abbrev.strip().upper() not in PLACEHOLDERS
+
+
+def _rank_in(ctx: IdleContext, abbrev: str) -> int | None:
+    """``abbrev``'s number in the chosen poll, from the cached polls (``None``: unranked, no
+    poll, or a team the directory does not know)."""
+    from ..config import COLLEGE_POLL_DEFAULT
+
+    polls = ctx.idle.polls()
+    if polls is None or not _known(abbrev):
+        return None
+    choice = getattr(ctx.config, "college_poll", COLLEGE_POLL_DEFAULT)
+    return polls.rank_of(team(abbrev).espn_id, choice, ctx.utc)
+
+
+def _bye_next_week(ctx: IdleContext, schedule: Any, favourite: str) -> int | None:
+    """The week the team plays next if **this** week is its bye, else ``None``.
+
+    ESPN's college schedule has no ``byeWeek``: a bye is a week with no game of the team between
+    two that it has. It is this week's bye when the scoreboard says which week it is (a regular
+    season one) and the schedule holds no game that week but one after it."""
+    board = ctx.idle.scoreboard
+    week = board.week if board is not None else None
+    if schedule is None or week is None or (board.season_type or REGULAR) != REGULAR:
+        return None
+    weeks = {g.week for g in schedule.games if g.week is not None and g.season_type == REGULAR}
+    later = sorted(w for w in weeks if w > week)
+    if week in weeks or not later or not any(w < week for w in weeks):
+        return None
+    return later[0]
+
+
+#: The most characters of the preview's top line that fit between the two crests (the tiny face).
+TOP_LINE_CHARS = 20
+
+
+def _bowl_label(headline: str) -> str:
+    """The bowl's name for the top line, upper case; a name too long for the line loses its last
+    word ``BOWL`` first (``CRICKET CELEBRATION``), then the display ellipsises it. ``POSTSEASON``
+    when the feed named no game."""
+    name = headline.strip().upper()
+    if len(name) > TOP_LINE_CHARS and name.endswith(" BOWL"):
+        name = name[: -len(" BOWL")]
+    return name or "POSTSEASON"
+
+
+def build_college_preview(ctx: IdleContext) -> PreviewView | None:
+    """The lead college team's next game (#554), or ``None`` (skip, never blank).
+
+    Candidates: its not-yet-started game on the scoreboard, in the week's games (a bowl once its
+    teams are chosen) and the next of its season schedule; the earliest wins. Unlike the NFL's, an
+    opponent the FBS table does not know (an FCS team, a Division II one) is a real game, drawn by
+    its abbreviation: only a **placeholder** (``TBD``) side is skipped, so a bowl whose teams are
+    not chosen yet is never shown as if it were a matchup. A postseason game is labelled with its
+    bowl; the week before a bye says so; both teams' poll numbers ride along (``rank_of``).
+    """
+    favourite = ctx.config.favourite_team
+    if not favourite or not _known(favourite):
+        return None
+    now = ctx.utc
+    week_board = ctx.idle.week(ctx.now)
+    pools = [ctx.games, week_board.games if week_board is not None else ()]
+    found: list[tuple[datetime, str, str, int | None, int | None, str]] = []
+    for pool in pools:
+        for g in pool:
+            if (
+                g.involves(favourite)
+                and g.is_pregame
+                and g.start_utc is not None
+                and g.start_utc >= now
+                and _decided(g.away.abbrev)
+                and _decided(g.home.abbrev)
+            ):
+                found.append(
+                    (g.start_utc, g.away.abbrev, g.home.abbrev, g.season_type, g.week, g.headline)
+                )
+    schedule = ctx.idle.schedule(team(favourite).espn_id, ctx.now)
+    upcoming = schedule.next_game(now) if schedule is not None else None
+    if (
+        upcoming is not None
+        and upcoming.start_utc is not None
+        and _decided(upcoming.away)
+        and _decided(upcoming.home)
+    ):
+        found.append(
+            (
+                upcoming.start_utc,
+                upcoming.away,
+                upcoming.home,
+                upcoming.season_type,
+                upcoming.week,
+                "",
+            )
+        )
+    if not found:
+        return None
+    start, away, home, season_type, week, headline = min(found, key=lambda f: f[0])
+    event = _find_event(ctx, away, home, start)
+    if event is not None:
+        season_type = event.season_type if event.season_type is not None else season_type
+        week = event.week if event.week is not None else week
+        headline = headline or event.headline
+    tag = game_tag(start, season_type)
+    if season_type == POSTSEASON:
+        label = _bowl_label(headline)
+    else:
+        label = f"WEEK {week}" if week is not None else ""
+        resumes = _bye_next_week(ctx, schedule, favourite)
+        if resumes is not None and week == resumes:
+            tag, label = "BYE WEEK", f"NEXT WK {week}"
+    return PreviewView(
+        away=away,
+        home=home,
+        start_utc=start,
+        tag=tag,
+        week=label,
+        away_record=event.away.record if event is not None else "",
+        home_record=event.home.record if event is not None else "",
+        away_rank=_rank_in(ctx, away),
+        home_rank=_rank_in(ctx, home),
     )
 
 

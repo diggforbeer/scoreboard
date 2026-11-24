@@ -10,11 +10,19 @@ repository never redistributes the artwork itself.
     python scripts/fetch-logos.py               # hockey: 32px, both variants
     python scripts/fetch-logos.py --size 32 --variant dark
     python scripts/fetch-logos.py --sport football   # football: 12px and 16px, dark
+    python scripts/fetch-logos.py --sport college    # the FBS's ~134 teams: 12px and 16px
 
 The "dark" variant is drawn for dark backgrounds and is what a black LED
 panel wants; several teams' "light" marks are near-black and vanish (the football
 "light" variant is ESPN's default art). Football art goes under ``assets/logos/football/``
 so a ``BUF`` is never confused between the leagues.
+
+College (#541) is football's recipe over the FBS table, keyed by ESPN id (``a.espncdn.com/i/
+teamlogos/ncaa/500/<id>.png`` and its ``500-dark`` variant), written under ``assets/logos/college/``
+because the NFL and the FBS share abbreviations that mean different teams. For each team *both*
+variants are downloaded and the one that reads brighter on black is kept (as the hockey's choice
+of ``dark`` is made by hand), then brightened if still too dim. ``assets/logos/college/overrides/``
+holds hand-fixed crests that win over the fetched ones.
 
 Football sizes: **12px** is the logo in each end zone (a 14px end zone on a 128px panel) and
 **16px** is the larger one for the coin toss and score screens. Checked on a contact sheet
@@ -140,6 +148,95 @@ def fetch_football_index() -> dict[str, dict[str, str]]:
     return index
 
 
+COLLEGE_LOGO_URLS = {
+    "default": "https://a.espncdn.com/i/teamlogos/ncaa/500/{id}.png",
+    "dark": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/{id}.png",
+}
+
+
+def lit_mean(image) -> float:
+    """The mean luma (0-255) of the lit pixels of an RGBA ``image``, as ``lift_dim`` judges it;
+    0.0 for an image with nothing lit."""
+    px = image.load()
+    width, height = image.size
+    lit = [px[x, y] for y in range(height) for x in range(width) if px[x, y][3] >= 48]
+    if not lit:
+        return 0.0
+    return sum(0.2126 * r + 0.7152 * g + 0.0722 * b for r, g, b, _ in lit) / len(lit)
+
+
+def best_variant(candidates: dict[str, bytes], size: int):
+    """``(name, image)`` of the downloaded variant that reads brightest at ``size``: ESPN's
+    ``500-dark`` art is drawn for dark backgrounds but is not always the better one (some marks
+    are only on the default art). Ties keep the dark variant."""
+    rendered = {name: rasterise_png(data, size) for name, data in candidates.items()}
+    order = sorted(rendered, key=lambda name: (-lit_mean(rendered[name]), name != "dark"))
+    return order[0], rendered[order[0]]
+
+
+def fetch_college_table():
+    """Every FBS team (id, abbreviation) from ESPN: two requests, ~1.9 MB (``FootballClient``)."""
+    from scoreboard.football.api import LEAGUE_COLLEGE, FootballClient
+
+    table = FootballClient(league=LEAGUE_COLLEGE).college_teams()
+    if table is None:
+        raise RuntimeError("ESPN's FBS team table could not be read")
+    return table
+
+
+def fetch_college(args: argparse.Namespace) -> int:
+    """College logos into ``<out>/college/<size>/dark/<ABBREV>.png`` (#541): the better-reading
+    of ESPN's two variants per team, brightened if still dim. The folder is named ``dark`` because
+    that is the variant the app asks for; it holds whichever art suits a black panel."""
+    sizes = args.size or list(FOOTBALL_SIZES)
+    try:
+        table = fetch_college_table()
+    except Exception as exc:
+        print(f"error: could not read ESPN's FBS team list: {exc}", file=sys.stderr)
+        return 1
+    teams = {t.abbrev.upper(): t for t in table.teams}
+    wanted = [a.strip().upper() for a in args.teams] if args.teams else sorted(teams)
+    unknown = [a for a in wanted if a not in teams]
+    if unknown:
+        print(f"error: not FBS teams: {', '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    failures: list[str] = []
+    for abbrev in wanted:
+        team = teams[abbrev]
+        downloaded: dict[str, bytes] = {}
+        for name, pattern in COLLEGE_LOGO_URLS.items():
+            try:
+                downloaded[name] = fetch_url(pattern.format(id=team.espn_id))
+            except Exception as exc:  # a missing variant is fine while the other exists
+                print(f"  {abbrev}  {name} variant unavailable: {exc}", file=sys.stderr)
+        if not downloaded:
+            failures.append(f"{abbrev}: no logo downloaded")
+            continue
+        for size in sizes:
+            target = args.out / "college" / str(size) / "dark" / f"{abbrev}.png"
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                name, image = best_variant(downloaded, size)
+                image, factor = lift_dim(image)
+                image.save(target)
+            except Exception as exc:  # one bad logo must not stop the rest
+                failures.append(f"{abbrev} ({size}px): {exc}")
+                print(f"  {abbrev}  {size}px FAILED: {exc}", file=sys.stderr)
+                continue
+            note = f"  (brightened x{factor:.1f})" if factor > 1.0 else ""
+            print(f"  {abbrev:<5} {size}px {name:<7} -> {_show(target)}{note}")
+
+    if failures:
+        print(f"\n{len(failures)} logo(s) failed:", file=sys.stderr)
+        for line in failures:
+            print(f"  {line}", file=sys.stderr)
+        return 1
+    shown = ", ".join(f"{size}px" for size in sizes)
+    print(f"\nFetched {len(wanted)} college teams at {shown}")
+    return 0
+
+
 def fetch_url(url: str) -> bytes:
     import requests
 
@@ -158,7 +255,10 @@ def _show(target: Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
-        "--sport", choices=["hockey", "football"], default="hockey", help="Which league's logos"
+        "--sport",
+        choices=["hockey", "football", "college"],
+        default="hockey",
+        help="Which league's logos",
     )
     parser.add_argument(
         "--size",
@@ -179,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.sport == "football":
         return fetch_football(args)
+    if args.sport == "college":
+        return fetch_college(args)
 
     sizes = args.size or [32]
     variants_choice = args.variant or "both"

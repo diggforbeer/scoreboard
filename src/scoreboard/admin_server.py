@@ -280,7 +280,7 @@ from websockets.asyncio.server import ServerConnection, serve
 from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
-from . import updater
+from . import college_picker, updater
 from .audio import (
     DEFAULT_STEM,
     DING_STEM,
@@ -288,12 +288,17 @@ from .audio import (
     HORN_EXTENSIONS,
     WAH_WAH_STEM,
     GoalHornPlayer,
+    college_stem,
     football_default_stem,
     football_team_stem,
     upload_directory,
 )
 from .audio_normalize import Normalized, normalize
 from .config import (
+    CFP_FIELD_MAX,
+    CFP_FIELD_MIN,
+    COLLEGE_POLL_CHOICES,
+    COLLEGE_SCORES_CHOICES,
     FLYBY_FREQUENCIES,
     FOOTBALL_TIMING_RANGES,
     GOAL_FLASH_MAX_SECONDS,
@@ -301,6 +306,8 @@ from .config import (
     PANEL_HARDWARE_MAPPING_CHOICES,
     TEAM_SPORTS,
     TEAMS_MAX,
+    UPSET_SECONDS_MAX,
+    UPSET_SECONDS_MIN,
     VALID_ROTATION_SCREENS,
     ConfigWriteError,
     Settings,
@@ -310,6 +317,7 @@ from .display.holiday import HOLIDAYS
 from .display.mirror import Frame, Mirror
 from .display.teams import TEAM_COLORS
 from .football import teams as football_teams
+from .football.college_teams import CollegeTable
 from .hostname import (
     apply_hostname,
     current_hostname,
@@ -372,6 +380,12 @@ FRAME_POLL_SECONDS = float(os.environ.get("SCOREBOARD_ADMIN_FRAME_POLL", "0.25")
 #: broadcast to all of them, unlike everything else here, which only ever
 #: replies to whoever sent the request.
 _clients: set[ServerConnection] = set()
+
+#: Where the college picker's team table comes from (#543): set by ``AdminServer`` on a real
+#: device, ``None`` (nothing fetched, the page sees ``ready: false``) in tests and bare dev runs.
+COLLEGE_SOURCE: Callable[[], CollegeTable | None] | None = None
+_college_list = college_picker.CollegeTeamList()
+_college_task: asyncio.Task[None] | None = None
 
 #: Logs tab (#197). Overridable so tests can substitute a fake journalctl.
 JOURNAL_COMMAND = ["journalctl"]
@@ -616,6 +630,20 @@ def _football_rotation_payload(settings: Settings) -> dict[str, object]:
             "show_bye": cfg.show_bye,
             "show_final": cfg.show_final,
             "show_redzone": cfg.show_redzone,
+            # The college settings (#565) ride in the same section: they are ``[football]`` too.
+            "college_poll": cfg.college_poll,
+            "college_scores": cfg.college_scores,
+            "upset_alert": cfg.upset_alert,
+            "upset_seconds": cfg.upset_seconds,
+            "upset_min_gap": cfg.upset_min_gap,
+            "cfp_field": cfg.cfp_field,
+        },
+        "college": {
+            "polls": list(COLLEGE_POLL_CHOICES),
+            "scores": list(COLLEGE_SCORES_CHOICES),
+            "upset_seconds": [UPSET_SECONDS_MIN, UPSET_SECONDS_MAX],
+            "upset_min_gap": [1, 25],
+            "cfp_field": [CFP_FIELD_MIN, CFP_FIELD_MAX],
         },
         "timing_ranges": {n: list(r) for n, r in FOOTBALL_TIMING_RANGES.items()},
     }
@@ -988,6 +1016,29 @@ async def _send_teams_config(
     await connection.send(json.dumps(_teams_payload(settings)))
 
 
+def _college_teams_payload() -> dict[str, object]:
+    """The FBS table as conferences with their teams (#543), for the college picker."""
+    return {"type": "config", "section": "college_teams", "data": _college_list.payload}
+
+
+async def _send_college_teams(connection: ServerConnection) -> None:
+    """Send the cached list (``ready: false`` until there is one) and, if it is due, start the
+    fetch on a worker thread: a connect never waits on ESPN. The page gets the list by broadcast
+    when it lands."""
+    global _college_task
+    await connection.send(json.dumps(_college_teams_payload()))
+    if _college_list.due(COLLEGE_SOURCE) and (_college_task is None or _college_task.done()):
+        _college_task = asyncio.create_task(_load_college_teams())
+
+
+async def _load_college_teams() -> None:
+    source = COLLEGE_SOURCE
+    if source is None:
+        return
+    if await asyncio.to_thread(_college_list.refresh, source) and _clients:
+        await _broadcast(_college_teams_payload())
+
+
 async def _send_dates_config(
     connection: ServerConnection, settings: Settings | None = None
 ) -> None:
@@ -1134,6 +1185,13 @@ def _football_key(team: object) -> tuple[str, str] | None:
     return kind, abbrev
 
 
+def _college_key(team: object) -> str | None:
+    """``"td"`` / ``"fg"`` for the college "my team" slots ``cfb_td`` / ``cfb_fg`` (#612)."""
+    if isinstance(team, str) and team.startswith("cfb_") and team[4:] in FOOTBALL_KINDS:
+        return team[4:]
+    return None
+
+
 def _horn_stem(team: object) -> str:
     """The on-disk stem for ``team`` -- the shipped default slot
     (``"default"``), the opponent-goal sting (``"wah_wah"``, #307), the followed-team ding
@@ -1149,6 +1207,9 @@ def _horn_stem(team: object) -> str:
         return WAH_WAH_STEM
     if team == "ding":
         return DING_STEM
+    college = _college_key(team)
+    if college is not None:
+        return college_stem(college)
     football = _football_key(team)
     if football is not None:
         kind, abbrev = football
@@ -1224,6 +1285,7 @@ def _list_uploaded_horns() -> list[dict[str, str]]:
         ("default", DEFAULT_STEM),
         ("wah_wah", WAH_WAH_STEM),
         ("ding", DING_STEM),
+        *((f"cfb_{kind}", college_stem(kind)) for kind in FOOTBALL_KINDS),
         *((t, t) for t in TEAM_COLORS),
         *(
             (f"fb_{kind}" + (f":{a}" if a else ""), stem)
@@ -1336,6 +1398,13 @@ def _play_named_horn(settings: Settings, team: object) -> tuple[bool, str]:
         if horn.ding_path() is None:
             return False, "No ding file found."
         if horn.play_ding(force=True):
+            return True, ""
+        return False, horn.last_error or "The player command failed to launch."
+    college = _college_key(team)
+    if college is not None:
+        if horn.football_path("", college, college=True) is None:
+            return False, "No college football sound file found, and no default is available."
+        if horn.play_football("", college, college=True):
             return True, ""
         return False, horn.last_error or "The player command failed to launch."
     football = _football_key(team)
@@ -1521,7 +1590,49 @@ def _coerce_football_rotation(data: object) -> dict[str, object]:
         if not isinstance(data[key], bool):
             raise ValueError(json.dumps({key: "must be true or false"}))
         values[key] = data[key]
+    _coerce_college(data, values)
     return values
+
+
+def _coerce_college(data: dict[str, object], values: dict[str, object]) -> None:
+    """The college settings of a ``football_rotation`` save (#565): a poll and a grid filter from
+    their choices, the upset alert's switch, length (4-15 s) and minimum gap (1-25 places).
+    Rejected outside the range, like ``goal_flash_seconds``; the boot TOML clamps instead."""
+    for key, choices in (
+        ("college_poll", COLLEGE_POLL_CHOICES),
+        ("college_scores", COLLEGE_SCORES_CHOICES),
+    ):
+        if key in data:
+            if data[key] not in choices:
+                raise ValueError(json.dumps({key: f"must be one of {', '.join(choices)}"}))
+            values[key] = data[key]
+    if "upset_alert" in data:
+        if not isinstance(data["upset_alert"], bool):
+            raise ValueError(json.dumps({"upset_alert": "must be true or false"}))
+        values["upset_alert"] = data["upset_alert"]
+    if "upset_seconds" in data:
+        seconds = data["upset_seconds"]
+        if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+            raise ValueError(json.dumps({"upset_seconds": "must be a number of seconds"}))
+        if not UPSET_SECONDS_MIN <= seconds <= UPSET_SECONDS_MAX:
+            msg = f"must be between {UPSET_SECONDS_MIN:g} and {UPSET_SECONDS_MAX:g}"
+            raise ValueError(json.dumps({"upset_seconds": msg}))
+        values["upset_seconds"] = float(seconds)
+    if "upset_min_gap" in data:
+        gap = data["upset_min_gap"]
+        if not isinstance(gap, int) or isinstance(gap, bool):
+            raise ValueError(json.dumps({"upset_min_gap": "must be a whole number"}))
+        if not 1 <= gap <= 25:
+            raise ValueError(json.dumps({"upset_min_gap": "must be between 1 and 25"}))
+        values["upset_min_gap"] = gap
+    if "cfp_field" in data:
+        size = data["cfp_field"]
+        if not isinstance(size, int) or isinstance(size, bool):
+            raise ValueError(json.dumps({"cfp_field": "must be a whole number"}))
+        if not CFP_FIELD_MIN <= size <= CFP_FIELD_MAX:
+            msg = f"must be between {CFP_FIELD_MIN} and {CFP_FIELD_MAX}"
+            raise ValueError(json.dumps({"cfp_field": msg}))
+        values["cfp_field"] = size
 
 
 #: The scalar half of ``[holiday]``; ``themes`` is a list, checked by
@@ -1762,6 +1873,8 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_teams_config(connection, settings)
         # And the important dates (#524), last again for the same reason.
         await _send_dates_config(connection, settings)
+        # And the college picker's team list (#543), last once more.
+        await _send_college_teams(connection)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:
@@ -2018,7 +2131,11 @@ class AdminServer:
         alias_port: int = 0,
         cache_items: Callable[[], list[dict[str, Any]]] | None = None,
         cache_clearer: Callable[[str], bool] | None = None,
+        college_source: Callable[[], CollegeTable | None] | None = None,
+        college_cache: Path | None = None,
     ) -> None:
+        self._college_source = college_source
+        self._college_cache = college_cache
         self._config_path = config_path
         self._port = port
         #: A second listener for the same page (#292): port 80 is the address,
@@ -2042,6 +2159,9 @@ class AdminServer:
 
     def start(self) -> None:
         global CONFIG_PATH, SNAPSHOT_PROVIDER, DEMO_SETTER, MIRROR, CACHE_ITEMS, CACHE_CLEARER
+        global COLLEGE_SOURCE
+        COLLEGE_SOURCE = self._college_source
+        _college_list.use_file(self._college_cache)
         CACHE_ITEMS = self._cache_items
         CACHE_CLEARER = self._cache_clearer
         CONFIG_PATH = self._config_path

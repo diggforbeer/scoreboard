@@ -23,7 +23,7 @@ import tomlkit
 from .display.holiday import DEFAULT_THEMES, HOLIDAY_NAMES
 from .display.teams import TEAM_COLORS
 from .football.teams import NIGHT_SLOTS
-from .football.teams import is_team as football_team_exists
+from .football.teams import is_nfl_team as football_team_exists
 from .important_dates import ImportantDate, parse_dates
 
 log = logging.getLogger(__name__)
@@ -309,6 +309,13 @@ VALID_ROTATION_SCREENS = (
     "fb_standings",
     "fb_week",
     "fb_schedule",
+    "cfb_preview",
+    "cfb_ap",
+    "cfb_cfp",
+    "cfb_conference",
+    "cfb_week",
+    "cfb_schedule",
+    "cfb_scores",
 )
 
 #: Rotation screen names a release renamed: still accepted in a saved config, mapped to the
@@ -319,6 +326,19 @@ ROTATION_SCREEN_ALIASES = {"scores": "scores_grid"}
 #: ``fb_bye``, ``fb_countdown`` and ``fb_final`` are not here on purpose: the board adds them itself
 #: when they apply (a bye week, the kickoff window, the hold after a game).
 FOOTBALL_SCREENS = ("fb_preview", "fb_standings", "fb_week", "fb_schedule")
+#: The college football screens the same list can hold (#579): their own names, because the NFL's
+#: ``fb_*`` rows belong to the NFL (``screen_sport``) and the idle alternation gives college a
+#: segment of its own. Which of them are drawn is up to ``football/idle_screens.py``: a name with
+#: nothing registered (the screens arrive with #551-#556) is skipped, never shown blank.
+COLLEGE_SCREENS = (
+    "cfb_preview",
+    "cfb_ap",
+    "cfb_cfp",
+    "cfb_conference",
+    "cfb_week",
+    "cfb_schedule",
+    "cfb_scores",
+)
 #: Football's screens plus the clock, which both sports draw: what football's default rotation is
 #: made of.
 FOOTBALL_ROTATION_SCREENS = (*FOOTBALL_SCREENS, "clock")
@@ -329,11 +349,13 @@ SHARED_SCREENS = ("clock", "dates")
 
 
 def screen_sport(screen: str) -> str:
-    """Which sport shows a rotation screen: ``football``, ``hockey``, or ``shared`` (the clock and
-    the owner's important dates, which either sport draws and which take the sport of the rows
-    around them)."""
+    """Which sport shows a rotation screen: ``football``, ``college``, ``hockey``, or ``shared``
+    (the clock and the owner's important dates, which any sport draws and which take the sport of
+    the rows around them)."""
     if screen in FOOTBALL_SCREENS:
         return "football"
+    if screen in COLLEGE_SCREENS:
+        return "college"
     return "shared" if screen in SHARED_SCREENS else "hockey"
 
 
@@ -359,6 +381,18 @@ DEFAULT_FOOTBALL_ROTATION: tuple[tuple[str, float], ...] = (
     ("fb_standings", 8.0),
     ("fb_week", 10.0),
     ("fb_schedule", 8.0),
+    ("clock", 6.0),
+)
+#: What college's part of the idle rotation is when ``[[rotation]]`` is absent or empty (#579): the
+#: next game, the AP Top 25, the conference table, the week's games, the schedule, the clock. The
+#: CFP rankings and the scores grid are opt-in, like the other grids. A name whose screen is not
+#: built yet is skipped, so each screen joins the default by arriving.
+DEFAULT_COLLEGE_ROTATION: tuple[tuple[str, float], ...] = (
+    ("cfb_preview", 8.0),
+    ("cfb_ap", 8.0),
+    ("cfb_conference", 8.0),
+    ("cfb_week", 10.0),
+    ("cfb_schedule", 8.0),
     ("clock", 6.0),
 )
 
@@ -522,6 +556,26 @@ def _positive_minutes(value: Any, default: float, name: str) -> float:
     return number
 
 
+#: How long the upset alert stays up: long enough to read, short enough not to hide a live game.
+UPSET_SECONDS_MIN = 4.0
+#: The playoff cut on the college CFP rankings screen (#585): teams in the field, so the line sits
+#: after this rank. 12 is the 12-team playoff; the bounds leave room for a change of format.
+CFP_FIELD_DEFAULT = 12
+CFP_FIELD_MIN = 4
+CFP_FIELD_MAX = 16
+UPSET_SECONDS_MAX = 15.0
+#: The polls ``football.college_poll`` can name: the AP, the AFCA Coaches Poll, the committee.
+COLLEGE_POLL_CHOICES = ("ap", "usa", "cfp")
+#: The default is the committee's, which is the AP's until the committee publishes (about week 10):
+#: ``Polls.chosen`` falls back to the AP, so early in the season this *is* the AP, and from the
+#: committee's first release the rank numbers follow the poll that decides the playoff (owner's
+#: call, 2026-11-22, after the AP left South Carolina unranked in a game ESPN called #21).
+COLLEGE_POLL_DEFAULT = "cfp"
+#: Which games the opt-in college scores grid (``cfb_scores``, #556) lists: every game on the
+#: slate, or only those with a team in the chosen poll. Either way ranked games come first.
+COLLEGE_SCORES_CHOICES = ("all", "ranked")
+
+
 @dataclass(slots=True)
 class FootballConfig:
     """Football mode's settings: the idle rotation, the screen lengths and the screen toggles.
@@ -556,8 +610,53 @@ class FootballConfig:
     show_final: bool = True
     #: The red zone alert over the idle screens (see ``football/redzone.py``).
     show_redzone: bool = True
+    #: Which college poll means "ranked": ``ap`` (default), ``usa`` (Coaches) or ``cfp`` (the
+    #: committee's, which falls back to the AP until it publishes). The rank badges and the upset
+    #: alert read this one setting (#546).
+    college_poll: str = COLLEGE_POLL_DEFAULT
+    #: The college scores grid's filter (``all`` games or the ``ranked`` ones, #556).
+    college_scores: str = "all"
+    #: The upset alert (#557): a ranked college team losing to a lower-ranked or unranked one, from
+    #: halftime on, and an upset final. Only when a team in the ranked list is one of the two (the
+    #: one being upset or the one pulling the upset, #588, #599). Silent.
+    #: ``upset_min_gap`` is how many places lower the leader must be ranked (1: any lower-ranked
+    #: team and every unranked one).
+    upset_alert: bool = True
+    upset_seconds: float = 8.0
+    upset_min_gap: int = 1
+    #: The line on the CFP rankings screen after this many teams (#585).
+    cfp_field: int = CFP_FIELD_DEFAULT
 
     def __post_init__(self) -> None:
+        self.upset_alert = bool(self.upset_alert)
+        try:
+            seconds = float(self.upset_seconds)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-numeric football.upset_seconds %r", self.upset_seconds)
+            seconds = 8.0
+        self.upset_seconds = max(UPSET_SECONDS_MIN, min(UPSET_SECONDS_MAX, seconds))
+        try:
+            gap = int(self.upset_min_gap)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-integer football.upset_min_gap %r", self.upset_min_gap)
+            gap = 1
+        self.upset_min_gap = max(1, min(25, gap))
+        try:
+            field_size = int(self.cfp_field)
+        except (TypeError, ValueError):
+            log.warning("Ignoring non-integer football.cfp_field %r", self.cfp_field)
+            field_size = CFP_FIELD_DEFAULT
+        self.cfp_field = max(CFP_FIELD_MIN, min(CFP_FIELD_MAX, field_size))
+        poll = str(self.college_poll).strip().lower()
+        if poll not in COLLEGE_POLL_CHOICES:
+            log.warning("Ignoring unknown football.college_poll %r", self.college_poll)
+            poll = COLLEGE_POLL_DEFAULT
+        self.college_poll = poll
+        scores = str(self.college_scores).strip().lower()
+        if scores not in COLLEGE_SCORES_CHOICES:
+            log.warning("Ignoring unknown football.college_scores %r", self.college_scores)
+            scores = "all"
+        self.college_scores = scores
         self.page_seconds = _non_negative(self.page_seconds, "football.page_seconds")
         for name, (default, low, high) in FOOTBALL_TIMING_RANGES.items():
             key = f"{name}_seconds"
@@ -785,8 +884,19 @@ def _parse_hhmm(name: str, value: str, default: str) -> tuple[str, time]:
 
 
 #: The sports a ranked team can belong to (epic #470). The abbreviations overlap (``BUF``,
-#: ``DAL``...), so a team is always a (sport, abbreviation) pair.
-TEAM_SPORTS = ("hockey", "football")
+#: ``DAL``...), so a team is always a (sport, abbreviation) pair. ``college`` is FBS football: it
+#: is a sport of its own here and not a league of ``football``, because the NFL and FBS share
+#: abbreviations (``CIN``, ``HOU``, ``MIA``) *and* ESPN ids (Auburn and the Bills are both 2).
+TEAM_SPORTS = ("hockey", "football", "college")
+#: The sports the app can run: the ones with an engine behind them. The app never switches to a
+#: sport that is not in this tuple.
+RUNNING_SPORTS = ("hockey", "football", "college")
+#: The sports a ``FootballMode`` runs: the NFL's and the FBS's, each with its own feed and teams.
+FOOTBALL_SPORTS = ("football", "college")
+#: What an FBS abbreviation looks like (ESPN's: ``UGA``, ``UTSA``, ``M-OH``, ``TA&M``). The table is
+#: fetched, so a board that boots offline cannot check a name against it; this only rejects what
+#: could not be one.
+COLLEGE_ABBREV = re.compile(r"[A-Z0-9&-]{2,6}")
 #: How many teams the ranked list holds.
 TEAMS_MAX = 12
 
@@ -800,9 +910,14 @@ class TeamEntry:
 
 
 def team_exists(sport: str, team: str) -> bool:
-    """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports)."""
+    """Whether ``team`` is one of ``sport``'s teams (the abbreviations overlap between sports).
+
+    For ``college`` this is the shape of an FBS abbreviation only: the table is fetched, not
+    bundled, so it cannot be checked offline (``COLLEGE_ABBREV``)."""
     if sport == "hockey":
         return team in TEAM_COLORS
+    if sport == "college":
+        return bool(COLLEGE_ABBREV.fullmatch(team)) and team not in NIGHT_SLOTS
     return (
         football_team_exists(team) or team in NIGHT_SLOTS
     )  # TNF / SNF / MNF follow a night's games
@@ -1049,6 +1164,8 @@ RETIRED_KEYS: dict[str, dict[str, str]] = {
         "also_follow": "replaced by the ranked [[teams]] list (add your teams on the admin page)",
     },
     "football": {
+        "top25_turns": "removed (#587): only teams in the ranked list take the board",
+        "top25_seconds": "removed (#587): only teams in the ranked list take the board",
         "rotation": "merged into the one [[rotation]] list, which now takes football screens too",
         "favourite_team": "replaced by the ranked [[teams]] list (add your team on the admin page)",
         "also_follow": "replaced by the ranked [[teams]] list (add your teams on the admin page)",

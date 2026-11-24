@@ -16,14 +16,17 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from ..important_dates import pick as pick_date
-from .api import MIN_POLL_SECONDS
+from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
 from .idle import (
+    POLLS_TTL,
     SCHEDULE_TTL,
     STANDINGS_TTL,
     WEEK_TTL,
@@ -35,8 +38,18 @@ from .idle import (
 from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
 from .redzone import RedZoneWatcher
+from .scroll import is_moving, scroll_px, scroll_seconds
 from .stats import GameStats
-from .teams import is_team, team, team_by_id
+from .teams import (
+    EMPTY_DIRECTORY,
+    NFL_DIRECTORY,
+    Directory,
+    is_team,
+    team,
+    team_by_id,
+    use_directory,
+)
+from .upset import UpsetWatcher
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
@@ -66,6 +79,17 @@ KICKOFF_WINDOW = timedelta(minutes=20)
 DEFAULT_ROTATE_SECONDS = 8.0
 
 
+def _in_scope(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Run a render-thread (or admin-thread) method of the mode in its league's team directory."""
+
+    @wraps(method)
+    def scoped(self: FootballMode, *args: Any, **kwargs: Any) -> Any:
+        with self.scope():
+            return method(self, *args, **kwargs)
+
+    return scoped
+
+
 class FootballMode:
     def __init__(
         self,
@@ -79,16 +103,27 @@ class FootballMode:
         wide: Callable[[], bool] = lambda: True,
         on_sound: Callable[[Any], None] | None = None,
         dates: Callable[[], Sequence[Any]] = lambda: (),
+        league: str = LEAGUE_NFL,
     ) -> None:
-        """``scoreboard`` and ``football`` return the live ``[scoreboard]`` and ``[football]``
-        settings (read at each poll and each frame, so an admin-page change applies without a
-        restart); ``client_factory`` makes the feed client (a fake in tests). The settings carry the
-        idle rotation's rows as ``idle_rotation`` (football's share of the one mixed
-        ``[[rotation]]`` list, epic #470)."""
+        """``league`` is ``nfl`` or ``college-football``: the mode's team lookups (by id and by
+        abbreviation) resolve in that league's directory (``teams.use_directory``), since the two
+        share both. ``scoreboard`` and ``football`` return the live ``[scoreboard]`` and
+        ``[football]`` settings (read at each poll and each frame, so an admin-page change
+        applies without a restart); ``client_factory`` makes the feed client (a fake in tests).
+        The settings carry the idle rotation's rows as ``idle_rotation`` (football's share of the
+        one mixed ``[[rotation]]`` list, epic #470)."""
         if client_factory is None:
             from .api import FootballClient
 
-            client_factory = FootballClient
+            def client_factory() -> Any:
+                return FootballClient(league=league, keep_table=league != "nfl")
+
+        self.league = league
+        #: The league's teams: fixed for the NFL; for college, the FBS table the feed's client
+        #: fetched (set from its thread, read by the render loop: one reference swap).
+        self._directory: Directory | None = None
+        #: When each game's halftime was first seen (monotonic), for the halftime cycle (#549).
+        self._half_since: dict[int, float] = {}
         self._scoreboard = scoreboard
         self._on_sound = on_sound
         #: The owner's important dates inside their window (#524), nearest first: what the shared
@@ -106,6 +141,8 @@ class FootballMode:
         #: How far through its slot the chosen rotation screen is (0 to 1): a screen of several
         #: pages shares its seconds between them, so the page is read off this. Render loop only.
         self._slot_fraction = 0.0
+        #: The chosen slot's length in seconds, for a table that scrolls over it (#551).
+        self._slot_length = 0.0
         #: When this mode's idle rotation began (monotonic seconds): the app sets it so a rotation
         #: starts at the top of the turn the sports alternate in (epic #470), 0 otherwise.
         self.idle_origin = 0.0
@@ -120,6 +157,7 @@ class FootballMode:
             monotonic,
             collect=self._collect,
             idle=self._collect_idle,
+            scope=self._scope_for_client,
         )
         #: Which play, celebration or reversal is on screen (#377). Render loop only.
         if timings is None and football is not None:
@@ -132,14 +170,84 @@ class FootballMode:
         self._core_sync = CoreSync()
         #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
         self.redzone = RedZoneWatcher(monotonic)
+        #: A ranked college team losing to a lower-ranked one (#557); college only.
+        self.upsets = UpsetWatcher(monotonic)
         #: Team rosters for jersey numbers (#354), fetched hourly on first use. Held here, so
         #: it lives as long as the mode and survives the board switching sport back and forth. The
         #: feed worker's thread owns it: it must not be used from the render loop.
         self.rosters = RosterCache(self._fetch_roster, monotonic)
         self._roster_client: Any = None
 
+    @property
+    def directory(self) -> Directory | None:
+        """The league's teams: the NFL's from the start, the FBS's once its client loaded them."""
+        return NFL_DIRECTORY if self.league != LEAGUE_COLLEGE else self._directory
+
+    def scope(self) -> AbstractContextManager[None]:
+        """The league's team directory as a context: wrap anything that resolves teams (drawing a
+        scene, reading the snapshot) in it. The NFL's is the default, so it is a no-op there. Until
+        the college table has loaded nothing resolves (everything is drawn as an unknown team)."""
+        if self.league != LEAGUE_COLLEGE:
+            return nullcontext()
+        return use_directory(self._directory or EMPTY_DIRECTORY)
+
+    def _scope_for_client(self, client: Any) -> AbstractContextManager[None]:
+        """The scope for the feed worker's thread, and where the render loop learns the table."""
+        if self.league != LEAGUE_COLLEGE:
+            return nullcontext()
+        directory = getattr(client, "directory", None)
+        if directory is not None:
+            self._directory = directory
+        return use_directory(directory or EMPTY_DIRECTORY)
+
+    def _chosen_poll(self) -> Any:
+        """The poll that decides "ranked" (``[football] college_poll``), or ``None``: not college,
+        no polls fetched yet, or none fresh (out of season nobody is ranked)."""
+        from ..config import COLLEGE_POLL_DEFAULT
+
+        if self.league != LEAGUE_COLLEGE:
+            return None
+        polls = self.snapshot.idle.polls()
+        if polls is None:
+            return None
+        cfg = self._football() if self._football else None
+        return polls.chosen(getattr(cfg, "college_poll", COLLEGE_POLL_DEFAULT), self._utc_now())
+
+    def rank_of(self, team_id: int | str | None) -> int | None:
+        """A team's number in the chosen poll, or ``None`` (unranked, or no poll to say)."""
+        poll = self._chosen_poll()
+        return None if poll is None or team_id is None else poll.rank_of(team_id)
+
+    def ranked(self, games: Sequence[FbGame]) -> list[FbGame]:
+        """``games`` with each team's ``rank`` filled in from the chosen poll. Ranks are not in
+        the game feed (its ``curatedRank`` follows an unknown poll), so they are applied here, at
+        read time: a new poll shows on the next frame without refetching a game."""
+        poll = self._chosen_poll()
+        if poll is None:
+            return list(games)
+        out: list[FbGame] = []
+        for game in games:
+            away, home = poll.rank_of(game.away.espn_id), poll.rank_of(game.home.espn_id)
+            if away is None and home is None:
+                out.append(game)
+                continue
+            out.append(
+                replace(
+                    game,
+                    away=replace(game.away, rank=away),
+                    home=replace(game.home, rank=home),
+                )
+            )
+        return out
+
     def _make_director(self) -> Director:
-        return Director(*self._director_args, stats=self._stats_for, on_sound=self._on_sound)
+        return Director(
+            *self._director_args,
+            stats=self._stats_for,
+            on_sound=self._on_sound,
+            scores_only=self.league == LEAGUE_COLLEGE,
+            stats_at_timeouts=self.league == LEAGUE_COLLEGE,
+        )
 
     def request_clear(self, scope: str) -> None:
         """Ask for the idle data (and rosters) to be forgotten: ``football`` or ``football:<item>``
@@ -147,6 +255,7 @@ class FootballMode:
         only leaves a note; the next poll does it, and fetches afresh."""
         self._clear_requests.add(":".join(scope.split(":")[:2]))  # a team's item clears its kind
 
+    @_in_scope
     def cache_items(self) -> list[dict[str, Any]]:
         """What football has cached, for the admin page's Cache tab (read-only; any thread)."""
         from ..cache_view import item
@@ -231,8 +340,11 @@ class FootballMode:
         """
         self.director = self._make_director()
         self.redzone.clear()
+        self.upsets.clear()
         self._slot_fraction = 0.0
+        self._slot_length = 0.0
 
+    @_in_scope
     def track(self) -> None:
         """Note which games were seen live and when each final first appeared, from the latest
         snapshot. ``scene`` does this as it draws; the app calls it too while another sport has
@@ -243,7 +355,24 @@ class FootballMode:
                 self._seen_live.add(game.id)
             elif game.is_final and game.id in self._seen_live:
                 self._final_since.setdefault(game.id, now)
+        if self.league == LEAGUE_COLLEGE:
+            # The upset alert watches the whole slate, whichever sport is on screen.
+            cfg = self._football() if self._football else None
+            if getattr(cfg, "upset_alert", True):
+                self.upsets.observe(
+                    self.ranked(self.snapshot.games or ()),
+                    getattr(cfg, "upset_min_gap", 1),
+                    self._upset_teams(cfg),
+                )
 
+    @staticmethod
+    def _upset_teams(cfg: Any) -> tuple[str, ...]:
+        """The teams an upset alert may be about (#588, #599): the ranked list's own, the favourite
+        and the followed teams, as the team being upset or the one pulling the upset. With none
+        listed nothing alerts."""
+        return tuple(getattr(cfg, "followed_teams", ()) or ())
+
+    @_in_scope
     def final_ages(self) -> dict[int, float]:
         """Seconds since each final was first seen ending (only games seen live)."""
         now = self._monotonic()
@@ -271,6 +400,7 @@ class FootballMode:
 
     # -- the feed worker's plays (its thread) --------------------------------------
 
+    @_in_scope
     def watched(self, games: Sequence[FbGame]) -> list[FbGame]:
         """The games whose plays are fetched: live (or about to start) ones the favourite or a
         followed team is in. Never every game on the slate.
@@ -350,7 +480,17 @@ class FootballMode:
             list(cfg.followed_teams) if cfg else []
         )
         mine = [t for t in dict.fromkeys(mine) if is_team(t)]
-        if any(g.is_live and any(g.involves(t) for t in mine) for g in games):
+        live_followed = any(g.is_live and any(g.involves(t) for t in mine) for g in games)
+        # The ranks are fetched at the usual pace, and once even with a followed game live (the
+        # board may have started mid-game and every badge needs them).
+        if (
+            self.league == LEAGUE_COLLEGE
+            and hasattr(client, "college_rankings")
+            and (snap.polls_cached is None or not live_followed)
+        ):
+            polls = self._idle_cache.refresh(("polls",), POLLS_TTL, client.college_rankings)
+            snap = replace(snap, polls_cached=polls or snap.polls_cached)
+        if live_followed:
             return snap
         cache = self._idle_cache
         schedules = dict(snap.schedules)
@@ -365,6 +505,18 @@ class FootballMode:
         standings = snap.standings_cached
         if mine and hasattr(client, "standings"):
             standings = cache.refresh(("standings",), STANDINGS_TTL, client.standings) or standings
+        college_table = snap.college_standings_cached
+        if (
+            self.league == LEAGUE_COLLEGE
+            and mine
+            and hasattr(client, "college_standings")
+            and any(entry.screen == "cfb_conference" for entry in self._entries())
+        ):
+            # ~2.5 MB, so only for a board that lists the conference table, and hourly.
+            college_table = (
+                cache.refresh(("college_standings",), STANDINGS_TTL, client.college_standings)
+                or college_table
+            )
         week_item = snap.week_cached
         if scoreboard is not None and scoreboard.week is not None and hasattr(client, "week"):
             number, kind = scoreboard.week, scoreboard.season_type or 2
@@ -377,6 +529,8 @@ class FootballMode:
             schedules=schedules,
             standings_cached=standings,
             week_cached=week_item,
+            polls_cached=snap.polls_cached,
+            college_standings_cached=college_table,
         )
 
     def _apply_clears(self, prev: IdleSnapshot) -> IdleSnapshot:
@@ -420,6 +574,7 @@ class FootballMode:
         self.rosters.clear()
         self._idle_cache.clear()
         self.redzone.clear()
+        self.upsets.clear()
         self._stats = {}
 
     @property
@@ -437,6 +592,7 @@ class FootballMode:
 
     # -- what to show ----------------------------------------------------
 
+    @_in_scope
     def scene(self) -> Scene:
         from ..app import Scene
 
@@ -451,8 +607,10 @@ class FootballMode:
             return Scene("fb_connecting")
         if snap.is_stale(now):
             return Scene("fb_no_data")
-        games = snap.games or ()
-        self.redzone.observe(games)
+        games = self.ranked(snap.games or ())
+        # A red zone alert is a takeover too: for college, only the ranked list's games raise one.
+        alerting = self.listed(games) if self.league == LEAGUE_COLLEGE else games
+        self.redzone.observe(alerting)
         idle_kind = self._idle_kind(games, snap, now)
         if idle_kind is not None:
             scene = self._idle_scene(idle_kind, games, snap, now)
@@ -468,10 +626,12 @@ class FootballMode:
                     )
             # A followed team's score banner (above) comes first; then a red zone alert, if one
             # is due; then the idle screen itself.
-            return self._redzone_scene(games) or scene
+            return self._redzone_scene(alerting) or scene
         if not games:
             return Scene("fb_no_games")
         game = self.pick_game(games, now)
+        if game is None:
+            return Scene("fb_no_games")  # college, and none of the ranked list's teams plays
         # The field between plays while a ball is in play, the halftime card at the half, and
         # the text scoreboard before the game and once it is final.
         resting = resting_kind(game)
@@ -483,8 +643,38 @@ class FootballMode:
         hold = self._is_favourite(game) and game.is_live and not game.is_halftime
         current = self.director.current(game.id, hold=hold)
         if current is None:
-            return base
+            return self._halftime_cycle(game, base, now) or base
         return self._play_scene(current, base)
+
+    def _halftime_cycle(self, game: FbGame, base: Scene, now: float) -> Scene | None:
+        """College halftime (#549): the card, then the team stats' pages, round again for as long
+        as the half lasts; a pure function of how long the half has run. ``None`` (the plain
+        card) for anything else, or until the stats have arrived. A score screen never gets
+        here: ``current`` is only None when nothing is being played out."""
+        from ..app import Scene
+        from .director import STATS
+
+        if not game.is_halftime:
+            self._half_since.pop(game.id, None)
+            return None
+        since = self._half_since.setdefault(game.id, now)
+        stats = self._stats_for(game.id) if self.league == LEAGUE_COLLEGE else None
+        if stats is None:
+            return None
+        page = self.director.stats_page_seconds()
+        cycle = HALFTIME_CARD_SECONDS + stats.pages * page
+        t = (now - since) % cycle
+        if t < HALFTIME_CARD_SECONDS:
+            return None
+        return Scene(
+            "fb_event",
+            fb_game=game,
+            fb_stats=stats,
+            fb_stage=STATS,
+            fb_elapsed=t - HALFTIME_CARD_SECONDS,
+            fb_seconds=page,
+            animating=True,
+        )
 
     def _favourite_game(self, games: Sequence[FbGame]) -> FbGame | None:
         favourite = self._football().favourite_team if self._football else ""
@@ -514,6 +704,38 @@ class FootballMode:
             "fb_redzone", fb_game=game, fb_elapsed=elapsed, fb_seconds=seconds, animating=True
         )
 
+    @_in_scope
+    def upset_scene(self) -> Scene | None:
+        """The upset alert to show now, or ``None``. Any sport may be on screen: like a goal, it
+        is news about a team the owner follows, wherever the board is. College only, 128px only,
+        silent, only if the owner has not turned it off, and only when the team being upset is
+        in the ranked list (#588)."""
+        from ..app import Scene
+
+        if self.league != LEAGUE_COLLEGE or not self._wide():
+            return None
+        cfg = self._football() if self._football else None
+        if not getattr(cfg, "upset_alert", True):
+            return None
+        seconds = float(getattr(cfg, "upset_seconds", 8.0))
+        shown = self.upsets.current(
+            self.ranked(self.snapshot.games or ()),
+            seconds,
+            getattr(cfg, "upset_min_gap", 1),
+            self._upset_teams(cfg),
+        )
+        if shown is None:
+            return None
+        game, upset, elapsed = shown
+        return Scene(
+            "fb_upset",
+            fb_game=game,
+            fb_upset=upset,
+            fb_elapsed=elapsed,
+            fb_seconds=seconds,
+            animating=True,
+        )
+
     # -- the idle selection (#422) -----------------------------------------------
 
     def _idle_kind(self, games: Sequence[FbGame], snap: FeedSnapshot, now: float) -> str | None:
@@ -529,6 +751,7 @@ class FootballMode:
         from .idle_screens import IDLE_SCREENS
 
         self._slot_fraction = 0.0
+        self._slot_length = 0.0
         cfg = self._football() if self._football else _no_football()
         followed = cfg.followed_teams
         for game in games:
@@ -541,10 +764,12 @@ class FootballMode:
         mine = next((g for g in games if favourite and g.involves(favourite)), None)
         if mine is not None and mine.is_live:
             return None  # the favourite's own game always wins
-        # A followed team's (or, with nobody followed, any) live game takes the screen, but only
-        # after the favourite's countdown and final below: those keep their place.
+        # A followed team's live game takes the screen, but only after the favourite's countdown
+        # and final below: those keep their place. With nobody followed the NFL shows any live
+        # game, but a college game that involves no team in the ranked list never takes the board
+        # (#587: the owner's rule).
         others_live = any(any(g.involves(t) for t in followed) for g in playing) or (
-            bool(playing) and not followed
+            bool(playing) and not followed and self.league != LEAGUE_COLLEGE
         )
         wide = self._wide()
         if not wide:
@@ -570,11 +795,27 @@ class FootballMode:
         if favourite:
             slots = self._rotation(cfg, ctx, favourite)
             if slots:
-                screen, self._slot_fraction = _slot_at(slots, now - self.idle_origin)
+                screen, self._slot_fraction, self._slot_length = _slot_span(
+                    slots, now - self.idle_origin
+                )
                 return screen
         if not games:
             return "clock" if self._has_clock() else None
         return None
+
+    def has_idle_rows(self) -> bool:
+        """Whether the idle rotation has a row that can be drawn right now (the render loop's, for
+        the app's sport alternation): a registered screen with something to show, or the
+        owner's important dates. A mode with none has nothing for its turn, and the board
+        skips it rather than sit on the plain scoreboards."""
+        cfg = self._football() if self._football else _no_football()
+        snap = self.snapshot
+        if not snap.has_data or not cfg.favourite_team or not self._wide():
+            return False
+        with self.scope():
+            games = self.ranked(snap.games or ())
+            ctx = self._idle_context(games, snap, self._monotonic(), cfg)
+            return bool(self._rotation(cfg, ctx, cfg.favourite_team))
 
     def _in_countdown(self, game: FbGame, cfg: FootballConfig) -> bool:
         if not game.is_pregame or game.start_utc is None:
@@ -617,6 +858,11 @@ class FootballMode:
                 seconds = (
                     cfg.page_seconds * pages if cfg.page_seconds and pages > 1 else entry.seconds
                 )
+                # A table taller than the panel scrolls, and the row's seconds is a minimum: the
+                # slot lasts as long as a readable scroll needs (hockey's rule, ``scroll.py``).
+                scrolled = int(getattr(view, "scroll_rows", 0) or 0)
+                if scrolled:
+                    seconds = scroll_seconds(scrolled, seconds)
                 slots.append((entry.screen, seconds))
         scoreboard = ctx.idle.scoreboard
         if (
@@ -655,11 +901,15 @@ class FootballMode:
         view = build(self._idle_context(games, snap, now, cfg)) if build is not None else None
         pages = max(int(getattr(view, "pages", 1) or 1), 1)
         page = min(int(self._slot_fraction * pages), pages - 1)
+        rows = int(getattr(view, "scroll_rows", 0) or 0)
+        offset = self._slot_fraction * self._slot_length
         return Scene(
             kind,
             fb_game=mine if kind in ("fb_countdown", "fb_final") else None,
             fb_idle=view,
             fb_page=page,
+            scroll_px=scroll_px(rows, offset, self._slot_length) if rows else 0,
+            scrolling=bool(rows) and is_moving(rows, offset, self._slot_length),
         )
 
     def _play_scene(self, current: Any, base: Scene) -> Scene:
@@ -683,7 +933,8 @@ class FootballMode:
             animating=True,
         )
 
-    def pick_game(self, games: Sequence[FbGame], now: float) -> FbGame:
+    @_in_scope
+    def pick_game(self, games: Sequence[FbGame], now: float) -> FbGame | None:
         """Which game to show: the favourite's while it is live, else the followed teams' in turn.
 
         ``games`` comes best-first from the client (live, then upcoming, then finished).
@@ -691,7 +942,9 @@ class FootballMode:
         1. The favourite's own game, while it is live, holds the screen alone.
         2. Otherwise the games the followed teams are in take turns, ``rotate_seconds`` each,
            the favourite's first. If any of them is live, only the live ones do.
-        3. With nobody followed, or none of them playing, every game takes a turn.
+        3. NFL: with nobody followed, or none of them playing, every game takes a turn. College
+           (#587): never; a game that involves no team in the ranked list is not shown, and
+           ``None`` comes back when none of the listed teams has a game.
 
         Turns are timed by the (injectable) monotonic clock, not a counter, so a refresh
         that changes the slate never makes the board skip or repeat a game.
@@ -699,6 +952,12 @@ class FootballMode:
         cfg = self._football() if self._football else None
         followed = cfg.followed_teams if cfg else []
         favourite = cfg.favourite_team if cfg else ""
+        if self.league == LEAGUE_COLLEGE:
+            # Only the ranked list's teams take the board (#587): a game that involves none of
+            # them is never shown, whatever the slate holds.
+            games = self.listed(games)
+            if not games:
+                return None
         favourite_game = next((g for g in games if favourite and g.involves(favourite)), None)
         if favourite_game is not None and favourite_game.is_live:
             return favourite_game
@@ -711,6 +970,16 @@ class FootballMode:
         seconds = self._scoreboard().rotate_seconds if self._scoreboard else DEFAULT_ROTATE_SECONDS
         turn = int(now // max(seconds, 1.0)) % len(pool)
         return pool[turn]
+
+    def listed(self, games: Sequence[FbGame]) -> list[FbGame]:
+        """The games that involve the favourite or a followed team: the ranked list's own."""
+        cfg = self._football() if self._football else None
+        followed = cfg.followed_teams if cfg else []
+        return [g for g in games if any(g.involves(t) for t in followed)]
+
+
+#: How long the halftime card holds before the team stats' pages take their turns (#549).
+HALFTIME_CARD_SECONDS = 15.0
 
 
 def resting_kind(game: FbGame) -> str:
@@ -725,13 +994,19 @@ def _slot_at(slots: Sequence[tuple[str, float]], now: float) -> tuple[str, float
     """The slot on screen at monotonic time ``now`` and how far through it (0 to 1): a pure
     function of the clock, so a refresh that changes the slots never makes the board lose its
     place by more than one turn."""
+    screen, fraction, _ = _slot_span(slots, now)
+    return screen, fraction
+
+
+def _slot_span(slots: Sequence[tuple[str, float]], now: float) -> tuple[str, float, float]:
+    """``_slot_at`` and the slot's length in seconds, for a screen that scrolls over it."""
     total = sum(seconds for _, seconds in slots)
     at = now % total
     for screen, seconds in slots:
         if at < seconds:
-            return screen, at / seconds
+            return screen, at / seconds, seconds
         at -= seconds
-    return slots[-1][0], 0.0
+    return slots[-1][0], 0.0, slots[-1][1]
 
 
 def _no_football() -> FootballConfig:

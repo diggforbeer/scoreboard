@@ -33,6 +33,17 @@ SITUATION = (255, 210, 0)
 RED_ZONE = (235, 50, 50)
 #: A team that is not one of the 32 (a Pro Bowl side): drawn plain, like the hockey default.
 UNKNOWN_TEAM = (220, 220, 220)
+#: A ranked college team's number: light violet, so it reads as none of the clock (green), the down
+#: and distance (yellow), a score (white) or a team colour (a mockup of the first version, gold,
+#: could not be told from the yellow).
+RANK_COLOR = (200, 160, 255)
+
+
+def rank_badge(side: FbTeam, r: Renderer) -> str:
+    """``5`` for a ranked college team, else ``""``: just the number, in its own colour (a ``#``
+    is not needed, and costs four pixels of a crowded line). 128px panels only: a single 64px
+    panel has no room beside the abbreviation, so it never shows a badge."""
+    return str(side.rank) if side.rank and r.width >= 128 else ""
 
 
 def side_color(side: FbTeam) -> tuple[int, int, int]:
@@ -67,8 +78,21 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
     status_baseline = r.height - 2
     half = r.width // 2
 
+    label_x: dict[int, int] = {}
     for side, x0 in ((game.away, 0), (game.home, half)):
-        r.text(canvas, font, x0 + 3, score_baseline, side_color(side), side.abbrev)
+        x = x0 + 3
+        badge = "" if game.is_live else rank_badge(side, r)  # none in a live game
+        if badge:
+            # The abbreviation moves right to make room, unless that would run into the score.
+            shift = text_width(r.fonts.small, badge) + 2
+            score_left = (
+                x0 + half - 3 - (0 if game.is_pregame else text_width(font, str(side.score)))
+            )
+            if x + shift + text_width(font, side.abbrev) + 1 <= score_left:
+                r.text(canvas, r.fonts.small, x, score_baseline, RANK_COLOR, badge)
+                x += shift
+        label_x[id(side)] = x
+        r.text(canvas, font, x, score_baseline, side_color(side), side.abbrev)
         if not game.is_pregame:
             r.text_right(canvas, font, x0 + half - 3, score_baseline, WHITE, str(side.score))
 
@@ -82,8 +106,8 @@ def draw_fb_scores(r: Renderer, canvas: Any, game: FbGame) -> None:
 
         holder = ff.possession_of(game, sit.possession_team_id)
         if holder is not None:
-            team, x0 = (game.away, 0) if holder == AWAY else (game.home, half)
-            bx = x0 + 3 + text_width(font, team.abbrev) + 4
+            team = game.away if holder == AWAY else game.home
+            bx = label_x[id(team)] + text_width(font, team.abbrev) + 4
             fball.draw_sprite(canvas, bx, score_baseline - 8, fball.LARGE)
     if game.is_live and sit is not None and sit.down_distance_text:
         color = RED_ZONE if sit.is_red_zone else SITUATION
@@ -141,13 +165,29 @@ def _band(
         down = (_tight(sit.short_down_distance_text) if wide else _compact_down(sit)).upper()
     color = RED_ZONE if in_red_zone else SITUATION
     right = r._fit_text(font, down, r.width // 2 - 2) if down else ""
+    full_clock = band_clock(game, r)
+
+    def clock_room(text: str) -> int:
+        return r.width - text_width(font, text) - 3 - (60 if wide else 0)
+
+    if wide and right and text_width(font, full_clock) > clock_room(right):
+        # ``1ST&GOAL`` leaves 33px, and ``4TH 10:30`` needs 36: the clock was cut to ``4TH 1...``,
+        # which reads as a minute left. A long down shrinks to ``1&G`` before the time is cut.
+        right = _squeezed_down(sit)
+    clock = r._fit_text(font, full_clock, max(clock_room(right), 8))
+    if wide and right:
+        # Four-letter college abbreviations and a two-digit score leave no room for a long down
+        # (``1ST&GOAL``); it shrinks to ``1&G`` / ``2&7`` rather than printing over the score.
+        min_x = 1 + text_width(font, clock) + 3
+        if not _score_fits(r, game, min_x, r.width - 1 - text_width(font, right) - 2):
+            right = _squeezed_down(sit)
     if right:
         r.text_right(canvas, font, r.width - 1, baseline, color, right)
-    left_room = r.width - text_width(font, right) - 3 - (60 if wide else 0)
-    clock = r._fit_text(font, band_clock(game, r), max(left_room, 8))
     r.text(canvas, font, 1, baseline, status_color(game), clock)
     if wide:
-        _score(r, canvas, game, baseline, side, min_x=1 + text_width(font, clock) + 3)
+        # The score sits between the clock on the left and the down and distance on the right.
+        max_x = r.width - 1 - text_width(font, right) - 2 if right else r.width
+        _score(r, canvas, game, baseline, side, min_x=1 + text_width(font, clock) + 3, max_x=max_x)
 
 
 _LIVE_CLOCK = re.compile(r"^\s*(\d{1,2}:\d{2})\s*-\s*(\d)(?:st|nd|rd|th)\s*$", re.I)
@@ -170,6 +210,15 @@ def _tight(text: str) -> str:
     return text.replace(" & ", "&") if len(text) > 7 else text
 
 
+def _squeezed_down(sit: Any) -> str:
+    """``1&G`` for goal to go, else ``2&7``: the shortest form that still says what it is."""
+    if sit.down is None:
+        return _compact_down(sit)
+    if "goal" in sit.short_down_distance_text.lower():
+        return f"{sit.down}&G"
+    return _compact_down(sit)
+
+
 def _compact_down(sit: Any) -> str:
     """``2&7`` for a 64px band; empty when there is no down."""
     if sit.down is None or sit.distance is None:
@@ -177,8 +226,39 @@ def _compact_down(sit: Any) -> str:
     return f"{sit.down}&{sit.distance}"
 
 
+def _score_parts(
+    r: Renderer, game: FbGame, badges: bool
+) -> list[tuple[str, str, tuple[int, int, int], int]]:
+    """(kind, text, colour, gap after) for the band's score: a badge, the abbreviation, then the
+    score, per team."""
+    out: list[tuple[str, str, tuple[int, int, int], int]] = []
+    for side, between in ((game.away, 3), (game.home, 0)):
+        badge = rank_badge(side, r) if badges else ""
+        if badge:
+            out.append(("badge", badge, RANK_COLOR, 1))
+        out.append(("abbrev", side.abbrev, side_color(side), 1))
+        out.append(("score", str(side.score), WHITE, between))
+    return out
+
+
+def _score_fits(r: Renderer, game: FbGame, min_x: int, max_x: int) -> bool:
+    """Whether the band's score fits between ``min_x`` and ``max_x`` even with no badges."""
+    from . import football_ball as fball
+
+    font = r.fonts.tiny
+    ball_w = fball.sprite_width(fball.SMALL) + 1
+    total = sum(text_width(font, t) + g for _, t, _, g in _score_parts(r, game, False)) + 2 * ball_w
+    return max((r.width - total) // 2, min_x) + total <= max_x
+
+
 def _score(
-    r: Renderer, canvas: Any, game: FbGame, baseline: int, side: str | None = None, min_x: int = 0
+    r: Renderer,
+    canvas: Any,
+    game: FbGame,
+    baseline: int,
+    side: str | None = None,
+    min_x: int = 0,
+    max_x: int | None = None,
 ) -> None:
     """``WSH 10 NYG 17`` centred in the band, each abbreviation in its team's colour. The team
     with the ball gets a small football before its abbreviation; both slots are reserved so the
@@ -188,19 +268,21 @@ def _score(
 
     font = r.fonts.tiny
     ball_w = fball.sprite_width(fball.SMALL) + 1
-    parts = [
-        (game.away.abbrev, side_color(game.away)),
-        (str(game.away.score), WHITE),
-        (game.home.abbrev, side_color(game.home)),
-        (str(game.home.score), WHITE),
-    ]
-    gaps = (1, 3, 1, 0)  # abbreviation-score, between the teams, abbreviation-score
-    total = sum(text_width(font, t) for t, _ in parts) + sum(gaps) + 2 * ball_w
-    x = max((r.width - total) // 2, min_x)
-    for i, ((text, color), gap) in enumerate(zip(parts, gaps, strict=True)):
-        if i in (0, 2):
-            has_ball = side == (AWAY if i == 0 else HOME)
-            if has_ball:
+
+    def placed(badges: bool) -> tuple[list[tuple[str, str, tuple[int, int, int], int]], int, int]:
+        parts = _score_parts(r, game, badges)
+        total = sum(text_width(font, t) + gap for _, t, _, gap in parts) + 2 * ball_w
+        return parts, total, max((r.width - total) // 2, min_x)
+
+    # No rank badges on a live game (owner's call, 2026-11-22: too cluttered); `badges` stays for
+    # the layout helpers' sake.
+    parts, _total, x = placed(False)
+    teams = iter((AWAY, HOME))
+    holder = None
+    for kind, text, color, gap in parts:
+        if kind == "abbrev":
+            holder = next(teams)
+            if side == holder:
                 fball.draw_sprite(canvas, x, baseline - 4, fball.SMALL)
             x += ball_w
         r.text(canvas, font, x, baseline, color, text)
@@ -210,7 +292,7 @@ def _score(
 def draw_fb_halftime(r: Renderer, canvas: Any, game: FbGame) -> None:
     """The halftime card (#388): what the board holds on from the end of the half until play
     resumes. ``HALFTIME`` in the large font, both teams' logos at the edges (128px only, 16px,
-    else their abbreviations) and the score under it."""
+    else their abbreviations) and the score under it. Never a rank badge (owner's call)."""
     canvas.Clear()
     wide = r.width >= 128
     cx = r.width // 2
@@ -229,19 +311,20 @@ def draw_fb_halftime(r: Renderer, canvas: Any, game: FbGame) -> None:
                     canvas.SetPixel(ox + dx, oy + dy, red, green, blue)
             else:
                 r.text_center(canvas, r.fonts.small, x, 19, side_color(side), side.abbrev)
-    parts = [
-        (game.away.abbrev, side_color(game.away)),
-        (str(game.away.score), WHITE),
-        (game.home.abbrev, side_color(game.home)),
-        (str(game.home.score), WHITE),
-    ]
-    gaps = (2, 6, 2, 0)
+
+    # No rank badges here, by the owner's call (2026-11-22, from a real board at the half of
+    # Georgia at South Carolina): the card is about the score, and a number before each team made
+    # the line cluttered. Every other college screen keeps its badges.
+    parts: list[tuple[str, tuple[int, int, int], int]] = []
+    for side, between in ((game.away, 6), (game.home, 0)):
+        parts.append((side.abbrev, side_color(side), 2))
+        parts.append((str(side.score), WHITE, between))
     font = r.fonts.small
-    total = sum(text_width(font, t) for t, _ in parts) + sum(gaps)
+    total = sum(text_width(font, t) + gap for t, _, gap in parts)
     if total > r.width - 2:  # a long score on a narrow panel: drop to the smaller font
         font = r.fonts.tiny
-        total = sum(text_width(font, t) for t, _ in parts) + sum(gaps)
+        total = sum(text_width(font, t) + gap for t, _, gap in parts)
     x = max(0, (r.width - total) // 2)
-    for (text, color), gap in zip(parts, gaps, strict=True):
+    for text, color, gap in parts:
         r.text(canvas, font, x, 29, color, text)
         x += text_width(font, text) + gap

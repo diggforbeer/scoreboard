@@ -95,10 +95,10 @@ async def _serve_and_get(path):
         return await asyncio.to_thread(_get)
 
 
-async def _skip_initial(client, n=15):
+async def _skip_initial(client, n=16):
     """Drain the version/audio/scoreboard/status/panel/night_mode/wifi/
-    rotation/update/horn_list/snapshot/holiday/football/football_rotation/teams/dates messages
-    every connection opens with."""
+    rotation/update/horn_list/snapshot/holiday/football/football_rotation/teams/dates/
+    college_teams messages every connection opens with."""
     for _ in range(n):
         await client.recv()
 
@@ -349,6 +349,24 @@ def test_rotation_save_rejects_an_unknown_screen(app_dir, config_path):
     assert message["type"] == "error"
     assert "row 1" in message["message"]
     assert config_path.read_text() == ""
+
+
+def test_rotation_save_accepts_college_screens_and_rejects_unknown_ones(app_dir, config_path):
+    """#579: the college football screens are their own names (and a sport of their own)."""
+
+    async def scenario(client, rows):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
+        return json.loads(await client.recv())
+
+    good = [{"screen": "cfb_ap", "seconds": 8}, {"screen": "cfb_preview", "seconds": 6}]
+    assert asyncio.run(_serve_and_run(lambda c: scenario(c, good))) == {
+        "type": "saved",
+        "section": "rotation",
+    }
+    assert 'screen = "cfb_ap"' in config_path.read_text()
+    bad = asyncio.run(_serve_and_run(lambda c: scenario(c, [{"screen": "cfb_nope", "seconds": 8}])))
+    assert bad["type"] == "error" and "row 1" in bad["message"]
 
 
 @pytest.mark.parametrize("seconds", [0, -5, "five", True])
@@ -1260,6 +1278,7 @@ def test_watcher_broadcasts_a_changed_snapshot(app_dir, config_path, monkeypatch
                     await client.recv()  # football_rotation, sent after holiday
                     await client.recv()  # teams, sent after that
                     await client.recv()  # dates, sent after teams
+                    await client.recv()  # college_teams, sent last
                     state["scene"] = "game"
                     second = json.loads(await asyncio.wait_for(client.recv(), timeout=2))
                     return first, second
@@ -1301,7 +1320,7 @@ def test_admin_server_class_sets_config_path_and_snapshot_provider(app_dir, conf
     server.start()
     try:
         with sync_connect(f"ws://localhost:{server.port}/", open_timeout=5) as ws:
-            messages = [json.loads(ws.recv(timeout=5)) for _ in range(13)]
+            messages = [json.loads(ws.recv(timeout=5)) for _ in range(14)]
         audio = next(m for m in messages if m.get("section") == "audio")
         assert audio["data"]["device"] == "hw:9,0"
         snapshot = next(m for m in messages if m["type"] == "snapshot")
@@ -1701,7 +1720,8 @@ def test_upload_horn_broadcasts_the_updated_list_to_the_uploading_client(
         await client.recv()  # holiday
         await client.recv()  # football_rotation
         await client.recv()  # teams
-        await client.recv()  # dates, the 15th and last
+        await client.recv()  # dates
+        await client.recv()  # college_teams, the 16th and last
         await client.send(json.dumps({"type": "upload_horn", "team": "NSH", "data": _wav_b64()}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1908,7 +1928,8 @@ def test_delete_horn_removes_the_file_and_broadcasts_the_updated_list(
         await client.recv()  # holiday
         await client.recv()  # football_rotation
         await client.recv()  # teams
-        await client.recv()  # dates, the 15th and last
+        await client.recv()  # dates
+        await client.recv()  # college_teams, the 16th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "NSH"}))
         ack = json.loads(await client.recv())
         after = json.loads(await client.recv())
@@ -1937,7 +1958,8 @@ def test_delete_horn_reverts_playback_to_the_shipped_default(app_dir, config_pat
         await client.recv()  # holiday
         await client.recv()  # football_rotation
         await client.recv()  # teams
-        await client.recv()  # dates, the 15th and last
+        await client.recv()  # dates
+        await client.recv()  # college_teams, the 16th and last
         await client.send(json.dumps({"type": "delete_horn", "team": "default"}))
         return await client.recv()
 
@@ -2386,15 +2408,28 @@ def test_sends_football_s_own_settings_without_a_rotation_of_its_own(app_dir, co
         "show_bye": True,
         "show_final": True,
         "show_redzone": True,
+        "college_poll": "cfp",
+        "college_scores": "all",
+        "upset_alert": True,
+        "upset_seconds": 8.0,
+        "upset_min_gap": 1,
+        "cfp_field": 12,
     }
     assert "defaults" not in message and "screens" not in message
+    assert message["college"] == {
+        "polls": ["ap", "usa", "cfp"],
+        "scores": ["all", "ranked"],
+        "upset_seconds": [4.0, 15.0],
+        "upset_min_gap": [1, 25],
+        "cfp_field": [4, 16],
+    }
 
 
 def test_saving_football_s_settings_writes_the_football_section(app_dir, config_path):
     config_path.write_text("[football]\nfinal_hold_minutes = 30\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         saved = await _save_football_rotation(client, {"final_hold_minutes": 45})
         return saved, await _next(client)
 
@@ -2417,7 +2452,7 @@ def test_football_screens_save_through_the_one_rotation_list_mixed_with_hockeys(
     ]
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         await client.send(json.dumps({"type": "save", "section": "rotation", "data": rows}))
         saved = await _next(client)
         return saved, await _next(client)
@@ -2434,7 +2469,7 @@ def test_football_screens_save_through_the_one_rotation_list_mixed_with_hockeys(
 
 def test_the_rotation_still_rejects_a_screen_that_belongs_to_neither_sport(app_dir, config_path):
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         data = [{"screen": "fb_bye", "seconds": 5}]  # added by the board itself, never listed
         await client.send(json.dumps({"type": "save", "section": "rotation", "data": data}))
         return await _next(client)
@@ -2466,7 +2501,7 @@ def test_a_bad_football_rotation_save_is_rejected_and_writes_nothing(app_dir, co
     config_path.write_text("[football]\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         return await _save_football_rotation(client, data)
 
     message = asyncio.run(_serve_and_run(scenario))
@@ -2479,7 +2514,7 @@ def test_the_football_screen_toggles_save_and_reload(app_dir, config_path):
     config_path.write_text("[football]\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         saved = await _save_football_rotation(client, {"show_bye": False, "show_countdown": False})
         return saved, await _next(client)
 
@@ -2494,7 +2529,7 @@ def test_the_football_screen_lengths_save_to_the_football_section(app_dir, confi
     config_path.write_text("[football]\n")
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         saved = await _save_football_rotation(client, {"timings": {"score": 10, "play": 2.5}})
         return saved, await _next(client)
 
@@ -2555,7 +2590,7 @@ def test_saving_the_teams_writes_the_list_in_order_and_echoes_it(app_dir, config
     ]
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         saved = await _save_teams(client, {"teams": rows})
         return saved, await _next(client)
 
@@ -2579,7 +2614,7 @@ def test_saving_an_empty_list_clears_it(app_dir, config_path):
     config_path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n')
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         return await _save_teams(client, {"teams": []})
 
     assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
@@ -2626,7 +2661,7 @@ def test_a_bad_teams_save_is_rejected_whole_and_writes_nothing(app_dir, config_p
     config_path.write_text('[[teams]]\nsport = "hockey"\nteam = "NSH"\n')
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         return await _save_teams(client, data)
 
     message = asyncio.run(_serve_and_run(scenario))
@@ -2639,7 +2674,7 @@ def test_the_same_abbreviation_in_both_sports_is_two_valid_teams(app_dir, config
     config_path.write_text("")
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         return await _save_teams(
             client,
             {"teams": [{"sport": "hockey", "team": "BUF"}, {"sport": "football", "team": "BUF"}]},
@@ -2666,6 +2701,49 @@ def test_upload_football_sounds_are_stored_apart_from_the_hockey_horn(
     player = GoalHornPlayer.default()
     assert player.football_path("DAL", "td") == upload_dir / "_football_td.wav"
     assert player.football_path("BUF", "fg") == upload_dir / "football_BUF_fg.wav"
+
+
+def test_the_college_my_team_slots_upload_list_and_are_found_by_the_player(
+    app_dir, config_path, upload_dir
+):
+    """#612: two slots, no school in the key; the shipped football default sits behind them."""
+    assert _upload("cfb_td", _wav_b64())["name"] == "_college_td.wav"
+    assert _upload("cfb_fg", _wav_b64())["name"] == "_college_fg.wav"
+    listed = admin_server._list_uploaded_horns()
+    assert {"team": "cfb_td", "filename": "_college_td.wav"} in listed
+    assert {"team": "cfb_fg", "filename": "_college_fg.wav"} in listed
+    from scoreboard.audio import GoalHornPlayer
+
+    player = GoalHornPlayer.default()
+    assert player.football_path("SC", "td", college=True) == upload_dir / "_college_td.wav"
+    assert player.football_path("SC", "td") != upload_dir / "_college_td.wav", "NFL never uses it"
+    assert admin_server._delete_horn("cfb_td") is True
+    assert not (upload_dir / "_college_td.wav").exists()
+
+
+@pytest.mark.parametrize("team", ["cfb_xx", "cfb_", "cfb_td:SC", "cfb_../x"])
+def test_the_college_slots_reject_any_other_key(app_dir, config_path, upload_dir, team):
+    assert _upload(team, _wav_b64())["type"] == "error"
+
+
+def test_play_horn_plays_the_college_slot(app_dir, config_path, tmp_path, monkeypatch):
+    horn_dir = tmp_path / "horns"
+    horn_dir.mkdir()
+    (horn_dir / "_college_td.wav").write_bytes(b"fake wav")
+    config_path.write_text(f'[audio]\nenabled = true\nhorn_dir = "{horn_dir}"\n')
+    calls = []
+    monkeypatch.setattr(
+        admin_server.GoalHornPlayer, "_popen", staticmethod(lambda cmd: calls.append(cmd))
+    )
+    monkeypatch.setattr(admin_server.GoalHornPlayer, "_amixer", staticmethod(lambda cmd: True))
+
+    async def scenario(client):
+        await _skip_initial(client)
+        await client.send(json.dumps({"type": "play_horn", "team": "cfb_td"}))
+        return json.loads(await client.recv())
+
+    reply = asyncio.run(_serve_and_run(scenario))
+    assert reply["played"] is True and calls[0][-1].endswith("_college_td.wav")
 
 
 @pytest.mark.parametrize("team", ["fb_td:ZZZ", "fb_xx", "fb_td:../x", "fb_"])
@@ -2719,7 +2797,7 @@ def test_saving_the_dates_writes_toml_dates_in_order_and_echoes_them(app_dir, co
     rows = [_date_row(), _date_row(date="2020-06-01", text="our day!", icon="heart", repeat=False)]
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         saved = await _save_dates(client, {"dates": rows})
         return saved, await _next(client)
 
@@ -2741,7 +2819,7 @@ def test_saving_no_dates_clears_the_list(app_dir, config_path):
     config_path.write_text('[[dates]]\ndate = 2018-03-14\ntext = "MOM"\n')
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         return await _save_dates(client, {"dates": []})
 
     assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
@@ -2775,7 +2853,7 @@ def test_a_bad_dates_save_is_rejected_whole_and_writes_nothing(app_dir, config_p
     config_path.write_text('[[dates]]\ndate = 2018-03-14\ntext = "KEEP"\n')
 
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         return await _save_dates(client, data)
 
     message = asyncio.run(_serve_and_run(scenario))
@@ -2786,7 +2864,7 @@ def test_a_bad_dates_save_is_rejected_whole_and_writes_nothing(app_dir, config_p
 
 def test_the_dates_screen_is_a_valid_rotation_row(app_dir, config_path):
     async def scenario(client):
-        await _skip_initial(client, n=15)
+        await _skip_initial(client, n=16)
         await client.send(
             json.dumps(
                 {
@@ -2800,3 +2878,97 @@ def test_the_dates_screen_is_a_valid_rotation_row(app_dir, config_path):
 
     assert asyncio.run(_serve_and_run(scenario)) == {"type": "saved", "section": "rotation"}
     assert [e.screen for e in Settings.load(config_path).rotation] == ["dates"]
+
+
+# -- the college settings (#565), part of the football_rotation section ---------------------------
+
+
+def test_the_college_settings_save_to_the_football_section_and_come_back(app_dir, config_path):
+    data = {
+        "college_poll": "cfp",
+        "college_scores": "ranked",
+        "upset_alert": False,
+        "upset_seconds": 12,
+        "upset_min_gap": 5,
+        "cfp_field": 8,
+    }
+
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        saved = await _save_football_rotation(client, data)
+        return saved, await _next(client)
+
+    saved, echo = asyncio.run(_serve_and_run(scenario))
+    assert saved == {"type": "saved", "section": "football_rotation"}
+    assert echo["data"]["college_poll"] == "cfp" and echo["data"]["upset_seconds"] == 12.0
+    cfg = Settings.load(config_path).football
+    assert (cfg.college_poll, cfg.college_scores, cfg.upset_alert) == ("cfp", "ranked", False)
+    assert (cfg.upset_seconds, cfg.upset_min_gap, cfg.cfp_field) == (12.0, 5, 8)
+
+
+@pytest.mark.parametrize(
+    ("data", "key"),
+    [
+        ({"college_poll": "bcs"}, "college_poll"),
+        ({"college_poll": 3}, "college_poll"),
+        ({"college_scores": "top10"}, "college_scores"),
+        ({"upset_alert": "yes"}, "upset_alert"),
+        ({"upset_seconds": 3.9}, "upset_seconds"),
+        ({"upset_seconds": 15.1}, "upset_seconds"),
+        ({"upset_seconds": "8"}, "upset_seconds"),
+        ({"upset_seconds": True}, "upset_seconds"),
+        ({"upset_min_gap": 0}, "upset_min_gap"),
+        ({"upset_min_gap": 26}, "upset_min_gap"),
+        ({"upset_min_gap": 2.5}, "upset_min_gap"),
+        ({"upset_min_gap": True}, "upset_min_gap"),
+        ({"cfp_field": 3}, "cfp_field"),
+        ({"cfp_field": 17}, "cfp_field"),
+        ({"cfp_field": 12.5}, "cfp_field"),
+        ({"cfp_field": "12"}, "cfp_field"),
+        ({"cfp_field": True}, "cfp_field"),
+    ],
+)
+def test_a_bad_college_setting_is_rejected_whole_and_writes_nothing(
+    app_dir, config_path, data, key
+):
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        # one good field rides along: a rejected save must not write it either
+        return await _save_football_rotation(client, {"college_scores": "ranked", **data})
+
+    message = asyncio.run(_serve_and_run(scenario))
+    assert message["type"] == "error" and key in message["message"]
+    assert "college" not in config_path.read_text() and "upset" not in config_path.read_text()
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"upset_seconds": 4}, 4.0),
+        ({"upset_seconds": 15}, 15.0),
+        ({"upset_min_gap": 1}, 1),
+        ({"upset_min_gap": 25}, 25),
+        ({"cfp_field": 4}, 4),
+        ({"cfp_field": 16}, 16),
+    ],
+)
+def test_the_college_limits_are_inclusive(app_dir, config_path, data, expected):
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        return await _save_football_rotation(client, data)
+
+    assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
+    cfg = Settings.load(config_path).football
+    assert expected in (cfg.upset_seconds, cfg.upset_min_gap, cfg.cfp_field)
+
+
+def test_a_save_without_the_college_keys_leaves_them_alone(app_dir, config_path):
+    config_path.write_text('[football]\ncollege_poll = "usa"\nupset_min_gap = 7\n')
+
+    async def scenario(client):
+        await _skip_initial(client, n=16)
+        return await _save_football_rotation(client, {"final_hold_minutes": 40})
+
+    assert asyncio.run(_serve_and_run(scenario))["type"] == "saved"
+    cfg = Settings.load(config_path).football
+    assert (cfg.college_poll, cfg.upset_min_gap, cfg.final_hold_minutes) == ("usa", 7, 40.0)

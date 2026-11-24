@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import logging
@@ -13,7 +14,7 @@ import subprocess
 import threading
 import time
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -22,15 +23,18 @@ from typing import TYPE_CHECKING, Any
 
 import qrcode
 
-from . import april_fools, blowout
+from . import april_fools, blowout, college_picker
 from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
 from .button import Button
 from .config import (
+    DEFAULT_COLLEGE_ROTATION,
     DEFAULT_CONFIG_PATHS,
     DEFAULT_FOOTBALL_ROTATION,
+    FOOTBALL_SPORTS,
     PANEL_HARDWARE_MAPPING_CHOICES,
+    RUNNING_SPORTS,
     ConfigWriteError,
     RotationEntry,
     Settings,
@@ -42,6 +46,7 @@ from .config import (
 from .delay import DelayQueue
 from .display import goal_light
 from .display import penalty as penalty_screen
+from .display.college_idle import COLLEGE_DRAWERS
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
@@ -64,6 +69,7 @@ from .football.events import Touchdown
 from .football.mode import FootballMode
 from .football.models import FbGame, Play
 from .football.people import Person
+from .football.teams import EMPTY_DIRECTORY, use_directory
 from .hockey.api import HockeyApiError, HockeyClient
 from .hockey.models import (
     DIVISION_SPOTS,
@@ -341,6 +347,8 @@ class Scene:
     fb_stats: Any = None
     #: What an idle screen draws (#419): the view its builder in ``football/idle_screens.py`` made.
     fb_idle: Any = None
+    #: The upset an ``fb_upset`` scene announces (a ``football.upset.Upset``).
+    fb_upset: Any = None
     #: Which page of a several-page idle screen (the standings' division, then conference).
     fb_page: int = 0
     fb_elapsed: float = field(default=0.0, compare=False)
@@ -375,6 +383,7 @@ class ScoreboardApp:
         hostname_lookup: Callable[[], str] | None = None,
         alias_publisher: AliasPublisher | None = None,
         football_client_factory: Callable[[], Any] | None = None,
+        college_client_factory: Callable[[], Any] | None = None,
         fetcher: InlineFetcher | ThreadedFetcher | None = None,
     ) -> None:
         self.settings = settings
@@ -488,6 +497,7 @@ class ScoreboardApp:
             logos=logos,
         )
         self.renderer.football_logos = self._make_football_logos(settings)
+        self.renderer.college_logos = self._make_football_logos(settings, "college")
         self.games: list[Game] = []
         self.index = 0
         #: Fetch results waiting out ``broadcast_delay_seconds`` (#301), and the
@@ -649,6 +659,8 @@ class ScoreboardApp:
         self.holiday_overlay = HolidayOverlay()
         self._overlay_animating = False
         self._demo_drawing = False
+        #: The demo step being drawn is a college one (#559): the demo's FBS directory and logos.
+        self._demo_college = False
         self._demo_holiday: Holiday | None = None
         self._running = False
         #: The sport the board is running right now (#346). Only
@@ -657,11 +669,17 @@ class ScoreboardApp:
         #: The ranked ``[[teams]]`` list (epic #470) picks it through the priority layer.
         self._sport = self._initial_sport(settings)
         self._football_client_factory = football_client_factory
+        self._college_client_factory = college_client_factory
         #: Football's mode exists whenever football may take the board (a football team is ranked,
         #: or nothing is and every live game counts): both feeds then run all the time and the
         #: priority layer picks between them.
         self._football: FootballMode | None = (
             self._new_football() if self._wants("football", settings) else None
+        )
+        #: The FBS's own mode, beside the NFL's: separate feed, teams and state (they share
+        #: abbreviations and ESPN ids). Only built when a college team is ranked.
+        self._college: FootballMode | None = (
+            self._new_football("college") if self._wants("college", settings) else None
         )
         #: Today's hockey games as the lite poll saw them while football has the screen (the full
         #: hockey machinery only runs for the sport on screen); the priority layer reads these.
@@ -719,8 +737,12 @@ class ScoreboardApp:
             self.admin_server.start()
         self.renderer.draw_message(self.canvas, "HOCKEY", "CONNECTING")
         self.swap_canvas()
-        if self._football is not None:
-            self._football.start()
+        # Every football-style feed that exists, not only the one on screen: the priority layer
+        # reads each one's slate to learn that a ranked team's game is live, so a college feed
+        # that waited to be on screen could never ask for the screen (a restart mid-game left the
+        # board on hockey's idle scroll while South Carolina played).
+        for mode in self._fb_modes():
+            mode.start()
 
         next_poll = 0.0
         next_rotate = 0.0
@@ -793,6 +815,7 @@ class ScoreboardApp:
                 if not self._running:
                     break
                 self._set_demo_logos(step.use_logos)
+                self._demo_college = step.college
                 self._start_demo_holiday(step)
                 self._start_demo_shootout(step)
                 self._start_demo_goal(step)
@@ -997,6 +1020,7 @@ class ScoreboardApp:
             self._demo_step_index += 1
             self._demo_next_step_at = now + DEMO_SCENE_SECONDS
             self._set_demo_logos(step.use_logos)
+            self._demo_college = step.college
             self._start_demo_holiday(step)
             self._start_demo_shootout(step)
             self._start_demo_goal(step)
@@ -1036,29 +1060,51 @@ class ScoreboardApp:
     # -- data ------------------------------------------------------------
 
     @staticmethod
-    def _make_football_logos(settings: Settings) -> LogoSet | None:
-        """The football logo set, or ``None`` with logos switched off (#349). Cheap: the files
-        are only read when a screen first asks for a team at a size."""
+    def _make_football_logos(settings: Settings, sport: str = "football") -> LogoSet | None:
+        """The football logo set (``sport`` ``football``, the NFL's) or the FBS's (``college``,
+        #541), or ``None`` with logos switched off (#349). Cheap: the files are only read when a
+        screen first asks for a team at a size, and a team with no file is just the text layout."""
         if not settings.scoreboard.show_logos:
             return None
-        return LogoSet("football", settings.scoreboard.logo_variant)
+        return LogoSet(sport, settings.scoreboard.logo_variant)
 
-    def _new_football(self) -> FootballMode:
-        """A football mode over the live settings. Its feed thread is not started here: ``run()``
-        starts it, and a later edit of the ranked list starts it once the loop is running."""
+    def _new_football(self, sport: str = "football") -> FootballMode:
+        """A football mode over the live settings, for the NFL (``football``) or the FBS
+        (``college``). Its feed thread is not started here: ``run()`` starts it, and a later
+        edit of the ranked list starts it once the loop is running."""
+        college = sport == "college"
         return FootballMode(
             lambda: self.settings.scoreboard,
-            client_factory=self._football_client_factory,
+            client_factory=self._college_client_factory
+            if college
+            else self._football_client_factory,
             monotonic=self.monotonic,
-            football=self._football_cfg,
+            football=(lambda: self._fb_cfg(sport)),
             delay_seconds=self._delay_seconds,
             utc_now=self.clock,
             wide=lambda: self.renderer.width >= 128,
-            on_sound=self._on_football_sound,
+            on_sound=lambda event: self._on_football_sound(event, college),
             dates=self._dates_views,
+            league="college-football" if college else "nfl",
         )
 
-    def _on_football_sound(self, event: FbEvent) -> None:
+    def _fb(self, sport: str | None = None) -> FootballMode | None:
+        """The football-style mode for ``sport`` (default: the one on screen), if it has one."""
+        sport = sport or self._sport
+        if sport == "football":
+            return self._football
+        return self._college if sport == "college" else None
+
+    def _fb_modes(self) -> list[FootballMode]:
+        return [m for m in (self._football, self._college) if m is not None]
+
+    def _fb_cfg(self, sport: str) -> Any:
+        """A football-style sport's settings as its screens read them."""
+        return self._priority().view(
+            sport, self.settings.football, self._owner, self._sport_rotation(sport)
+        )
+
+    def _on_football_sound(self, event: FbEvent, college: bool = False) -> None:
         """The lead football team's touchdown or made field goal (#517): its own sound, else the
         default. Same rules as the hockey horn: the audio switch, volume and button mute apply."""
         kind = "td" if isinstance(event, Touchdown) else "fg"
@@ -1066,7 +1112,7 @@ class ScoreboardApp:
         if self._horn_muted():
             log.info("Sounds muted by button press; not playing the football sound")
             return
-        self.horn.play_football(event.team, kind)
+        self.horn.play_football(event.team, kind, college)
 
     def current_mode(self) -> str:
         """``hockey`` or ``football``: the one place that says which sport is running (#346)."""
@@ -1075,13 +1121,16 @@ class ScoreboardApp:
     @staticmethod
     def _initial_sport(settings: Settings) -> str:
         """The sport to start on: the top-ranked team's, else hockey."""
-        return settings.teams[0].sport if settings.teams else "hockey"
+        return next((e.sport for e in settings.teams if e.sport in RUNNING_SPORTS), "hockey")
 
     @staticmethod
     def _wants(sport: str, settings: Settings) -> bool:
         """Whether ``sport``'s feed is needed: a team of it is ranked, or none is (every live game
         of either sport counts then). A hockey-only list never polls football's feed."""
-        return not settings.teams or any(entry.sport == sport for entry in settings.teams)
+        ranked = any(entry.sport == sport for entry in settings.teams)
+        if sport == "college":
+            return ranked  # nobody gets the FBS feed (a 450 KB poll) unasked
+        return not settings.teams or ranked
 
     def _reset_favourite_caches(self) -> None:
         """Forget what was fetched for the previous favourite.
@@ -1110,10 +1159,33 @@ class ScoreboardApp:
         """
         if favourite == april_fools.PRANK_AS:
             return "hockey", favourite  # the April Fools prank recolours everything, as ever
-        first = self._priority().colour_team()
+        first = self._priority().colour_team(self._colours_known)
         if first is not None:
             return first.sport, first.team
         return "hockey", ""
+
+    def _colours_known(self, entry: TeamEntry) -> bool:
+        """Whether a ranked team's colours can be drawn now. A college team's come from the FBS
+        table, fetched after boot: until it has loaded the colours skip it (plain, as with no
+        team ranked) instead of failing."""
+        if entry.sport not in RUNNING_SPORTS:
+            return False
+        if entry.sport != "college":
+            return True
+        directory = self._college.directory if self._college is not None else None
+        return directory is not None and entry.team in directory.by_abbrev
+
+    @contextlib.contextmanager
+    def _colour_context(self, sport: str) -> Iterator[None]:
+        """Draw in ``sport``'s team colours: a college team's are football-shaped lookups in the
+        FBS directory, so that scope goes with it."""
+        if sport != "college":
+            with use_sport(sport):
+                yield
+            return
+        directory = self._college.directory if self._college is not None else None
+        with use_sport("football"), use_directory(directory or EMPTY_DIRECTORY):
+            yield
 
     def _priority(self) -> Priority:
         """The priority layer over the current ranked list (rebuilt only when the list changes)."""
@@ -1126,9 +1198,7 @@ class ScoreboardApp:
         """Football's settings as its screens read them: ``[football]`` seen through
         the priority layer (the owner is the favourite, the other ranked football teams are
         followed, the lead team has the horn; with no team ranked, nobody is)."""
-        return self._priority().view(
-            "football", self.settings.football, self._owner, self._sport_rotation("football")
-        )
+        return self._fb_cfg("football")
 
     def _hockey_cfg(self) -> Any:
         """Hockey's settings as its screens read them: ``[scoreboard]`` seen through
@@ -1147,6 +1217,10 @@ class ScoreboardApp:
                 countdown=timedelta(minutes=football.countdown_minutes),
                 final_hold=timedelta(minutes=football.final_hold_minutes),
             ),
+            "college": Windows(
+                countdown=timedelta(minutes=football.countdown_minutes),
+                final_hold=timedelta(minutes=football.final_hold_minutes),
+            ),
         }
 
     def _desired_sport(self) -> str:
@@ -1158,20 +1232,20 @@ class ScoreboardApp:
         otherwise hockey keeps it (its no-favourite flow shows every game, or the clock).
         """
         football_games = list(self._football.snapshot.games or ()) if self._football else []
+        college_games = list(self._college.snapshot.games or ()) if self._college else []
         hockey_games = self._hockey_priority_games()
         now = self.clock()
         ages = {("hockey", gid): now - ended for gid, ended in self.ended_at.items()}
-        if self._football is not None:
-            self._football.track()
-            ages.update(
-                {
-                    ("football", gid): timedelta(seconds=s)
-                    for gid, s in self._football.final_ages().items()
-                }
-            )
+        for sport in FOOTBALL_SPORTS:
+            mode = self._fb(sport)
+            if mode is not None:
+                mode.track()
+                ages.update(
+                    {(sport, gid): timedelta(seconds=s) for gid, s in mode.final_ages().items()}
+                )
         priority = self._priority()
         owner = priority.owner(
-            {"hockey": hockey_games, "football": football_games},
+            {"hockey": hockey_games, "football": football_games, "college": college_games},
             now,
             self._priority_windows(),
             ages,
@@ -1196,7 +1270,14 @@ class ScoreboardApp:
         """The sports with something to show now, best-ranked lead first: a sport whose slate is
         empty (the offseason, or its feed is down) sits out of the idle rotation."""
         football_games = self._football.snapshot.games if self._football is not None else None
-        have = {"hockey": bool(self._hockey_priority_games()), "football": bool(football_games)}
+        college_games = self._college.snapshot.games if self._college is not None else None
+        have = {
+            "hockey": bool(self._hockey_priority_games()),
+            "football": bool(football_games),
+            # College only counts with a row it can draw now: its screens arrive one by one (#551+)
+            # and a segment with none would hold the board on the plain scoreboards.
+            "college": bool(college_games) and self._college.has_idle_rows(),
+        }
         order = self._priority().sports() or ["hockey", "football"]
         return [sport for sport in order if have.get(sport)]
 
@@ -1212,7 +1293,7 @@ class ScoreboardApp:
             self._idle_origin = 0.0
             if self._football is not None:
                 self._football.idle_origin = 0.0
-            return priority.sports()[0]
+            return next((s for s in priority.sports() if s in RUNNING_SPORTS), "hockey")
         index, fraction = slot
         segment = segments[index]
         # The segment began ``fraction`` of its length ago: its sport times its rows from there.
@@ -1226,16 +1307,25 @@ class ScoreboardApp:
         """The ranked list was edited: start or stop football's feed as it is wanted, forget what
         belonged to the old favourite and followed teams, and let the next ``_choose_sport`` pick
         from the new order."""
-        wants_football = self._wants("football", new_settings)
-        if wants_football and self._football is None:
-            self._football = self._new_football()
-        if wants_football and self._running:
-            self._football.start()  # idempotent
-        elif not wants_football and self._football is not None:
-            self._football.stop()  # its feed thread must not outlive the mode
-            self._football = None
-            if self._sport == "football":
-                self._switch_sport("hockey", force_clean=True)
+        for sport in FOOTBALL_SPORTS:
+            wanted = self._wants(sport, new_settings)
+            mode = self._fb(sport)
+            if wanted and mode is None:
+                mode = self._new_football(sport)
+                if sport == "football":
+                    self._football = mode
+                else:
+                    self._college = mode
+            if wanted and self._running and mode is not None:
+                mode.start()  # idempotent
+            elif not wanted and mode is not None:
+                mode.stop()  # its feed thread must not outlive the mode
+                if sport == "football":
+                    self._football = None
+                else:
+                    self._college = None
+                if self._sport == sport:
+                    self._switch_sport("hockey", force_clean=True)
         self._reset_favourite_caches()
         # _goal_events counts only followed teams' goals, so a team added mid-game would read as its
         # whole tally scoring at once. Forget them; the next poll re-baselines without firing.
@@ -1292,6 +1382,13 @@ class ScoreboardApp:
                     self._football.start()
         elif sport == "football":
             self._football.reset_screens()
+        if sport == "college":
+            if self._college is None:
+                self._college = self._new_football("college")
+                if self._running:
+                    self._college.start()
+            else:
+                self._college.reset_screens()
         self._sport = sport
         self._sport_since = self.monotonic()
         self._poll_asap = True
@@ -1361,8 +1458,9 @@ class ScoreboardApp:
         self.mirror.requested = True
 
     def refresh(self) -> None:
-        if self._sport == "football" and self._football is not None:
-            self._football.refresh()
+        mode = self._fb() if self._sport in FOOTBALL_SPORTS else None
+        if mode is not None:
+            mode.refresh()
             if self._wants("hockey", self.settings):
                 # Hockey keeps being polled, lightly, so the priority layer can see it start.
                 self.fetcher.submit("scores_lite", self.client.scores, self._on_scores_lite)
@@ -1610,6 +1708,7 @@ class ScoreboardApp:
                 )
             self.renderer.logos = logos
             self.renderer.football_logos = self._make_football_logos(new_settings)
+            self.renderer.college_logos = self._make_football_logos(new_settings, "college")
 
         if auto_brightness_changed:
             # Same lazy probe as __init__: only touch the I2C bus when the
@@ -2635,8 +2734,14 @@ class ScoreboardApp:
             if sport == "hockey":
                 rows += self._default_rotation()
             else:
-                rows += [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+                rows += self._football_default(sport)
         return rows
+
+    @staticmethod
+    def _football_default(sport: str) -> list[RotationEntry]:
+        """A football-style sport's built-in idle rotation: the NFL's, or college's (#579)."""
+        defaults = DEFAULT_COLLEGE_ROTATION if sport == "college" else DEFAULT_FOOTBALL_ROTATION
+        return [RotationEntry(s, sec) for s, sec in defaults]
 
     def _sport_rotation(self, sport: str) -> list[RotationEntry]:
         """The rows ``sport`` shows: its current segment's while the sports alternate, else its own
@@ -2651,7 +2756,7 @@ class ScoreboardApp:
                 return rows
         if sport == "hockey":
             return self._default_rotation()
-        return [RotationEntry(s, sec) for s, sec in DEFAULT_FOOTBALL_ROTATION]
+        return self._football_default(sport)
 
     def _effective_rotation(self) -> list[RotationEntry]:
         return self._sport_rotation("hockey")
@@ -2789,8 +2894,15 @@ class ScoreboardApp:
             address_scene = self._address_scene()
             if address_scene is not None:
                 return address_scene
-        if self._sport == "football" and self._football is not None:
-            return self._football.scene()
+        # An upset (a ranked college team losing to a lower-ranked one) is news whichever sport the
+        # board is showing, as a goal is: it takes the board for its few seconds.
+        if self._college is not None:
+            upset = self._college.upset_scene()
+            if upset is not None:
+                return upset
+        mode = self._fb() if self._sport in FOOTBALL_SPORTS else None
+        if mode is not None:
+            return mode.scene()
         scene = self._select_base_scene(allow_fetch=allow_fetch)
         return self._apply_goal_override(scene)
 
@@ -2894,6 +3006,8 @@ class ScoreboardApp:
             alias_port=alias,
             cache_items=self.cache_items,
             cache_clearer=self.request_cache_clear,
+            college_source=college_picker.fetch_table,
+            college_cache=college_picker.CACHE_FILE,
         )
 
     def _set_admin_yield(self, yielded: bool) -> None:
@@ -3844,6 +3958,42 @@ class ScoreboardApp:
         return dataclasses.replace(scene, **changes) if changes else scene
 
     def draw_scene(self, scene: Scene) -> None:
+        """Draw ``scene``. A college scene is drawn in the FBS's team directory and with the
+        college logo set (#541) in place of the football one, which holds the NFL's crests under
+        abbreviations (``CIN``) the FBS reuses; a college team with no crest file falls back to
+        the text layout, as any team does."""
+        if self._demo_college:
+            self._draw_demo_college(scene)
+            return
+        mode = self._fb() if self._sport == "college" else None
+        if mode is None and scene.kind == "fb_upset":
+            mode = self._college  # an upset alert over hockey or the NFL: still the FBS's teams
+        if mode is None:
+            self._draw_scene(scene)
+            return
+        saved = self.renderer.football_logos
+        self.renderer.football_logos = self.renderer.college_logos
+        try:
+            with mode.scope():
+                self._draw_scene(scene)
+        finally:
+            self.renderer.football_logos = saved
+
+    def _draw_demo_college(self, scene: Scene) -> None:
+        """A college demo step: the demo's own FBS directory (the real table needs ESPN) and the
+        college logo set."""
+        from .football.college_demo import DEMO_DIRECTORY
+        from .football.teams import use_directory
+
+        saved = self.renderer.football_logos
+        self.renderer.football_logos = self.renderer.college_logos
+        try:
+            with use_directory(DEMO_DIRECTORY):
+                self._draw_scene(scene)
+        finally:
+            self.renderer.football_logos = saved
+
+    def _draw_scene(self, scene: Scene) -> None:
         r = self.renderer
         self._shootout_animating = False
         self._egg_animating = False
@@ -3857,9 +4007,9 @@ class ScoreboardApp:
         self._penalty_building = (
             penalty_age is not None and penalty_age < penalty_screen.ENTRANCE_SECONDS
         )
-        football_on = self._sport == "football" and self._football is not None
+        football_on = self._sport in FOOTBALL_SPORTS and self._fb() is not None
         favourite = (
-            self._football_cfg().favourite_team
+            self._fb_cfg(self._sport).favourite_team
             if football_on
             else self._hockey_cfg().favourite_team
         )
@@ -3940,6 +4090,8 @@ class ScoreboardApp:
             r.draw_fb_countdown(self.canvas, scene.fb_game, self.clock())
         elif scene.kind == "fb_redzone":
             r.draw_fb_redzone(self.canvas, scene.fb_game, scene.fb_elapsed)
+        elif scene.kind == "fb_upset":
+            r.draw_fb_upset(self.canvas, scene.fb_game, scene.fb_upset, scene.fb_elapsed)
         elif scene.kind == "fb_schedule":
             r.draw_fb_schedule(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind == "fb_week":
@@ -3954,22 +4106,24 @@ class ScoreboardApp:
             r.draw_fb_preview(self.canvas, scene.fb_idle, self.clock())
         elif scene.kind in ("fb_play", "fb_playtext", "fb_event"):
             r.draw_fb_play_scene(self.canvas, scene)
+        elif scene.kind in COLLEGE_DRAWERS:
+            COLLEGE_DRAWERS[scene.kind](r, self.canvas, scene, self.clock())
         elif scene.kind == "clock":
             sport, abbrev = self._colour_scheme(favourite, clock=True)
-            with use_sport(sport):
+            with self._colour_context(sport):
                 r.draw_clock(self.canvas, self.clock(), abbrev)
         elif scene.kind == "christmas_tree":
             sport, abbrev = self._colour_scheme(favourite)
             egg = self._tree_egg()
             # The squirrel and fire move; the quote is static text (the tree twinkles at 2fps).
             self._egg_animating = egg is not None and egg[0] in ("squirrel", "fire")
-            with use_sport(sport):
+            with self._colour_context(sport):
                 r.draw_christmas_tree(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "thanksgiving":
             sport, abbrev = self._colour_scheme(favourite)
             egg = self._turkey_egg()
             self._egg_animating = egg is not None
-            with use_sport(sport):
+            with self._colour_context(sport):
                 r.draw_thanksgiving(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "dates" and scene.date_views:
             r.draw_date(self.canvas, scene.date_views[0], self.clock())
@@ -4034,12 +4188,12 @@ class ScoreboardApp:
 
     def _draw_holiday_overlay(self, scene: Scene, favourite: str) -> None:
         holiday = self._demo_holiday if self._demo_drawing else self.active_holiday()
-        football_on = self._sport == "football" and self._football is not None
+        football_on = self._sport in FOOTBALL_SPORTS and self._fb() is not None
         if football_on and not self._demo_drawing:
             holiday = self._football_game_holiday(scene, holiday)
         min_gap, max_gap = self.settings.holiday.flyby_gap_minutes
         sport, favourite = self._colour_scheme(favourite)
-        with use_sport(sport):
+        with self._colour_context(sport):
             self._overlay_animating = self.holiday_overlay.draw(
                 self.canvas,
                 scene_kind=scene.kind,

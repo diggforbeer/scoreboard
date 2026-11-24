@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..football.director import STATS
-from ..football.stats import PAGES, GameStats
+from ..football.stats import GameStats
 from ..football.teams import is_team, team_color
 from .football_plays import DIM, WHITE, event_screen
 
@@ -75,15 +75,16 @@ def draw_stats(r: Renderer, canvas: Any, scene: Scene) -> None:
         return
     away, home = game.away.abbrev, game.home.abbrev
     colors = {"away": _color(away), "home": _color(home)}
-    page = page_of(scene, len(PAGES))
+    pages = stats.layout
+    page = page_of(scene, len(pages))
 
     _logo(r, canvas, away, 8)
     _logo(r, canvas, home, r.width - 8)
-    _dots(canvas, 8, page, len(PAGES))
-    _dots(canvas, r.width - 8, page, len(PAGES))
+    _dots(canvas, 8, page, len(pages))
+    _dots(canvas, r.width - 8, page, len(pages))
 
     mid = r.width // 2
-    for row, baseline in zip(PAGES[page], ROW_BASELINES, strict=False):
+    for row, baseline in zip(pages[page], ROW_BASELINES, strict=False):
         ahead = stats.leader(row)
         r.text_center(canvas, r.fonts.tiny, mid, baseline, DIM, row.label)
         for side, x, draw in (

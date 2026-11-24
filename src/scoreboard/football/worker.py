@@ -31,6 +31,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -114,7 +115,12 @@ class FeedWorker:
         collect: Callable[[Any, list[FbGame], FeedSnapshot], tuple[dict, dict]] | None = None,
         idle: Callable[[Any, list[FbGame], Scoreboard | None, IdleSnapshot], IdleSnapshot]
         | None = None,
+        scope: Callable[[Any], AbstractContextManager[None]] | None = None,
     ) -> None:
+        #: ``scope(client)`` returns a context manager the ``collect`` and ``idle`` callbacks run
+        #: in, so a college feed's team lookups (the client's own parsing scopes itself) resolve
+        #: against the FBS and not the NFL (see ``teams.use_directory``). ``None``: no scope.
+        self._scope = scope
         #: After each good scoreboard fetch, ``idle(client, games, scoreboard, previous)`` returns
         #: the idle screens' data (#421), fetching only what is due. Same rules as ``collect``.
         self._idle = idle
@@ -224,14 +230,16 @@ class FeedWorker:
         plays, players = before.plays, before.players
         if games is not None and self._collect is not None:
             try:
-                plays, players = self._collect(client, games, before)
+                with self._scoped(client):
+                    plays, players = self._collect(client, games, before)
             except Exception:  # plays are a bonus: the scores must still reach the panel
                 log.warning("collecting football plays failed", exc_info=True)
 
         idle = before.idle
         if games is not None and self._idle is not None:
             try:
-                idle = self._idle(client, games, scoreboard, before.idle)
+                with self._scoped(client):
+                    idle = self._idle(client, games, scoreboard, before.idle)
             except Exception:  # the idle screens are a bonus too
                 log.warning("collecting the football idle data failed", exc_info=True)
 
@@ -273,6 +281,9 @@ class FeedWorker:
         if snap.failures == 0:
             return base
         return min(base * 2 ** (snap.failures - 1), max(MAX_BACKOFF_SECONDS, base))
+
+    def _scoped(self, client: Any) -> AbstractContextManager[None]:
+        return self._scope(client) if self._scope is not None else nullcontext()
 
     # -- client ----------------------------------------------------------
 

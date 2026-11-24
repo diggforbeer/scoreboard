@@ -11,12 +11,26 @@ off-season). The caller can tell the two apart, which the staleness logic needs.
 from __future__ import annotations
 
 import logging
-from typing import Any
+import time
+from collections.abc import Callable
+from functools import wraps
+from typing import Any, TypeVar
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .college_rankings import Polls, polls_from_payload
+from .college_standings import CollegeStandings, college_standings_from_payload
+from .college_teams import (
+    TABLE_MAX_AGE_SECONDS,
+    CollegeTable,
+    directory_from_table,
+    read_table,
+    table_file,
+    table_from_payloads,
+    write_table,
+)
 from .idle import (
     Scoreboard,
     Standings,
@@ -27,15 +41,39 @@ from .idle import (
 )
 from .models import FbGame, Play
 from .people import RosterPlayer, roster_from_payload
-from .stats import GameStats, stats_from_summary
+from .stats import COLLEGE_PAGES, PAGES, GameStats, stats_from_summary
+from .teams import NFL_DIRECTORY, Directory, use_directory
 
 log = logging.getLogger(__name__)
 
-BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
-#: The core API: per-play ``participants`` (who did it) and the ``Coin Toss`` play (#354).
-CORE_URL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl"
-#: The standings live on ``/apis/v2/``, not ``/apis/site/v2/`` (football_api.md, "Between games").
-STANDINGS_URL = "https://site.api.espn.com/apis/v2/sports/football/nfl"
+#: ESPN's league slugs. The college feed has the NFL's shape, so one client serves both (#539).
+LEAGUE_NFL = "nfl"
+LEAGUE_COLLEGE = "college-football"
+LEAGUES = (LEAGUE_NFL, LEAGUE_COLLEGE)
+
+
+def league_base_url(league: str) -> str:
+    """The site API for ``league``: scoreboard, summary, teams, roster."""
+    return f"https://site.api.espn.com/apis/site/v2/sports/football/{league}"
+
+
+def league_core_url(league: str) -> str:
+    """The core API: per-play ``participants`` (who did it) and the ``Coin Toss`` play (#354)."""
+    return f"https://sports.core.api.espn.com/v2/sports/football/leagues/{league}"
+
+
+def league_standings_url(league: str) -> str:
+    """The standings live on ``/apis/v2/``, not ``/apis/site/v2/`` (football_api.md)."""
+    return f"https://site.api.espn.com/apis/v2/sports/football/{league}"
+
+
+BASE_URL = league_base_url(LEAGUE_NFL)
+CORE_URL = league_core_url(LEAGUE_NFL)
+STANDINGS_URL = league_standings_url(LEAGUE_NFL)
+#: ESPN group 80 is FBS. Without it the college scoreboard returns a curated 24 games; with it
+#: every FBS game of the week (``football_api.md``, "College football"). ``limit`` is lifted
+#: because the default page can cut a full Saturday short.
+COLLEGE_SCOREBOARD_PARAMS = {"groups": "80", "limit": "300"}
 #: Plays asked for per core page. A game has 150-200, so one page covers it; longer ones follow
 #: ``pageCount``.
 CORE_PAGE_LIMIT = 300
@@ -51,6 +89,29 @@ TIMEOUT = (5.0, 5.0)
 #: so asking faster than this only returns the same bytes. The lowest interval
 #: any caller should poll at.
 MIN_POLL_SECONDS = 10.0
+
+
+_R = TypeVar("_R")
+
+
+def _in_league(method: Callable[..., _R | None]) -> Callable[..., _R | None]:
+    """Run a parsing method with this client's league as the active team directory.
+
+    The models look teams up by ESPN id and abbreviation, and those collide between the NFL and
+    FBS, so a college client must parse inside its own directory whatever thread it runs on. A
+    college client with no team table yet fetches it first, and answers ``None`` (no data) if it
+    cannot: parsing without one would mark every team unknown, or worse, resolve it to the NFL's.
+    """
+
+    @wraps(method)
+    def scoped(self: FootballClient, *args: Any, **kwargs: Any) -> _R | None:
+        directory = self._league_directory()
+        if directory is None:
+            return None
+        with use_directory(directory):
+            return method(self, *args, **kwargs)
+
+    return scoped
 
 
 def _build_session() -> requests.Session:
@@ -76,13 +137,28 @@ def _build_session() -> requests.Session:
 class FootballClient:
     def __init__(
         self,
-        base_url: str = BASE_URL,
+        base_url: str | None = None,
         timeout: float | tuple[float, float] = TIMEOUT,
         session: requests.Session | None = None,
-        core_url: str = CORE_URL,
+        core_url: str | None = None,
+        league: str = LEAGUE_NFL,
+        standings_url: str | None = None,
+        keep_table: bool = False,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.core_url = core_url.rstrip("/")
+        if league not in LEAGUES:
+            raise ValueError(f"unknown football league {league!r}; expected one of {LEAGUES}")
+        self.league = league
+        #: Keep the FBS table on disk (``college_teams.table_file``): the running board does, so
+        #: a restart answers at once instead of waiting on ESPN's two big requests. Off for tests
+        #: and one-off clients.
+        self.keep_table = keep_table and league == LEAGUE_COLLEGE
+        #: The teams this client parses against: the NFL's from the start, the FBS's once the
+        #: table has been fetched (``college_teams``).
+        self._directory: Directory | None = NFL_DIRECTORY if league == LEAGUE_NFL else None
+        # An explicit URL wins (tests point these at a fake); otherwise the league decides.
+        self.base_url = (base_url or league_base_url(league)).rstrip("/")
+        self.core_url = (core_url or league_core_url(league)).rstrip("/")
+        self.standings_url = (standings_url or league_standings_url(league)).rstrip("/")
         self.timeout = timeout
         self.session = session or _build_session()
         #: The last failure, or ``""`` after a success. For the admin page's status.
@@ -99,6 +175,7 @@ class FootballClient:
     def __exit__(self, *_exc: object) -> None:
         self.close()
 
+    @_in_league
     def scoreboard(
         self, date: str | None = None, week: int | None = None, season_type: int | None = None
     ) -> Scoreboard | None:
@@ -108,7 +185,9 @@ class FootballClient:
         or 3) asks for a whole week. ``None`` is no data, as for ``scores``; an empty slate gives
         a ``Scoreboard`` with no games.
         """
-        params: dict[str, str] = {}
+        params: dict[str, str] = (
+            dict(COLLEGE_SCOREBOARD_PARAMS) if self.league == LEAGUE_COLLEGE else {}
+        )
         if date:
             params["dates"] = date
         if week is not None:
@@ -134,6 +213,7 @@ class FootballClient:
         """The whole week's games in one request (``week=N&seasontype=T``) and its byes."""
         return self.scoreboard(week=number, season_type=season_type)
 
+    @_in_league
     def schedule(self, team_id: int | str) -> TeamSchedule | None:
         """A team's regular-season schedule and bye week (~300 KB: fetch daily at most).
 
@@ -146,11 +226,79 @@ class FootballClient:
 
     def standings(self) -> Standings | None:
         """Each conference's divisions with every team's record, seed and streak (~160 KB)."""
-        payload = self._get("/standings", {"level": "3"}, base=STANDINGS_URL)
+        if self.league != LEAGUE_NFL:
+            # The college table is a different shape (conferences, the Sun Belt nested under its
+            # divisions, repeated stat names): ``college_standings()``. "No data" here, so a mode
+            # asking for the NFL's every hour keeps the rest of its idle data.
+            return None
+        payload = self._get("/standings", {"level": "3"}, base=self.standings_url)
         if payload is None:
             return None
         return standings_from_payload(payload)
 
+    def college_standings(self) -> CollegeStandings | None:
+        """Every conference's table with each team's records, seed and streak (#553, ~2.5 MB:
+        the caller fetches it hourly at most, and only when a screen shows it). College only."""
+        if self.league != LEAGUE_COLLEGE:
+            raise ValueError("college_standings() needs a college-football client")
+        payload = self._get("/standings", {"group": "80"}, base=self.standings_url)
+        if payload is None:
+            return None
+        return college_standings_from_payload(payload)
+
+    def college_teams(self) -> CollegeTable | None:
+        """Every FBS team with its conference and colours (#540): two requests, ~1.9 MB.
+
+        The standings (``group=80``) say who is FBS and which conference; ``/teams`` has the
+        colours. Fetch once and keep it (the caller caches); ``None`` if either request fails, so
+        a half-built table with neutral colours is never kept for a day. NFL clients refuse.
+        """
+        if self.league != LEAGUE_COLLEGE:
+            raise ValueError("college_teams() needs a college-football client")
+        standings = self._get("/standings", {"group": "80"}, base=self.standings_url)
+        if standings is None:
+            return None
+        teams = self._get("/teams", {"limit": "1000"})
+        if teams is None:
+            return None
+        table = table_from_payloads(standings, teams)
+        if table is not None:
+            self._directory = directory_from_table(table)
+            if self.keep_table:
+                write_table(table_file(), table)
+        return table
+
+    @property
+    def directory(self) -> Directory | None:
+        """The teams this client parses against, or ``None`` until the college table has loaded."""
+        return self._directory
+
+    def _league_directory(self) -> Directory | None:
+        """The directory to parse with, fetching the college table first if it is needed."""
+        if self._directory is not None:
+            return self._directory
+        kept = read_table(table_file()) if self.keep_table else None
+        if kept is not None and time.time() - kept[1] < TABLE_MAX_AGE_SECONDS:
+            self._directory = directory_from_table(kept[0])
+            return self._directory
+        if self.college_teams() is None:
+            if kept is None:
+                return None
+            log.warning("ESPN's team table is unreachable: using the one kept on disk")
+            self._directory = directory_from_table(kept[0])
+        return self._directory
+
+    def college_rankings(self) -> Polls | None:
+        """The AP, Coaches and CFP polls in one request (~680 KB: fetch hourly at most) (#546).
+
+        ``None`` is no data (a failure, or not the shape expected). NFL clients refuse.
+        """
+        if self.league != LEAGUE_COLLEGE:
+            raise ValueError("college_rankings() needs a college-football client")
+        payload = self._get("/rankings")
+        return None if payload is None else polls_from_payload(payload)
+
+    @_in_league
     def plays(self, event_id: int | str) -> list[Play] | None:
         """Every play of a game so far, in the order they happened (#353).
 
@@ -164,13 +312,15 @@ class FootballClient:
         if payload is None:
             return None
         # The same payload carries the team stats: keep them so showing them is no extra request.
-        self._stats[str(event_id)] = stats_from_summary(payload)
+        layout = COLLEGE_PAGES if self.league == LEAGUE_COLLEGE else PAGES
+        self._stats[str(event_id)] = stats_from_summary(payload, layout)
         return plays_from_summary(payload)
 
     def team_stats(self, event_id: int | str) -> GameStats | None:
         """The team stats from the last :meth:`plays` call for this game, or ``None``."""
         return self._stats.get(str(event_id))
 
+    @_in_league
     def core_plays(self, event_id: int | str) -> list[Play] | None:
         """A game's plays from the **core** feed, each with its ``participants`` (#354).
 
@@ -204,6 +354,7 @@ class FootballClient:
                 plays[play.id] = play
         return sorted(plays.values(), key=Play.sort_key)
 
+    @_in_league
     def roster(self, team_id: int | str) -> dict[int, RosterPlayer] | None:
         """A team's roster by athlete id (jersey, name, position), or ``None`` on failure (#354)."""
         payload = self._get(f"/teams/{team_id}/roster")

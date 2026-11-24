@@ -96,9 +96,11 @@ class RecordingHorn:
         self.wah_wah_calls = 0
         self.ding_calls = 0
         self.football_calls: list[tuple[str, str]] = []
+        self.football_college: list[bool] = []
 
-    def play_football(self, abbrev: str, kind: str) -> bool:
+    def play_football(self, abbrev: str, kind: str, college: bool = False) -> bool:
         self.football_calls.append((abbrev, kind))
+        self.football_college.append(college)
         return True
 
     def play(self, abbrev: str) -> bool:
@@ -2438,6 +2440,19 @@ def test_a_football_touchdown_and_field_goal_play_their_own_sounds_unless_muted(
     app._horn_muted_until = app.monotonic() + 3600
     app._on_football_sound(Touchdown(**common))
     assert len(app.horn.football_calls) == 2
+
+
+def test_only_the_college_mode_asks_for_the_college_slot(day):
+    """#612: both football modes share the horn hook; the college one says so."""
+    from scoreboard.football.events import Scope, Touchdown
+    from test_football_events import make_play
+
+    app, _clock, _client = day
+    play = make_play(2, "rush_td_pat", score=(0, 7), off="NYG")
+    event = Touchdown(play=play, game_id=1, team="NYG", scope=Scope.FULL, sound=True)
+    app._new_football("football")._on_sound(event)
+    app._new_football("college")._on_sound(event)
+    assert app.horn.football_college == [False, True]
 
 
 def _shots():

@@ -73,6 +73,9 @@ class Renderer:
         #: The football's logos at several sizes (#349), kept apart from the hockey's because the
         #: abbreviations overlap. ``None`` with logos switched off or in hockey mode.
         self.football_logos: LogoSet | None = None
+        #: The FBS's crests (#541), swapped in for ``football_logos`` while a college scene is
+        #: drawn.
+        self.college_logos: LogoSet | None = None
         self._colors: dict[tuple[int, int, int], Any] = {}
         #: goal_light's GOAL letters, rasterised once.
         self.goal_glyphs: dict[str, Any] = {}
@@ -1415,6 +1418,12 @@ class Renderer:
         from . import football_idle
 
         football_idle.draw_fb_redzone(self, canvas, game, seconds)
+
+    def draw_fb_upset(self, canvas: Any, game: Any, upset: Any, seconds: float) -> None:
+        """The upset alert: a ranked college team losing to a lower-ranked one (#557)."""
+        from . import football_upset
+
+        football_upset.draw_fb_upset(self, canvas, game, upset, seconds)
 
     def draw_fb_preview(self, canvas: Any, view: Any, now: Any) -> None:
         """The football next-game preview (#424); see ``football_idle``."""

@@ -73,7 +73,16 @@ def team_codes() -> tuple[str, ...]:
 #: The scoring moments and the Wi-Fi setup screens stay clean: a ghost
 #: crossing "GOAL" or a QR code someone is trying to scan helps nobody.
 NO_OVERLAY_SCENES = frozenset(
-    {"goal", "goal_detail", "three_stars", "penalty", "blowout", "ap_setup", "wifi_join"}
+    {
+        "goal",
+        "goal_detail",
+        "three_stars",
+        "penalty",
+        "blowout",
+        "ap_setup",
+        "wifi_join",
+        "fb_upset",
+    }
 )
 #: Idle scenes with empty corners for a holiday's static decoration. Not
 #: countdown/preview: their 32px logos fill both edges, same reason the

@@ -15,6 +15,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from .college_views import (
+    ConferenceView,
+    PollView,
+    ScoresView,
+    build_ap,
+    build_cfp,
+    build_conference,
+    build_scores,
+)
 from .idle_views import (
     ByeView,
     FinalView,
@@ -23,6 +32,7 @@ from .idle_views import (
     StandingsView,
     WeekView,
     build_bye,
+    build_college_preview,
     build_final,
     build_preview,
     build_schedule,
@@ -117,3 +127,33 @@ def _week(ctx: IdleContext) -> WeekView | None:
 @idle_screen("fb_schedule")
 def _schedule(ctx: IdleContext) -> ScheduleView | None:
     return build_schedule(ctx)
+
+
+@idle_screen("cfb_ap")
+def _college_ap(ctx: IdleContext) -> PollView | None:
+    """The AP Top 25 (#551): college boards only, because only a college board lists the name."""
+    return build_ap(ctx)
+
+
+@idle_screen("cfb_cfp")
+def _college_cfp(ctx: IdleContext) -> PollView | None:
+    """The committee's rankings (#552): skipped until they are published."""
+    return build_cfp(ctx)
+
+
+@idle_screen("cfb_conference")
+def _college_conference(ctx: IdleContext) -> ConferenceView | None:
+    """The lead team's conference table (#553)."""
+    return build_conference(ctx)
+
+
+@idle_screen("cfb_preview")
+def _college_preview(ctx: IdleContext) -> PreviewView | None:
+    """The lead college team's next game (#554)."""
+    return build_college_preview(ctx)
+
+
+@idle_screen("cfb_scores")
+def _college_scores(ctx: IdleContext) -> ScoresView | None:
+    """The opt-in scores grid (#556): the slate already polled, four games a page."""
+    return build_scores(ctx)

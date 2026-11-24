@@ -111,6 +111,9 @@ class DemoStep(NamedTuple):
     #: A unique, file-safe name (``game_live``, ``game_live_text``), which
     #: ``scripts/render-screens.py`` uses to name the step's image.
     name: str = ""
+    #: A college football step (#559): drawn in the demo's FBS team directory and with the college
+    #: logo set, never the NFL's.
+    college: bool = False
 
 
 def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:

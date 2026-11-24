@@ -60,6 +60,17 @@ const HOCKEY_ROTATION_SCREENS = ROTATION_SCREENS.filter(
 )
 // The football screens the same list can hold (config.py's FOOTBALL_SCREENS); the clock is shared.
 const FOOTBALL_ROTATION_SCREENS = ['fb_preview', 'fb_standings', 'fb_week', 'fb_schedule'] as const
+// The college football screens (config.py's COLLEGE_SCREENS): their own names, and a turn of their
+// own beside the NFL's. One not built yet is skipped by the board.
+const COLLEGE_ROTATION_SCREENS = [
+  'cfb_preview',
+  'cfb_ap',
+  'cfb_cfp',
+  'cfb_conference',
+  'cfb_week',
+  'cfb_schedule',
+  'cfb_scores',
+] as const
 // One cached thing on the Cache tab (cache_view.py): what it is, how old, and its data.
 interface CacheItem {
   key: string
@@ -164,6 +175,8 @@ function hornLabel(team: string, available: TeamsAvailable): string {
   if (team === 'default') return 'Default horn'
   if (team === 'wah_wah') return 'Wah-wah (opponent scores)'
   if (team === 'ding') return 'Ding (followed team scores)'
+  if (team === 'cfb_td') return 'College football: my team scores a touchdown'
+  if (team === 'cfb_fg') return 'College football: my team kicks a field goal'
   if (team.startsWith('fb_')) {
     const [head, abbrev] = team.split(':')
     const kind = head === 'fb_td' ? 'touchdown' : 'field goal'
@@ -204,6 +217,33 @@ interface FootballRotationConfig {
   show_bye: boolean
   show_final: boolean
   show_redzone: boolean
+  // The college settings (#565), also ``[football]``.
+  college_poll: string
+  college_scores: string
+  upset_alert: boolean
+  upset_seconds: number
+  upset_min_gap: number
+  cfp_field: number
+}
+
+// What the board says the college controls may hold (admin_server.py's ``college`` block).
+interface CollegeChoices {
+  polls: string[]
+  scores: string[]
+  upset_seconds: [number, number]
+  upset_min_gap: [number, number]
+  cfp_field: [number, number]
+}
+
+const COLLEGE_POLL_LABELS: Record<string, string> = {
+  ap: 'AP Top 25',
+  usa: 'Coaches Poll',
+  cfp: 'CFP Rankings (AP until the committee publishes) (default)',
+}
+
+const COLLEGE_SCORES_LABELS: Record<string, string> = {
+  all: 'Every game on the slate',
+  ranked: 'Only games with a ranked team',
 }
 
 interface FootballTeamOption {
@@ -213,8 +253,29 @@ interface FootballTeamOption {
 
 // The ranked list of teams, hockey and football mixed, rank 1 first (epic #470).
 interface TeamRow {
-  sport: 'hockey' | 'football'
+  sport: 'hockey' | 'football' | 'college'
   team: string
+}
+
+// The FBS table the college picker offers (college_picker.py, #543): conferences with their
+// teams, sent by the board. ``ready`` is false until the board has fetched it from ESPN.
+interface CollegeTeamOption {
+  id: number
+  abbrev: string
+  name: string
+  short_name: string
+  color: [number, number, number]
+}
+
+interface CollegeConference {
+  name: string
+  short: string
+  teams: CollegeTeamOption[]
+}
+
+interface CollegeTeams {
+  ready: boolean
+  conferences: CollegeConference[]
 }
 
 interface TeamsConfig {
@@ -382,6 +443,7 @@ type ServerMessage =
   | { type: 'config'; section: 'audio'; data: AudioConfig }
   | { type: 'config'; section: 'scoreboard'; data: ScoreboardConfig }
   | { type: 'config'; section: 'teams'; data: TeamsConfig; available: TeamsAvailable; max: number }
+  | { type: 'config'; section: 'college_teams'; data: CollegeTeams }
   | { type: 'config'; section: 'dates'; data: DatesConfig; available: DatesAvailable; max: number }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
@@ -393,6 +455,7 @@ type ServerMessage =
       section: 'football_rotation'
       data: FootballRotationConfig
       timing_ranges: Record<string, [number, number, number]>
+      college: CollegeChoices
     }
   | {
       type: 'config'
@@ -456,14 +519,139 @@ function teamLabel(row: TeamRow, available: TeamsAvailable): string {
   return available.football.find((t) => t.abbrev === row.team)?.name ?? row.team
 }
 
+// A college team's name from the picker's table, else its abbreviation (the table may not have
+// arrived yet, or the team may have left FBS).
+function collegeName(college: CollegeTeams, abbrev: string): string {
+  for (const conference of college.conferences) {
+    const found = conference.teams.find((t) => t.abbrev === abbrev)
+    if (found) return found.name
+  }
+  return abbrev
+}
+
+// The expanding conference list with a search box (#544). Conferences open and close; a search
+// filters every conference at once and opens the ones with a match. Picking a team adds it to the
+// ranked list; at the cap the teams are disabled and the reason is on the page.
+function CollegePicker({
+  college,
+  taken,
+  full,
+  max,
+  onPick,
+}: {
+  college: CollegeTeams
+  taken: (abbrev: string) => boolean
+  full: boolean
+  max: number
+  onPick: (abbrev: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const needle = query.trim().toLowerCase()
+  const matches = (t: CollegeTeamOption) =>
+    !needle ||
+    t.name.toLowerCase().includes(needle) ||
+    t.short_name.toLowerCase().includes(needle) ||
+    t.abbrev.toLowerCase().includes(needle)
+  const shown = college.conferences
+    .map((c) => ({ ...c, teams: c.teams.filter(matches) }))
+    .filter((c) => c.teams.length > 0)
+  if (!college.ready) {
+    return (
+      <p className="text-body-secondary small mb-0" id="college-loading">
+        Loading the college team list from ESPN... (the board fetches it the first time it is
+        needed)
+      </p>
+    )
+  }
+  return (
+    <div id="college-picker">
+      <input
+        type="search"
+        className="form-control mb-2"
+        id="college-search"
+        aria-label="Search college teams"
+        placeholder="Search college teams..."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {full && (
+        <div className="alert alert-warning py-2" id="college-full">
+          Your list is full ({max} teams). Remove a team above to add another.
+        </div>
+      )}
+      {shown.length === 0 && (
+        <p className="text-body-secondary small" id="college-none">
+          No college team matches &ldquo;{query}&rdquo;.
+        </p>
+      )}
+      {shown.map((conference) => {
+        const expanded = needle ? true : !!open[conference.name]
+        return (
+          <div className="mb-1" key={conference.name} data-conference={conference.name}>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm w-100 text-start d-flex justify-content-between"
+              aria-expanded={expanded}
+              onClick={() => setOpen({ ...open, [conference.name]: !open[conference.name] })}
+            >
+              <span>{conference.name}</span>
+              <span className="text-body-secondary">
+                {conference.teams.length} {expanded ? '\u25B2' : '\u25BC'}
+              </span>
+            </button>
+            {expanded && (
+              <ul className="list-group list-group-flush college-teams">
+                {conference.teams.map((t) => {
+                  const have = taken(t.abbrev)
+                  return (
+                    <li
+                      className="list-group-item d-flex align-items-center gap-2 py-1"
+                      key={t.abbrev}
+                      data-team={t.abbrev}
+                    >
+                      <span
+                        className="d-inline-block rounded-circle flex-shrink-0"
+                        style={{
+                          width: '0.8rem',
+                          height: '0.8rem',
+                          background: `rgb(${t.color.join(',')})`,
+                        }}
+                      />
+                      <span className="flex-grow-1">
+                        {t.name} ({t.abbrev})
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        aria-label={`Add ${t.name}`}
+                        disabled={have || full}
+                        onClick={() => onPick(t.abbrev)}
+                      >
+                        {have ? 'Added' : 'Add'}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function TeamsCard({
   value,
   available,
+  college,
   max,
   onChange,
 }: {
   value: TeamsConfig
   available: TeamsAvailable
+  college: CollegeTeams
   max: number
   onChange: (next: TeamsConfig) => void
 }) {
@@ -473,7 +661,9 @@ function TeamsCard({
   const nameOf = (row: TeamRow) =>
     row.sport === 'hockey'
       ? (hockeyNames[row.team] ?? row.team)
-      : (available.football.find((t) => t.abbrev === row.team)?.name ?? row.team)
+      : row.sport === 'college'
+        ? collegeName(college, row.team)
+        : (available.football.find((t) => t.abbrev === row.team)?.name ?? row.team)
   const isLead = (row: TeamRow, index: number) =>
     !isSlot(row) && teams.findIndex((t) => t.sport === row.sport && !isSlot(t)) === index
   const taken = (sport: string, team: string) => teams.some((t) => t.sport === sport && t.team === team)
@@ -483,6 +673,10 @@ function TeamsCard({
     const [row] = next.splice(index, 1)
     next.splice(index + by, 0, row)
     onChange({ teams: next })
+  }
+  const addCollege = (abbrev: string) => {
+    if (full || taken('college', abbrev)) return
+    onChange({ teams: [...teams, { sport: 'college', team: abbrev }] })
   }
   const add = () => {
     const [sport, team] = pick.split(':')
@@ -514,7 +708,15 @@ function TeamsCard({
           >
             <span className="flex-grow-1">
               {nameOf(row)} ({row.team}){' '}
-              <span className={`badge ${row.sport === 'hockey' ? 'text-bg-primary' : 'text-bg-success'}`}>
+              <span
+                className={`badge ${
+                  row.sport === 'hockey'
+                    ? 'text-bg-primary'
+                    : row.sport === 'college'
+                      ? 'text-bg-danger'
+                      : 'text-bg-success'
+                }`}
+              >
                 {row.sport}
               </span>{' '}
               {index === 0 && <span className="badge text-bg-warning teams-top">top priority</span>}{' '}
@@ -603,6 +805,14 @@ function TeamsCard({
           Add
         </button>
       </div>
+      <h3 className="h6 mt-3">College teams</h3>
+      <CollegePicker
+        college={college}
+        taken={(abbrev) => taken('college', abbrev)}
+        full={full}
+        max={max}
+        onPick={addCollege}
+      />
     </>
   )
 }
@@ -912,10 +1122,12 @@ function App() {
   )
   const [teamsAvailable, setTeamsAvailable] = useState<TeamsAvailable>({ hockey: [], football: [] })
   const [teamsMax, setTeamsMax] = useState(12)
+  const [collegeTeams, setCollegeTeams] = useState<CollegeTeams>({ ready: false, conferences: [] })
   // Whether football's section of the Idle rotation card shows: a football team is ranked
   // or nothing is yet.
   const rankedSports = teamsState.value?.teams.map((t) => t.sport) ?? []
   const showsFootball = rankedSports.length === 0 || rankedSports.includes('football')
+  const showsCollege = rankedSports.includes('college')
 
   const [datesState, datesSave] = useAutosave<DatesConfig>(
     (v) => save('dates', v),
@@ -958,6 +1170,7 @@ function App() {
   )
   const footballRotation = footballRotationState.value
   const [footballTimingRanges, setFootballTimingRanges] = useState<Record<string, [number, number, number]>>({})
+  const [collegeChoices, setCollegeChoices] = useState<CollegeChoices | null>(null)
 
   const [holidayState, holidaySave] = useAutosave<HolidayConfig>(
     (v) => save('holiday', v),
@@ -1066,6 +1279,7 @@ function App() {
               setTeamsAvailable(message.available)
               setTeamsMax(message.max)
             }
+            else if (message.section === 'college_teams') setCollegeTeams(message.data)
             else if (message.section === 'dates') {
               datesSave.receiveConfig(message.data)
               setDatesAvailable(message.available)
@@ -1079,6 +1293,7 @@ function App() {
             else if (message.section === 'football_rotation') {
               footballRotationSave.receiveConfig(message.data)
               setFootballTimingRanges(message.timing_ranges)
+              setCollegeChoices(message.college)
             }
             else if (message.section === 'holiday') {
               holidaySave.receiveConfig(message.data)
@@ -1722,6 +1937,7 @@ function App() {
             <TeamsCard
               value={teamsState.value}
               available={teamsAvailable}
+              college={collegeTeams}
               max={teamsMax}
               onChange={(next) => teamsSave.edit(next)}
             />
@@ -1762,7 +1978,7 @@ function App() {
           {rotation ? (
             <form onSubmit={flushOnSubmit(rotationSave)}>
               <p className="text-body-secondary small">
-                Screens shown when nothing you follow is on, in this order, hockey and football mixed.
+                Screens shown when nothing you follow is on, in this order, the sports mixed.
                 Consecutive rows of one sport show together, then the board moves to the other
                 sport's; a sport with nothing to show is skipped. Up to {ROTATION_MAX_ROWS} rows.
                 Empty falls back to each sport's built-in default.
@@ -1790,7 +2006,14 @@ function App() {
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="Both sports">
+                    <optgroup label="College football">
+                      {COLLEGE_ROTATION_SCREENS.map((screen) => (
+                        <option key={screen} value={screen}>
+                          {screen}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All sports">
                       {SHARED_ROTATION_SCREENS.map((screen) => (
                         <option key={screen} value={screen}>
                           {screen}
@@ -2061,6 +2284,165 @@ function App() {
 
       </div>
       <div className="col-lg-6">
+
+      {showsCollege && footballRotation && collegeChoices && (
+        <div className="card mb-4" id="college-settings">
+          <div className="card-body">
+            <h2 className="card-title h5">College football</h2>
+            <form onSubmit={flushOnSubmit(footballRotationSave)}>
+              <div className="row g-3">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-poll">
+                    Which poll means &ldquo;ranked&rdquo;
+                  </label>
+                  <select
+                    className="form-select"
+                    id="college-poll"
+                    value={footballRotation.college_poll}
+                    onChange={(e) =>
+                      footballRotationSave.edit({ ...footballRotation, college_poll: e.target.value })
+                    }
+                  >
+                    {collegeChoices.polls.map((poll) => (
+                      <option key={poll} value={poll}>
+                        {COLLEGE_POLL_LABELS[poll] ?? poll}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-text">
+                    The rank numbers on the screens and the upset alert all follow this one poll.
+                  </div>
+                </div>
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-scores">
+                    Scores grid shows
+                  </label>
+                  <select
+                    className="form-select"
+                    id="college-scores"
+                    value={footballRotation.college_scores}
+                    onChange={(e) =>
+                      footballRotationSave.edit({
+                        ...footballRotation,
+                        college_scores: e.target.value,
+                      })
+                    }
+                  >
+                    {collegeChoices.scores.map((choice) => (
+                      <option key={choice} value={choice}>
+                        {COLLEGE_SCORES_LABELS[choice] ?? choice}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-text">
+                    For the <code>cfb_scores</code> screen in the Idle rotation; ranked games come
+                    first either way.
+                  </div>
+                </div>
+              </div>
+              <div className="form-check mt-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="college-upset-alert"
+                  checked={footballRotation.upset_alert}
+                  onChange={(e) =>
+                    footballRotationSave.edit({ ...footballRotation, upset_alert: e.target.checked })
+                  }
+                />
+                <label className="form-check-label" htmlFor="college-upset-alert">
+                  Upset alert
+                </label>
+                <div className="form-text">
+                  When a ranked team is losing to a lower-ranked or unranked one from halftime on, or
+                  has lost, and one of the two is in your list (your team being upset, or your team
+                  pulling the upset), the board interrupts with a card naming both teams. It is
+                  silent, and a game with neither team in your list never alerts.
+                </div>
+              </div>
+              <div className="row g-3 mt-1">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-cfp-field">
+                    Playoff field (teams)
+                  </label>
+                  <input
+                    className="form-control"
+                    id="college-cfp-field"
+                    type="number"
+                    step="1"
+                    min={collegeChoices.cfp_field[0]}
+                    max={collegeChoices.cfp_field[1]}
+                    value={footballRotation.cfp_field}
+                    onChange={(e) =>
+                      numberEdit(footballRotationSave, e, {
+                        ...footballRotation,
+                        cfp_field: Number(e.target.value),
+                      })
+                    }
+                    onBlur={footballRotationSave.flush}
+                  />
+                  <div className="form-text">
+                    A line on the CFP Rankings screen after this many teams. 12 is the 12-team
+                    playoff; change it if the format does.
+                  </div>
+                </div>
+              </div>
+              <div className="row g-3 mt-1">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-upset-seconds">
+                    Alert stays up for (seconds)
+                  </label>
+                  <input
+                    className="form-control"
+                    id="college-upset-seconds"
+                    type="number"
+                    step="any"
+                    min={collegeChoices.upset_seconds[0]}
+                    max={collegeChoices.upset_seconds[1]}
+                    value={footballRotation.upset_seconds}
+                    onChange={(e) =>
+                      numberEdit(footballRotationSave, e, {
+                        ...footballRotation,
+                        upset_seconds: Number(e.target.value),
+                      })
+                    }
+                    onBlur={footballRotationSave.flush}
+                  />
+                  <div className="form-text">
+                    {collegeChoices.upset_seconds[0]} to {collegeChoices.upset_seconds[1]}.
+                  </div>
+                </div>
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="college-upset-gap">
+                    Smallest upset (places)
+                  </label>
+                  <input
+                    className="form-control"
+                    id="college-upset-gap"
+                    type="number"
+                    step="1"
+                    min={collegeChoices.upset_min_gap[0]}
+                    max={collegeChoices.upset_min_gap[1]}
+                    value={footballRotation.upset_min_gap}
+                    onChange={(e) =>
+                      numberEdit(footballRotationSave, e, {
+                        ...footballRotation,
+                        upset_min_gap: Number(e.target.value),
+                      })
+                    }
+                    onBlur={footballRotationSave.flush}
+                  />
+                  <div className="form-text">
+                    How many places lower the leading team must be ranked. 1 is any lower-ranked
+                    team and every unranked one; with 5, a #3 team losing to a #6 does not alert but
+                    losing to a #8 does.
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showsFootball && footballRotation && (
         <div className="card mb-4">
@@ -2927,7 +3309,8 @@ function App() {
             Upload a WAV or MP3 (up to 30 seconds, max 8 MB) to replace the default horn, or to give one team its
             own. A team's own horn always wins over the default. Football has its own touchdown
             and field-goal sounds, kept apart from the hockey horns; only your top football
-            team's touchdowns and field goals play one.
+            team's touchdowns and field goals play one. College football has two slots for your
+            top college team, whoever it is (a fight song, say), so there is no school list to scroll.
           </p>
 
           {hornList.length > 0 ? (
@@ -2999,6 +3382,10 @@ function App() {
                 <option value="default">Default horn (all teams)</option>
                 <option value="wah_wah">Wah-wah (opponent scores)</option>
                 <option value="ding">Ding (followed team scores)</option>
+                <optgroup label="College football: my team">
+                  <option value="cfb_td">My team scores a touchdown</option>
+                  <option value="cfb_fg">My team kicks a field goal</option>
+                </optgroup>
                 <optgroup label="Hockey goal horns">
                   {HOCKEY_TEAMS.map(([code, name]) => (
                     <option key={code} value={code}>

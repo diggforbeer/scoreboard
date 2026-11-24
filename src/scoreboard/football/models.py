@@ -109,6 +109,9 @@ class FbTeam:
     road_record: str = ""
     #: ``True``/``False`` once the game is decided, ``None`` before.
     winner: bool | None = None
+    #: The team's number in the chosen college poll (1-25), ``None`` if unranked or not college.
+    #: Not from the game feed: ``FootballMode.ranked`` fills it in from the polls.
+    rank: int | None = None
 
     @staticmethod
     def from_api(raw: Any) -> FbTeam:
@@ -217,6 +220,15 @@ class FbSituation:
         )
 
 
+def _headline(comp: dict[str, Any]) -> str:
+    """The first note's headline (a bowl's name), or ``""``."""
+    for note in _list(comp.get("notes")):
+        text = _str(_dict(note).get("headline")).strip()
+        if text:
+            return text
+    return ""
+
+
 def _leaders(comp: dict[str, Any]) -> tuple[FbLeader, ...]:
     out = []
     for cat in _list(comp.get("leaders")):
@@ -288,6 +300,11 @@ class FbGame:
     broadcasts: tuple[str, ...] = ()
     #: The game's top passer, rusher and receiver; **only for a final** (see ``FbLeader``).
     leaders: tuple[FbLeader, ...] = ()
+    #: The postseason game's name, ``Cricket Celebration Bowl`` (college: ``notes[].headline`` on a
+    #: season-type-3 game, which is where the bowls are named, also while both teams are still
+    #: ``TBD``); empty otherwise. The regular season's notes are scheduling remarks (``FLEX: ...``),
+    #: not names, so they are not read.
+    headline: str = ""
 
     @staticmethod
     def from_api(raw: Any) -> FbGame:
@@ -303,6 +320,7 @@ class FbGame:
             raise ValueError(f"game {game_id} does not have both an away and a home team")
         status = _dict(comp.get("status") or event.get("status"))
         stype = _dict(status.get("type"))
+        season_type = _int(_dict(event.get("season")).get("type"), None)
         return FbGame(
             id=game_id,
             away=away,
@@ -322,7 +340,7 @@ class FbGame:
             venue=_str(_dict(comp.get("venue")).get("fullName")),
             week=_int(_dict(event.get("week")).get("number"), None),
             situation=FbSituation.from_api(comp.get("situation")),
-            season_type=_int(_dict(event.get("season")).get("type"), None),
+            season_type=season_type,
             broadcasts=tuple(
                 name
                 for b in _list(comp.get("broadcasts"))
@@ -330,6 +348,7 @@ class FbGame:
                 if name
             ),
             leaders=_leaders(comp) if _str(stype.get("state")) == POST else (),
+            headline=_headline(comp) if season_type == 3 else "",
         )
 
     # -- state ---------------------------------------------------------
@@ -341,7 +360,14 @@ class FbGame:
     @property
     def is_halftime(self) -> bool:
         """Live, but between halves: no ball in play, so no field to show (#378)."""
-        return self.is_live and "HALF" in self.status_name.upper()
+        if not self.is_live:
+            return False
+        if "HALF" in self.status_name.upper():
+            return True
+        # Real feed, Clemson at Duke 2026-11-20: for about 20 s after the 2nd quarter ends the
+        # status is still STATUS_IN_PROGRESS with the detail "End of 2nd Quarter" (clock 0:00),
+        # before it turns STATUS_HALFTIME. There is no ball in play in that window either.
+        return self.period == 2 and self.detail.strip().lower().startswith("end of 2nd")
 
     @property
     def is_live(self) -> bool:
