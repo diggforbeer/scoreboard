@@ -50,13 +50,13 @@ from .display.college_idle import COLLEGE_DRAWERS
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
+    TURKEY_RUN_SECONDS,
     Holiday,
     HolidayOverlay,
     active_holiday,
     christmas_countdown,
     thanksgiving_countdown,
     tree_egg,
-    turkey_egg,
     use_sport,
 )
 from .display.logos import LogoLibrary, LogoSet
@@ -539,6 +539,9 @@ class ScoreboardApp:
         #: Demo only: when the current step's goal light "started".
         self._demo_goal_started: float | None = None
         self._egg_animating = False
+        #: The turkey run's pacing (see ``_turkey_egg``): when it started, and when the next is due.
+        self._turkey_started: float | None = None
+        self._turkey_next_at: float | None = None
         #: ``scoreboard --eggs``: the tree egg being shown and its monotonic start (eggs.py).
         self._egg_show: tuple[str, float] | None = None
         #: The favourite's goal light is on screen (fast loop); _goal_building
@@ -910,13 +913,38 @@ class ScoreboardApp:
         self._demo_goal_started = self.monotonic() if step.animate_goal else None
 
     def _turkey_egg(self) -> tuple[str, float] | None:
-        """The Thanksgiving turkey egg playing now and its age (#516); never in demo mode."""
+        """The Thanksgiving turkey egg playing now and its age (#516); never in demo mode.
+
+        Paced like the fly-bys: a timer, drawn from the ``flyby_frequency`` gap range, starts
+        counting when the screen is first drawn and runs on whatever else is up; the run starts
+        the first time the Thanksgiving screen is drawn once it is due, so it is seen at that
+        frequency rather than only if the screen happens to be up at the right moment.
+        """
         if self._egg_show is not None:
             kind, started = self._egg_show
             return (kind, self.monotonic() - started) if kind == "turkey" else None
         if self._demo_drawing:
             return None
-        return turkey_egg(self.clock().timestamp())
+        now = self.monotonic()
+        if self._turkey_started is not None:
+            age = now - self._turkey_started
+            if age < TURKEY_RUN_SECONDS:
+                return "turkey", age
+            self._turkey_started = None
+            self._turkey_next_at = now + self._turkey_gap()
+            return None
+        if self._turkey_next_at is None:
+            self._turkey_next_at = now + self._turkey_gap()
+        if now < self._turkey_next_at:
+            return None
+        self._turkey_started = now
+        return "turkey", 0.0
+
+    def _turkey_gap(self) -> float:
+        """Seconds to the next turkey run: the fly-by gap range, half to one-and-a-half times
+        the average for the chosen ``flyby_frequency``."""
+        shortest, longest = self.settings.holiday.flyby_gap_minutes
+        return self.holiday_overlay.rng.uniform(shortest, longest) * 60
 
     def _tree_egg(self) -> tuple[str, float] | None:
         """The Christmas tree Easter egg playing now and its age (#509); never in demo mode."""

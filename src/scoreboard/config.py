@@ -837,8 +837,9 @@ class HolidayConfig:
     #: Every holiday but the ones marked default_on=False (Canadian
     #: Thanksgiving), so a US board doesn't sprout October turkeys unasked.
     themes: list[str] = field(default_factory=lambda: list(DEFAULT_THEMES))
-    #: How often a fly-by (the Halloween ghost, Santa...) crosses the board:
-    #: a key of FLYBY_FREQUENCIES. Presets rather than raw minutes: it's a
+    #: How often a fly-by (the Halloween ghost, Santa...) crosses the board
+    #: (and the turkey's run on the Thanksgiving screen is paced by the same
+    #: gaps): a key of FLYBY_FREQUENCIES. Presets rather than raw minutes: it's a
     #: "did you see that?" moment, so how it feels matters, not exact gaps.
     flyby_frequency: str = "occasional"
 

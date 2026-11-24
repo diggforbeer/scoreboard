@@ -1696,14 +1696,14 @@ def thanksgiving_countdown(day: date) -> tuple[str, str] | None:
 
 # -- Thanksgiving turkey egg (#516) ---------------------------------------------
 #
-# Very rarely the turkey is startled and bolts right across the countdown, shaking the lettering
+# Now and then the turkey is startled and bolts right across the countdown, shaking the lettering
 # and blanking patches of it as it passes, shedding feathers that drift down over the words; the
-# patches repair themselves, and it wanders back in from the right, sheepish. A pure function of
-# age like the tree eggs (see above), and kept a surprise the same way.
+# patches repair themselves, and it wanders back in from the right, sheepish. The run itself is a
+# pure function of age like the tree eggs (see above), and kept a surprise the same way. How
+# often it happens is the Holiday Cheer ``flyby_frequency``, like the fly-bys: the app keeps a
+# timer drawn from the same gap range (``ScoreboardApp._turkey_egg``).
 
 TURKEY_RUN_SECONDS = 8.0
-#: ``kind, odds (1 in N 30s windows), seconds``: about once in three hours of the screen.
-TURKEY_EGGS = (("turkey", 360, TURKEY_RUN_SECONDS),)
 _TR_STARTLE = 0.6
 _TR_RUN_END = 2.4
 _TR_RETURN = 3.4
@@ -1715,11 +1715,6 @@ TURKEY_FACING_RIGHT = tuple(tuple(row[::-1] for row in frame) for frame in THANK
 _PATCHES = 30
 _FEATHERS = 13
 _EXCLAIM = ("YY", "YY", "YY", "..", "YY")
-
-
-def turkey_egg(timestamp: float) -> tuple[str, float] | None:
-    """The turkey egg playing at ``timestamp`` and its age, else ``None``."""
-    return _roll_egg(timestamp, TURKEY_EGGS, "turkey-egg")
 
 
 def _run_front(age: float, width: int) -> int:

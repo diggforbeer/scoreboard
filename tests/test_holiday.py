@@ -1033,15 +1033,64 @@ def test_the_fire_script_is_one_function_of_age():
     assert len(TREE_SKELETON) > 60, "a trunk and a good many twigs"
 
 
-def test_the_turkey_roll_is_a_pure_function_of_the_clock():
-    from scoreboard.display.holiday import TREE_EGG_WINDOW_SECONDS, turkey_egg
+def _turkey_app(holiday_app, frequency="occasional"):
+    app, src, now = holiday_app
+    now["t"] = datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
+    app.settings.holiday.flyby_frequency = frequency
+    return app, src
 
-    start = 1_800_000_000.0
-    rolls = [turkey_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
-    assert rolls == [turkey_egg(start + i * TREE_EGG_WINDOW_SECONDS) for i in range(5000)]
-    hits = [r for r in rolls if r]
-    assert 5 <= len(hits) <= 40, "about 1 in 360 windows"
-    assert {kind for kind, _age in hits} == {"turkey"}
+
+@pytest.mark.parametrize("frequency", ["rare", "occasional", "frequent"])
+def test_the_turkey_runs_at_the_holiday_frequency_like_the_flybys(holiday_app, frequency):
+    from scoreboard.config import FLYBY_FREQUENCIES
+    from scoreboard.display.holiday import TURKEY_RUN_SECONDS
+
+    app, src = _turkey_app(holiday_app, frequency)
+    shortest, longest = (m * 60 for m in FLYBY_FREQUENCIES[frequency].gap_minutes)
+
+    assert app._turkey_egg() is None, "nothing the moment the screen first appears"
+    gap = app._turkey_next_at - src.monotonic()
+    assert shortest <= gap <= longest, "the next run is due within the fly-by gap range"
+
+    src.now += gap - 1
+    assert app._turkey_egg() is None, "not yet"
+    src.now += 1
+    assert app._turkey_egg() == ("turkey", 0.0), "the first draw once it is due starts the run"
+    src.now += TURKEY_RUN_SECONDS - 1
+    kind, age = app._turkey_egg()
+    assert kind == "turkey" and 0 < age < TURKEY_RUN_SECONDS
+    src.now += 1
+    assert app._turkey_egg() is None, "over after its 8 seconds"
+    again = app._turkey_next_at - src.monotonic()
+    assert shortest <= again <= longest, "and the next is scheduled from the same range"
+
+
+def test_a_rarer_setting_makes_the_turkey_wait_longer(holiday_app):
+    gaps = {}
+    for frequency in ("frequent", "rare"):
+        app, src = _turkey_app(holiday_app, frequency)
+        app.holiday_overlay.rng = random.Random(1)  # the same draw, scaled by the preset
+        app._turkey_next_at = None
+        app._turkey_egg()
+        gaps[frequency] = app._turkey_next_at - src.monotonic()
+    assert gaps["rare"] > gaps["frequent"]
+
+
+def test_the_turkey_waits_for_its_screen_once_it_is_due(holiday_app):
+    # The timer runs on whatever else is up; the run starts when the screen next appears.
+    app, src = _turkey_app(holiday_app)
+    app._turkey_egg()
+    src.now += 3 * 3600  # long past due, with the Thanksgiving screen not drawn at all
+    assert app._turkey_started is None
+    assert app._turkey_egg() == ("turkey", 0.0), "plays straight away when it comes up"
+
+
+def test_the_turkey_schedule_never_runs_in_demo_mode(holiday_app):
+    app, src = _turkey_app(holiday_app)
+    app._demo_drawing = True
+    src.now += 24 * 3600
+    assert app._turkey_egg() is None
+    assert app._turkey_next_at is None and app._turkey_started is None
 
 
 def test_the_turkey_bolts_right_then_wanders_back_left():
@@ -1077,18 +1126,16 @@ def test_the_turkey_sheds_feathers_and_the_lettering_heals():
     assert any(turkey_text_shake(t / 30) != (0, 0) for t in range(20, 80))
 
 
-def test_the_turkey_run_holds_the_fast_loop_but_only_on_its_own_screen(holiday_app, monkeypatch):
-    from scoreboard import app as app_module
+def test_the_turkey_run_holds_the_fast_loop_but_only_on_its_own_screen(holiday_app):
     from scoreboard.app import ANIMATION_FRAME_INTERVAL, FRAME_INTERVAL
 
-    app, _src, now = holiday_app
+    app, src, now = holiday_app
     now["t"] = datetime(2026, 11, 19, 18, 0, tzinfo=UTC)
-    monkeypatch.setattr(app_module, "turkey_egg", lambda _ts: ("turkey", 1.0))
+    app.draw_scene(Scene("thanksgiving"))
+    assert app.frame_interval() == FRAME_INTERVAL, "the plain screen is the normal 2fps loop"
+    app._turkey_started = src.monotonic()  # a run in progress
     app.draw_scene(Scene("thanksgiving"))
     assert app.frame_interval() == ANIMATION_FRAME_INTERVAL
-    monkeypatch.setattr(app_module, "turkey_egg", lambda _ts: None)
-    app.draw_scene(Scene("thanksgiving"))
-    assert app.frame_interval() == FRAME_INTERVAL
     # A tour phase for one egg never leaks into the other screen.
     app._egg_show = ("turkey", app.monotonic())
     assert app._tree_egg() is None
