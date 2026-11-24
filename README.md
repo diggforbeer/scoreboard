@@ -75,7 +75,7 @@
 | src/scoreboard/football/idle\_screens.py          |       61 |        0 |    100% |           |
 | src/scoreboard/football/idle\_views.py            |      279 |        2 |     99% |   384-385 |
 | src/scoreboard/football/live\_capture.py          |      156 |        2 |     99% |   216-217 |
-| src/scoreboard/football/mode.py                   |      523 |       16 |     97% |267-270, 281, 292-293, 304-306, 318-320, 997-998, 1009 |
+| src/scoreboard/football/mode.py                   |      544 |       16 |     97% |277-280, 291, 302-303, 314-316, 328-330, 1029-1030, 1041 |
 | src/scoreboard/football/models.py                 |      314 |        2 |     99% |   33, 265 |
 | src/scoreboard/football/pacing.py                 |       42 |        0 |    100% |           |
 | src/scoreboard/football/people.py                 |      137 |        0 |    100% |           |
@@ -102,7 +102,7 @@
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **16231** |  **491** | **97%** |           |
+| **TOTAL**                                         | **16252** |  **491** | **97%** |           |
 
 
 ## Setup coverage badge
