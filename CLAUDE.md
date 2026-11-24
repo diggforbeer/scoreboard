@@ -351,6 +351,11 @@ fetches and `poll_interval()` target `_api_games()` (the undelayed list), not
 the delayed `self.games`, so they start when the API says a game is live;
 `with_situation` reads `_shown_situations`/`_shown_shootouts`, the delayed
 copies. Three stars needs nothing extra: it starts from the delayed final.
+Football follows it too: `FootballMode.snapshot` holds the feed's `games` back through its own
+`DelayQueue` (the plays already wait in the director's), so the resting field's score, possession and
+spot change with the play that caused them. Only `games` is delayed: `fetched_at` (staleness), the plays
+and the worker's own poll cadence read the live feed. The scoreboard feed also runs ahead of ESPN's
+play-by-play by ~35-120s on its own, which a delay of 0 does not close (see `tests/test_football_games_delay.py`).
 Unverified on hardware (#4) and against a real broadcast.
 
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
