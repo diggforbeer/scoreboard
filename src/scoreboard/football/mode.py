@@ -14,6 +14,7 @@ The designed screens plug into the renderer's registries (``display/football_pla
 from __future__ import annotations
 
 import contextlib
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -22,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
+from ..delay import DelayQueue
 from ..important_dates import pick as pick_date
 from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
@@ -166,6 +168,14 @@ class FootballMode:
         #: thread swaps in a new dict; the render loop only reads the reference.
         self._stats: Mapping[int, GameStats] = {}
         self._director_args = (football or _no_football, monotonic, delay_seconds, utc_now, timings)
+        #: The scoreboard's games wait out the broadcast delay like the plays do, so the field,
+        #: score and possession change when the matching play is shown, not before it (see
+        #: ``snapshot``). The first result applies at once; a delay of 0 passes everything through.
+        self._games_delay = DelayQueue(monotonic)
+        self._games_delay_seconds = delay_seconds
+        self._games_lock = threading.Lock()
+        self._games_seen: tuple[FbGame, ...] | None = None
+        self._games_shown: tuple[FbGame, ...] | None = None
         self.director = self._make_director()
         self._core_sync = CoreSync()
         #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
@@ -579,7 +589,29 @@ class FootballMode:
 
     @property
     def snapshot(self) -> FeedSnapshot:
-        return self.worker.snapshot()
+        """The feed's latest snapshot, its games held back by the broadcast delay.
+
+        Only ``games`` is delayed: the plays go through the director's own delay queue, and the
+        worker (which polls on the live games) reads ``worker.snapshot()`` directly. Staleness
+        stays the real fetch time.
+        """
+        raw = self.worker.snapshot()
+        with self._games_lock:
+            if raw.games is None:
+                self._games_seen = self._games_shown = None
+                return raw
+            if raw.games is not self._games_seen:  # each good fetch publishes a new tuple
+                self._games_seen = games = raw.games
+
+                def apply(games: tuple[FbGame, ...] = games) -> None:
+                    self._games_shown = games
+
+                self._games_delay.submit("games", self._games_delay_seconds(), apply)
+            self._games_delay.drain()
+            shown = self._games_shown
+        if shown is None or shown is raw.games:
+            return raw
+        return replace(raw, games=shown)
 
     @property
     def ready(self) -> bool:
