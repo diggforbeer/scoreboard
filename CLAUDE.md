@@ -355,7 +355,8 @@ Football follows it too: `FootballMode.snapshot` holds the feed's `games` back t
 `DelayQueue` (the plays already wait in the director's), so the resting field's score, possession and
 spot change with the play that caused them. Only `games` is delayed: `fetched_at` (staleness), the plays
 and the worker's own poll cadence read the live feed. The scoreboard feed also runs ahead of ESPN's
-play-by-play by ~35-120s on its own, which a delay of 0 does not close (see `tests/test_football_games_delay.py`).
+play-by-play by up to a poll on its own (measured: 0-15s on one game), which a delay of 0 does not close (see `tests/test_football_games_delay.py`).
+`football/skew.py` logs that gap per play: `[game] scoreboard names play <id> ...` when the live situation's `lastPlay.id` first shows, `plays feed has <id> ... Ns after the scoreboard named it` when `/summary` lists it, `never listed` if it never does; with the queue's `play shown: id=` line that is the chain `journalctl -u scoreboard | grep -E "skew|names play|plays feed has|play shown"`.
 Unverified on hardware (#4) and against a real broadcast.
 
 Power-play state (`situation`) is fetched from `gamecenter/{id}/landing`
