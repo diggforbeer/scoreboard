@@ -2601,6 +2601,88 @@ def test_the_dates_scene_is_stable_so_the_live_view_does_not_resnapshot_it(day):
     assert app._rotation_screen_scene("dates", None, None) == first
 
 
+# --------------------------------------------------------------------------
+# The stock ticker
+# --------------------------------------------------------------------------
+
+
+class _Quotes:
+    def __init__(self, **prices):
+        self.prices = prices
+
+    def quote(self, symbol):
+        from scoreboard.stocks import Quote
+
+        price = self.prices.get(symbol)
+        return None if price is None else Quote(symbol, price, price * 0.01, 1.0)
+
+
+def _quotes_arrive(app, **prices):
+    app._stocks_feed.poll_once(_Quotes(**prices), list(app.settings.stocks.symbols))
+
+
+def test_the_stocks_screen_is_skipped_until_there_are_symbols_and_quotes(day):
+    app, _, _ = day
+    assert app._rotation_screen_scene("stocks", None, None) is None  # nothing configured
+    app.settings.stocks.symbols = ["AAPL"]
+    assert app._rotation_screen_scene("stocks", None, None) is None  # no quotes yet
+    _quotes_arrive(app, AAPL=354.07)
+    scene = app._rotation_screen_scene("stocks", None, None)
+    assert scene.kind == "stocks"
+    assert [(v.symbol, v.price, v.change, v.up) for v in scene.stock_views] == [
+        ("AAPL", "354.07", "+1.00%", True)
+    ]
+
+
+def test_a_symbol_the_feed_does_not_know_shows_no_data_in_its_place(day):
+    app, _, _ = day
+    app.settings.stocks.symbols = ["AAPL", "NOPE"]
+    _quotes_arrive(app, AAPL=10.0)
+    scene = app._rotation_screen_scene("stocks", None, None)
+    assert [(v.symbol, v.price) for v in scene.stock_views] == [
+        ("AAPL", "10.00"),
+        ("NOPE", "NO DATA"),
+    ]
+
+
+def test_the_stocks_slot_lasts_a_whole_pass_and_scrolls_left_to_right(day):
+    from scoreboard.stocks import travel
+
+    app, _, _ = day
+    app.settings.stocks.symbols = ["AAPL", "TSLA", "MSFT", "GOOG", "AMZN"]
+    app.settings.stocks.speed = 20.0
+    _quotes_arrive(app, AAPL=354.07, TSLA=384.68, MSFT=412.5, GOOG=171.2, AMZN=188.9)
+    scene = app._rotation_screen_scene("stocks", None, None)
+    seconds = app._slot_seconds(scene, 5.0)
+    assert seconds == travel(scene.stock_views, app.renderer.width) / 20.0 > 5.0
+    start = app._split_slot(scene, 0.0, seconds)
+    middle = app._split_slot(scene, seconds / 2, seconds)
+    end = app._split_slot(scene, seconds, seconds)
+    assert start.scroll_px == 0 and start.scrolling
+    assert 0 < middle.scroll_px < end.scroll_px == travel(scene.stock_views, app.renderer.width)
+
+
+def test_a_stocks_row_in_the_idle_rotation_shows_the_ticker(day):
+    app, _, _ = day
+    app.settings.rotation = [RotationEntry("stocks", 10.0)]
+    assert app._rotate_idle_scenes(None, None) is None
+    app.settings.stocks.symbols = ["AAPL"]
+    _quotes_arrive(app, AAPL=354.07)
+    shown = app._rotate_idle_scenes(None, None)
+    assert shown.kind == "stocks" and shown.scrolling
+
+
+def test_the_stocks_screen_draws_through_the_renderer(day):
+    app, _, _ = day
+    app.settings.stocks.symbols = ["AAPL"]
+    _quotes_arrive(app, AAPL=354.07)
+    drawn = []
+    app.renderer.draw_stocks = lambda canvas, views, px: drawn.append((views[0].symbol, px))
+    scene = dataclasses.replace(app._rotation_screen_scene("stocks", None, None), scroll_px=40)
+    app.draw_scene(scene)
+    assert drawn == [("AAPL", 40)]
+
+
 # -- the Zamboni page's clock (#526) --------------------------------------------------------------
 
 

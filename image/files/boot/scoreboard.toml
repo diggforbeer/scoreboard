@@ -134,8 +134,9 @@ scores_grid = false
 # "christmas" ticked), "scores_grid" (every game today, four to a frame, its
 # seconds shared between the pages) and "address" (the admin page's IP and a
 # QR code to it; it also shows by itself for a minute once the board is
-# online) and "dates" (the birthdays and anniversaries in [[dates]] below, shown
-# while one is inside its window) are never in the default list -- they
+# online), "dates" (the birthdays and anniversaries in [[dates]] below, shown
+# while one is inside its window) and "stocks" (the ticker in [stocks] below,
+# scrolling left to right) are never in the default list -- they
 # only show if you add them here. A screen with nothing to show right now
 # (e.g. standings before your team's season has started) is skipped for
 # that pass, not shown blank.
@@ -170,6 +171,16 @@ scores_grid = false
 # repeat = true
 # show_years = true
 # days_before = 30
+
+# The stock ticker: up to five symbols scrolling across the panel from left to
+# right, shown by a "stocks" row in the idle rotation above (also on the admin
+# page, Idle screen config tab, "Stock ticker"). Quotes come from Yahoo Finance with no
+# account or key, and can be 15 minutes behind. Symbols are Yahoo's: AAPL,
+# BRK-B, ^GSPC (an index), BTC-USD, EURUSD=X.
+# [stocks]
+# symbols = ["AAPL", "TSLA", "^GSPC"]
+# refresh_seconds = 300   # 60-3600
+# speed = 20              # pixels per second, 8-60
 
 [football]
 # Football's own settings: the screen lengths and the toggles (all also on the

@@ -1092,11 +1092,41 @@ directory with `renderer.college_logos`. Images are `docs/football/cfb_*.png`, r
 committed), shown in `football_screen.md`'s "College screens"; `docs/college/` still holds the real-capture
 mockups. A new college screen adds a step here and a row in that section.
 
+## Stock ticker
+
+`[stocks]` (`symbols` up to `STOCKS_MAX` = 5, `refresh_seconds` 60-3600, `speed` 8-60 px/s) feeds the opt-in
+`stocks` rotation screen: a strip that scrolls across the panel **left to right**, once per slot. It follows the
+dates screen's shape (a shared screen, `config.SHARED_SCREENS`, so either sport's turn shows it; football's idle
+screens are 128px only).
+
+- **`stocks.py` is the whole rule set and is pure** except `YahooClient` and `StockFeed`: symbol rules
+  (`clean_symbol`, `symbol_problem`: capitals, digits, `. - = ^`, 12 chars; the config loader's `parse_symbols`
+  is forgiving, the admin save `_coerce_stocks` strict), `Quote`/`StockView` (the drawn text and direction),
+  `block_width`/`strip_width`/`travel`/`slot_seconds`/`scroll_px` (the strip and its scroll, from fixed font
+  widths so football's mode, which has no renderer, computes the same slot), and the feed.
+- **Source:** Yahoo's public chart endpoint (`query1.finance.yahoo.com/v8/finance/chart/<sym>?interval=1d&range=5d`),
+  no key, unofficial. The change is read off the daily closes' last two (`chartPreviousClose` is the close before
+  the whole 5-day window, so it is wrong for this); `regularMarketChangePercent` is the fallback. One request per
+  symbol; a 404 or a payload with no price is "no quote". To change provider, replace `YahooClient` only.
+- **`StockFeed`** (its own thread, started in `run()`, stopped in `shutdown()`; same shape as football's feed
+  worker) reads `settings.stocks` each pass, so the admin page's edit applies without a restart. A failed symbol
+  keeps its last quote, an unknown one is dropped (the screen shows `NO DATA` for it), and `fetched_at` only moves
+  when a pass got something. `ScoreboardApp._stock_views()` returns nothing until `fetched_at` is set, so the slot is
+  skipped rather than drawn blank.
+- **The slot:** `_slot_seconds` (hockey) and `FootballMode._rotation` (football, `STOCKS_PANEL_WIDTH` = 128) stretch the
+  row's seconds to one whole pass at `speed`; `_split_slot` / `_idle_scene` turn the slot's offset into
+  `Scene.scroll_px` (0 = the strip just off the left edge, `travel` = just off the right) with `scrolling = True`
+  so the loop runs fast. `Renderer.draw_stocks` draws only the blocks that are on the panel.
+- **Admin:** a `stocks` config section sent **last** on connect (so `_skip_initial` is 17; `college_teams` stays the 16th), `{symbols,
+  refresh_seconds, speed}` plus `available` bounds; saves go through the generic `[section]` writer. The "Idle screen config" tab
+  (the Idle rotation, Important dates and Stock ticker cards, moved off Home) has the "Stock ticker" card (`StocksCard`), which holds a new row back until it has a symbol and offers "Add to rotation" when the
+  rotation lacks a `stocks` row, as the dates card does.
+
 ## Important dates (#524)
 
 `[[dates]]` (up to `DATES_MAX` = 10) is the owner's list of birthdays, anniversaries and other days;
 the opt-in `dates` rotation screen (absent from every default, like `matchup`) counts down to each and
-celebrates on the day. The admin page's "Important dates" card (Home tab) edits it; a one-click
+celebrates on the day. The admin page's "Important dates" card (Idle screen config tab) edits it; a one-click
 "Add to rotation" appears only when a rotation exists without a `dates` row (with none, adding a lone
 row would replace the built-in default).
 

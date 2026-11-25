@@ -52,9 +52,10 @@ const ROTATION_SCREENS = [
   'scores_grid',
   'address',
   'dates',
+  'stocks',
 ] as const
 // The screens that belong to no sport (config.py's SHARED_SCREENS): either sport shows them.
-const SHARED_ROTATION_SCREENS = ['clock', 'dates'] as const
+const SHARED_ROTATION_SCREENS = ['clock', 'dates', 'stocks'] as const
 const HOCKEY_ROTATION_SCREENS = ROTATION_SCREENS.filter(
   (screen) => !(SHARED_ROTATION_SCREENS as readonly string[]).includes(screen),
 )
@@ -312,6 +313,21 @@ interface DatesAvailable {
   days_before_default: number
 }
 
+// The stock ticker (stocks.py): up to five symbols, Yahoo's spelling, shown by the "stocks"
+// rotation screen as a strip that scrolls left to right.
+interface StocksConfig {
+  symbols: string[]
+  refresh_seconds: number
+  speed: number
+}
+
+interface StocksAvailable {
+  max: number
+  symbol_max: number
+  refresh: [number, number]
+  speed: [number, number]
+}
+
 interface StatusConfig {
   enabled: boolean
   port: number
@@ -445,6 +461,7 @@ type ServerMessage =
   | { type: 'config'; section: 'teams'; data: TeamsConfig; available: TeamsAvailable; max: number }
   | { type: 'config'; section: 'college_teams'; data: CollegeTeams }
   | { type: 'config'; section: 'dates'; data: DatesConfig; available: DatesAvailable; max: number }
+  | { type: 'config'; section: 'stocks'; data: StocksConfig; available: StocksAvailable }
   | { type: 'config'; section: 'status'; data: StatusConfig }
   | { type: 'config'; section: 'panel'; data: PanelConfig }
   | { type: 'config'; section: 'night_mode'; data: NightModeConfig }
@@ -817,6 +834,166 @@ function TeamsCard({
   )
 }
 
+// What a stock symbol may hold (stocks.symbol_problem): capitals, digits and . - = ^. The page
+// drops the rest as it is typed; the server checks again.
+const cleanSymbol = (raw: string, max: number) =>
+  raw.toUpperCase().replace(/[^A-Z0-9.\-=^]/g, '').slice(0, max)
+
+function StocksCard({
+  section,
+  value,
+  available,
+  rotationHasStocks,
+  rotationCanTakeRow,
+  onAddToRotation,
+}: {
+  section: {
+    edit(value: StocksConfig, delayMs?: number, field?: string, invalid?: boolean): void
+    flush(): void
+    clearInvalid(): void
+  }
+  value: StocksConfig
+  available: StocksAvailable
+  rotationHasStocks: boolean
+  rotationCanTakeRow: boolean
+  onAddToRotation: () => void
+}) {
+  const rows = value.symbols
+  const full = rows.length >= available.max
+  const [refreshLow, refreshHigh] = available.refresh
+  const [speedLow, speedHigh] = available.speed
+  const changeSymbol = (i: number, symbol: string) =>
+    section.edit(
+      { ...value, symbols: rows.map((row, j) => (j === i ? symbol : row)) },
+      TYPING_DELAY_MS,
+      `stocks-symbol-${i}`,
+      symbol === '',
+    )
+  const remove = (i: number) => {
+    section.clearInvalid()
+    section.edit({ ...value, symbols: rows.filter((_, j) => j !== i) })
+  }
+  // Nothing is sent until the new row has a symbol.
+  const add = () =>
+    section.edit({ ...value, symbols: [...rows, ''] }, 0, `stocks-symbol-${rows.length}`, true)
+  const changeNumber = (key: 'refresh_seconds' | 'speed', raw: string, low: number, high: number) => {
+    const n = Number(raw)
+    section.edit(
+      { ...value, [key]: n },
+      TYPING_DELAY_MS,
+      `stocks-${key}`,
+      raw === '' || Number.isNaN(n) || n < low || n > high,
+    )
+  }
+  return (
+    <>
+      <p className="text-body-secondary small">
+        A ticker of up to {available.max} stocks that scrolls across the panel from left to right. Add
+        a <code>stocks</code> row to the Idle rotation to show it. Symbols are Yahoo Finance's: AAPL,
+        BRK-B, ^GSPC (an index), BTC-USD, EURUSD=X. Prices can be up to 15 minutes old.
+      </p>
+      {!rotationHasStocks && (
+        <div className="alert alert-info py-2 small d-flex align-items-center gap-2" id="stocks-hint">
+          <span className="flex-grow-1">
+            {rotationCanTakeRow
+              ? 'The Idle rotation has no stocks row yet, so the ticker will not show.'
+              : 'Add a stocks row to the Idle rotation to show the ticker.'}
+          </span>
+          {rotationCanTakeRow && (
+            <button type="button" className="btn btn-sm btn-primary" id="stocks-add-to-rotation" onClick={onAddToRotation}>
+              Add to rotation
+            </button>
+          )}
+        </div>
+      )}
+      {rows.length === 0 && (
+        <p className="text-body-secondary" id="stocks-empty">
+          No stocks yet.
+        </p>
+      )}
+      <ul className="list-group mb-3" id="stocks-list">
+        {rows.map((symbol, i) => (
+          <li className="list-group-item d-flex align-items-center gap-2" key={i} data-stock-row={i}>
+            <form
+              className="d-flex align-items-center gap-2 flex-grow-1"
+              onSubmit={(event) => {
+                event.preventDefault()
+                section.flush()
+              }}
+            >
+              <input
+                className="form-control"
+                style={{ width: '12rem', textTransform: 'uppercase' }}
+                type="text"
+                maxLength={available.symbol_max}
+                placeholder="SYMBOL (e.g. AAPL)"
+                aria-label={`symbol ${i + 1}`}
+                id={`stocks-symbol-${i}`}
+                value={symbol}
+                onChange={(e) => changeSymbol(i, cleanSymbol(e.target.value, available.symbol_max))}
+                onBlur={section.flush}
+              />
+              <button
+                type="button"
+                className="btn btn-outline-danger btn-sm"
+                aria-label={`remove ${symbol || `stock ${i + 1}`}`}
+                onClick={() => remove(i)}
+              >
+                Remove
+              </button>
+            </form>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        className="btn btn-outline-secondary mb-3"
+        id="stocks-add-button"
+        onClick={add}
+        disabled={full}
+      >
+        {full ? `Full (${available.max} stocks)` : 'Add a stock'}
+      </button>
+      <div className="d-flex flex-wrap gap-3">
+        <div>
+          <label className="form-label small mb-1" htmlFor="stocks-refresh_seconds">
+            Refresh every (seconds)
+          </label>
+          <input
+            className="form-control"
+            style={{ width: '8rem' }}
+            type="number"
+            step="1"
+            min={refreshLow}
+            max={refreshHigh}
+            id="stocks-refresh_seconds"
+            value={value.refresh_seconds}
+            onChange={(e) => changeNumber('refresh_seconds', e.target.value, refreshLow, refreshHigh)}
+            onBlur={section.flush}
+          />
+        </div>
+        <div>
+          <label className="form-label small mb-1" htmlFor="stocks-speed">
+            Scroll speed (pixels per second)
+          </label>
+          <input
+            className="form-control"
+            style={{ width: '8rem' }}
+            type="number"
+            step="1"
+            min={speedLow}
+            max={speedHigh}
+            id="stocks-speed"
+            value={value.speed}
+            onChange={(e) => changeNumber('speed', e.target.value, speedLow, speedHigh)}
+            onBlur={section.flush}
+          />
+        </div>
+      </div>
+    </>
+  )
+}
+
 // What a date's text may hold (important_dates.DATE_TEXT_CHARS): the page capitalises and drops
 // the rest as it is typed, so the panel is never asked to draw something it cannot; the server
 // checks again.
@@ -901,7 +1078,7 @@ function DatesCard({
           <span className="flex-grow-1">
             {rotationCanTakeRow
               ? 'The Idle rotation has no dates row yet, so these will not show.'
-              : 'Add a dates row to the Idle rotation (below) to show these.'}
+              : 'Add a dates row to the Idle rotation to show these.'}
           </span>
           {rotationCanTakeRow && (
             <button type="button" className="btn btn-sm btn-primary" onClick={onAddToRotation}>
@@ -1141,6 +1318,17 @@ function App() {
   })
   const [datesMax, setDatesMax] = useState(10)
 
+  const [stocksState, stocksSave] = useAutosave<StocksConfig>(
+    (v) => save('stocks', v),
+    NOT_CONNECTED_ERROR,
+  )
+  const [stocksAvailable, setStocksAvailable] = useState<StocksAvailable>({
+    max: 5,
+    symbol_max: 12,
+    refresh: [60, 3600],
+    speed: [8, 60],
+  })
+
   const [status, setStatus] = useState<StatusConfig | null>(null)
   const [statusSaveStatus, setStatusSaveStatus] = useState<SaveStatus>('idle')
   const [statusSaveError, setStatusSaveError] = useState<string | null>(null)
@@ -1201,7 +1389,7 @@ function App() {
 
   // Two pages don't justify a router (#193): plain view state.
   const [page, setPage] = useState<
-    'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'cache' | 'logs'
+    'home' | 'idle' | 'display' | 'audio' | 'holidays' | 'setup' | 'cache' | 'logs'
   >('home')
   const [cacheItems, setCacheItems] = useState<CacheItem[] | null>(null)
   const [logLines, setLogLines] = useState<LogEntry[]>([])
@@ -1234,6 +1422,7 @@ function App() {
       rotationSave,
       holidaySave,
       datesSave,
+      stocksSave,
     ]
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -1285,6 +1474,10 @@ function App() {
               setDatesAvailable(message.available)
               setDatesMax(message.max)
             }
+            else if (message.section === 'stocks') {
+              stocksSave.receiveConfig(message.data)
+              setStocksAvailable(message.available)
+            }
             else if (message.section === 'status') setStatus(message.data)
             else if (message.section === 'panel') setPanel(message.data)
             else if (message.section === 'night_mode') nightModeSave.receiveConfig(message.data)
@@ -1333,6 +1526,7 @@ function App() {
             else if (message.section === 'scoreboard') scoreboardSave.receiveSaved()
             else if (message.section === 'teams') teamsSave.receiveSaved()
             else if (message.section === 'dates') datesSave.receiveSaved()
+            else if (message.section === 'stocks') stocksSave.receiveSaved()
             else if (message.section === 'football_rotation') footballRotationSave.receiveSaved()
             else if (message.section === 'status') setStatusSaveStatus('saved')
             else if (message.section === 'panel') setPanelSaveStatus('saved')
@@ -1408,6 +1602,8 @@ function App() {
               teamsSave.receiveError(message.message)
             } else if (message.section === 'dates') {
               datesSave.receiveError(message.message)
+            } else if (message.section === 'stocks') {
+              stocksSave.receiveError(message.message)
             } else if (message.section === 'status') {
               setStatusSaveStatus('error')
               setStatusSaveError(message.message)
@@ -1476,6 +1672,7 @@ function App() {
     footballRotationSave,
     teamsSave,
     datesSave,
+    stocksSave,
     nightModeSave,
     wifiSave,
     rotationSave,
@@ -1844,7 +2041,7 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'display', 'audio', 'holidays', 'setup', 'cache', 'logs'] as const).map((name) => (
+        {(['home', 'idle', 'display', 'audio', 'holidays', 'setup', 'cache', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
@@ -1854,6 +2051,7 @@ function App() {
               {
                 {
                   home: 'Home',
+                  idle: 'Idle screen config',
                   display: 'Display',
                   audio: 'Audio',
                   holidays: 'Holiday Cheer',
@@ -1949,28 +2147,14 @@ function App() {
 
 
       </div>
-      <div className="col-lg-6">
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Important dates</h2>
-          {datesState.value ? (
-            <DatesCard
-              section={datesSave}
-              value={datesState.value}
-              available={datesAvailable}
-              max={datesMax}
-              rotationHasDates={rotation?.some((row) => row.screen === 'dates') ?? false}
-              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
-              onAddToRotation={() => {
-                if (rotation) rotationSave.edit([...rotation, { screen: 'dates', seconds: 8 }])
-              }}
-            />
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
       </div>
+        </>
+      )}
+
+      {page === 'idle' && (
+        <>
+      <div className="row g-4">
+      <div className="col-lg-6">
 
       <div className="card mb-4">
         <div className="card-body">
@@ -2080,6 +2264,50 @@ function App() {
                 </button>
               </div>
             </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      </div>
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Important dates</h2>
+          {datesState.value ? (
+            <DatesCard
+              section={datesSave}
+              value={datesState.value}
+              available={datesAvailable}
+              max={datesMax}
+              rotationHasDates={rotation?.some((row) => row.screen === 'dates') ?? false}
+              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
+              onAddToRotation={() => {
+                if (rotation) rotationSave.edit([...rotation, { screen: 'dates', seconds: 8 }])
+              }}
+            />
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Stock ticker</h2>
+          {stocksState.value ? (
+            <StocksCard
+              section={stocksSave}
+              value={stocksState.value}
+              available={stocksAvailable}
+              rotationHasStocks={rotation?.some((row) => row.screen === 'stocks') ?? false}
+              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
+              onAddToRotation={() => {
+                if (rotation) rotationSave.edit([...rotation, { screen: 'stocks', seconds: 20 }])
+              }}
+            />
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
           )}

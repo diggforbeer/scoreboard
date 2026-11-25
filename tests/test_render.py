@@ -2857,6 +2857,7 @@ def test_the_shot_map_draws_nothing_in_the_rounded_off_corners(games):
 
 from scoreboard.display import date_icons  # noqa: E402 - kept with the tests that use it
 from scoreboard.important_dates import DateView  # noqa: E402
+from scoreboard.stocks import StockView, strip_width, travel  # noqa: E402
 
 DATES_NOW = datetime(2026, 11, 18, 12, 0, 0, tzinfo=UTC)
 DATES_TEXT_LEFT = 3 + date_icons.ICON_BOX[0] + 5  # where the text column starts at 128px
@@ -2887,6 +2888,75 @@ def assert_date_layout(c: AsciiCanvas, view: DateView, *, years: bool, icon: boo
         assert label.x0 >= DATES_TEXT_LEFT and big.x0 >= DATES_TEXT_LEFT
     small = c.bbox(left, 28, right, H - 1)
     assert (small is not None) == years, "the years line shows if and only if the date counts years"
+
+
+# -- the stock ticker: a strip moving from the left edge to the right ----------------------------
+
+STOCK_VIEWS = (
+    StockView("AAPL", "354.07", "+1.43%", True),
+    StockView("TSLA", "384.68", "-0.62%", False),
+    StockView("NOPE", "NO DATA", "", None),
+)
+
+
+def draw_stocks(px: int, views=STOCK_VIEWS, *, width: int = W) -> AsciiCanvas:
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=width, height=H, tz=TZ)
+    c = AsciiCanvas(width, H)
+    r.draw_stocks(c, views, px)
+    return c
+
+
+@pytest.mark.parametrize(
+    ("name", "share"),
+    [("stocks_entering", 0.25), ("stocks_middle", 0.55), ("stocks_leaving", 0.85)],
+)
+def test_stocks_scene(name, share, update_snapshots):
+    c = draw_stocks(round(share * travel(STOCK_VIEWS, W)))
+    art = show(name, c)
+    assert not [p for p in c.out_of_bounds if not 0 <= p[1] < H], "drew above or below the panel"
+    check_snapshot(name, art, update_snapshots)
+
+
+def test_the_strip_starts_off_the_left_edge_and_ends_off_the_right():
+    assert not draw_stocks(0).lit(), "nothing is on the panel before the strip enters"
+    assert not draw_stocks(travel(STOCK_VIEWS, W)).lit(), "nothing is left after it leaves"
+
+
+def test_the_strip_moves_to_the_right_as_the_offset_grows():
+    """The first stock enters from the left: its rightmost lit pixel advances with the offset."""
+
+    def right_edge(px):
+        box = draw_stocks(px).bbox()
+        return None if box is None else box.x1
+
+    edges = [right_edge(px) for px in (14, 24, 34)]
+    assert None not in edges and edges == sorted(edges) and len(set(edges)) == 3
+
+
+@pytest.mark.parametrize(
+    ("view", "change_colour"),
+    [
+        (StockView("AAPL", "1.00", "+1.00%", True), "LIVE"),
+        (StockView("AAPL", "1.00", "-1.00%", False), "LOSS"),
+        (StockView("AAPL", "1.00", "0.00%", None), "SUBDUED"),
+    ],
+)
+def test_a_stock_is_symbol_and_change_over_a_price_coloured_by_direction(view, change_colour):
+    from scoreboard.display import renderer as rd
+
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=W, height=H, tz=TZ)
+    drawn: dict[str, tuple[int, int, int]] = {}
+    real = r.text
+
+    def record(canvas, font, x, y, rgb, text):
+        drawn[text] = rgb
+        return real(canvas, font, x, y, rgb, text)
+
+    r.text = record
+    r.draw_stocks(AsciiCanvas(W, H), (view,), strip_width((view,)))
+    assert drawn[view.symbol] == rd.ACCENT
+    assert drawn[view.change] == getattr(rd, change_colour)
+    assert drawn[view.price] == rd.WHITE
 
 
 DATE_SNAPSHOTS = [

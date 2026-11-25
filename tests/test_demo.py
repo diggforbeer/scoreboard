@@ -36,6 +36,7 @@ EVERY_KIND = {
     "clock",
     "address",
     "dates",
+    "stocks",
     "no_games",
     "no_data",
     "ap_setup",
@@ -175,6 +176,8 @@ def test_every_step_renders_on_panel(width):
             r.draw_address(c, scene.address_ip, scene.address_port, scene.address_qr)
         elif scene.kind == "dates":
             r.draw_date(c, scene.date_views[0], NOW)
+        elif scene.kind == "stocks":
+            r.draw_stocks(c, scene.stock_views, scene.scroll_px)
         elif scene.kind == "clock":
             r.draw_clock(c, NOW)
         elif scene.kind == "christmas_tree":
@@ -183,13 +186,18 @@ def test_every_step_renders_on_panel(width):
             r.draw_thanksgiving(c, datetime(2026, 11, 19, 23, 0, tzinfo=UTC), "NSH")
         else:
             r.draw_message(c, scene.kind.upper())
+
         # A scrolling table is clipped by the panel at the foot (as on
         # hardware), never sideways or above.
-        off = [
-            p
-            for p in c.out_of_bounds
-            if scene.kind not in ("conference_leaders", "division", "wildcard") or p[1] < 32
-        ]
+        def clipped(point, kind=scene.kind):
+            """What the panel clips by design: a scrolling table at the foot, the ticker's strip
+            at the sides (it enters and leaves across the edges)."""
+            x, y = point
+            if kind == "stocks":
+                return not 0 <= x < width and 0 <= y < 32
+            return kind in ("conference_leaders", "division", "wildcard") and y >= 32
+
+        off = [p for p in c.out_of_bounds if not clipped(p)]
         # A scorer's name has no max length, so goal_detail may run past the
         # 32px middle column of a single panel (accepted in #122, no truncation).
         if scene.kind == "goal_detail" and width == 64:

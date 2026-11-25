@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any
 
 from ..delay import DelayQueue
 from ..important_dates import pick as pick_date
+from ..stocks import scroll_px as stocks_scroll_px
+from ..stocks import slot_seconds as stocks_slot_seconds
 from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
 from .idle import (
@@ -73,6 +75,9 @@ FB_SCENE_KINDS = (
     "fb_event",
 )
 
+#: The idle screens are drawn for 128px panels only, so the ticker's travel is figured for one.
+STOCKS_PANEL_WIDTH = 128
+
 #: A game this close to kickoff has its plays fetched, so the opening kickoff (and the coin
 #: toss read from it) animates instead of being swallowed by the baseline.
 KICKOFF_WINDOW = timedelta(minutes=20)
@@ -105,6 +110,7 @@ class FootballMode:
         wide: Callable[[], bool] = lambda: True,
         on_sound: Callable[[Any], None] | None = None,
         dates: Callable[[], Sequence[Any]] = lambda: (),
+        stocks: Callable[[], tuple[Sequence[Any], float]] = lambda: ((), 20.0),
         league: str = LEAGUE_NFL,
     ) -> None:
         """``league`` is ``nfl`` or ``college-football``: the mode's team lookups (by id and by
@@ -131,6 +137,8 @@ class FootballMode:
         #: The owner's important dates inside their window (#524), nearest first: what the shared
         #: ``dates`` rotation screen shows between games, as hockey's does.
         self._dates = dates
+        #: The stock ticker's views and scroll speed (px/s): the ``stocks`` rotation screen.
+        self._stocks = stocks
         self._football = football
         self._monotonic = monotonic
         self._client_factory = client_factory
@@ -881,6 +889,11 @@ class FootballMode:
             elif entry.screen == "dates":
                 if self._dates():
                     slots.append((entry.screen, entry.seconds))
+            elif entry.screen == "stocks":
+                shown, speed = self._stocks()
+                if shown:
+                    seconds = stocks_slot_seconds(shown, entry.seconds, speed, STOCKS_PANEL_WIDTH)
+                    slots.append((entry.screen, seconds))
             elif entry.screen in IDLE_SCREENS:
                 view = IDLE_SCREENS[entry.screen](ctx)
                 if not view:
@@ -921,6 +934,18 @@ class FootballMode:
         from ..app import Scene
         from .idle_screens import IDLE_SCREENS
 
+        if kind == "stocks":
+            shown, _speed = self._stocks()
+            if shown:
+                offset = self._slot_fraction * self._slot_length
+                return Scene(
+                    "stocks",
+                    stock_views=tuple(shown),
+                    scroll_px=stocks_scroll_px(
+                        shown, offset, self._slot_length, STOCKS_PANEL_WIDTH
+                    ),
+                    scrolling=True,
+                )
         if kind == "dates":
             views = list(self._dates())
             if views:
