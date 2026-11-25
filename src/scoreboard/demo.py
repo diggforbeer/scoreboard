@@ -34,7 +34,7 @@ from .hockey.models import (
     standings_window,
 )
 from .important_dates import DateView
-from .stocks import StockView, overflow
+from .stocks import StockView, strip_width
 
 
 def _meetings(now: datetime) -> tuple[MeetingResult, ...]:
@@ -401,12 +401,10 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         *(
             (
                 f"stocks_{name}",
-                Scene(
-                    "stocks", stock_views=_STOCKS, scroll_px=round(share * overflow(_STOCKS, 128))
-                ),
+                Scene("stocks", stock_views=_STOCKS, scroll_px=round(share * strip_width(_STOCKS))),
                 {},
             )
-            for name, share in (("start", 0.0), ("middle", 0.5), ("end", 1.0))
+            for name, share in (("start", 0.0), ("middle", 0.4), ("wrap", 0.8))
         ),
     ]
     for holiday in (

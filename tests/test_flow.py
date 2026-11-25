@@ -2645,23 +2645,24 @@ def test_a_symbol_the_feed_does_not_know_shows_no_data_in_its_place(day):
     ]
 
 
-def test_the_stocks_slot_starts_painted_rests_scrolls_left_and_rests_on_the_last_stocks(day):
-    from scoreboard.stocks import HOLD_SECONDS, overflow
+def test_the_stocks_slot_starts_painted_rests_then_scrolls_left_without_stopping(day):
+    from scoreboard.stocks import HOLD_SECONDS, strip_width
 
     app, _, _ = day
     app.settings.stocks.symbols = ["AAPL", "TSLA", "MSFT", "GOOG", "AMZN"]
     app.settings.stocks.speed = 20.0
     _quotes_arrive(app, AAPL=354.07, TSLA=384.68, MSFT=412.5, GOOG=171.2, AMZN=188.9)
     scene = app._rotation_screen_scene("stocks", None, None)
-    seconds = app._slot_seconds(scene, 5.0)
-    extra = overflow(scene.stock_views, app.renderer.width)
-    assert seconds == 2 * HOLD_SECONDS + extra / 20.0 > 5.0
-    start = app._split_slot(scene, 0.0, seconds)
-    middle = app._split_slot(scene, seconds / 2, seconds)
-    end = app._split_slot(scene, seconds, seconds)
-    assert start.scroll_px == 0 and not start.scrolling  # painted in full, resting
-    assert middle.scroll_px == round(extra / 2) and middle.scrolling
-    assert end.scroll_px == extra and not end.scrolling  # resting on the last stocks
+    assert app._slot_seconds(scene, 30.0) == 30.0  # it loops for as long as the row says
+    loop = strip_width(scene.stock_views)
+
+    def at(offset):
+        return app._split_slot(scene, offset, 30.0)
+
+    assert at(0.0).scroll_px == 0 and not at(0.0).scrolling  # painted in full, resting
+    assert at(HOLD_SECONDS + 1).scroll_px == 20 and at(HOLD_SECONDS + 1).scrolling
+    last = at(29.9)
+    assert last.scrolling and 0 <= last.scroll_px < loop  # still moving at the very end
 
 
 def test_a_stocks_row_in_the_idle_rotation_shows_the_ticker(day):

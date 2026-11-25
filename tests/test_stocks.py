@@ -12,11 +12,10 @@ from scoreboard.stocks import (
     StockView,
     clean_symbol,
     is_moving,
-    overflow,
     parse_symbols,
     quote_from_chart,
     scroll_px,
-    slot_seconds,
+    scrolls,
     strip_width,
     symbol_problem,
     view_for,
@@ -161,49 +160,48 @@ FIVE = tuple(
 ONE = (StockView("AAPL", "354.07", "+1.43%", True),)
 
 
-def test_a_strip_wider_than_the_panel_overflows_by_what_hides_its_last_stock():
-    assert overflow(FIVE, 128) == strip_width(FIVE) - stocks.GAP + 2 * stocks.EDGE - 128 > 0
-    assert overflow(ONE, 128) == 0  # it all fits: the strip never moves
-    assert overflow((), 128) == 0
+def test_a_strip_wider_than_the_panel_scrolls_and_one_that_fits_stays_still():
+    assert scrolls(FIVE, 128)
+    assert not scrolls(ONE, 128)
+    assert not scrolls((), 128)
 
 
-def test_the_slot_starts_fully_painted_rests_scrolls_evenly_and_rests_on_the_last_stocks():
-    seconds = slot_seconds(FIVE, 1, 20, 128)
-    extra = overflow(FIVE, 128)
-    assert scroll_px(FIVE, 0, seconds, 128) == 0  # the first paint: the first stocks, in place
-    assert scroll_px(FIVE, stocks.HOLD_SECONDS, seconds, 128) == 0  # still resting
-    assert scroll_px(FIVE, seconds / 2, seconds, 128) == round(extra / 2)
-    assert scroll_px(FIVE, seconds - stocks.HOLD_SECONDS, seconds, 128) == extra
-    assert scroll_px(FIVE, seconds, seconds, 128) == extra  # and stays on the last stocks
-    assert scroll_px(FIVE, 99, seconds, 128) == extra  # clamped
+def test_the_slot_starts_fully_painted_rests_then_scrolls_at_the_speed_without_stopping():
+    hold = stocks.HOLD_SECONDS
+    assert scroll_px(FIVE, 0, 20, 128) == 0  # the first paint: the first stocks, in place
+    assert scroll_px(FIVE, hold, 20, 128) == 0  # still resting
+    assert scroll_px(FIVE, hold + 1, 20, 128) == 20
+    assert scroll_px(FIVE, hold + 2.5, 20, 128) == 50
+    assert scroll_px(FIVE, hold + 1, 40, 128) == 40  # twice the speed, twice as far
+
+
+def test_the_scroll_wraps_so_the_first_stock_comes_round_again_and_never_stops():
+    loop = strip_width(FIVE)
+    lap = loop / 20
+    start = stocks.HOLD_SECONDS
+    assert scroll_px(FIVE, start + lap - 0.1, 20, 128) > loop - 4  # nearly a full lap
+    for offset in (start + lap * 0.99, start + lap * 1.5, start + lap * 7.3, start + 3600):
+        assert 0 <= scroll_px(FIVE, offset, 20, 128) < loop
+    # it keeps advancing across the wrap: ten milliseconds on is never ten milliseconds back
+    seen = [scroll_px(FIVE, start + lap + t / 10, 20, 128) for t in range(0, 20)]
+    assert seen == sorted(seen), "the position only moves one way within a lap"
 
 
 def test_a_strip_that_fits_never_moves_and_nothing_is_not_an_error():
-    assert [scroll_px(ONE, t, 10, 128) for t in (0, 5, 10)] == [0, 0, 0]
-    assert scroll_px((), 5, 10, 128) == 0
-    assert not is_moving(ONE, 5, 10, 128)
+    assert [scroll_px(ONE, t, 20, 128) for t in (0, 5, 500)] == [0, 0, 0]
+    assert scroll_px((), 5, 20, 128) == 0
+    assert not is_moving(ONE, 500, 128)
 
 
-def test_the_fast_loop_only_runs_between_the_two_rests():
-    seconds = slot_seconds(FIVE, 1, 20, 128)
+def test_the_fast_loop_runs_from_the_end_of_the_opening_rest_until_the_slot_ends():
     hold = stocks.HOLD_SECONDS
-    assert [
-        is_moving(FIVE, t, seconds, 128) for t in (0, hold - 0.1, hold, seconds - hold - 0.1)
-    ] == [
+    assert [is_moving(FIVE, t, 128) for t in (0, hold - 0.1, hold, hold + 60, 9999)] == [
         False,
         False,
+        True,
         True,
         True,
     ]
-    assert not is_moving(FIVE, seconds - hold, seconds, 128)
-
-
-def test_the_slot_lasts_both_rests_and_the_scroll_at_the_speed_but_never_less_than_the_row():
-    needed = 2 * stocks.HOLD_SECONDS + overflow(FIVE, 128) / 20
-    assert slot_seconds(FIVE, 1, 20, 128) == pytest.approx(needed)
-    assert slot_seconds(FIVE, 500, 20, 128) == 500
-    assert slot_seconds(ONE, 9, 20, 128) == 9  # nothing to scroll: the row's seconds
-    assert slot_seconds((), 9, 20, 128) == 9
 
 
 # -- the feed --------------------------------------------------------------------------------

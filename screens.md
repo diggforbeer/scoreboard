@@ -434,18 +434,18 @@ Feb 28 in a year with no 29th.
 
 ![Stock ticker, as the screen paints](docs/screens/stocks_start.png)
 ![Stock ticker, scrolling](docs/screens/stocks_middle.png)
-![Stock ticker, resting on the last stocks](docs/screens/stocks_end.png)
+![Stock ticker, the last stock with the first coming round behind it](docs/screens/stocks_wrap.png)
 
 Up to five stocks side by side in one strip: each is its symbol (yellow) and the day's change
 (green up, red down, grey when flat) over a big white price, with a thin divider between stocks. A
 symbol the feed has no quote for shows `NO DATA` in grey in its place.
 
-**It paints fully first, then scrolls for the rest.** The screen starts with the first stocks already
-filling the panel and rests there for two seconds, scrolls **right to left** to bring the others into
-view, and rests two seconds on the last ones. The row's seconds is the minimum: when the scroll at the
-chosen speed needs longer, the slot stretches (two rests plus the scroll), the same rule as the standings
-tables, which scroll down. A strip that fits the panel (one stock, or two short ones) never moves and holds still
-for the row's seconds. It runs the fast loop only while it is moving.
+**It paints fully first, then scrolls without stopping.** The screen starts with the first stocks already
+filling the panel and rests there for two seconds, then scrolls **right to left** at the chosen speed for
+the rest of its slot. The strip is a loop: as the last stock leaves on the left the first is already
+coming round on the right, so it never ends and never goes blank. The slot is the rotation row's seconds
+(it does not stretch or stop early). A strip that fits the panel (one stock, or two short ones) never
+moves and holds still. It runs the fast loop whenever it is moving.
 
 Quotes come from Yahoo Finance's public chart endpoint (no account or key; US prices can be 15
 minutes behind), one request per symbol every few minutes, on their own thread. The change is

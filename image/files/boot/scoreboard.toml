@@ -173,7 +173,7 @@ scores_grid = false
 # days_before = 30
 
 # The stock ticker: up to five symbols, painted in full and then scrolling right
-# to left to reveal the rest, shown by a "stocks" row in the idle rotation above (also on the admin
+# to left without stopping, shown by a "stocks" row in the idle rotation above (also on the admin
 # page, Idle screen config tab, "Stock ticker"). Quotes come from Yahoo Finance with no
 # account or key, and can be 15 minutes behind. Symbols are Yahoo's: AAPL,
 # BRK-B, ^GSPC (an index), BTC-USD, EURUSD=X.

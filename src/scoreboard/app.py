@@ -2621,8 +2621,9 @@ class ScoreboardApp:
             shown = pick_date(scene.date_views, offset, seconds)
             return dataclasses.replace(scene, date_views=(shown,))
         if scene.kind == "stocks":
-            px = stocks_mod.scroll_px(scene.stock_views, offset, seconds, self.renderer.width)
-            moving = stocks_mod.is_moving(scene.stock_views, offset, seconds, self.renderer.width)
+            width, speed = self.renderer.width, self.settings.stocks.speed
+            px = stocks_mod.scroll_px(scene.stock_views, offset, speed, width)
+            moving = stocks_mod.is_moving(scene.stock_views, offset, width)
             return dataclasses.replace(scene, scroll_px=px, scrolling=moving)
         if scene.kind in SCROLLING_KINDS:
             return self._scroll_conference(scene, offset, seconds)
@@ -2631,12 +2632,9 @@ class ScoreboardApp:
     def _slot_seconds(self, scene: Scene, configured: float) -> float:
         """A scrolling table's slot lasts as long as a readable scroll needs.
 
-        The configured seconds is a minimum there, not an exact length.
+        The configured seconds is a minimum there, not an exact length. (The stock ticker loops
+        for as long as its slot lasts, so it keeps the configured seconds.)
         """
-        if scene.kind == "stocks":
-            return stocks_mod.slot_seconds(
-                scene.stock_views, configured, self.settings.stocks.speed, self.renderer.width
-            )
         if scene.kind not in SCROLLING_KINDS:
             return configured
         return self.renderer.standings_scroll_seconds(len(scene.standings), configured)

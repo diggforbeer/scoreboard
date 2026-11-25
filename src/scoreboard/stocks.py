@@ -1,7 +1,7 @@
 """The stock ticker idle screen: the rules, the quotes and the feed behind it.
 
 ``[stocks]`` lists up to ``STOCKS_MAX`` symbols; the opt-in ``stocks`` rotation screen draws them
-as a strip that starts fully painted and scrolls left to show the rest. Everything here is pure
+as a strip that starts fully painted and then scrolls left without stopping. Everything here is pure
 except ``YahooClient`` (one HTTP GET per symbol) and ``StockFeed`` (the thread that calls it), so
 the config loader, the admin save, both sports' rotations and the renderer share one rule set.
 
@@ -174,47 +174,37 @@ def strip_width(shown: Iterable[StockView]) -> int:
     return sum(block_width(v) for v in shown)
 
 
-#: Seconds the strip rests at each end of its scroll: long enough to read the first stocks as the
-#: screen paints, and the last ones as it settles. (Hockey's standings tables use the same rule.)
+#: Seconds the strip rests when the screen first paints, so the first stocks can be read before it
+#: starts to move. After that it never stops: it loops until the slot ends.
 HOLD_SECONDS = 2.0
 #: Blank pixels kept beside the first and last stock, so neither sits against the panel's edge.
 EDGE = 2
 
 
-def overflow(shown: Iterable[StockView], panel_width: int) -> int:
-    """Pixels the strip is wider than the panel: how far it has to move to show its last stock.
-    0 when every stock fits, and then the strip never moves."""
-    return max(0, strip_width(shown) - GAP + 2 * EDGE - panel_width)
+def scrolls(shown: Sequence[StockView], panel_width: int) -> bool:
+    """Whether the strip is wider than the panel. One that fits stays still."""
+    return bool(shown) and strip_width(shown) - GAP + 2 * EDGE > panel_width
 
 
-def slot_seconds(
-    shown: Sequence[StockView], minimum: float, speed: float, panel_width: int
-) -> float:
-    """The slot's length: ``minimum`` (the rotation row's seconds), or longer if resting at both
-    ends and moving the overflow at ``speed`` px/s takes more, so every price is seen."""
-    extra = overflow(shown, panel_width)
-    if not shown or extra <= 0:
-        return minimum
-    return max(minimum, 2 * HOLD_SECONDS + extra / max(speed, SPEED_MIN))
+def scroll_px(shown: Sequence[StockView], offset: float, speed: float, panel_width: int) -> int:
+    """How far left the strip has moved ``offset`` seconds into the slot, at ``speed`` px/s.
 
-
-def scroll_px(shown: Sequence[StockView], offset: float, seconds: float, panel_width: int) -> int:
-    """How far left the strip has moved ``offset`` seconds into a ``seconds`` slot. The slot starts
-    fully painted (0: the first stocks fill the panel), rests, moves evenly, and rests again on the
-    last stocks (``overflow``)."""
-    extra = overflow(shown, panel_width)
-    hold = min(HOLD_SECONDS, seconds / 4)
-    moving_seconds = seconds - 2 * hold
-    if not shown or extra <= 0 or moving_seconds <= 0:
+    The slot starts fully painted (0: the first stocks fill the panel), rests ``HOLD_SECONDS`` and
+    then scrolls without stopping: the strip is a loop of ``strip_width`` pixels, the renderer draws
+    it twice, and this wraps, so the first stock comes round again behind the last for as long as
+    the slot lasts."""
+    if not scrolls(shown, panel_width):
         return 0
-    progress = min(1.0, max(0.0, (offset - hold) / moving_seconds))
-    return round(progress * extra)
+    run = offset - HOLD_SECONDS
+    if run <= 0:
+        return 0
+    return int(run * max(speed, SPEED_MIN)) % strip_width(shown)
 
 
-def is_moving(shown: Sequence[StockView], offset: float, seconds: float, panel_width: int) -> bool:
-    """Whether the strip is between its two rests (the board runs its fast loop then)."""
-    hold = min(HOLD_SECONDS, seconds / 4)
-    return overflow(shown, panel_width) > 0 and hold <= offset < seconds - hold
+def is_moving(shown: Sequence[StockView], offset: float, panel_width: int) -> bool:
+    """Whether the strip is scrolling (the board runs its fast loop then): always, once the opening
+    rest is over, unless it all fits the panel."""
+    return scrolls(shown, panel_width) and offset >= HOLD_SECONDS
 
 
 # -- the feed ----------------------------------------------------------------------------------
