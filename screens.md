@@ -432,15 +432,15 @@ Feb 28 in a year with no 29th.
 
 ### `stocks`: the stock ticker
 
-![Stock ticker, entering from the left](docs/screens/stocks_entering.png)
+![Stock ticker, entering from the right](docs/screens/stocks_entering.png)
 ![Stock ticker, crossing the panel](docs/screens/stocks_middle.png)
-![Stock ticker, leaving on the right](docs/screens/stocks_leaving.png)
+![Stock ticker, leaving on the left](docs/screens/stocks_leaving.png)
 
-Up to five stocks side by side in one strip that scrolls across the panel **from left to right**:
+Up to five stocks side by side in one strip that scrolls across the panel **from right to left**:
 each is its symbol (yellow) and the day's change (green up, red down, grey when flat) over a big
 white price, with a thin divider between stocks. A symbol the feed has no quote for shows
-`NO DATA` in grey in its place. The strip starts wholly off the left edge and leaves wholly off the
-right, once per slot; the slot lasts as long as that takes at the scroll speed, and the row's
+`NO DATA` in grey in its place. The strip starts wholly off the right edge and leaves wholly off the
+left, once per slot; the slot lasts as long as that takes at the scroll speed, and the row's
 seconds is the minimum (the same rule as the standings tables, which scroll down). It runs the
 fast loop while it moves.
 

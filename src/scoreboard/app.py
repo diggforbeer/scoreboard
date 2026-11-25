@@ -334,7 +334,7 @@ class Scene:
     #: (a rotation slot narrows it to the one being shown).
     date_views: tuple[DateView, ...] = ()
     #: Set only for ``stocks`` -- the ticker's stocks as drawn; ``scroll_px`` is how far the strip
-    #: has moved right and ``scrolling`` keeps the loop fast while it does.
+    #: has moved left and ``scrolling`` keeps the loop fast while it does.
     stock_views: tuple[stocks_mod.StockView, ...] = ()
     #: Set only for ``fb_scores`` (#352) -- the football game to show.
     fb_game: FbGame | None = None

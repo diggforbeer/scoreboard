@@ -1,7 +1,7 @@
 """The stock ticker idle screen: the rules, the quotes and the feed behind it.
 
 ``[stocks]`` lists up to ``STOCKS_MAX`` symbols; the opt-in ``stocks`` rotation screen draws them
-as a strip that scrolls across the panel from the left edge to the right. Everything here is pure
+as a strip that scrolls across the panel from the right edge to the left. Everything here is pure
 except ``YahooClient`` (one HTTP GET per symbol) and ``StockFeed`` (the thread that calls it), so
 the config loader, the admin save, both sports' rotations and the renderer share one rule set.
 
@@ -175,7 +175,7 @@ def strip_width(shown: Iterable[StockView]) -> int:
 
 
 def travel(shown: Iterable[StockView], panel_width: int) -> int:
-    """Pixels the strip moves in one pass: from fully off the left edge to fully off the right."""
+    """Pixels the strip moves in one pass: from fully off the right edge to fully off the left."""
     return strip_width(shown) + panel_width
 
 
@@ -190,8 +190,8 @@ def slot_seconds(
 
 
 def scroll_px(shown: Sequence[StockView], offset: float, seconds: float, panel_width: int) -> int:
-    """How far right the strip has moved ``offset`` seconds into a ``seconds`` slot. 0 puts the
-    strip's right edge on the panel's left edge; ``travel`` puts its left edge on the right one."""
+    """How far left the strip has moved ``offset`` seconds into a ``seconds`` slot. 0 puts the
+    strip's left edge on the panel's right edge; ``travel`` puts its right edge on the left one."""
     if not shown or seconds <= 0:
         return 0
     progress = min(1.0, max(0.0, offset / seconds))

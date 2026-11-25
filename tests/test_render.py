@@ -2890,7 +2890,7 @@ def assert_date_layout(c: AsciiCanvas, view: DateView, *, years: bool, icon: boo
     assert (small is not None) == years, "the years line shows if and only if the date counts years"
 
 
-# -- the stock ticker: a strip moving from the left edge to the right ----------------------------
+# -- the stock ticker: a strip moving from the right edge to the left ----------------------------
 
 STOCK_VIEWS = (
     StockView("AAPL", "354.07", "+1.43%", True),
@@ -2917,20 +2917,20 @@ def test_stocks_scene(name, share, update_snapshots):
     check_snapshot(name, art, update_snapshots)
 
 
-def test_the_strip_starts_off_the_left_edge_and_ends_off_the_right():
+def test_the_strip_starts_off_the_right_edge_and_ends_off_the_left():
     assert not draw_stocks(0).lit(), "nothing is on the panel before the strip enters"
     assert not draw_stocks(travel(STOCK_VIEWS, W)).lit(), "nothing is left after it leaves"
 
 
-def test_the_strip_moves_to_the_right_as_the_offset_grows():
-    """The first stock enters from the left: its rightmost lit pixel advances with the offset."""
+def test_the_strip_moves_to_the_left_as_the_offset_grows():
+    """The first stock enters from the right: its leftmost lit pixel retreats with the offset."""
 
-    def right_edge(px):
+    def left_edge(px):
         box = draw_stocks(px).bbox()
-        return None if box is None else box.x1
+        return None if box is None else box.x0
 
-    edges = [right_edge(px) for px in (14, 24, 34)]
-    assert None not in edges and edges == sorted(edges) and len(set(edges)) == 3
+    edges = [left_edge(px) for px in (20, 40, 60)]
+    assert None not in edges and edges == sorted(edges, reverse=True) and len(set(edges)) == 3
 
 
 @pytest.mark.parametrize(

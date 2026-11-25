@@ -1095,7 +1095,7 @@ mockups. A new college screen adds a step here and a row in that section.
 ## Stock ticker
 
 `[stocks]` (`symbols` up to `STOCKS_MAX` = 5, `refresh_seconds` 60-3600, `speed` 8-60 px/s) feeds the opt-in
-`stocks` rotation screen: a strip that scrolls across the panel **left to right**, once per slot. It follows the
+`stocks` rotation screen: a strip that scrolls across the panel **right to left**, once per slot. It follows the
 dates screen's shape (a shared screen, `config.SHARED_SCREENS`, so either sport's turn shows it; football's idle
 screens are 128px only).
 
@@ -1115,7 +1115,7 @@ screens are 128px only).
   skipped rather than drawn blank.
 - **The slot:** `_slot_seconds` (hockey) and `FootballMode._rotation` (football, `STOCKS_PANEL_WIDTH` = 128) stretch the
   row's seconds to one whole pass at `speed`; `_split_slot` / `_idle_scene` turn the slot's offset into
-  `Scene.scroll_px` (0 = the strip just off the left edge, `travel` = just off the right) with `scrolling = True`
+  `Scene.scroll_px` (0 = the strip just off the right edge, `travel` = just off the left) with `scrolling = True`
   so the loop runs fast. `Renderer.draw_stocks` draws only the blocks that are on the panel.
 - **Admin:** a `stocks` config section sent **last** on connect (so `_skip_initial` is 17; `college_teams` stays the 16th), `{symbols,
   refresh_seconds, speed}` plus `available` bounds; saves go through the generic `[section]` writer. The "Idle screen config" tab

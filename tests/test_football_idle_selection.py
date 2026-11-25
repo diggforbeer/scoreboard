@@ -350,7 +350,7 @@ def test_the_dates_screen_drops_out_with_nothing_near():
     assert set(kinds(mode, clock, range(0, 30))) == {"fb_preview"}
 
 
-# -- the shared "stocks" screen: a strip scrolling left to right ---------------------------------
+# -- the shared "stocks" screen: a strip scrolling right to left ---------------------------------
 
 
 def test_the_stocks_screen_scrolls_to_the_right_over_its_slot_and_lasts_a_whole_pass():

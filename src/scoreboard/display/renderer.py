@@ -29,7 +29,7 @@ from ..hockey.models import (
     TeamLeaders,
 )
 from ..important_dates import DateView, countdown_text, years_text
-from ..stocks import DETAIL_CHAR_WIDTH, GAP, StockView, block_width, strip_width
+from ..stocks import DETAIL_CHAR_WIDTH, GAP, StockView, block_width
 from . import date_icons, goal_light
 from . import penalty as penalty_screen
 from .fonts import FontSet, text_width
@@ -1645,14 +1645,14 @@ class Renderer:
 
     def draw_stocks(self, canvas: Any, views: tuple[StockView, ...], px: int) -> None:
         """The ``stocks`` rotation screen: every stock side by side in one strip that moves from
-        the left edge to the right, ``px`` pixels so far (0 has the strip just off the left edge).
+        the right edge to the left, ``px`` pixels so far (0 has the strip just off the right edge).
 
         A stock is its symbol over its price and the day's change, the change green up and red down
         (grey when flat or when the feed has nothing: ``NO DATA``). Blocks wholly off the panel are
         not drawn. The widths are ``stocks.block_width``'s, so the slot's length matches the strip.
         """
         canvas.Clear()
-        x = px - strip_width(views)
+        x = self.width - px
         for view in views:
             width = block_width(view)
             if x + width > 0 and x < self.width:
