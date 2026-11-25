@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..delay import DelayQueue
 from ..important_dates import pick as pick_date
+from ..stocks import is_moving as stocks_is_moving
 from ..stocks import scroll_px as stocks_scroll_px
 from ..stocks import slot_seconds as stocks_slot_seconds
 from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
@@ -944,7 +945,9 @@ class FootballMode:
                     scroll_px=stocks_scroll_px(
                         shown, offset, self._slot_length, STOCKS_PANEL_WIDTH
                     ),
-                    scrolling=True,
+                    scrolling=stocks_is_moving(
+                        shown, offset, self._slot_length, STOCKS_PANEL_WIDTH
+                    ),
                 )
         if kind == "dates":
             views = list(self._dates())

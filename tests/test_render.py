@@ -2857,7 +2857,7 @@ def test_the_shot_map_draws_nothing_in_the_rounded_off_corners(games):
 
 from scoreboard.display import date_icons  # noqa: E402 - kept with the tests that use it
 from scoreboard.important_dates import DateView  # noqa: E402
-from scoreboard.stocks import StockView, strip_width, travel  # noqa: E402
+from scoreboard.stocks import StockView, overflow  # noqa: E402
 
 DATES_NOW = datetime(2026, 11, 18, 12, 0, 0, tzinfo=UTC)
 DATES_TEXT_LEFT = 3 + date_icons.ICON_BOX[0] + 5  # where the text column starts at 128px
@@ -2890,11 +2890,12 @@ def assert_date_layout(c: AsciiCanvas, view: DateView, *, years: bool, icon: boo
     assert (small is not None) == years, "the years line shows if and only if the date counts years"
 
 
-# -- the stock ticker: a strip moving from the right edge to the left ----------------------------
+# -- the stock ticker: a strip painted in full, then scrolled left -----------------------------
 
 STOCK_VIEWS = (
     StockView("AAPL", "354.07", "+1.43%", True),
     StockView("TSLA", "384.68", "-0.62%", False),
+    StockView("^GSPC", "7201.1", "0.00%", None),
     StockView("NOPE", "NO DATA", "", None),
 )
 
@@ -2907,30 +2908,41 @@ def draw_stocks(px: int, views=STOCK_VIEWS, *, width: int = W) -> AsciiCanvas:
 
 
 @pytest.mark.parametrize(
-    ("name", "share"),
-    [("stocks_entering", 0.25), ("stocks_middle", 0.55), ("stocks_leaving", 0.85)],
+    ("name", "share"), [("stocks_start", 0.0), ("stocks_middle", 0.5), ("stocks_end", 1.0)]
 )
 def test_stocks_scene(name, share, update_snapshots):
-    c = draw_stocks(round(share * travel(STOCK_VIEWS, W)))
+    c = draw_stocks(round(share * overflow(STOCK_VIEWS, W)))
     art = show(name, c)
     assert not [p for p in c.out_of_bounds if not 0 <= p[1] < H], "drew above or below the panel"
     check_snapshot(name, art, update_snapshots)
 
 
-def test_the_strip_starts_off_the_right_edge_and_ends_off_the_left():
-    assert not draw_stocks(0).lit(), "nothing is on the panel before the strip enters"
-    assert not draw_stocks(travel(STOCK_VIEWS, W)).lit(), "nothing is left after it leaves"
+def test_the_first_paint_has_the_first_stocks_filling_the_panel_from_the_left():
+    box = draw_stocks(0).bbox()
+    assert box is not None and box.x0 <= 3, "the first stock starts at the left edge"
+    assert box.x1 >= W - 20, "and the panel is full to the right"
+
+
+def test_the_scroll_ends_with_the_last_stock_in_full_at_the_right_edge():
+    c = draw_stocks(overflow(STOCK_VIEWS, W))
+    box = c.bbox(W - 60, 0, W - 1, H - 1)
+    assert box is not None and W - 6 <= box.x1 <= W - 1, "the last stock ends at the right edge"
+    # (the divider after it is 4px beyond the panel, clipped as the panel does)
+    assert not [p for p in c.out_of_bounds if W <= p[0] < W + 3], "and none of it is cut off"
 
 
 def test_the_strip_moves_to_the_left_as_the_offset_grows():
-    """The first stock enters from the right: its leftmost lit pixel retreats with the offset."""
+    """Ten more pixels of scroll is the same picture ten pixels further left."""
+    start, later = draw_stocks(0), draw_stocks(10)
+    shifted = {(x - 10, y) for (x, y) in start.pixels if 10 <= x < 70}
+    assert shifted and shifted <= set(later.pixels)
+    assert start.render() != later.render()
 
-    def left_edge(px):
-        box = draw_stocks(px).bbox()
-        return None if box is None else box.x0
 
-    edges = [left_edge(px) for px in (20, 40, 60)]
-    assert None not in edges and edges == sorted(edges, reverse=True) and len(set(edges)) == 3
+def test_a_strip_that_fits_the_panel_is_painted_from_the_left_and_has_nowhere_to_scroll():
+    one = (StockView("AAPL", "354.07", "+1.43%", True),)
+    assert overflow(one, W) == 0
+    assert draw_stocks(0, one).bbox().x0 <= 3
 
 
 @pytest.mark.parametrize(
@@ -2953,7 +2965,7 @@ def test_a_stock_is_symbol_and_change_over_a_price_coloured_by_direction(view, c
         return real(canvas, font, x, y, rgb, text)
 
     r.text = record
-    r.draw_stocks(AsciiCanvas(W, H), (view,), strip_width((view,)))
+    r.draw_stocks(AsciiCanvas(W, H), (view,), 0)
     assert drawn[view.symbol] == rd.ACCENT
     assert drawn[view.change] == getattr(rd, change_colour)
     assert drawn[view.price] == rd.WHITE

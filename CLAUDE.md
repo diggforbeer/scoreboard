@@ -1095,14 +1095,14 @@ mockups. A new college screen adds a step here and a row in that section.
 ## Stock ticker
 
 `[stocks]` (`symbols` up to `STOCKS_MAX` = 5, `refresh_seconds` 60-3600, `speed` 8-60 px/s) feeds the opt-in
-`stocks` rotation screen: a strip that scrolls across the panel **right to left**, once per slot. It follows the
+`stocks` rotation screen: a strip that starts fully painted (the first stocks on the panel), rests, scrolls **right to left** to show the rest and rests on the last ones, once per slot. It follows the
 dates screen's shape (a shared screen, `config.SHARED_SCREENS`, so either sport's turn shows it; football's idle
 screens are 128px only).
 
 - **`stocks.py` is the whole rule set and is pure** except `YahooClient` and `StockFeed`: symbol rules
   (`clean_symbol`, `symbol_problem`: capitals, digits, `. - = ^`, 12 chars; the config loader's `parse_symbols`
   is forgiving, the admin save `_coerce_stocks` strict), `Quote`/`StockView` (the drawn text and direction),
-  `block_width`/`strip_width`/`travel`/`slot_seconds`/`scroll_px` (the strip and its scroll, from fixed font
+  `block_width`/`strip_width`/`overflow`/`slot_seconds`/`scroll_px`/`is_moving` (the strip and its rest-scroll-rest, from fixed font
   widths so football's mode, which has no renderer, computes the same slot), and the feed.
 - **Source:** Yahoo's public chart endpoint (`query1.finance.yahoo.com/v8/finance/chart/<sym>?interval=1d&range=5d`),
   no key, unofficial. The change is read off the daily closes' last two (`chartPreviousClose` is the close before
@@ -1114,9 +1114,9 @@ screens are 128px only).
   when a pass got something. `ScoreboardApp._stock_views()` returns nothing until `fetched_at` is set, so the slot is
   skipped rather than drawn blank.
 - **The slot:** `_slot_seconds` (hockey) and `FootballMode._rotation` (football, `STOCKS_PANEL_WIDTH` = 128) stretch the
-  row's seconds to one whole pass at `speed`; `_split_slot` / `_idle_scene` turn the slot's offset into
-  `Scene.scroll_px` (0 = the strip just off the right edge, `travel` = just off the left) with `scrolling = True`
-  so the loop runs fast. `Renderer.draw_stocks` draws only the blocks that are on the panel.
+  row's seconds to two `HOLD_SECONDS` rests plus the overflow at `speed` (a strip that fits never moves); `_split_slot` /
+  `_idle_scene` turn the slot's offset into `Scene.scroll_px` (0 = painted from the left edge, `overflow` = the last
+  stocks at the right edge) with `scrolling` true only between the rests, so the loop runs fast only then. `Renderer.draw_stocks` draws only the blocks that are on the panel.
 - **Admin:** a `stocks` config section sent **last** on connect (so `_skip_initial` is 17; `college_teams` stays the 16th), `{symbols,
   refresh_seconds, speed}` plus `available` bounds; saves go through the generic `[section]` writer. The "Idle screen config" tab
   (the Idle rotation, Important dates and Stock ticker cards, moved off Home) has the "Stock ticker" card (`StocksCard`), which holds a new row back until it has a symbol and offers "Add to rotation" when the

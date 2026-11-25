@@ -2622,7 +2622,8 @@ class ScoreboardApp:
             return dataclasses.replace(scene, date_views=(shown,))
         if scene.kind == "stocks":
             px = stocks_mod.scroll_px(scene.stock_views, offset, seconds, self.renderer.width)
-            return dataclasses.replace(scene, scroll_px=px, scrolling=True)
+            moving = stocks_mod.is_moving(scene.stock_views, offset, seconds, self.renderer.width)
+            return dataclasses.replace(scene, scroll_px=px, scrolling=moving)
         if scene.kind in SCROLLING_KINDS:
             return self._scroll_conference(scene, offset, seconds)
         return self._split_matchup(scene, offset, seconds)

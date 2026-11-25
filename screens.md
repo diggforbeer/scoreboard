@@ -432,17 +432,20 @@ Feb 28 in a year with no 29th.
 
 ### `stocks`: the stock ticker
 
-![Stock ticker, entering from the right](docs/screens/stocks_entering.png)
-![Stock ticker, crossing the panel](docs/screens/stocks_middle.png)
-![Stock ticker, leaving on the left](docs/screens/stocks_leaving.png)
+![Stock ticker, as the screen paints](docs/screens/stocks_start.png)
+![Stock ticker, scrolling](docs/screens/stocks_middle.png)
+![Stock ticker, resting on the last stocks](docs/screens/stocks_end.png)
 
-Up to five stocks side by side in one strip that scrolls across the panel **from right to left**:
-each is its symbol (yellow) and the day's change (green up, red down, grey when flat) over a big
-white price, with a thin divider between stocks. A symbol the feed has no quote for shows
-`NO DATA` in grey in its place. The strip starts wholly off the right edge and leaves wholly off the
-left, once per slot; the slot lasts as long as that takes at the scroll speed, and the row's
-seconds is the minimum (the same rule as the standings tables, which scroll down). It runs the
-fast loop while it moves.
+Up to five stocks side by side in one strip: each is its symbol (yellow) and the day's change
+(green up, red down, grey when flat) over a big white price, with a thin divider between stocks. A
+symbol the feed has no quote for shows `NO DATA` in grey in its place.
+
+**It paints fully first, then scrolls for the rest.** The screen starts with the first stocks already
+filling the panel and rests there for two seconds, scrolls **right to left** to bring the others into
+view, and rests two seconds on the last ones. The row's seconds is the minimum: when the scroll at the
+chosen speed needs longer, the slot stretches (two rests plus the scroll), the same rule as the standings
+tables, which scroll down. A strip that fits the panel (one stock, or two short ones) never moves and holds still
+for the row's seconds. It runs the fast loop only while it is moving.
 
 Quotes come from Yahoo Finance's public chart endpoint (no account or key; US prices can be 15
 minutes behind), one request per symbol every few minutes, on their own thread. The change is

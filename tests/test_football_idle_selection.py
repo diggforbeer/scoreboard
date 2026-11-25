@@ -350,29 +350,33 @@ def test_the_dates_screen_drops_out_with_nothing_near():
     assert set(kinds(mode, clock, range(0, 30))) == {"fb_preview"}
 
 
-# -- the shared "stocks" screen: a strip scrolling right to left ---------------------------------
+# -- the shared "stocks" screen: painted in full, then scrolling left ------------------------
 
 
-def test_the_stocks_screen_scrolls_to_the_right_over_its_slot_and_lasts_a_whole_pass():
-    from scoreboard.stocks import StockView, slot_seconds, travel
+def test_the_stocks_screen_starts_painted_then_scrolls_left_and_rests_on_the_last_stocks():
+    from scoreboard.stocks import HOLD_SECONDS, StockView, overflow, slot_seconds
 
     register("fb_preview")
-    shown = (
-        StockView("AAPL", "354.07", "+1.43%", True),
-        StockView("TSLA", "384.68", "-0.62%", False),
+    shown = tuple(
+        StockView(sym, "123.45", "+1.00%", True) for sym in ("AAPL", "TSLA", "MSFT", "GOOG", "AMZN")
     )
     mode, clock = build([pregame()], rotation=[("fb_preview", 12), ("stocks", 12)], stocks=shown)
-    mode.idle_origin = BASE  # the turn is 12s + a fractional pass: start it at BASE, not mod it
+    mode.idle_origin = BASE  # the turn is 12s + a fractional slot: start it at BASE, not mod it
     seconds = slot_seconds(shown, 12, 20.0, 128)
-    assert seconds > 12  # a whole pass at 20 px/s needs longer than the row's minimum
-    clock.t = BASE + 12 + 0.1
-    first = mode.scene()
-    assert first.kind == "stocks" and first.stock_views == shown and first.scrolling
-    clock.t = BASE + 12 + seconds / 2
-    middle = mode.scene()
-    clock.t = BASE + 12 + seconds - 0.1
-    last = mode.scene()
-    assert first.scroll_px < middle.scroll_px < last.scroll_px <= travel(shown, 128)
+    extra = overflow(shown, 128)
+    assert seconds == 2 * HOLD_SECONDS + extra / 20.0 > 12  # the scroll needs more than the row
+
+    def at(offset):
+        clock.t = BASE + 12 + offset
+        return mode.scene()
+
+    first = at(0.1)
+    assert first.kind == "stocks" and first.stock_views == shown
+    assert first.scroll_px == 0 and not first.scrolling  # painted in full, resting
+    middle = at(seconds / 2)
+    assert abs(middle.scroll_px - extra / 2) <= 1 and middle.scrolling
+    last = at(seconds - 0.1)
+    assert last.scroll_px == extra and not last.scrolling  # resting on the last stocks
 
 
 def test_the_stocks_screen_drops_out_with_no_quotes():

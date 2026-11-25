@@ -2645,8 +2645,8 @@ def test_a_symbol_the_feed_does_not_know_shows_no_data_in_its_place(day):
     ]
 
 
-def test_the_stocks_slot_lasts_a_whole_pass_and_scrolls_left_to_right(day):
-    from scoreboard.stocks import travel
+def test_the_stocks_slot_starts_painted_rests_scrolls_left_and_rests_on_the_last_stocks(day):
+    from scoreboard.stocks import HOLD_SECONDS, overflow
 
     app, _, _ = day
     app.settings.stocks.symbols = ["AAPL", "TSLA", "MSFT", "GOOG", "AMZN"]
@@ -2654,12 +2654,14 @@ def test_the_stocks_slot_lasts_a_whole_pass_and_scrolls_left_to_right(day):
     _quotes_arrive(app, AAPL=354.07, TSLA=384.68, MSFT=412.5, GOOG=171.2, AMZN=188.9)
     scene = app._rotation_screen_scene("stocks", None, None)
     seconds = app._slot_seconds(scene, 5.0)
-    assert seconds == travel(scene.stock_views, app.renderer.width) / 20.0 > 5.0
+    extra = overflow(scene.stock_views, app.renderer.width)
+    assert seconds == 2 * HOLD_SECONDS + extra / 20.0 > 5.0
     start = app._split_slot(scene, 0.0, seconds)
     middle = app._split_slot(scene, seconds / 2, seconds)
     end = app._split_slot(scene, seconds, seconds)
-    assert start.scroll_px == 0 and start.scrolling
-    assert 0 < middle.scroll_px < end.scroll_px == travel(scene.stock_views, app.renderer.width)
+    assert start.scroll_px == 0 and not start.scrolling  # painted in full, resting
+    assert middle.scroll_px == round(extra / 2) and middle.scrolling
+    assert end.scroll_px == extra and not end.scrolling  # resting on the last stocks
 
 
 def test_a_stocks_row_in_the_idle_rotation_shows_the_ticker(day):
@@ -2669,7 +2671,7 @@ def test_a_stocks_row_in_the_idle_rotation_shows_the_ticker(day):
     app.settings.stocks.symbols = ["AAPL"]
     _quotes_arrive(app, AAPL=354.07)
     shown = app._rotate_idle_scenes(None, None)
-    assert shown.kind == "stocks" and shown.scrolling
+    assert shown.kind == "stocks" and shown.scroll_px == 0  # one stock fits: painted, not moving
 
 
 def test_the_stocks_screen_draws_through_the_renderer(day):

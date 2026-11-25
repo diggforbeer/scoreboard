@@ -11,13 +11,14 @@ from scoreboard.stocks import (
     StockFeed,
     StockView,
     clean_symbol,
+    is_moving,
+    overflow,
     parse_symbols,
     quote_from_chart,
     scroll_px,
     slot_seconds,
     strip_width,
     symbol_problem,
-    travel,
     view_for,
     views,
 )
@@ -154,19 +155,54 @@ def test_a_block_is_as_wide_as_its_wider_line_plus_the_gap():
     assert strip_width(SHOWN) == sum(stocks.block_width(v) for v in SHOWN)
 
 
-def test_the_strip_travels_from_off_the_left_edge_to_off_the_right():
-    assert travel(SHOWN, 128) == strip_width(SHOWN) + 128
-    assert scroll_px(SHOWN, 0, 10, 128) == 0
-    assert scroll_px(SHOWN, 10, 10, 128) == travel(SHOWN, 128)
-    assert scroll_px(SHOWN, 5, 10, 128) == round(travel(SHOWN, 128) / 2)
-    assert scroll_px(SHOWN, 99, 10, 128) == travel(SHOWN, 128)  # clamped
+FIVE = tuple(
+    StockView(sym, "123.45", "+1.00%", True) for sym in ("AAPL", "TSLA", "MSFT", "GOOG", "AMZN")
+)
+ONE = (StockView("AAPL", "354.07", "+1.43%", True),)
+
+
+def test_a_strip_wider_than_the_panel_overflows_by_what_hides_its_last_stock():
+    assert overflow(FIVE, 128) == strip_width(FIVE) - stocks.GAP + 2 * stocks.EDGE - 128 > 0
+    assert overflow(ONE, 128) == 0  # it all fits: the strip never moves
+    assert overflow((), 128) == 0
+
+
+def test_the_slot_starts_fully_painted_rests_scrolls_evenly_and_rests_on_the_last_stocks():
+    seconds = slot_seconds(FIVE, 1, 20, 128)
+    extra = overflow(FIVE, 128)
+    assert scroll_px(FIVE, 0, seconds, 128) == 0  # the first paint: the first stocks, in place
+    assert scroll_px(FIVE, stocks.HOLD_SECONDS, seconds, 128) == 0  # still resting
+    assert scroll_px(FIVE, seconds / 2, seconds, 128) == round(extra / 2)
+    assert scroll_px(FIVE, seconds - stocks.HOLD_SECONDS, seconds, 128) == extra
+    assert scroll_px(FIVE, seconds, seconds, 128) == extra  # and stays on the last stocks
+    assert scroll_px(FIVE, 99, seconds, 128) == extra  # clamped
+
+
+def test_a_strip_that_fits_never_moves_and_nothing_is_not_an_error():
+    assert [scroll_px(ONE, t, 10, 128) for t in (0, 5, 10)] == [0, 0, 0]
     assert scroll_px((), 5, 10, 128) == 0
+    assert not is_moving(ONE, 5, 10, 128)
 
 
-def test_the_slot_lasts_a_whole_pass_at_the_speed_but_never_less_than_the_row():
-    needed = travel(SHOWN, 128) / 20
-    assert slot_seconds(SHOWN, 1, 20, 128) == pytest.approx(needed)
-    assert slot_seconds(SHOWN, 500, 20, 128) == 500
+def test_the_fast_loop_only_runs_between_the_two_rests():
+    seconds = slot_seconds(FIVE, 1, 20, 128)
+    hold = stocks.HOLD_SECONDS
+    assert [
+        is_moving(FIVE, t, seconds, 128) for t in (0, hold - 0.1, hold, seconds - hold - 0.1)
+    ] == [
+        False,
+        False,
+        True,
+        True,
+    ]
+    assert not is_moving(FIVE, seconds - hold, seconds, 128)
+
+
+def test_the_slot_lasts_both_rests_and_the_scroll_at_the_speed_but_never_less_than_the_row():
+    needed = 2 * stocks.HOLD_SECONDS + overflow(FIVE, 128) / 20
+    assert slot_seconds(FIVE, 1, 20, 128) == pytest.approx(needed)
+    assert slot_seconds(FIVE, 500, 20, 128) == 500
+    assert slot_seconds(ONE, 9, 20, 128) == 9  # nothing to scroll: the row's seconds
     assert slot_seconds((), 9, 20, 128) == 9
 
 

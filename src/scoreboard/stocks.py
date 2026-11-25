@@ -1,7 +1,7 @@
 """The stock ticker idle screen: the rules, the quotes and the feed behind it.
 
 ``[stocks]`` lists up to ``STOCKS_MAX`` symbols; the opt-in ``stocks`` rotation screen draws them
-as a strip that scrolls across the panel from the right edge to the left. Everything here is pure
+as a strip that starts fully painted and scrolls left to show the rest. Everything here is pure
 except ``YahooClient`` (one HTTP GET per symbol) and ``StockFeed`` (the thread that calls it), so
 the config loader, the admin save, both sports' rotations and the renderer share one rule set.
 
@@ -174,28 +174,47 @@ def strip_width(shown: Iterable[StockView]) -> int:
     return sum(block_width(v) for v in shown)
 
 
-def travel(shown: Iterable[StockView], panel_width: int) -> int:
-    """Pixels the strip moves in one pass: from fully off the right edge to fully off the left."""
-    return strip_width(shown) + panel_width
+#: Seconds the strip rests at each end of its scroll: long enough to read the first stocks as the
+#: screen paints, and the last ones as it settles. (Hockey's standings tables use the same rule.)
+HOLD_SECONDS = 2.0
+#: Blank pixels kept beside the first and last stock, so neither sits against the panel's edge.
+EDGE = 2
+
+
+def overflow(shown: Iterable[StockView], panel_width: int) -> int:
+    """Pixels the strip is wider than the panel: how far it has to move to show its last stock.
+    0 when every stock fits, and then the strip never moves."""
+    return max(0, strip_width(shown) - GAP + 2 * EDGE - panel_width)
 
 
 def slot_seconds(
     shown: Sequence[StockView], minimum: float, speed: float, panel_width: int
 ) -> float:
-    """The slot's length: ``minimum`` (the rotation row's seconds), or longer if one whole pass at
-    ``speed`` px/s takes more, so every price is seen."""
-    if not shown:
+    """The slot's length: ``minimum`` (the rotation row's seconds), or longer if resting at both
+    ends and moving the overflow at ``speed`` px/s takes more, so every price is seen."""
+    extra = overflow(shown, panel_width)
+    if not shown or extra <= 0:
         return minimum
-    return max(minimum, travel(shown, panel_width) / max(speed, SPEED_MIN))
+    return max(minimum, 2 * HOLD_SECONDS + extra / max(speed, SPEED_MIN))
 
 
 def scroll_px(shown: Sequence[StockView], offset: float, seconds: float, panel_width: int) -> int:
-    """How far left the strip has moved ``offset`` seconds into a ``seconds`` slot. 0 puts the
-    strip's left edge on the panel's right edge; ``travel`` puts its right edge on the left one."""
-    if not shown or seconds <= 0:
+    """How far left the strip has moved ``offset`` seconds into a ``seconds`` slot. The slot starts
+    fully painted (0: the first stocks fill the panel), rests, moves evenly, and rests again on the
+    last stocks (``overflow``)."""
+    extra = overflow(shown, panel_width)
+    hold = min(HOLD_SECONDS, seconds / 4)
+    moving_seconds = seconds - 2 * hold
+    if not shown or extra <= 0 or moving_seconds <= 0:
         return 0
-    progress = min(1.0, max(0.0, offset / seconds))
-    return round(progress * travel(shown, panel_width))
+    progress = min(1.0, max(0.0, (offset - hold) / moving_seconds))
+    return round(progress * extra)
+
+
+def is_moving(shown: Sequence[StockView], offset: float, seconds: float, panel_width: int) -> bool:
+    """Whether the strip is between its two rests (the board runs its fast loop then)."""
+    hold = min(HOLD_SECONDS, seconds / 4)
+    return overflow(shown, panel_width) > 0 and hold <= offset < seconds - hold
 
 
 # -- the feed ----------------------------------------------------------------------------------
