@@ -27,7 +27,7 @@ method.
 - [How a screen gets chosen](#how-a-screen-gets-chosen)
 - [Game screens](#game-screens): `game`, `goal`, `goal_detail`, `penalty`, `three_stars`, `intermission`, shootout, `scores`
 - [Before a game](#before-a-game): `preview`, `countdown`, `matchup`, `matchup_meetings`
-- [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`, `thanksgiving`, `dates`
+- [Between games](#between-games): `standings`, `conference_leaders`, `division`, `wildcard`, `leaders`, `clock`, `christmas_tree`, `thanksgiving`, `dates`, `stocks`
 - [Setup and status screens](#setup-and-status-screens): `address`, `ap_setup`, `wifi_join`, `connecting`, `no_data`, `no_games`
 - [Holiday decorations](#holiday-decorations)
 - [Variants](#variants-that-apply-to-most-screens)
@@ -429,6 +429,33 @@ Feb 28 in a year with no 29th.
 - **Controls:** opt-in: `dates` in `[[rotation]]` (the admin page's idle rotation list), plus the
   dates themselves in `[[dates]]`. Skipped while nothing is inside its window. It belongs to no
   sport, like the clock, so it shows in either sport's turn.
+
+### `stocks`: the stock ticker
+
+![Stock ticker, entering from the left](docs/screens/stocks_entering.png)
+![Stock ticker, crossing the panel](docs/screens/stocks_middle.png)
+![Stock ticker, leaving on the right](docs/screens/stocks_leaving.png)
+
+Up to five stocks side by side in one strip that scrolls across the panel **from left to right**:
+each is its symbol (yellow) and the day's change (green up, red down, grey when flat) over a big
+white price, with a thin divider between stocks. A symbol the feed has no quote for shows
+`NO DATA` in grey in its place. The strip starts wholly off the left edge and leaves wholly off the
+right, once per slot; the slot lasts as long as that takes at the scroll speed, and the row's
+seconds is the minimum (the same rule as the standings tables, which scroll down). It runs the
+fast loop while it moves.
+
+Quotes come from Yahoo Finance's public chart endpoint (no account or key; US prices can be 15
+minutes behind), one request per symbol every few minutes, on their own thread. The change is
+against the previous close. A symbol that fails keeps its last quote; the screen is skipped until
+the first quotes have arrived. Yahoo's endpoint is unofficial, so if it ever changes only
+`YahooClient` in `stocks.py` needs replacing.
+
+- **Controls:** opt-in: `stocks` in `[[rotation]]`, plus `[stocks]` (the admin page's "Stock ticker"
+  card, Home tab): `symbols` (up to 5; capitals, digits and `. - = ^`, in Yahoo's spelling: `AAPL`,
+  `BRK-B`, `^GSPC` for an index, `BTC-USD`, `EURUSD=X`), `refresh_seconds` (60-3600, default 300)
+  and `speed` (8-60 pixels per second, default 20). Like the clock and the dates it belongs to no
+  sport, so it shows in either sport's turn; football's idle screens are 128px only, so a
+  single-panel football board does not show it.
 
 ## Setup and status screens
 

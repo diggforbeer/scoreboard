@@ -29,6 +29,7 @@ from ..hockey.models import (
     TeamLeaders,
 )
 from ..important_dates import DateView, countdown_text, years_text
+from ..stocks import DETAIL_CHAR_WIDTH, GAP, StockView, block_width, strip_width
 from . import date_icons, goal_light
 from . import penalty as penalty_screen
 from .fonts import FontSet, text_width
@@ -1641,6 +1642,32 @@ class Renderer:
         while text and text_width(font, text) > room:
             text = text[:-1]
         return text.rstrip()
+
+    def draw_stocks(self, canvas: Any, views: tuple[StockView, ...], px: int) -> None:
+        """The ``stocks`` rotation screen: every stock side by side in one strip that moves from
+        the left edge to the right, ``px`` pixels so far (0 has the strip just off the left edge).
+
+        A stock is its symbol over its price and the day's change, the change green up and red down
+        (grey when flat or when the feed has nothing: ``NO DATA``). Blocks wholly off the panel are
+        not drawn. The widths are ``stocks.block_width``'s, so the slot's length matches the strip.
+        """
+        canvas.Clear()
+        x = px - strip_width(views)
+        for view in views:
+            width = block_width(view)
+            if x + width > 0 and x < self.width:
+                self._draw_stock(canvas, view, x, width)
+            x += width
+
+    def _draw_stock(self, canvas: Any, view: StockView, x: int, width: int) -> None:
+        colour = {True: LIVE, False: LOSS, None: SUBDUED}[view.up]
+        x += 2
+        self.text(canvas, self.fonts.medium, x, 11, ACCENT, view.symbol)
+        if view.change:
+            after = x + text_width(self.fonts.medium, view.symbol) + DETAIL_CHAR_WIDTH
+            self.text(canvas, self.fonts.small, after, 11, colour, view.change)
+        self.text(canvas, self.fonts.large, x, 27, WHITE if view.change else SUBDUED, view.price)
+        self.vline(canvas, x - 2 + width - GAP // 2, 5, self.height - 6, DIM)
 
     def draw_address(
         self,

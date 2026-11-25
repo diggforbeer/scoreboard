@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 import qrcode
 
 from . import april_fools, blowout, college_picker
+from . import stocks as stocks_mod
 from .admin_server import AdminServer
 from .audio import GoalHornPlayer
 from .brightness import lux_to_brightness
@@ -265,7 +266,8 @@ class Scene:
     ``standings``,
     ``conference_leaders``, ``division``, ``wildcard``, ``matchup``, ``matchup_meetings``,
     ``leaders``, ``scores``, ``clock``, ``christmas_tree``, ``thanksgiving``, ``no_games``,
-    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``, ``dates``.
+    ``connecting``, ``no_data``, ``ap_setup``, ``wifi_join``, ``address``, ``dates``,
+    ``stocks``.
 
     Football mode (football) adds the ``fb_`` kinds listed in ``football.mode.FB_SCENE_KINDS``,
     documented in ``football_screen.md`` rather than ``screens.md``.
@@ -331,6 +333,9 @@ class Scene:
     #: Set only for ``dates`` (#524) -- the important dates inside their window, nearest first
     #: (a rotation slot narrows it to the one being shown).
     date_views: tuple[DateView, ...] = ()
+    #: Set only for ``stocks`` -- the ticker's stocks as drawn; ``scroll_px`` is how far the strip
+    #: has moved right and ``scrolling`` keeps the loop fast while it does.
+    stock_views: tuple[stocks_mod.StockView, ...] = ()
     #: Set only for ``fb_scores`` (#352) -- the football game to show.
     fb_game: FbGame | None = None
     #: Set only for the football play scenes (``fb_play``, ``fb_playtext``, ``fb_event``, #377):
@@ -681,6 +686,11 @@ class ScoreboardApp:
         self._college: FootballMode | None = (
             self._new_football("college") if self._wants("college", settings) else None
         )
+        #: The stock ticker's quotes (``stocks.py``): its own thread, started by ``run()``; it idles
+        #: with no symbols, and the screen is skipped until the first quotes arrive.
+        self._stocks_feed = stocks_mod.StockFeed(
+            lambda: self.settings.stocks.symbols, lambda: self.settings.stocks.refresh_seconds
+        )
         #: Today's hockey games as the lite poll saw them while football has the screen (the full
         #: hockey machinery only runs for the sport on screen); the priority layer reads these.
         self._hockey_lite: list[Game] = []
@@ -743,6 +753,7 @@ class ScoreboardApp:
         # board on hockey's idle scroll while South Carolina played).
         for mode in self._fb_modes():
             mode.start()
+        self._stocks_feed.start()
 
         next_poll = 0.0
         next_rotate = 0.0
@@ -1041,6 +1052,7 @@ class ScoreboardApp:
 
     def shutdown(self) -> None:
         try:
+            self._stocks_feed.stop()
             if self._football is not None:
                 self._football.stop()
             if self.admin_server is not None:
@@ -1085,6 +1097,7 @@ class ScoreboardApp:
             wide=lambda: self.renderer.width >= 128,
             on_sound=lambda event: self._on_football_sound(event, college),
             dates=self._dates_views,
+            stocks=lambda: (self._stock_views(), self.settings.stocks.speed),
             league="college-football" if college else "nfl",
         )
 
@@ -2607,6 +2620,9 @@ class ScoreboardApp:
         if scene.kind == "dates":
             shown = pick_date(scene.date_views, offset, seconds)
             return dataclasses.replace(scene, date_views=(shown,))
+        if scene.kind == "stocks":
+            px = stocks_mod.scroll_px(scene.stock_views, offset, seconds, self.renderer.width)
+            return dataclasses.replace(scene, scroll_px=px, scrolling=True)
         if scene.kind in SCROLLING_KINDS:
             return self._scroll_conference(scene, offset, seconds)
         return self._split_matchup(scene, offset, seconds)
@@ -2616,6 +2632,10 @@ class ScoreboardApp:
 
         The configured seconds is a minimum there, not an exact length.
         """
+        if scene.kind == "stocks":
+            return stocks_mod.slot_seconds(
+                scene.stock_views, configured, self.settings.stocks.speed, self.renderer.width
+            )
         if scene.kind not in SCROLLING_KINDS:
             return configured
         return self.renderer.standings_scroll_seconds(len(scene.standings), configured)
@@ -2796,6 +2816,8 @@ class ScoreboardApp:
             return self._address_scene()
         if screen == "dates":
             return self._dates_scene()
+        if screen == "stocks":
+            return self._stocks_scene()
         if screen == "scores_grid":
             return Scene("scores", games=tuple(self.games)) if self.games else None
         return None
@@ -2809,6 +2831,20 @@ class ScoreboardApp:
         slot: nothing is near, or none are entered. Football's idle rotation builds the same."""
         views = self._dates_views()
         return Scene("dates", date_views=tuple(views)) if views else None
+
+    def _stock_views(self) -> tuple[stocks_mod.StockView, ...]:
+        """The configured stocks as drawn, or none until the first quotes have arrived (a screen
+        with nothing to show is skipped, never drawn blank). Football's rotation reads the same."""
+        symbols = self.settings.stocks.symbols
+        snapshot = self._stocks_feed.snapshot()
+        if not symbols or snapshot.fetched_at is None:
+            return ()
+        return stocks_mod.views(symbols, snapshot.quotes)
+
+    def _stocks_scene(self) -> Scene | None:
+        """The stock ticker (``stocks.py``), or None to skip the slot: no symbols or no quotes."""
+        shown = self._stock_views()
+        return Scene("stocks", stock_views=shown) if shown else None
 
     def _holiday_screen_scene(self) -> Scene | None:
         """The active holiday's own screen (#243), or None to skip the slot.
@@ -4125,6 +4161,8 @@ class ScoreboardApp:
             self._egg_animating = egg is not None
             with self._colour_context(sport):
                 r.draw_thanksgiving(self.canvas, self.clock(), abbrev, egg)
+        elif scene.kind == "stocks" and scene.stock_views:
+            r.draw_stocks(self.canvas, scene.stock_views, scene.scroll_px)
         elif scene.kind == "dates" and scene.date_views:
             r.draw_date(self.canvas, scene.date_views[0], self.clock())
         elif scene.kind == "address":

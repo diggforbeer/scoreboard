@@ -338,6 +338,11 @@ available but not ticked by default.
 from as many days before as you choose, and celebrates on the day. Up to 10, 14 characters each; see
 [screens.md](screens.md#dates-important-dates) for what it looks like.
 
+**Stock ticker.** Up to five stocks (any Yahoo Finance symbol: `AAPL`, `^GSPC`, `BTC-USD`) in a strip that
+scrolls across the panel from left to right, green up and red down. Add them on the admin page (Home tab,
+"Stock ticker") and add a `stocks` row to the idle rotation; no account or key is needed. See
+[screens.md](screens.md#stocks-the-stock-ticker).
+
 ## Audio
 
 The board can play a horn through a USB speaker or USB audio adapter when

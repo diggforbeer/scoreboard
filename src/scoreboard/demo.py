@@ -34,6 +34,7 @@ from .hockey.models import (
     standings_window,
 )
 from .important_dates import DateView
+from .stocks import StockView, travel
 
 
 def _meetings(now: datetime) -> tuple[MeetingResult, ...]:
@@ -76,6 +77,15 @@ _CONFERENCE = (
 _ADDRESS_QR = ScoreboardApp._qr_matrix("http://192.168.1.42:8080", "demo address")
 
 _AP_QR = ScoreboardApp._qr_matrix("WIFI:T:WPA;S:Scoreboard;P:scoreboard;;", "demo AP setup")
+
+#: The stock ticker's demo strip: up, down, flat and a symbol the feed does not know.
+_STOCKS = (
+    StockView("AAPL", "354.07", "+1.43%", True),
+    StockView("TSLA", "384.68", "-0.62%", False),
+    StockView("^GSPC", "7201.1", "0.00%", None),
+    StockView("BTC-USD", "59471", "+2.10%", True),
+    StockView("NOPE", "NO DATA", "", None),
+)
 
 _LEADERS = TeamLeaders(
     goals=SkaterLine(1, "F. Forsberg", 14, 9, 23),
@@ -388,6 +398,14 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
         ("dates_heart", Scene("dates", date_views=(DateView("NATE & EM", "heart", 1, 9),)), {}),
         ("dates_gift", Scene("dates", date_views=(DateView("XMAS GIFTS", "gift", 21),)), {}),
         ("dates_star", Scene("dates", date_views=(DateView("BIG TRIP", "star", 30),)), {}),
+        *(
+            (
+                f"stocks_{name}",
+                Scene("stocks", stock_views=_STOCKS, scroll_px=round(share * travel(_STOCKS, 128))),
+                {},
+            )
+            for name, share in (("entering", 0.2), ("middle", 0.5), ("leaving", 0.8))
+        ),
     ]
     for holiday in (
         "halloween",

@@ -665,6 +665,61 @@ def test_important_dates_card_adds_edits_and_removes_a_date(admin_page):
             browser.close()
 
 
+def test_stock_ticker_card_adds_edits_and_removes_symbols(admin_page):
+    """The stock ticker card: a new symbol is held back until it has text, typing is capitalised and
+    stripped to what Yahoo spells, up to five fit, and every change saves to ``[stocks]``."""
+    from playwright.sync_api import sync_playwright
+
+    def saved():
+        return admin_page.config().get("stocks", {})
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            frames = _sent_saves(page)
+            page.goto(admin_page.url)
+            page.wait_for_selector("#stocks-add-button", timeout=15000)
+            assert page.locator("#stocks-empty").is_visible()
+
+            # A new row has no symbol yet: it shows, but nothing is sent.
+            page.click("#stocks-add-button")
+            page.wait_for_selector("[data-stock-row='0']")
+            page.wait_for_timeout(1500)
+            assert [f for f in frames if '"section":"stocks"' in f] == [], "saved an empty symbol"
+
+            # Lower case becomes capitals and characters Yahoo does not use are dropped.
+            page.fill('[aria-label="symbol 1"]', "aapl!")
+            assert page.input_value('[aria-label="symbol 1"]') == "AAPL"
+            _wait_until(lambda: saved().get("symbols") == ["AAPL"])
+
+            page.click("#stocks-add-button")
+            page.fill('[aria-label="symbol 2"]', "^gspc")
+            _wait_until(lambda: saved().get("symbols") == ["AAPL", "^GSPC"])
+
+            page.fill("#stocks-speed", "30")
+            _wait_until(lambda: saved().get("speed") == 30)
+            page.fill("#stocks-refresh_seconds", "120")
+            _wait_until(lambda: saved().get("refresh_seconds") == 120)
+
+            # Five is the most the ticker holds.
+            for n in range(3, 6):
+                page.click("#stocks-add-button")
+                page.fill(f'[aria-label="symbol {n}"]', f"S{n}")
+            _wait_until(lambda: len(saved().get("symbols", [])) == 5)
+            assert page.locator("#stocks-add-button").is_disabled()
+
+            page.reload()
+            page.wait_for_selector("[data-stock-row='4']", timeout=15000)
+            assert page.input_value('[aria-label="symbol 2"]') == "^GSPC"
+
+            page.get_by_role("button", name="remove AAPL").click()
+            _wait_until(lambda: saved().get("symbols", [])[:1] == ["^GSPC"])
+            assert len(saved()["symbols"]) == 4
+        finally:
+            browser.close()
+
+
 def test_a_removed_blank_date_never_blocks_saving_the_others(admin_page):
     """The page holds back a date with no text by its position, so removing that row has to forget
     the mark or no later save would ever be sent."""
