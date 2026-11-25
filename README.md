@@ -75,7 +75,7 @@
 | src/scoreboard/football/idle\_screens.py          |       61 |        0 |    100% |           |
 | src/scoreboard/football/idle\_views.py            |      279 |        2 |     99% |   384-385 |
 | src/scoreboard/football/live\_capture.py          |      156 |        2 |     99% |   216-217 |
-| src/scoreboard/football/mode.py                   |      558 |       16 |     97% |285-288, 299, 310-311, 322-324, 336-338, 1054-1055, 1066 |
+| src/scoreboard/football/mode.py                   |      562 |       16 |     97% |288-291, 302, 313-314, 325-327, 339-341, 1059-1060, 1071 |
 | src/scoreboard/football/models.py                 |      314 |        2 |     99% |   33, 265 |
 | src/scoreboard/football/pacing.py                 |       42 |        0 |    100% |           |
 | src/scoreboard/football/people.py                 |      137 |        0 |    100% |           |
@@ -84,6 +84,7 @@
 | src/scoreboard/football/redzone.py                |       75 |        2 |     97% |   108-109 |
 | src/scoreboard/football/reversals.py              |      124 |        0 |    100% |           |
 | src/scoreboard/football/scroll.py                 |       23 |        0 |    100% |           |
+| src/scoreboard/football/skew.py                   |       37 |        1 |     97% |        81 |
 | src/scoreboard/football/stats.py                  |       85 |        4 |     95% |130-131, 135, 157 |
 | src/scoreboard/football/teams.py                  |       81 |        1 |     99% |       193 |
 | src/scoreboard/football/textlayout.py             |       28 |        0 |    100% |           |
@@ -103,7 +104,7 @@
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **16560** |  **496** | **97%** |           |
+| **TOTAL**                                         | **16601** |  **497** | **97%** |           |
 
 
 ## Setup coverage badge
