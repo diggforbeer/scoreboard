@@ -451,7 +451,7 @@ the first quotes have arrived. Yahoo's endpoint is unofficial, so if it ever cha
 `YahooClient` in `stocks.py` needs replacing.
 
 - **Controls:** opt-in: `stocks` in `[[rotation]]`, plus `[stocks]` (the admin page's "Stock ticker"
-  card, Home tab): `symbols` (up to 5; capitals, digits and `. - = ^`, in Yahoo's spelling: `AAPL`,
+  card, Idle screen config tab): `symbols` (up to 5; capitals, digits and `. - = ^`, in Yahoo's spelling: `AAPL`,
   `BRK-B`, `^GSPC` for an index, `BTC-USD`, `EURUSD=X`), `refresh_seconds` (60-3600, default 300)
   and `speed` (8-60 pixels per second, default 20). Like the clock and the dates it belongs to no
   sport, so it shows in either sport's turn; football's idle screens are 128px only, so a

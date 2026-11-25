@@ -1118,15 +1118,15 @@ screens are 128px only).
   `Scene.scroll_px` (0 = the strip just off the left edge, `travel` = just off the right) with `scrolling = True`
   so the loop runs fast. `Renderer.draw_stocks` draws only the blocks that are on the panel.
 - **Admin:** a `stocks` config section sent **last** on connect (so `_skip_initial` is 17; `college_teams` stays the 16th), `{symbols,
-  refresh_seconds, speed}` plus `available` bounds; saves go through the generic `[section]` writer. The Home-tab
-  "Stock ticker" card (`StocksCard`) holds a new row back until it has a symbol and offers "Add to rotation" when the
+  refresh_seconds, speed}` plus `available` bounds; saves go through the generic `[section]` writer. The "Idle screen config" tab
+  (the Idle rotation, Important dates and Stock ticker cards, moved off Home) has the "Stock ticker" card (`StocksCard`), which holds a new row back until it has a symbol and offers "Add to rotation" when the
   rotation lacks a `stocks` row, as the dates card does.
 
 ## Important dates (#524)
 
 `[[dates]]` (up to `DATES_MAX` = 10) is the owner's list of birthdays, anniversaries and other days;
 the opt-in `dates` rotation screen (absent from every default, like `matchup`) counts down to each and
-celebrates on the day. The admin page's "Important dates" card (Home tab) edits it; a one-click
+celebrates on the day. The admin page's "Important dates" card (Idle screen config tab) edits it; a one-click
 "Add to rotation" appears only when a rotation exists without a `dates` row (with none, adding a lone
 row would replace the built-in default).
 

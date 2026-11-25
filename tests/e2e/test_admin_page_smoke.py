@@ -427,6 +427,11 @@ def test_live_view_shows_a_snapshot_and_refreshes(live_admin_page):
             browser.close()
 
 
+def _open_idle_tab(page):
+    """The idle rotation, the important dates and the stock ticker live on their own tab."""
+    page.get_by_role("button", name="Idle screen config").click()
+
+
 def _wait_until(condition, timeout=15.0):
     """Poll ``condition`` until it is true. The config file is rewritten by another process, so a
     read can land on a half-written or not-yet-populated file (no ``[scoreboard]`` yet, or a TOML
@@ -458,7 +463,6 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             page.wait_for_selector("#teams-add", timeout=15000)
             football = page.get_by_role("heading", name="Football between games")
             rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
-            rotation.wait_for(timeout=15000)  # the Idle rotation card is on the Home tab
             page.get_by_role("button", name="Display", exact=True).click()
             football.wait_for(timeout=15000)
             assert football.count() == 1, "nothing ranked: football's card shows"
@@ -473,7 +477,10 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             page.select_option("#teams-add", "football:TEN")
             page.click("#teams-add-button")
 
-            # One list, both sports: a hockey row, a football row, the clock.
+            # One list, both sports: a hockey row, a football row, the clock. The Idle rotation
+            # card is on the Idle screen config tab.
+            _open_idle_tab(page)
+            rotation.wait_for(timeout=15000)
             card = rotation.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
             for _ in range(3):
                 card.get_by_role("button", name="Add row").click()
@@ -506,6 +513,7 @@ def test_one_idle_rotation_mixes_hockey_and_football_screens_and_football_has_it
             _wait_until(lambda: admin_page.config()["football"].get("score_seconds") == 10)
 
             page.reload()
+            _open_idle_tab(page)
             page.wait_for_selector('[aria-label="rotation screen 2"]', timeout=15000)
             assert page.input_value('[aria-label="rotation screen 2"]') == "fb_week"
             page.get_by_role("button", name="Display", exact=True).click()
@@ -613,6 +621,7 @@ def test_important_dates_card_adds_edits_and_removes_a_date(admin_page):
             page = browser.new_page()
             frames = _sent_saves(page)
             page.goto(admin_page.url)
+            _open_idle_tab(page)
             page.wait_for_selector("#dates-add-button", timeout=15000)
             assert page.locator("#dates-empty").is_visible()
 
@@ -653,6 +662,7 @@ def test_important_dates_card_adds_edits_and_removes_a_date(admin_page):
             assert page.locator("#dates-years-0").is_disabled()
 
             page.reload()
+            _open_idle_tab(page)
             page.wait_for_selector("[data-date-row='0']", timeout=15000)
             assert page.input_value('[aria-label="date 1"]') == "2018-03-14"
             assert page.input_value('[aria-label="text 1"]') == "MOM"
@@ -679,6 +689,7 @@ def test_stock_ticker_card_adds_edits_and_removes_symbols(admin_page):
             page = browser.new_page()
             frames = _sent_saves(page)
             page.goto(admin_page.url)
+            _open_idle_tab(page)
             page.wait_for_selector("#stocks-add-button", timeout=15000)
             assert page.locator("#stocks-empty").is_visible()
 
@@ -710,6 +721,7 @@ def test_stock_ticker_card_adds_edits_and_removes_symbols(admin_page):
             assert page.locator("#stocks-add-button").is_disabled()
 
             page.reload()
+            _open_idle_tab(page)
             page.wait_for_selector("[data-stock-row='4']", timeout=15000)
             assert page.input_value('[aria-label="symbol 2"]') == "^GSPC"
 
@@ -730,6 +742,7 @@ def test_a_removed_blank_date_never_blocks_saving_the_others(admin_page):
         try:
             page = browser.new_page()
             page.goto(admin_page.url)
+            _open_idle_tab(page)
             page.wait_for_selector("#dates-add-button", timeout=15000)
             page.click("#dates-add-button")
             page.fill('[aria-label="text 1"]', "ONE")
@@ -757,15 +770,19 @@ def test_the_dates_card_offers_to_add_the_screen_to_a_rotation_that_lacks_it(adm
         try:
             page = browser.new_page()
             page.goto(admin_page.url)
+            _open_idle_tab(page)
             page.wait_for_selector("#dates-hint", timeout=15000)
-            assert page.get_by_role("button", name="Add to rotation").count() == 0
+            assert (
+                page.locator("#dates-hint").get_by_role("button", name="Add to rotation").count()
+                == 0
+            )
             assert "Add a dates row" in page.locator("#dates-hint").inner_text()
 
             rotation = page.get_by_role("heading", name="Idle rotation", exact=True)
             card = rotation.locator("xpath=ancestor::*[contains(@class, 'card-body')]")
             card.get_by_role("button", name="Add row").click()
             page.select_option('[aria-label="rotation screen 1"]', "clock")
-            page.get_by_role("button", name="Add to rotation").click()
+            page.locator("#dates-hint").get_by_role("button", name="Add to rotation").click()
             _wait_until(
                 lambda: [r["screen"] for r in admin_page.config()["rotation"]] == ["clock", "dates"]
             )

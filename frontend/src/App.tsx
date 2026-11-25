@@ -897,7 +897,7 @@ function StocksCard({
           <span className="flex-grow-1">
             {rotationCanTakeRow
               ? 'The Idle rotation has no stocks row yet, so the ticker will not show.'
-              : 'Add a stocks row to the Idle rotation (below) to show the ticker.'}
+              : 'Add a stocks row to the Idle rotation to show the ticker.'}
           </span>
           {rotationCanTakeRow && (
             <button type="button" className="btn btn-sm btn-primary" id="stocks-add-to-rotation" onClick={onAddToRotation}>
@@ -1078,7 +1078,7 @@ function DatesCard({
           <span className="flex-grow-1">
             {rotationCanTakeRow
               ? 'The Idle rotation has no dates row yet, so these will not show.'
-              : 'Add a dates row to the Idle rotation (below) to show these.'}
+              : 'Add a dates row to the Idle rotation to show these.'}
           </span>
           {rotationCanTakeRow && (
             <button type="button" className="btn btn-sm btn-primary" onClick={onAddToRotation}>
@@ -1389,7 +1389,7 @@ function App() {
 
   // Two pages don't justify a router (#193): plain view state.
   const [page, setPage] = useState<
-    'home' | 'display' | 'audio' | 'holidays' | 'setup' | 'cache' | 'logs'
+    'home' | 'idle' | 'display' | 'audio' | 'holidays' | 'setup' | 'cache' | 'logs'
   >('home')
   const [cacheItems, setCacheItems] = useState<CacheItem[] | null>(null)
   const [logLines, setLogLines] = useState<LogEntry[]>([])
@@ -2041,7 +2041,7 @@ function App() {
       </div>
 
       <ul className="nav nav-tabs mb-4">
-        {(['home', 'display', 'audio', 'holidays', 'setup', 'cache', 'logs'] as const).map((name) => (
+        {(['home', 'idle', 'display', 'audio', 'holidays', 'setup', 'cache', 'logs'] as const).map((name) => (
           <li className="nav-item" key={name}>
             <button
               type="button"
@@ -2051,6 +2051,7 @@ function App() {
               {
                 {
                   home: 'Home',
+                  idle: 'Idle screen config',
                   display: 'Display',
                   audio: 'Audio',
                   holidays: 'Holiday Cheer',
@@ -2146,48 +2147,14 @@ function App() {
 
 
       </div>
+      </div>
+        </>
+      )}
+
+      {page === 'idle' && (
+        <>
+      <div className="row g-4">
       <div className="col-lg-6">
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Important dates</h2>
-          {datesState.value ? (
-            <DatesCard
-              section={datesSave}
-              value={datesState.value}
-              available={datesAvailable}
-              max={datesMax}
-              rotationHasDates={rotation?.some((row) => row.screen === 'dates') ?? false}
-              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
-              onAddToRotation={() => {
-                if (rotation) rotationSave.edit([...rotation, { screen: 'dates', seconds: 8 }])
-              }}
-            />
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-body">
-          <h2 className="card-title h5">Stock ticker</h2>
-          {stocksState.value ? (
-            <StocksCard
-              section={stocksSave}
-              value={stocksState.value}
-              available={stocksAvailable}
-              rotationHasStocks={rotation?.some((row) => row.screen === 'stocks') ?? false}
-              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
-              onAddToRotation={() => {
-                if (rotation) rotationSave.edit([...rotation, { screen: 'stocks', seconds: 20 }])
-              }}
-            />
-          ) : (
-            <p className="text-body-secondary mb-0">waiting for server...</p>
-          )}
-        </div>
-      </div>
 
       <div className="card mb-4">
         <div className="card-body">
@@ -2297,6 +2264,50 @@ function App() {
                 </button>
               </div>
             </form>
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      </div>
+      <div className="col-lg-6">
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Important dates</h2>
+          {datesState.value ? (
+            <DatesCard
+              section={datesSave}
+              value={datesState.value}
+              available={datesAvailable}
+              max={datesMax}
+              rotationHasDates={rotation?.some((row) => row.screen === 'dates') ?? false}
+              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
+              onAddToRotation={() => {
+                if (rotation) rotationSave.edit([...rotation, { screen: 'dates', seconds: 8 }])
+              }}
+            />
+          ) : (
+            <p className="text-body-secondary mb-0">waiting for server...</p>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <h2 className="card-title h5">Stock ticker</h2>
+          {stocksState.value ? (
+            <StocksCard
+              section={stocksSave}
+              value={stocksState.value}
+              available={stocksAvailable}
+              rotationHasStocks={rotation?.some((row) => row.screen === 'stocks') ?? false}
+              rotationCanTakeRow={!!rotation && rotation.length > 0 && rotation.length < ROTATION_MAX_ROWS}
+              onAddToRotation={() => {
+                if (rotation) rotationSave.edit([...rotation, { screen: 'stocks', seconds: 20 }])
+              }}
+            />
           ) : (
             <p className="text-body-secondary mb-0">waiting for server...</p>
           )}
