@@ -182,6 +182,7 @@ def test_a_fetch_starts_on_the_first_connect_and_the_list_arrives_by_broadcast(f
 
     async def scenario(client):
         first = await last_message(client)
+        await client.recv()  # the stock ticker's settings, sent after college_teams
         pushed = json.loads(await asyncio.wait_for(client.recv(), timeout=5))
         return first, pushed
 

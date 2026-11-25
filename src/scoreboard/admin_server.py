@@ -281,6 +281,7 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from . import college_picker, updater
+from . import stocks as stocks_mod
 from .audio import (
     DEFAULT_STEM,
     DING_STEM,
@@ -658,6 +659,26 @@ def _rotation_payload(settings: Settings) -> dict[str, object]:
         "type": "config",
         "section": "rotation",
         "data": [dataclasses.asdict(entry) for entry in settings.rotation],
+    }
+
+
+def _stocks_payload(settings: Settings) -> dict[str, object]:
+    """The stock ticker's settings (``stocks.py``) and the bounds the page enforces."""
+    cfg = settings.stocks
+    return {
+        "type": "config",
+        "section": "stocks",
+        "data": {
+            "symbols": list(cfg.symbols),
+            "refresh_seconds": cfg.refresh_seconds,
+            "speed": cfg.speed,
+        },
+        "available": {
+            "max": stocks_mod.STOCKS_MAX,
+            "symbol_max": stocks_mod.SYMBOL_MAX_LENGTH,
+            "refresh": [stocks_mod.REFRESH_MIN, stocks_mod.REFRESH_MAX],
+            "speed": [stocks_mod.SPEED_MIN, stocks_mod.SPEED_MAX],
+        },
     }
 
 
@@ -1044,6 +1065,13 @@ async def _send_dates_config(
 ) -> None:
     settings = settings or Settings.load(CONFIG_PATH)
     await connection.send(json.dumps(_dates_payload(settings)))
+
+
+async def _send_stocks_config(
+    connection: ServerConnection, settings: Settings | None = None
+) -> None:
+    settings = settings or Settings.load(CONFIG_PATH)
+    await connection.send(json.dumps(_stocks_payload(settings)))
 
 
 async def _send_snapshot(connection: ServerConnection) -> None:
@@ -1686,6 +1714,7 @@ _SEND_AFTER_SAVE = {
     "football_rotation": _send_football_rotation_config,
     "teams": _send_teams_config,
     "dates": _send_dates_config,
+    "stocks": _send_stocks_config,
 }
 
 
@@ -1714,6 +1743,38 @@ def _coerce_teams(data: object) -> list[dict[str, str]]:
             raise ValueError(json.dumps({label: f"{sport} {team} is already in the list"}))
         entries.append(entry)
     return entries
+
+
+def _coerce_stocks(data: object) -> dict[str, object]:
+    """Validate a ``stocks`` save: the symbol list (rejected whole on the first bad symbol, like
+    ``_coerce_teams``) and the two pacing numbers."""
+    if not isinstance(data, dict) or not isinstance(data.get("symbols"), list):
+        raise ValueError(json.dumps({"symbols": "must be an object with a list of symbols"}))
+    rows = data["symbols"]
+    if len(rows) > stocks_mod.STOCKS_MAX:
+        raise ValueError(json.dumps({"symbols": f"at most {stocks_mod.STOCKS_MAX} stocks"}))
+    symbols: list[str] = []
+    for i, row in enumerate(rows):
+        label = f"stock {i + 1}"
+        symbol = stocks_mod.clean_symbol(row)
+        problem = stocks_mod.symbol_problem(symbol)
+        if problem:
+            raise ValueError(json.dumps({label: problem}))
+        if symbol in symbols:
+            raise ValueError(json.dumps({label: f"{symbol} is already in the list"}))
+        symbols.append(symbol)
+    out: dict[str, object] = {"symbols": symbols}
+    for key, low, high in (
+        ("refresh_seconds", stocks_mod.REFRESH_MIN, stocks_mod.REFRESH_MAX),
+        ("speed", stocks_mod.SPEED_MIN, stocks_mod.SPEED_MAX),
+    ):
+        value = data.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(json.dumps({key: "must be a number"}))
+        if not low <= value <= high:
+            raise ValueError(json.dumps({key: f"must be from {low:g} to {high:g}"}))
+        out[key] = value
+    return out
 
 
 def _coerce_dates(data: object) -> list[dict[str, object]]:
@@ -1826,6 +1887,8 @@ async def _handle_save(connection: ServerConnection, message: dict[str, object])
             values = _coerce_teams(message.get("data"))
         elif section == "dates":
             values = _coerce_dates(message.get("data"))
+        elif section == "stocks":
+            values = _coerce_stocks(message.get("data"))
         else:
             error = {"type": "error", "message": f"unknown section {section!r}"}
             await connection.send(json.dumps(error))
@@ -1875,6 +1938,8 @@ async def _handle(connection: ServerConnection) -> None:
         await _send_dates_config(connection, settings)
         # And the college picker's team list (#543), last once more.
         await _send_college_teams(connection)
+        # And the stock ticker's settings, last of all.
+        await _send_stocks_config(connection, settings)
         log.info("Sent initial state to %s", connection.remote_address)
         async for raw in connection:
             try:

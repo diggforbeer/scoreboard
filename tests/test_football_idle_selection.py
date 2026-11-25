@@ -62,6 +62,7 @@ def build(
     utc=None,
     clock=None,
     dates=(),
+    stocks=(),
     **cfg,
 ):
     clock = clock or Clock(BASE)
@@ -79,6 +80,7 @@ def build(
         utc_now=utc or Utc(),
         wide=lambda: wide,
         dates=lambda: list(dates),
+        stocks=lambda: (tuple(stocks), 20.0),
     )
     mode.worker.poll_once()
     return mode, clock
@@ -345,4 +347,35 @@ def test_the_dates_screen_shares_its_seconds_between_dates_nearest_first():
 def test_the_dates_screen_drops_out_with_nothing_near():
     register("fb_preview")
     mode, clock = build([pregame()], rotation=[("fb_preview", 12), ("dates", 12)])
+    assert set(kinds(mode, clock, range(0, 30))) == {"fb_preview"}
+
+
+# -- the shared "stocks" screen: a strip scrolling left to right ---------------------------------
+
+
+def test_the_stocks_screen_scrolls_to_the_right_over_its_slot_and_lasts_a_whole_pass():
+    from scoreboard.stocks import StockView, slot_seconds, travel
+
+    register("fb_preview")
+    shown = (
+        StockView("AAPL", "354.07", "+1.43%", True),
+        StockView("TSLA", "384.68", "-0.62%", False),
+    )
+    mode, clock = build([pregame()], rotation=[("fb_preview", 12), ("stocks", 12)], stocks=shown)
+    mode.idle_origin = BASE  # the turn is 12s + a fractional pass: start it at BASE, not mod it
+    seconds = slot_seconds(shown, 12, 20.0, 128)
+    assert seconds > 12  # a whole pass at 20 px/s needs longer than the row's minimum
+    clock.t = BASE + 12 + 0.1
+    first = mode.scene()
+    assert first.kind == "stocks" and first.stock_views == shown and first.scrolling
+    clock.t = BASE + 12 + seconds / 2
+    middle = mode.scene()
+    clock.t = BASE + 12 + seconds - 0.1
+    last = mode.scene()
+    assert first.scroll_px < middle.scroll_px < last.scroll_px <= travel(shown, 128)
+
+
+def test_the_stocks_screen_drops_out_with_no_quotes():
+    register("fb_preview")
+    mode, clock = build([pregame()], rotation=[("fb_preview", 12), ("stocks", 12)])
     assert set(kinds(mode, clock, range(0, 30))) == {"fb_preview"}

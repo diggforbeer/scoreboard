@@ -332,11 +332,16 @@ team colours; and Canada Day and July 4th, fireworks and flags. Canadian
 Thanksgiving (`thanksgiving_ca`) and Canada Day (`canada_day`) are
 available but not ticked by default.
 
-**Important dates.** Enter birthdays, anniversaries and other days on the admin page (Home tab,
+**Important dates.** Enter birthdays, anniversaries and other days on the admin page (Idle screen config tab,
 "Important dates") and add a `dates` row to the idle rotation: each date counts down on its own screen
 (a cake, balloon, heart, gift or star beside your label and `12 DAYS`, or `TURNS 8` for a birthday)
 from as many days before as you choose, and celebrates on the day. Up to 10, 14 characters each; see
 [screens.md](screens.md#dates-important-dates) for what it looks like.
+
+**Stock ticker.** Up to five stocks (any Yahoo Finance symbol: `AAPL`, `^GSPC`, `BTC-USD`) in a strip that
+scrolls across the panel from left to right, green up and red down. Add them on the admin page (Idle screen config tab,
+"Stock ticker") and add a `stocks` row to the idle rotation; no account or key is needed. See
+[screens.md](screens.md#stocks-the-stock-ticker).
 
 ## Audio
 

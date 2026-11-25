@@ -25,6 +25,16 @@ from .display.teams import TEAM_COLORS
 from .football.teams import NIGHT_SLOTS
 from .football.teams import is_nfl_team as football_team_exists
 from .important_dates import ImportantDate, parse_dates
+from .stocks import (
+    REFRESH_DEFAULT,
+    REFRESH_MAX,
+    REFRESH_MIN,
+    SPEED_DEFAULT,
+    SPEED_MAX,
+    SPEED_MIN,
+    clamp,
+    parse_symbols,
+)
 
 log = logging.getLogger(__name__)
 
@@ -289,7 +299,8 @@ class ScoreboardConfig:
 #: "matchup" (#157), "top_west"/"top_east" (#200), "division" (#296), "wildcard" (#298),
 #: "leaders" (#201) and "holiday" (#243, the active holiday's own screen) and "scores_grid" (#269,
 #: today's games several to a frame) and "address" (#293, how to reach the admin
-#: page) and "dates" (#524, the owner's birthdays and anniversaries) are opt-in only: never part of
+#: page) and "dates" (#524, the owner's birthdays and anniversaries) and "stocks" (the ticker
+#: strip) are opt-in only: never part of
 #: the derived default list.
 VALID_ROTATION_SCREENS = (
     "countdown_preview",
@@ -305,6 +316,7 @@ VALID_ROTATION_SCREENS = (
     "scores_grid",
     "address",
     "dates",
+    "stocks",
     "fb_preview",
     "fb_standings",
     "fb_week",
@@ -345,7 +357,7 @@ FOOTBALL_ROTATION_SCREENS = (*FOOTBALL_SCREENS, "clock")
 
 
 #: Screens that belong to no sport (see ``screen_sport``).
-SHARED_SCREENS = ("clock", "dates")
+SHARED_SCREENS = ("clock", "dates", "stocks")
 
 
 def screen_sport(screen: str) -> str:
@@ -455,6 +467,24 @@ def _parse_rotation(
             continue
         entries.append(RotationEntry(screen=screen, seconds=seconds_value))
     return entries
+
+
+@dataclass(slots=True)
+class StocksConfig:
+    """The stock ticker idle screen (``stocks.py``): up to five symbols, Yahoo's spelling."""
+
+    symbols: list[str] = field(default_factory=list)
+    #: Seconds between quote refreshes.
+    refresh_seconds: float = REFRESH_DEFAULT
+    #: How fast the strip scrolls, in pixels per second.
+    speed: float = SPEED_DEFAULT
+
+    def __post_init__(self) -> None:
+        self.symbols = parse_symbols(self.symbols)
+        self.refresh_seconds = clamp(
+            self.refresh_seconds, REFRESH_MIN, REFRESH_MAX, REFRESH_DEFAULT
+        )
+        self.speed = clamp(self.speed, SPEED_MIN, SPEED_MAX, SPEED_DEFAULT)
 
 
 @dataclass(slots=True)
@@ -984,6 +1014,8 @@ class Settings:
     #: The owner's important dates (#524), up to ``DATES_MAX``, in file order. Shown by the opt-in
     #: ``dates`` rotation screen.
     dates: list[ImportantDate] = field(default_factory=list)
+    #: The stock ticker's symbols and pacing (``[stocks]``).
+    stocks: StocksConfig = field(default_factory=StocksConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     status: StatusServerConfig = field(default_factory=StatusServerConfig)
     wifi_setup: WifiSetupConfig = field(default_factory=WifiSetupConfig)
@@ -1024,6 +1056,7 @@ class Settings:
             teams=_parse_teams(raw.get("teams", [])),
             rotation=_parse_rotation(raw.get("rotation", [])),
             dates=parse_dates(raw.get("dates", [])),
+            stocks=_build(StocksConfig, raw.get("stocks", {}), "stocks"),
             audio=_build(AudioConfig, raw.get("audio", {})),
             status=_build(StatusServerConfig, raw.get("status", {})),
             wifi_setup=_build(WifiSetupConfig, raw.get("wifi_setup", {})),
@@ -1143,6 +1176,7 @@ class Settings:
         self.teams = reloaded.teams
         self.rotation = reloaded.rotation
         self.dates = reloaded.dates
+        self.stocks = reloaded.stocks
         self.audio = reloaded.audio
         self.status = reloaded.status
         self.wifi_setup = reloaded.wifi_setup
