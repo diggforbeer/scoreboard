@@ -43,6 +43,7 @@ from .models import FbGame, Play
 from .people import CoreSync, RosterCache, RosterPlayer, merge_core
 from .redzone import RedZoneWatcher
 from .scroll import is_moving, scroll_px, scroll_seconds
+from .skew import SkewLog
 from .stats import GameStats
 from .teams import (
     EMPTY_DIRECTORY,
@@ -186,6 +187,8 @@ class FootballMode:
         self._games_shown: tuple[FbGame, ...] | None = None
         self.director = self._make_director()
         self._core_sync = CoreSync()
+        #: Logs how far the scoreboard runs ahead of the plays feed (``skew``). Worker thread only.
+        self._skew = SkewLog(monotonic)
         #: Teams driving inside the 20, for the alert over the idle screens (``redzone``).
         self.redzone = RedZoneWatcher(monotonic)
         #: A ranked college team losing to a lower-ranked one (#557); college only.
@@ -452,6 +455,7 @@ class FootballMode:
                 if game.id in prev.plays:
                     plays[game.id] = prev.plays[game.id]
                 continue
+            self._skew.observe(game, site)
             merged = list(site)
             if self._core_sync.should_fetch(game.id, site):
                 core = client.core_plays(game.id)
@@ -467,6 +471,7 @@ class FootballMode:
             players[game.id] = self.rosters.players_for([game.home.espn_id, game.away.espn_id])
         keep = {g.id for g in games}
         self._core_sync.forget(lambda game_id: game_id in keep)
+        self._skew.forget(lambda game_id: game_id in keep)
         return plays, players
 
     def _keep_stats(self, client: Any, game_id: int) -> None:
