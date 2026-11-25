@@ -1644,20 +1644,24 @@ class Renderer:
         return text.rstrip()
 
     def draw_stocks(self, canvas: Any, views: tuple[StockView, ...], px: int) -> None:
-        """The ``stocks`` rotation screen: every stock side by side in one strip that moves from
-        the left edge to the right, ``px`` pixels so far (0 has the strip just off the left edge).
+        """The ``stocks`` rotation screen: every stock side by side in one strip, ``px`` pixels
+        scrolled left (0 is the strip fully painted from the left edge: the first stocks on the
+        panel). The strip is a loop: it is drawn twice, back to back, so as the last stock leaves
+        on the left the first is already coming round behind it.
 
         A stock is its symbol over its price and the day's change, the change green up and red down
         (grey when flat or when the feed has nothing: ``NO DATA``). Blocks wholly off the panel are
         not drawn. The widths are ``stocks.block_width``'s, so the slot's length matches the strip.
         """
         canvas.Clear()
-        x = px - strip_width(views)
-        for view in views:
-            width = block_width(view)
-            if x + width > 0 and x < self.width:
-                self._draw_stock(canvas, view, x, width)
-            x += width
+        loop = strip_width(views)
+        for start in (-px, loop - px):
+            x = start
+            for view in views:
+                width = block_width(view)
+                if x + width > 0 and x < self.width:
+                    self._draw_stock(canvas, view, x, width)
+                x += width
 
     def _draw_stock(self, canvas: Any, view: StockView, x: int, width: int) -> None:
         colour = {True: LIVE, False: LOSS, None: SUBDUED}[view.up]

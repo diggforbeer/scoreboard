@@ -2857,7 +2857,7 @@ def test_the_shot_map_draws_nothing_in_the_rounded_off_corners(games):
 
 from scoreboard.display import date_icons  # noqa: E402 - kept with the tests that use it
 from scoreboard.important_dates import DateView  # noqa: E402
-from scoreboard.stocks import StockView, strip_width, travel  # noqa: E402
+from scoreboard.stocks import StockView, scrolls, strip_width  # noqa: E402
 
 DATES_NOW = datetime(2026, 11, 18, 12, 0, 0, tzinfo=UTC)
 DATES_TEXT_LEFT = 3 + date_icons.ICON_BOX[0] + 5  # where the text column starts at 128px
@@ -2890,11 +2890,12 @@ def assert_date_layout(c: AsciiCanvas, view: DateView, *, years: bool, icon: boo
     assert (small is not None) == years, "the years line shows if and only if the date counts years"
 
 
-# -- the stock ticker: a strip moving from the left edge to the right ----------------------------
+# -- the stock ticker: a strip painted in full, then scrolled left -----------------------------
 
 STOCK_VIEWS = (
     StockView("AAPL", "354.07", "+1.43%", True),
     StockView("TSLA", "384.68", "-0.62%", False),
+    StockView("^GSPC", "7201.1", "0.00%", None),
     StockView("NOPE", "NO DATA", "", None),
 )
 
@@ -2907,30 +2908,49 @@ def draw_stocks(px: int, views=STOCK_VIEWS, *, width: int = W) -> AsciiCanvas:
 
 
 @pytest.mark.parametrize(
-    ("name", "share"),
-    [("stocks_entering", 0.25), ("stocks_middle", 0.55), ("stocks_leaving", 0.85)],
+    ("name", "share"), [("stocks_start", 0.0), ("stocks_middle", 0.4), ("stocks_wrap", 0.8)]
 )
 def test_stocks_scene(name, share, update_snapshots):
-    c = draw_stocks(round(share * travel(STOCK_VIEWS, W)))
+    c = draw_stocks(round(share * strip_width(STOCK_VIEWS)))
     art = show(name, c)
     assert not [p for p in c.out_of_bounds if not 0 <= p[1] < H], "drew above or below the panel"
     check_snapshot(name, art, update_snapshots)
 
 
-def test_the_strip_starts_off_the_left_edge_and_ends_off_the_right():
-    assert not draw_stocks(0).lit(), "nothing is on the panel before the strip enters"
-    assert not draw_stocks(travel(STOCK_VIEWS, W)).lit(), "nothing is left after it leaves"
+def test_the_first_paint_has_the_first_stocks_filling_the_panel_from_the_left():
+    box = draw_stocks(0).bbox()
+    assert box is not None and box.x0 <= 3, "the first stock starts at the left edge"
+    assert box.x1 >= W - 20, "and the panel is full to the right"
 
 
-def test_the_strip_moves_to_the_right_as_the_offset_grows():
-    """The first stock enters from the left: its rightmost lit pixel advances with the offset."""
+def test_the_strip_moves_to_the_left_as_the_offset_grows():
+    """Ten more pixels of scroll is the same picture ten pixels further left."""
+    start, later = draw_stocks(0), draw_stocks(10)
+    shifted = {(x - 10, y) for (x, y) in start.pixels if 10 <= x < 70}
+    assert shifted and shifted <= set(later.pixels)
+    assert start.render() != later.render()
 
-    def right_edge(px):
-        box = draw_stocks(px).bbox()
-        return None if box is None else box.x1
 
-    edges = [right_edge(px) for px in (14, 24, 34)]
-    assert None not in edges and edges == sorted(edges) and len(set(edges)) == 3
+def test_the_strip_loops_so_a_lap_later_is_the_same_picture():
+    loop = strip_width(STOCK_VIEWS)
+    for px in (0, 17, loop // 2):
+        assert draw_stocks(px).render() == draw_stocks(px + loop).render()
+
+
+def test_the_first_stock_comes_round_behind_the_last_with_no_blank_stretch():
+    """Forty pixels before the lap ends, the first stock is already entering on the right."""
+    loop = strip_width(STOCK_VIEWS)
+    near_the_seam = draw_stocks(loop - 40)
+    first_stock_again = {(x + 40, y) for (x, y) in draw_stocks(0).pixels if x + 40 < W}
+    assert first_stock_again <= set(near_the_seam.pixels)
+    # and the panel is never empty, whatever the position
+    assert all(draw_stocks(px).lit() for px in range(0, loop, 9))
+
+
+def test_a_strip_that_fits_the_panel_is_painted_from_the_left_and_does_not_scroll():
+    one = (StockView("AAPL", "354.07", "+1.43%", True),)
+    assert not scrolls(one, W)
+    assert draw_stocks(0, one).bbox().x0 <= 3
 
 
 @pytest.mark.parametrize(
@@ -2953,7 +2973,7 @@ def test_a_stock_is_symbol_and_change_over_a_price_coloured_by_direction(view, c
         return real(canvas, font, x, y, rgb, text)
 
     r.text = record
-    r.draw_stocks(AsciiCanvas(W, H), (view,), strip_width((view,)))
+    r.draw_stocks(AsciiCanvas(W, H), (view,), 0)
     assert drawn[view.symbol] == rd.ACCENT
     assert drawn[view.change] == getattr(rd, change_colour)
     assert drawn[view.price] == rd.WHITE

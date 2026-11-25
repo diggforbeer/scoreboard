@@ -1,7 +1,7 @@
 """The stock ticker idle screen: the rules, the quotes and the feed behind it.
 
 ``[stocks]`` lists up to ``STOCKS_MAX`` symbols; the opt-in ``stocks`` rotation screen draws them
-as a strip that scrolls across the panel from the left edge to the right. Everything here is pure
+as a strip that starts fully painted and then scrolls left without stopping. Everything here is pure
 except ``YahooClient`` (one HTTP GET per symbol) and ``StockFeed`` (the thread that calls it), so
 the config loader, the admin save, both sports' rotations and the renderer share one rule set.
 
@@ -174,28 +174,37 @@ def strip_width(shown: Iterable[StockView]) -> int:
     return sum(block_width(v) for v in shown)
 
 
-def travel(shown: Iterable[StockView], panel_width: int) -> int:
-    """Pixels the strip moves in one pass: from fully off the left edge to fully off the right."""
-    return strip_width(shown) + panel_width
+#: Seconds the strip rests when the screen first paints, so the first stocks can be read before it
+#: starts to move. After that it never stops: it loops until the slot ends.
+HOLD_SECONDS = 2.0
+#: Blank pixels kept beside the first and last stock, so neither sits against the panel's edge.
+EDGE = 2
 
 
-def slot_seconds(
-    shown: Sequence[StockView], minimum: float, speed: float, panel_width: int
-) -> float:
-    """The slot's length: ``minimum`` (the rotation row's seconds), or longer if one whole pass at
-    ``speed`` px/s takes more, so every price is seen."""
-    if not shown:
-        return minimum
-    return max(minimum, travel(shown, panel_width) / max(speed, SPEED_MIN))
+def scrolls(shown: Sequence[StockView], panel_width: int) -> bool:
+    """Whether the strip is wider than the panel. One that fits stays still."""
+    return bool(shown) and strip_width(shown) - GAP + 2 * EDGE > panel_width
 
 
-def scroll_px(shown: Sequence[StockView], offset: float, seconds: float, panel_width: int) -> int:
-    """How far right the strip has moved ``offset`` seconds into a ``seconds`` slot. 0 puts the
-    strip's right edge on the panel's left edge; ``travel`` puts its left edge on the right one."""
-    if not shown or seconds <= 0:
+def scroll_px(shown: Sequence[StockView], offset: float, speed: float, panel_width: int) -> int:
+    """How far left the strip has moved ``offset`` seconds into the slot, at ``speed`` px/s.
+
+    The slot starts fully painted (0: the first stocks fill the panel), rests ``HOLD_SECONDS`` and
+    then scrolls without stopping: the strip is a loop of ``strip_width`` pixels, the renderer draws
+    it twice, and this wraps, so the first stock comes round again behind the last for as long as
+    the slot lasts."""
+    if not scrolls(shown, panel_width):
         return 0
-    progress = min(1.0, max(0.0, offset / seconds))
-    return round(progress * travel(shown, panel_width))
+    run = offset - HOLD_SECONDS
+    if run <= 0:
+        return 0
+    return int(run * max(speed, SPEED_MIN)) % strip_width(shown)
+
+
+def is_moving(shown: Sequence[StockView], offset: float, panel_width: int) -> bool:
+    """Whether the strip is scrolling (the board runs its fast loop then): always, once the opening
+    rest is over, unless it all fits the panel."""
+    return scrolls(shown, panel_width) and offset >= HOLD_SECONDS
 
 
 # -- the feed ----------------------------------------------------------------------------------

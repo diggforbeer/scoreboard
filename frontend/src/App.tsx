@@ -314,7 +314,7 @@ interface DatesAvailable {
 }
 
 // The stock ticker (stocks.py): up to five symbols, Yahoo's spelling, shown by the "stocks"
-// rotation screen as a strip that scrolls left to right.
+// rotation screen as a strip that paints in full, then scrolls right to left without stopping.
 interface StocksConfig {
   symbols: string[]
   refresh_seconds: number
@@ -888,7 +888,7 @@ function StocksCard({
   return (
     <>
       <p className="text-body-secondary small">
-        A ticker of up to {available.max} stocks that scrolls across the panel from left to right. Add
+        A ticker of up to {available.max} stocks that paints in full, then scrolls right to left without stopping. Add
         a <code>stocks</code> row to the Idle rotation to show it. Symbols are Yahoo Finance's: AAPL,
         BRK-B, ^GSPC (an index), BTC-USD, EURUSD=X. Prices can be up to 15 minutes old.
       </p>

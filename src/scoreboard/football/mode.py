@@ -25,8 +25,8 @@ from typing import TYPE_CHECKING, Any
 
 from ..delay import DelayQueue
 from ..important_dates import pick as pick_date
+from ..stocks import is_moving as stocks_is_moving
 from ..stocks import scroll_px as stocks_scroll_px
-from ..stocks import slot_seconds as stocks_slot_seconds
 from .api import LEAGUE_COLLEGE, LEAGUE_NFL, MIN_POLL_SECONDS
 from .director import Director, Timings, timings_from
 from .idle import (
@@ -895,10 +895,8 @@ class FootballMode:
                 if self._dates():
                     slots.append((entry.screen, entry.seconds))
             elif entry.screen == "stocks":
-                shown, speed = self._stocks()
-                if shown:
-                    seconds = stocks_slot_seconds(shown, entry.seconds, speed, STOCKS_PANEL_WIDTH)
-                    slots.append((entry.screen, seconds))
+                if self._stocks()[0]:
+                    slots.append((entry.screen, entry.seconds))
             elif entry.screen in IDLE_SCREENS:
                 view = IDLE_SCREENS[entry.screen](ctx)
                 if not view:
@@ -940,16 +938,14 @@ class FootballMode:
         from .idle_screens import IDLE_SCREENS
 
         if kind == "stocks":
-            shown, _speed = self._stocks()
+            shown, speed = self._stocks()
             if shown:
                 offset = self._slot_fraction * self._slot_length
                 return Scene(
                     "stocks",
                     stock_views=tuple(shown),
-                    scroll_px=stocks_scroll_px(
-                        shown, offset, self._slot_length, STOCKS_PANEL_WIDTH
-                    ),
-                    scrolling=True,
+                    scroll_px=stocks_scroll_px(shown, offset, speed, STOCKS_PANEL_WIDTH),
+                    scrolling=stocks_is_moving(shown, offset, STOCKS_PANEL_WIDTH),
                 )
         if kind == "dates":
             views = list(self._dates())
