@@ -2442,6 +2442,7 @@ def test_thanksgiving_day_draws_a_steaming_roast_not_the_walking_turkey():
     assert ROAST_PALETTE["G"] in left, "the roast is on the spot the turkey had"
     assert TURKEY_BODY not in left, "and the walking turkey is gone"
     assert ROAST_PALETTE["G"] not in week_before.colors(0, 0, TURKEY_SCREEN_WIDTH + 3)
+    assert ROAST_PALETTE["R"] in left, "one stray feather drifts down beside the steam"
 
 
 def test_thanksgiving_roast_steams_at_two_frames_per_second():

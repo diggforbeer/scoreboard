@@ -1683,9 +1683,10 @@ def draw_thanksgiving_turkey(
 #: on top, two wisps that swap at the screen's 2 fps, then the bird on its platter. 'b' is a
 #: drumstick's bone, 'P' parsley, 'S'/'s' the platter and its shadow.
 _ROAST_STEAM = (
-    ("...W...W......", "....W...W.....", "...W...W......", "....W...W....."),
-    ("....W...W.....", "...W...W......", "....W...W.....", "...W...W......"),
+    ("...W...W....Y.", "....W...W..YO.", "...W...W...R..", "....W...W....."),
+    ("....W...W.....", "...W...W...Y..", "....W...W.YO..", "...W...W..R..."),
 )
+# The one stray feather (top right) drifts down and left as the steam swaps: he got away, mostly.
 _ROAST_BODY = (
     ".b..........b.",
     ".bD.GGGGGG.Db.",
@@ -1707,6 +1708,9 @@ ROAST_PALETTE = {
     "S": (200, 200, 215),
     "s": (105, 105, 125),
     "P": (40, 180, 60),
+    "Y": FEATHER_GOLD,
+    "O": FEATHER_ORANGE,
+    "R": FEATHER_RED,
 }
 #: The countdown's two lines on the day; ``thanksgiving_countdown`` returns exactly this.
 THANKSGIVING_DAY_LINES = ("HAPPY", "THANKSGIVING")

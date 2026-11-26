@@ -1000,7 +1000,7 @@ because the real binding's `DrawText` never reaches Python `SetPixel`. Skipped o
 panel. Same fences and no-snapshots rule as the tree eggs, which still use the fixed wall-clock roll.
 
 On **Thanksgiving Day itself** (#626) the `thanksgiving` screen draws a steaming roast on a platter
-(`display/holiday.py` `draw_thanksgiving_roast`, two steam frames at 2 fps, the turkey's own slot)
+(`display/holiday.py` `draw_thanksgiving_roast`, two steam frames at 2 fps and one stray feather drifting down beside the steam, in the turkey's own slot)
 instead of the walking turkey, and the turkey run never starts: same family, same rule, never
 documented user-facing (no `screens.md` picture, no demo step), pinned by the same fence tests.
 
