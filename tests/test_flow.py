@@ -2417,6 +2417,80 @@ def test_the_stats_page_follows_the_clock(day):
     assert first != second, "so the live view takes a new snapshot"
 
 
+def _intermission_with_a_followed_game_live(followed, rotate=10):
+    """The favourite (game 1) in an intermission, stats in; SEA (game 9) live and followed."""
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = rotate
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
+    client.game_stats_by_game[1] = _int_stats()
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    return app, clock, client
+
+
+def _runs(app, clock, seconds):
+    """Sample once a second: [(game id, kind, first page index, seconds)] for each unbroken run."""
+    runs: list[list] = []
+    for _ in range(seconds):
+        s = app.select_scene()
+        key = (s.game.id, s.kind)
+        if runs and runs[-1][0] == key:
+            runs[-1][2] += 1
+        else:
+            runs.append([key, s.stats_page, 1])
+        clock.advance(seconds=1)
+    return runs
+
+
+def _page_count(app, scene):
+    ice = None if scene.ice_elapsed is None else (scene.ice_elapsed, scene.ice_total)
+    return app.renderer.intermission_page_count(scene.game, scene.stats, scene.shots, ice)
+
+
+def test_the_intermission_turn_lasts_every_page_and_starts_on_the_first(followed):
+    """Another followed game shares the screen with the favourite's intermission. The favourite's
+    turn used to be half a rotation, with the page taken from the global clock, so the pages
+    appeared cut off, in any order. Now its turn is every page long and starts on page one."""
+    from scoreboard.app import INTERMISSION_PAGE_SECONDS
+
+    page_len = int(INTERMISSION_PAGE_SECONDS)
+    app, clock, _client = _intermission_with_a_followed_game_live(followed)
+    scene_now = app.select_scene()
+    pages = _page_count(app, scene_now)
+    assert pages >= 1
+    runs = _runs(app, clock, int(3 * (pages * page_len + 10)))
+    own = [r for r in runs if r[0] == (1, "intermission")]
+    other = [r for r in runs if r[0] == (9, "game")]
+    assert len(own) >= 2 and len(other) >= 2, "both take turns, repeatedly"
+    for _, first_page, length in own[1:-1] or own[1:]:
+        assert length == pages * page_len, "the whole intermission, page after page"
+        assert first_page % pages == 0 or pages == 1, "and it always opens on the first page"
+    for _, _, length in other[1:-1] or other[1:]:
+        assert length == 10, "the other game keeps its usual turn"
+
+
+def test_the_intermission_pages_follow_in_order_within_its_turn(followed):
+    from scoreboard.app import INTERMISSION_PAGE_SECONDS
+
+    page_len = int(INTERMISSION_PAGE_SECONDS)
+    app, clock, _client = _intermission_with_a_followed_game_live(followed)
+    first = app.select_scene()
+    pages = _page_count(app, first)
+    # Walk to the start of the favourite's next turn, then read its pages second by second.
+    for _ in range(400):
+        s = app.select_scene()
+        if s.kind == "intermission" and app._intermission_turn_start == app.monotonic():
+            break
+        clock.advance(seconds=1)
+    seen = []
+    for _ in range(pages * page_len):
+        s = app.select_scene()
+        assert s.kind == "intermission"
+        seen.append(s.stats_page % pages)
+        clock.advance(seconds=1)
+    assert [seen[i * page_len] for i in range(pages)] == list(range(pages))
+
+
 def test_a_shootout_never_gets_the_stats_screen(day):
     app, clock, client = day
     set_follow(app.settings, ["SEA"])

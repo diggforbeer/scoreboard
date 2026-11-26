@@ -326,7 +326,12 @@ only when they score. During its intermission or held final, the other
 live followed games take `rotate_seconds` turns and the favourite's own
 screen drops in for `FAVOURITE_QUICK_TURN` (half) of that each cycle, so
 its score stays in view without hogging time from games actually being
-played. With the favourite not playing, live followed games take equal
+played. **Except** an intermission that has its stats screen: its turn is
+every page long (`_intermission_turn_seconds`: `renderer.intermission_page_count` x
+`INTERMISSION_PAGE_SECONDS`) and the pages count from the turn's start
+(`_intermission_turn_start`), so the pages run in order and a followed game's
+turn comes after them, not in the middle (seen NSH at DAL with MIN live: a half-rotation
+turn showed whichever page the global clock was on). With the favourite not playing, live followed games take equal
 turns (intermissions included -- skipping them was considered and not
 chosen); if the favourite's game today hasn't started, its countdown/preview
 joins as a `FAVOURITE_QUICK_TURN` so a live followed team can't hide it
@@ -475,7 +480,7 @@ needed at 128px -- only 12+ letter surnames truncate between logos.
 favourite's own intermission the game scene's frozen scoreboard is replaced by a two-page table of
 the game's team stats (shots, faceoff %, power plays, hits, penalty minutes; blocks, giveaways,
 takeaways, the last two periods' shots), away left and home right with the logos at the edges, the
-leader of each row in their colour, pages turning every `INTERMISSION_PAGE_SECONDS` (a pure function
+leader of each row in their colour, pages turning every `INTERMISSION_PAGE_SECONDS` (counted from the start of the favourite's turn when other followed games share the screen, else a pure function
 of the clock; `Scene.stats_page` is the tick and the renderer takes it modulo its own page count).
 By the owner's decisions: **the favourite's game only** (not a followed team's, not a shootout) and
 **one extra request, scoped**: `HockeyClient.game_stats` reads `right-rail` (`teamGameStats`,

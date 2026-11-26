@@ -579,6 +579,38 @@ class Renderer:
     #: The side behind on a row shows its number in the label's grey: dimmer was unreadable.
     _INTERMISSION_TRAILING = _INTERMISSION_LABEL
 
+    def _intermission_layout(
+        self, game: Game, stats: GameStats | None, shots: ShotMap | None, ice: Any
+    ) -> tuple[Any, int, int, bool, list[Any], bool, bool]:
+        """What the intermission screen is made of on this panel: the logos (or ``None``), the
+        table's left and right edges, whether it is headed by abbreviations, the stat tables a page
+        each, and whether the shot map and the Zamboni page are offered."""
+        from . import shotmap, zamboni
+
+        logos = None
+        left, right = 0, self.width
+        if self.logos is not None and self.width >= 128:
+            away = self.logos.get(game.away.abbrev)
+            home = self.logos.get(game.home.abbrev)
+            if away is not None and home is not None:
+                logos = (away, home)
+                _, _, left, right = self._logo_span(away, home)
+        headed = logos is None
+        baselines = self._INTERMISSION_HEADED_BASELINES if headed else self._INTERMISSION_BASELINES
+        size = len(baselines)
+        flat = [line for page in stats.pages for line in page] if stats is not None else []
+        tables = [flat[i : i + size] for i in range(0, len(flat), size)]
+        has_map = shots is not None and shotmap.fits(self.width)
+        has_ice = ice is not None and zamboni.fits(self.width)
+        return logos, left, right, headed, tables, has_map, has_ice
+
+    def intermission_page_count(
+        self, game: Game, stats: GameStats | None, shots: ShotMap | None, ice: Any = None
+    ) -> int:
+        """How many pages ``draw_intermission`` cycles through here (0: nothing to draw)."""
+        _, _, _, _, tables, has_map, has_ice = self._intermission_layout(game, stats, shots, ice)
+        return len(tables) + (1 if has_map else 0) + (1 if has_ice else 0)
+
     def draw_intermission(
         self,
         canvas: Any,
@@ -603,21 +635,9 @@ class Renderer:
         from . import shotmap, zamboni
 
         canvas.Clear()
-        logos = None
-        left, right = 0, self.width
-        if self.logos is not None and self.width >= 128:
-            away = self.logos.get(game.away.abbrev)
-            home = self.logos.get(game.home.abbrev)
-            if away is not None and home is not None:
-                logos = (away, home)
-                _, _, left, right = self._logo_span(away, home)
-        headed = logos is None
-        baselines = self._INTERMISSION_HEADED_BASELINES if headed else self._INTERMISSION_BASELINES
-        size = len(baselines)
-        flat = [line for page in stats.pages for line in page] if stats is not None else []
-        tables = [flat[i : i + size] for i in range(0, len(flat), size)]
-        has_map = shots is not None and shotmap.fits(self.width)
-        has_ice = ice is not None and zamboni.fits(self.width)
+        logos, left, right, headed, tables, has_map, has_ice = self._intermission_layout(
+            game, stats, shots, ice
+        )
         total = len(tables) + (1 if has_map else 0) + (1 if has_ice else 0)
         if total == 0:
             return
