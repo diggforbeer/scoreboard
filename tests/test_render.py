@@ -2436,7 +2436,6 @@ def test_thanksgiving_day_draws_a_steaming_roast_not_the_walking_turkey():
     day, week_before = canvas(), canvas()
     make_renderer().draw_thanksgiving(day, REAL_THANKSGIVING, "NSH")
     make_renderer().draw_thanksgiving(week_before, THANKSGIVING_DAY, "NSH")
-    show("thanksgiving day, the roast", day)
 
     assert not day.out_of_bounds
     left = day.colors(0, 0, TURKEY_SCREEN_WIDTH + 3)
@@ -2452,13 +2451,11 @@ def test_thanksgiving_roast_steams_at_two_frames_per_second():
     assert first.pixels != second.pixels and not second.out_of_bounds
 
 
-def test_thanksgiving_day_has_no_turkey_run_and_the_demo_can_force_it():
-    plain, run, forced = canvas(), canvas(), canvas()
+def test_thanksgiving_day_has_no_turkey_run():
+    plain, run = canvas(), canvas()
     make_renderer().draw_thanksgiving(plain, REAL_THANKSGIVING, "NSH")
     make_renderer().draw_thanksgiving(run, REAL_THANKSGIVING, "NSH", ("turkey", 1.5))
-    make_renderer().draw_thanksgiving(forced, THANKSGIVING_DAY, "NSH", on_the_day=True)
     assert run.pixels == plain.pixels, "the roast does not bolt"
-    assert forced.pixels == plain.pixels, "on_the_day is the same screen on any date"
 
 
 def test_thanksgiving_roast_on_a_single_panel_is_just_the_roast_centred():

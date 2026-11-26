@@ -387,11 +387,6 @@ to US Thanksgiving, the 4th Thursday of November (`HAPPY THANKSGIVING` on the da
 the favourite's colour; a single 64px panel shows just the turkey. Nov 1 through
 Thanksgiving Day.
 
-![Thanksgiving Day](docs/screens/thanksgiving_day.png)
-
-On Thanksgiving Day itself the bird is dinner: the walking turkey is swapped for a roast on a
-platter, its steam swapping at 2 fps, beside `HAPPY THANKSGIVING`.
-
 - **Controls:** the same `holiday` rotation entry as the Christmas tree: it shows whichever of
   the two is in season. Thanksgiving must be ticked under `[holiday]`. Skipped otherwise.
   Canadian Thanksgiving has no screen.

@@ -1329,12 +1329,11 @@ class Renderer:
         now: datetime,
         favourite: str,
         egg: tuple[str, float] | None = None,
-        on_the_day: bool = False,
     ) -> None:
         """The holiday rotation screen in November (like the December tree): a turkey on the
         left, the countdown to Thanksgiving on the right, the top line in the favourite's colour.
-        On Thanksgiving Day itself (``on_the_day`` forces it for the demo) the bird is dinner: a
-        steaming roast on a platter, and no turkey run (#626).
+        On Thanksgiving Day itself the bird is dinner: a steaming roast on a
+        platter, and no turkey run (#626, an egg: not in the guide or the demo).
 
         ``egg`` is the turkey run (#516), ``("turkey", age)`` from ``ScoreboardApp._turkey_egg``.
         """
@@ -1355,7 +1354,7 @@ class Renderer:
         canvas.Clear()
         local = now.astimezone(self.tz)
         tick = int(now.timestamp() * 2)
-        lines = THANKSGIVING_DAY_LINES if on_the_day else thanksgiving_countdown(local.date())
+        lines = thanksgiving_countdown(local.date())
         day = lines == THANKSGIVING_DAY_LINES
         draw_bird = draw_thanksgiving_roast if day else draw_thanksgiving_turkey
         top = (self.height - TURKEY_SCREEN_HEIGHT) // 2

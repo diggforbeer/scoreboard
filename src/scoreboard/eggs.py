@@ -1,8 +1,9 @@
 """The Easter egg tour (#509): ``scoreboard --eggs [name]``, a hidden way to see them.
 
-The tree screen's quote, squirrel and fire, the Thanksgiving turkey's run, the blowout flash and
-April Fools' Admirals are all rare by design: the tree ones only exist in December, the turkey in
-November, April Fools on one day, and the blowout needs a five-goal loss. Waiting for one on a
+The tree screen's quote, squirrel and fire, the Thanksgiving turkey's run (and the roast that
+replaces him on the day itself), the blowout flash and April Fools' Admirals are all rare by
+design: the tree ones only exist in December, the turkey in November, April Fools on one day, and
+the blowout needs a five-goal loss. Waiting for one on a
 real board is not a plan, so the flag plays each in turn on the real panel, in a loop (Ctrl-C to
 stop), or just the one named.
 
@@ -19,16 +20,25 @@ from typing import NamedTuple
 from . import blowout
 from .app import Scene
 from .demo import demo_steps
-from .display.holiday import TREE_EGGS, TURKEY_RUN_SECONDS
+from .display.holiday import TREE_EGGS, TURKEY_RUN_SECONDS, nth_weekday
 
 #: The tour's items, in order.
-NAMES = ("quote", "squirrel", "fire", "blowout", "april_fools", "turkey")
+NAMES = ("quote", "squirrel", "fire", "blowout", "april_fools", "turkey", "roast")
 #: A calm moment of the plain screen before and after each, so the start and end are seen.
 PAUSE_SECONDS = 2.0
 #: Where the tree screen's date is held, so its countdown shows whatever the real date is.
 TOUR_DAY = (12, 13)
 #: The turkey's screen only exists in November: the tour holds the date here for it.
 THANKSGIVING_DAY = (11, 19)
+
+
+def roast_day() -> tuple[int, int]:
+    """Thanksgiving Day proper, for the roast that replaces the turkey on it (#626): the 4th
+    Thursday of this year's November, whatever the real date is."""
+    day = nth_weekday(datetime.now(UTC).year, 11, 3, 4)
+    return day.month, day.day
+
+
 #: How long each April Fools screen is shown relabelled.
 PRANK_SECONDS = 4.0
 
@@ -53,7 +63,11 @@ def _demo_scene(name: str) -> Scene:
 
 def seconds(name: str) -> float:
     """How long the egg itself plays (the calm moments around it not counted)."""
-    return sum(p.seconds for p in plan(name) if p.egg or p.prank or p.scene.kind == "blowout")
+    return sum(
+        p.seconds
+        for p in plan(name)
+        if p.egg or p.prank or p.scene.kind == "blowout" or name == "roast"
+    )
 
 
 def plan(name: str) -> list[Phase]:
@@ -73,6 +87,9 @@ def plan(name: str) -> list[Phase]:
             Phase(screen, TURKEY_RUN_SECONDS, egg="turkey", day=THANKSGIVING_DAY),
             Phase(screen, PAUSE_SECONDS, day=THANKSGIVING_DAY),
         ]
+    if name == "roast":
+        screen = Scene("thanksgiving")
+        return [Phase(screen, PAUSE_SECONDS * 3, day=roast_day())]
     if name == "blowout":
         final = next(
             s.scene.game

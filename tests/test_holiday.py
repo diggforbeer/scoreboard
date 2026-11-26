@@ -1178,7 +1178,17 @@ def test_tree_eggs_are_kept_out_of_the_guide_readme_and_demo(path):
     from pathlib import Path
 
     text = (Path(__file__).resolve().parent.parent / path).read_text().lower()
-    for word in ("squirrel", "lots of sap", "griswold", "tree_egg", "turkey_egg", "turkey_pose"):
+    for word in (
+        "squirrel",
+        "lots of sap",
+        "griswold",
+        "tree_egg",
+        "turkey_egg",
+        "turkey_pose",
+        "roast_frames",
+        "thanksgiving_roast",
+        "thanksgiving_day",
+    ):
         assert word not in text, f"{word!r} must not appear in {path}"
 
 

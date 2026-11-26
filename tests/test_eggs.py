@@ -76,6 +76,18 @@ def test_the_turkey_plays_on_its_own_screen_in_november():
     assert frames[0]["egg"] is None and frames[-1]["egg"] is None
 
 
+def test_the_roast_is_the_thanksgiving_screen_held_on_thanksgiving_day():
+    from scoreboard.display.holiday import THANKSGIVING_DAY_LINES, thanksgiving_countdown
+
+    month, day = eggs.roast_day()
+    assert month == 11
+    year = datetime.now(UTC).year
+    assert thanksgiving_countdown(datetime(year, month, day).date()) == THANKSGIVING_DAY_LINES
+    frames = tour(("roast",), total("roast") - 0.5)
+    assert {f["kind"] for f in frames} == {"thanksgiving"}
+    assert {f["month"] for f in frames} == {11} and not any(f["egg"] for f in frames)
+
+
 def test_the_blowout_plays_its_own_scene():
     frames = tour(("blowout",), total("blowout") - 0.5)
     assert {"christmas_tree", "blowout"} <= {f["kind"] for f in frames}
