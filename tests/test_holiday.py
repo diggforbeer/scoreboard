@@ -1189,3 +1189,14 @@ def test_no_tree_egg_pictures_in_the_screen_guide():
     assert not list(docs.glob("christmas_tree_*.png")) or all(
         p.name == "christmas_tree.png" for p in docs.glob("christmas_tree_*.png")
     )
+
+
+def test_no_turkey_run_on_thanksgiving_day(holiday_app):
+    """The bird is in the oven (#626): a due run neither draws nor holds the fast loop."""
+    from scoreboard.app import FRAME_INTERVAL
+
+    app, src, now = holiday_app
+    now["t"] = datetime(2026, 11, 26, 18, 0, tzinfo=UTC)
+    app._turkey_started = src.monotonic()  # a run in progress
+    app.draw_scene(Scene("thanksgiving"))
+    assert app.frame_interval() == FRAME_INTERVAL

@@ -183,7 +183,9 @@ def test_every_step_renders_on_panel(width):
         elif scene.kind == "christmas_tree":
             r.draw_christmas_tree(c, NOW, "NSH")
         elif scene.kind == "thanksgiving":
-            r.draw_thanksgiving(c, datetime(2026, 11, 19, 23, 0, tzinfo=UTC), "NSH")
+            r.draw_thanksgiving(
+                c, datetime(2026, 11, 19, 23, 0, tzinfo=UTC), "NSH", on_the_day=scene.on_the_day
+            )
         else:
             r.draw_message(c, scene.kind.upper())
 

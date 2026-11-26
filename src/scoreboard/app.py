@@ -51,6 +51,7 @@ from .display.college_idle import COLLEGE_DRAWERS
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
+    THANKSGIVING_DAY_LINES,
     TURKEY_RUN_SECONDS,
     Holiday,
     HolidayOverlay,
@@ -336,6 +337,8 @@ class Scene:
     #: Set only for ``stocks`` -- the ticker's stocks as drawn; ``scroll_px`` is how far the strip
     #: has moved left and ``scrolling`` keeps the loop fast while it does.
     stock_views: tuple[stocks_mod.StockView, ...] = ()
+    #: Demo only: draw the ``thanksgiving`` screen as it is on Thanksgiving Day itself (#626).
+    on_the_day: bool = False
     #: Set only for ``fb_scores`` (#352) -- the football game to show.
     fb_game: FbGame | None = None
     #: Set only for the football play scenes (``fb_play``, ``fb_playtext``, ``fb_event``, #377):
@@ -4181,10 +4184,15 @@ class ScoreboardApp:
                 r.draw_christmas_tree(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "thanksgiving":
             sport, abbrev = self._colour_scheme(favourite)
-            egg = self._turkey_egg()
+            now = self.clock()
+            # No turkey run on the day: the bird is in the oven (#626).
+            day = scene.on_the_day or (
+                thanksgiving_countdown(now.astimezone(r.tz).date()) == THANKSGIVING_DAY_LINES
+            )
+            egg = None if day else self._turkey_egg()
             self._egg_animating = egg is not None
             with self._colour_context(sport):
-                r.draw_thanksgiving(self.canvas, self.clock(), abbrev, egg)
+                r.draw_thanksgiving(self.canvas, now, abbrev, egg, on_the_day=scene.on_the_day)
         elif scene.kind == "stocks" and scene.stock_views:
             r.draw_stocks(self.canvas, scene.stock_views, scene.scroll_px)
         elif scene.kind == "dates" and scene.date_views:

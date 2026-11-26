@@ -2416,6 +2416,60 @@ def test_thanksgiving_turkey_run_is_skipped_where_the_countdown_does_not_fit():
     assert run.pixels == plain.pixels and not run.out_of_bounds
 
 
+REAL_THANKSGIVING = datetime(2026, 11, 26, 23, 0, tzinfo=UTC)  # the 4th Thursday
+
+
+def test_thanksgiving_day_draws_a_steaming_roast_not_the_walking_turkey():
+    """#626: on the day itself the bird is dinner."""
+    from scoreboard.display.holiday import (
+        ROAST_FRAMES,
+        ROAST_PALETTE,
+        TURKEY_BODY,
+        TURKEY_SCREEN_HEIGHT,
+        TURKEY_SCREEN_WIDTH,
+    )
+
+    assert ROAST_FRAMES[0] != ROAST_FRAMES[1], "the steam moves"
+    assert {len(f) for f in ROAST_FRAMES} == {TURKEY_SCREEN_HEIGHT}
+    assert {len(row) for f in ROAST_FRAMES for row in f} == {TURKEY_SCREEN_WIDTH}, "same slot"
+
+    day, week_before = canvas(), canvas()
+    make_renderer().draw_thanksgiving(day, REAL_THANKSGIVING, "NSH")
+    make_renderer().draw_thanksgiving(week_before, THANKSGIVING_DAY, "NSH")
+    show("thanksgiving day, the roast", day)
+
+    assert not day.out_of_bounds
+    left = day.colors(0, 0, TURKEY_SCREEN_WIDTH + 3)
+    assert ROAST_PALETTE["G"] in left, "the roast is on the spot the turkey had"
+    assert TURKEY_BODY not in left, "and the walking turkey is gone"
+    assert ROAST_PALETTE["G"] not in week_before.colors(0, 0, TURKEY_SCREEN_WIDTH + 3)
+
+
+def test_thanksgiving_roast_steams_at_two_frames_per_second():
+    first, second = canvas(), canvas()
+    make_renderer().draw_thanksgiving(first, REAL_THANKSGIVING, "NSH")
+    make_renderer().draw_thanksgiving(second, REAL_THANKSGIVING + timedelta(seconds=0.5), "NSH")
+    assert first.pixels != second.pixels and not second.out_of_bounds
+
+
+def test_thanksgiving_day_has_no_turkey_run_and_the_demo_can_force_it():
+    plain, run, forced = canvas(), canvas(), canvas()
+    make_renderer().draw_thanksgiving(plain, REAL_THANKSGIVING, "NSH")
+    make_renderer().draw_thanksgiving(run, REAL_THANKSGIVING, "NSH", ("turkey", 1.5))
+    make_renderer().draw_thanksgiving(forced, THANKSGIVING_DAY, "NSH", on_the_day=True)
+    assert run.pixels == plain.pixels, "the roast does not bolt"
+    assert forced.pixels == plain.pixels, "on_the_day is the same screen on any date"
+
+
+def test_thanksgiving_roast_on_a_single_panel_is_just_the_roast_centred():
+    from scoreboard.display.holiday import ROAST_PALETTE
+
+    r = Renderer(graphics=graphics, fonts=FontSet(graphics), width=64, height=H, tz=TZ, logos=None)
+    c = AsciiCanvas(64, H)
+    r.draw_thanksgiving(c, REAL_THANKSGIVING, "NSH")
+    assert ROAST_PALETTE["G"] in c.colors() and not c.out_of_bounds
+
+
 def test_christmas_tree_quote_is_skipped_where_the_countdown_does_not_fit():
     # A single 64px panel shows just the tree; the quote must not squeeze in beside it.
     when = datetime(2026, 12, 13, 23, 0, tzinfo=UTC)
