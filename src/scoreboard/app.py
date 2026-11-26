@@ -688,6 +688,9 @@ class ScoreboardApp:
         )
         #: The stock ticker's quotes (``stocks.py``): its own thread, started by ``run()``; it idles
         #: with no symbols, and the screen is skipped until the first quotes arrive.
+        #: When the favourite's intermission turn on screen began (monotonic), set by
+        #: ``_favourite_scene`` each frame it is chosen: the intermission's pages count from it.
+        self._intermission_turn_start: float | None = None
         self._stocks_feed = stocks_mod.StockFeed(
             lambda: self.settings.stocks.symbols, lambda: self.settings.stocks.refresh_seconds
         )
@@ -2326,8 +2329,12 @@ class ScoreboardApp:
         shots = shots_held[1] if shots_held is not None else None
         if stats is None and shots is None:
             return None
-        # The page count is the renderer's (it depends on the panel), so this is just the tick.
-        tick = int(self.monotonic() // INTERMISSION_PAGE_SECONDS)
+        # The page count is the renderer's (it depends on the panel), so this is just the tick:
+        # counted from the start of the favourite's turn while other followed games share the
+        # screen (every turn starts on the first page), else from the clock.
+        now = self.monotonic()
+        started = self._intermission_turn_start
+        tick = int(((now - started) if started is not None else now) // INTERMISSION_PAGE_SECONDS)
         ice = self._intermission_ice(game)
         return Scene(
             "intermission",
@@ -3391,9 +3398,12 @@ class ScoreboardApp:
         cfg = self._hockey_cfg()
         turns = self._followed_turns()
         if turns:
-            position = self.monotonic() % sum(seconds for _, seconds in turns)
+            now = self.monotonic()
+            position = now % sum(seconds for _, seconds in turns)
+            self._intermission_turn_start = None
             for game, seconds in turns:
                 if position < seconds:
+                    self._intermission_turn_start = now - position
                     return self._turn_scene(game)
                 position -= seconds
             return self._turn_scene(turns[-1][0])
@@ -3451,7 +3461,22 @@ class ScoreboardApp:
             favourite_game = today
         if favourite_game is None:
             return others
-        return [(favourite_game, cfg.rotate_seconds * FAVOURITE_QUICK_TURN), *others]
+        quick = cfg.rotate_seconds * FAVOURITE_QUICK_TURN
+        if favourite_game.in_intermission:
+            quick = max(quick, self._intermission_turn_seconds(favourite_game))
+        return [(favourite_game, quick), *others]
+
+    def _intermission_turn_seconds(self, game: Game) -> float:
+        """How long the favourite's intermission turn must last to show every page of its screen
+        (``INTERMISSION_PAGE_SECONDS`` each, in order), or 0 while the screen has nothing yet.
+        A shorter turn cut the pages off wherever the clock happened to be, so the three pages
+        came and went in no order while another followed game took the rest of the time."""
+        shown = self._intermission_scene(Scene("game", game))
+        if shown is None:
+            return 0.0
+        ice = None if shown.ice_elapsed is None else (shown.ice_elapsed, shown.ice_total)
+        pages = self.renderer.intermission_page_count(shown.game, shown.stats, shown.shots, ice)
+        return pages * INTERMISSION_PAGE_SECONDS
 
     def situation_targets(self) -> list[Game]:
         """Live games worth a second request: followed teams' and the on-screen one.
