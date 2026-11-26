@@ -93,7 +93,7 @@
 | src/scoreboard/football/worker.py                 |      170 |        4 |     98% |243-244, 309-310 |
 | src/scoreboard/hockey/\_\_init\_\_.py             |        3 |        0 |    100% |           |
 | src/scoreboard/hockey/api.py                      |      135 |       20 |     85% |128-130, 137-142, 201-203, 211-216, 267-268 |
-| src/scoreboard/hockey/models.py                   |      700 |       11 |     98% |283, 345-346, 438, 445-446, 455, 516-517, 687, 869 |
+| src/scoreboard/hockey/models.py                   |      703 |       11 |     98% |283, 345-346, 438, 445-446, 455, 516-517, 700, 882 |
 | src/scoreboard/hostname.py                        |       69 |        2 |     97% |     86-87 |
 | src/scoreboard/important\_dates.py                |      134 |        3 |     98% |124-125, 151 |
 | src/scoreboard/light\_sensor.py                   |       38 |        0 |    100% |           |
@@ -104,7 +104,7 @@
 | src/scoreboard/updater.py                         |      287 |       28 |     90% |115-116, 134, 154, 172-176, 180-185, 251-253, 277, 313-318, 322-328, 339, 461, 465 |
 | src/scoreboard/wifi.py                            |      140 |      109 |     22% |73-75, 94-142, 154-165, 169-171, 176-179, 183-185, 193-195, 203-213, 217-224, 228-240, 250-254, 261-265, 276-288, 292-296 |
 | src/scoreboard/wifi\_join.py                      |       86 |        7 |     92% |112-114, 117-118, 201-202 |
-| **TOTAL**                                         | **16603** |  **497** | **97%** |           |
+| **TOTAL**                                         | **16606** |  **497** | **97%** |           |
 
 
 ## Setup coverage badge
