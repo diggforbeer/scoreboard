@@ -1678,6 +1678,51 @@ def draw_thanksgiving_turkey(
     )
 
 
+#: Thanksgiving Day itself: the turkey is dinner, so the screen draws the roast, not the bird.
+#: 14 columns by 13 rows like the walking turkey (drawn at twice the size): the steam's four rows
+#: on top, two wisps that swap at the screen's 2 fps, then the bird on its platter. 'b' is a
+#: drumstick's bone, 'P' parsley, 'S'/'s' the platter and its shadow.
+_ROAST_STEAM = (
+    ("...W...W....Y.", "....W...W..YO.", "...W...W...R..", "....W...W....."),
+    ("....W...W.....", "...W...W...Y..", "....W...W.YO..", "...W...W..R..."),
+)
+# The one stray feather (top right) drifts down and left as the steam swaps: he got away, mostly.
+_ROAST_BODY = (
+    ".b..........b.",
+    ".bD.GGGGGG.Db.",
+    "..DGGHHHGGGD..",
+    "...GHHHHGGGG..",
+    "..DGGHHGGGGDD.",
+    "..DDGGGGGGDD..",
+    ".PSSSSSSSSSSP.",
+    "SSSSSSSSSSSSSS",
+    ".ssssssssssss.",
+)
+ROAST_FRAMES = tuple(_enlarged((*steam, *_ROAST_BODY)) for steam in _ROAST_STEAM)
+ROAST_PALETTE = {
+    "W": (190, 190, 210),
+    "G": (200, 110, 30),
+    "H": (245, 175, 70),
+    "D": (140, 70, 20),
+    "b": (240, 235, 220),
+    "S": (200, 200, 215),
+    "s": (105, 105, 125),
+    "P": (40, 180, 60),
+    "Y": FEATHER_GOLD,
+    "O": FEATHER_ORANGE,
+    "R": FEATHER_RED,
+}
+#: The countdown's two lines on the day; ``thanksgiving_countdown`` returns exactly this.
+THANKSGIVING_DAY_LINES = ("HAPPY", "THANKSGIVING")
+
+
+def draw_thanksgiving_roast(
+    canvas: Any, x: int, y: int, tick: int, width: int, height: int
+) -> None:
+    """The roast turkey at (x, y) on Thanksgiving Day; ``tick`` (half-seconds) swaps the steam."""
+    draw_sprite(canvas, ROAST_FRAMES[tick % len(ROAST_FRAMES)], ROAST_PALETTE, x, y, width, height)
+
+
 def thanksgiving_countdown(day: date) -> tuple[str, str] | None:
     """The turkey screen's two lines, or None outside Nov 1 through Thanksgiving Day.
 
@@ -1690,7 +1735,7 @@ def thanksgiving_countdown(day: date) -> tuple[str, str] | None:
     if left < 0:
         return None
     if left == 0:
-        return "HAPPY", "THANKSGIVING"
+        return THANKSGIVING_DAY_LINES
     return f"{left} DAY{'S' if left > 1 else ''}", "TO THANKSGIVING"
 
 

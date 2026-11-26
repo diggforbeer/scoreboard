@@ -999,7 +999,12 @@ right; each patch heals at its own time. The lettering is *overdrawn* (black pat
 because the real binding's `DrawText` never reaches Python `SetPixel`. Skipped on a single 64px
 panel. Same fences and no-snapshots rule as the tree eggs, which still use the fixed wall-clock roll.
 
-**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools|turkey]`** (`eggs.py`,
+On **Thanksgiving Day itself** (#626) the `thanksgiving` screen draws a steaming roast on a platter
+(`display/holiday.py` `draw_thanksgiving_roast`, two steam frames at 2 fps and one stray feather drifting down beside the steam, in the turkey's own slot)
+instead of the walking turkey, and the turkey run never starts: same family, same rule, never
+documented user-facing (no `screens.md` picture, no demo step), pinned by the same fence tests.
+
+**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools|turkey|roast]`** (`eggs.py`,
 `ScoreboardApp.run_eggs`): a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and
 `screens.md`) that loops every egg on the real panel, or plays just the one named. Each is a `plan()`
 of `Phase`s (a calm moment, the egg, a calm moment). The tree eggs hold the tree screen's date in

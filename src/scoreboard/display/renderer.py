@@ -1332,14 +1332,18 @@ class Renderer:
     ) -> None:
         """The holiday rotation screen in November (like the December tree): a turkey on the
         left, the countdown to Thanksgiving on the right, the top line in the favourite's colour.
+        On Thanksgiving Day itself the bird is dinner: a steaming roast on a
+        platter, and no turkey run (#626, an egg: not in the guide or the demo).
 
         ``egg`` is the turkey run (#516), ``("turkey", age)`` from ``ScoreboardApp._turkey_egg``.
         """
         from .holiday import (
+            THANKSGIVING_DAY_LINES,
             THANKSGIVING_TEXT,
             TURKEY_RUN_SECONDS,
             TURKEY_SCREEN_HEIGHT,
             TURKEY_SCREEN_WIDTH,
+            draw_thanksgiving_roast,
             draw_thanksgiving_turkey,
             draw_turkey_run,
             thanksgiving_countdown,
@@ -1351,6 +1355,8 @@ class Renderer:
         local = now.astimezone(self.tz)
         tick = int(now.timestamp() * 2)
         lines = thanksgiving_countdown(local.date())
+        day = lines == THANKSGIVING_DAY_LINES
+        draw_bird = draw_thanksgiving_roast if day else draw_thanksgiving_turkey
         top = (self.height - TURKEY_SCREEN_HEIGHT) // 2
         left = TURKEY_SCREEN_WIDTH + 6  # the text column starts here
         room = self.width - left - 2
@@ -1361,13 +1367,13 @@ class Renderer:
         if not fits:
             # A single 64px panel has no room beside the turkey: just the turkey.
             x = (self.width - TURKEY_SCREEN_WIDTH) // 2
-            draw_thanksgiving_turkey(canvas, x, top, tick, self.width, self.height)
+            draw_bird(canvas, x, top, tick, self.width, self.height)
             return
-        run = egg[1] if egg is not None and egg[0] == "turkey" else None
+        run = egg[1] if egg is not None and egg[0] == "turkey" and not day else None
         if run is not None and run >= TURKEY_RUN_SECONDS:
             run = None
         if run is None:
-            draw_thanksgiving_turkey(canvas, 3, top, tick, self.width, self.height)
+            draw_bird(canvas, 3, top, tick, self.width, self.height)
         first, second = lines
         centre = (left + self.width) // 2
         first_colour = team_color(favourite) if favourite else THANKSGIVING_TEXT
