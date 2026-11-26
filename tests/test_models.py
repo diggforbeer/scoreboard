@@ -776,7 +776,7 @@ def _pbp(*plays, home_id=6, away_id=26):
     return {"awayTeam": {"id": away_id}, "homeTeam": {"id": home_id}, "plays": list(plays)}
 
 
-def _shot(owner, x, y, kind="shot-on-goal", defending="left", period_type="REG"):
+def _shot(owner, x, y, kind="shot-on-goal", defending="left", period_type="REG", zone=None):
     play = {
         "typeDescKey": kind,
         "periodDescriptor": {"number": 1, "periodType": period_type},
@@ -784,6 +784,8 @@ def _shot(owner, x, y, kind="shot-on-goal", defending="left", period_type="REG")
     }
     if defending is not None:
         play["homeTeamDefendingSide"] = defending
+    if zone is not None:
+        play["details"]["zoneCode"] = zone
     return play
 
 
@@ -844,3 +846,31 @@ def test_one_bad_play_does_not_lose_the_rest_and_no_shots_is_none():
 def test_shots_of_a_side_are_picked_out():
     shots = shot_map_from_play_by_play(_pbp(_shot(6, 80, 1), _shot(26, -80, 1), _shot(26, -70, 2)))
     assert len(shots.of("away")) == 2 and len(shots.of("home")) == 1
+
+
+def test_a_shot_the_feed_puts_beside_its_own_net_is_turned_back_to_the_net_it_shot_at():
+    """NSH at DAL, 2026-11-25: two DAL shots (zone D, NSH's goalie in net) carried the coordinates
+    of DAL's own end, which put DAL's glow at the Predators' end. Period one: home (DAL, 6) defends
+    the right end, so it shoots at x < 0 -- the feed said x = 89."""
+    mirrored = _shot(6, 89, 17, defending="right", zone="D")
+    sound = _shot(6, -70, -10, defending="right", zone="O")
+    shots = shot_map_from_play_by_play(_pbp(mirrored, sound))
+    assert [(s.side, s.x, s.y) for s in shots.shots] == [("home", 89, 17), ("home", 70, 10)]
+    # Period two, the other way round: the home team defends the left end and shoots at x > 0.
+    second = shot_map_from_play_by_play(_pbp(_shot(6, -86, -35, defending="left", zone="D")))
+    assert [(s.side, s.x, s.y) for s in second.shots] == [("home", 86, 35)]
+    # The away team's mirrored shot lands at the left end, where the away team shoots.
+    away = shot_map_from_play_by_play(_pbp(_shot(26, -89, -17, defending="right", zone="D")))
+    assert [(s.side, s.x, s.y) for s in away.shots] == [("away", -89, -17)]
+
+
+def test_zone_d_only_turns_a_shot_that_really_lies_in_its_own_half():
+    # Zone D but already in the attacked half, or only just past centre: left as the feed has it.
+    inside = shot_map_from_play_by_play(_pbp(_shot(6, -80, 5, defending="right", zone="D")))
+    assert [(s.x, s.y) for s in inside.shots] == [(80, -5)]  # normal: DAL attacks left in P1
+    near = shot_map_from_play_by_play(_pbp(_shot(6, 10, 5, defending="right", zone="D")))
+    assert [(s.x, s.y) for s in near.shots] == [(-10, -5)]  # 10 ft past centre: not mirrored
+    # Any other zone, or none, is never turned.
+    for zone in ("O", "N", None):
+        shot = shot_map_from_play_by_play(_pbp(_shot(6, 89, 17, defending="right", zone=zone)))
+        assert [(s.x, s.y) for s in shot.shots] == [(-89, -17)]
