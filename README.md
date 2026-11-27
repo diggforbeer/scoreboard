@@ -68,7 +68,7 @@
 | src/scoreboard/football/college\_teams.py         |      214 |       10 |     95% |171, 201, 222-223, 238, 356, 414-417 |
 | src/scoreboard/football/college\_views.py         |       76 |        0 |    100% |           |
 | src/scoreboard/football/demo.py                   |      184 |        0 |    100% |           |
-| src/scoreboard/football/director.py               |      248 |        9 |     96% |221, 236, 281, 296, 303, 330, 424, 438, 460 |
+| src/scoreboard/football/director.py               |      248 |        9 |     96% |217, 232, 277, 292, 299, 326, 420, 434, 456 |
 | src/scoreboard/football/events.py                 |      211 |        9 |     96% |270, 297, 306, 350, 354-357, 412 |
 | src/scoreboard/football/geometry.py               |       91 |        0 |    100% |           |
 | src/scoreboard/football/idle.py                   |      245 |        4 |     98% |116, 341, 350-351 |

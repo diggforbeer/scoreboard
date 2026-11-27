@@ -65,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_7812c8feabf66f51_models_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.5">coverage.py v7.17.5</a>,
-            created at 2026-11-27 00:03 +0000
+            created at 2026-11-27 00:33 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -774,9 +774,9 @@
     <p class="run"><span class="n"><a id="t692" href="#t692">692</a></span><span class="t">        <span class="key">return</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_play_scene</span><span class="op">(</span><span class="nam">current</span><span class="op">,</span> <span class="nam">base</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t693" href="#t693">693</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t694" href="#t694">694</a></span><span class="t">    <span class="key">def</span> <span class="nam">_halftime_cycle</span><span class="op">(</span><span class="nam">self</span><span class="op">,</span> <span class="nam">game</span><span class="op">:</span> <span class="nam">FbGame</span><span class="op">,</span> <span class="nam">base</span><span class="op">:</span> <span class="nam">Scene</span><span class="op">,</span> <span class="nam">now</span><span class="op">:</span> <span class="nam">float</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="nam">Scene</span> <span class="op">|</span> <span class="key">None</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t695" href="#t695">695</a></span><span class="t">        <span class="str">&quot;&quot;&quot;College halftime (#549): the card, then the team stats&#x27; pages, round again for as long</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t696" href="#t696">696</a></span><span class="t"><span class="str">        as the half lasts; a pure function of how long the half has run. ``None`` (the plain</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t697" href="#t697">697</a></span><span class="t"><span class="str">        card) for anything else, or until the stats have arrived. A score screen never gets</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t695" href="#t695">695</a></span><span class="t">        <span class="str">&quot;&quot;&quot;Halftime (#549, both leagues): the card, then the team stats&#x27; pages, round again for as</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t696" href="#t696">696</a></span><span class="t"><span class="str">        long as the half lasts; a pure function of how long the half has run. ``None`` (the plain</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t697" href="#t697">697</a></span><span class="t"><span class="str">        card) for anything but the half, or until the stats have arrived. A score screen never gets</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t698" href="#t698">698</a></span><span class="t"><span class="str">        here: ``current`` is only None when nothing is being played out.&quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t699" href="#t699">699</a></span><span class="t">        <span class="key">from</span> <span class="op">.</span><span class="op">.</span><span class="nam">app</span> <span class="key">import</span> <span class="nam">Scene</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t700" href="#t700">700</a></span><span class="t">        <span class="key">from</span> <span class="op">.</span><span class="nam">director</span> <span class="key">import</span> <span class="nam">STATS</span>&nbsp;</span><span class="r"></span></p>
@@ -785,7 +785,7 @@
     <p class="run"><span class="n"><a id="t703" href="#t703">703</a></span><span class="t">            <span class="nam">self</span><span class="op">.</span><span class="nam">_half_since</span><span class="op">.</span><span class="nam">pop</span><span class="op">(</span><span class="nam">game</span><span class="op">.</span><span class="nam">id</span><span class="op">,</span> <span class="key">None</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t704" href="#t704">704</a></span><span class="t">            <span class="key">return</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t705" href="#t705">705</a></span><span class="t">        <span class="nam">since</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_half_since</span><span class="op">.</span><span class="nam">setdefault</span><span class="op">(</span><span class="nam">game</span><span class="op">.</span><span class="nam">id</span><span class="op">,</span> <span class="nam">now</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t706" href="#t706">706</a></span><span class="t">        <span class="nam">stats</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_stats_for</span><span class="op">(</span><span class="nam">game</span><span class="op">.</span><span class="nam">id</span><span class="op">)</span> <span class="key">if</span> <span class="nam">self</span><span class="op">.</span><span class="nam">league</span> <span class="op">==</span> <span class="nam">LEAGUE_COLLEGE</span> <span class="key">else</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t706" href="#t706">706</a></span><span class="t">        <span class="nam">stats</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_stats_for</span><span class="op">(</span><span class="nam">game</span><span class="op">.</span><span class="nam">id</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t707" href="#t707">707</a></span><span class="t">        <span class="key">if</span> <span class="nam">stats</span> <span class="key">is</span> <span class="key">None</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t708" href="#t708">708</a></span><span class="t">            <span class="key">return</span> <span class="key">None</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t709" href="#t709">709</a></span><span class="t">        <span class="nam">page</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">director</span><span class="op">.</span><span class="nam">stats_page_seconds</span><span class="op">(</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
@@ -1178,7 +1178,7 @@
             <a class="nav" href="z_7812c8feabf66f51_models_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.5">coverage.py v7.17.5</a>,
-            created at 2026-11-27 00:03 +0000
+            created at 2026-11-27 00:33 +0000
         </p>
     </div>
 </footer>
