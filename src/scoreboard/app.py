@@ -131,9 +131,6 @@ INTERMISSION_PAGE_SECONDS = 6.0
 INTERMISSION_STATS_REFRESH_SECONDS = 60.0
 #: A failed or empty stats fetch is tried again after this long.
 INTERMISSION_STATS_RETRY_SECONDS = 15.0
-#: The usual length of a break between periods, regular season and playoffs (#526).
-INTERMISSION_SECONDS = 17 * 60
-INTERMISSION_PLAYOFF_SECONDS = 18 * 60
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
@@ -304,10 +301,6 @@ class Scene:
     stats_page: int = 0
     #: Set only for ``intermission`` -- the shots for its shot-map page, when there are any.
     shots: ShotMap | None = None
-    #: Set only for ``intermission`` -- seconds of the break gone and its length, for the Zamboni
-    #: page (#526); whole seconds, so the scene (and the live view's key) moves once a second.
-    ice_elapsed: float | None = None
-    ice_total: float = 0.0
     #: Set only for ``ap_setup`` (#131 follow-up) -- the board's own
     #: first-boot WiFi AP, so a phone can join and finish setup. ``None``
     #: password means the AP came up open, not WPA2-protected.
@@ -640,8 +633,6 @@ class ScoreboardApp:
         self._int_stats_tried: dict[int, float] = {}
         self._int_shots: dict[int, tuple[float, ShotMap]] = {}
         self._int_shots_tried: dict[int, float] = {}
-        #: (game id, period) -> monotonic time the break was first seen, for the Zamboni page.
-        self._int_started: dict[tuple[int, int], float] = {}
         #: (game id, monotonic start) of the blowout flash (#326, blowout.py).
         self._blowout: tuple[int, float] | None = None
         self._blowout_shown: set[int] = set()
@@ -1461,7 +1452,6 @@ class ScoreboardApp:
         self._int_stats_tried = {}
         self._int_shots = {}
         self._int_shots_tried = {}
-        self._int_started = {}
         self._blowout = None
         self._blowout_shown = set()
         self._shootout_animating = False
@@ -2263,7 +2253,6 @@ class ScoreboardApp:
                 self._int_stats_tried,
                 self._int_shots,
                 self._int_shots_tried,
-                self._int_started,
             ):
                 store.clear()
             return
@@ -2336,35 +2325,7 @@ class ScoreboardApp:
         now = self.monotonic()
         started = self._intermission_turn_start
         tick = int(((now - started) if started is not None else now) // INTERMISSION_PAGE_SECONDS)
-        ice = self._intermission_ice(game)
-        return Scene(
-            "intermission",
-            game,
-            stats=stats,
-            stats_page=tick,
-            shots=shots,
-            ice_elapsed=None if ice is None else ice[0],
-            ice_total=0.0 if ice is None else ice[1],
-        )
-
-    def _intermission_ice(self, game: Game) -> tuple[float, float] | None:
-        """(seconds gone, length) of this break for the Zamboni page (#526), or ``None`` after the
-        last regulation period (the break before overtime is short). The length is the usual one
-        (17 minutes, 18 in the playoffs) unless the feed's countdown says it is longer; the time
-        gone comes from the feed's countdown when it gives one, else from when we first saw the
-        break. Whole seconds, so the page and the live view move once a second."""
-        if game.period >= game.max_regulation_periods:
-            return None
-        usual = float(INTERMISSION_PLAYOFF_SECONDS if game.game_type == 3 else INTERMISSION_SECONDS)
-        now = self.monotonic()
-        seen = self._int_started.setdefault((game.id, game.period), now)
-        left = game.intermission_left
-        if left is None:
-            total, elapsed = usual, now - seen
-        else:
-            total = max(usual, left + (now - seen))
-            elapsed = total - left
-        return float(int(min(max(elapsed, 0.0), total))), total
+        return Scene("intermission", game, stats=stats, stats_page=tick, shots=shots)
 
     def _three_stars_override(self) -> Scene | None:
         if self._three_stars is None:
@@ -3475,8 +3436,7 @@ class ScoreboardApp:
         shown = self._intermission_scene(Scene("game", game))
         if shown is None:
             return 0.0
-        ice = None if shown.ice_elapsed is None else (shown.ice_elapsed, shown.ice_total)
-        pages = self.renderer.intermission_page_count(shown.game, shown.stats, shown.shots, ice)
+        pages = self.renderer.intermission_page_count(shown.game, shown.stats, shown.shots)
         return pages * INTERMISSION_PAGE_SECONDS
 
     def situation_targets(self) -> list[Game]:
@@ -4099,10 +4059,7 @@ class ScoreboardApp:
         elif scene.kind == "three_stars":
             r.draw_three_stars(self.canvas, scene.game, scene.stars)
         elif scene.kind == "intermission":
-            ice = None if scene.ice_elapsed is None else (scene.ice_elapsed, scene.ice_total)
-            r.draw_intermission(
-                self.canvas, scene.game, scene.stats, scene.stats_page, scene.shots, ice
-            )
+            r.draw_intermission(self.canvas, scene.game, scene.stats, scene.stats_page, scene.shots)
         elif scene.kind == "blowout":  # not documented on purpose, see blowout.py
             r.draw_blowout(self.canvas, scene.game, favourite)
         elif scene.kind == "countdown":

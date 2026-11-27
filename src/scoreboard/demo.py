@@ -295,28 +295,6 @@ def demo_steps(favourite_team: str, now: datetime) -> list[DemoStep]:
             Scene("intermission", intermission, stats=int_stats),
             {"use_logos": False},
         ),
-        *(
-            (
-                f"intermission_zamboni_{name}",
-                # Page 3 of a logo layout (two stats tables first); a narrow or logo-less panel
-                # has no ice page and shows a stats table there instead.
-                Scene(
-                    "intermission",
-                    intermission,
-                    stats=int_stats,
-                    stats_page=2,
-                    ice_elapsed=elapsed,
-                    ice_total=1020.0,
-                ),
-                {},
-            )
-            for name, elapsed in (
-                ("start", 20.0),
-                ("quarter", 250.0),
-                ("half", 435.0),
-                ("done", 900.0),
-            )
-        ),
         ("game_overtime", Scene("game", overtime), {}),
         ("goal", Scene("goal", goal, goal_team=home), {"animate_goal": True}),
         ("goal_followed", Scene("goal", goal, goal_team=away), {}),
