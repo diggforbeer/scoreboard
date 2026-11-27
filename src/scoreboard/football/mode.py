@@ -692,9 +692,9 @@ class FootballMode:
         return self._play_scene(current, base)
 
     def _halftime_cycle(self, game: FbGame, base: Scene, now: float) -> Scene | None:
-        """College halftime (#549): the card, then the team stats' pages, round again for as long
-        as the half lasts; a pure function of how long the half has run. ``None`` (the plain
-        card) for anything else, or until the stats have arrived. A score screen never gets
+        """Halftime (#549, both leagues): the card, then the team stats' pages, round again for as
+        long as the half lasts; a pure function of how long the half has run. ``None`` (the plain
+        card) for anything but the half, or until the stats have arrived. A score screen never gets
         here: ``current`` is only None when nothing is being played out."""
         from ..app import Scene
         from .director import STATS
@@ -703,7 +703,7 @@ class FootballMode:
             self._half_since.pop(game.id, None)
             return None
         since = self._half_since.setdefault(game.id, now)
-        stats = self._stats_for(game.id) if self.league == LEAGUE_COLLEGE else None
+        stats = self._stats_for(game.id)
         if stats is None:
             return None
         page = self.director.stats_page_seconds()

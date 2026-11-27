@@ -167,16 +167,12 @@ def test_the_nfl_director_is_unchanged_a_team_timeout_is_still_its_card_and_sent
     assert nfl.names() == [dr.PLAY, dr.PLAYTEXT], "no stats over a team timeout in the NFL"
 
 
-def test_only_a_college_mode_turns_it_on():
+def test_only_a_college_mode_adds_team_timeouts():
     def mode(league):
         return FootballMode(lambda: ScoreboardConfig(), client_factory=lambda: None, league=league)
 
     college, nfl = mode("college-football"), mode("nfl")
-    assert college.director._breaks == (
-        *dr.STATS_BREAKS,
-        dr.PlayKind.TIMEOUT,
-        dr.PlayKind.END_PERIOD,
-    )
+    assert college.director._breaks == (*dr.STATS_BREAKS, dr.PlayKind.TIMEOUT)
     assert nfl.director._breaks == dr.STATS_BREAKS
 
 

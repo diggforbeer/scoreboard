@@ -1,9 +1,9 @@
-"""Halftime and quarter-end team stats for a college game (#549, owner's call 2026-11-22).
+"""Halftime and quarter-end team stats (#549, owner's call 2026-11-22; the NFL since 2026-11-26).
 
 A quarter end (the 1st and 3rd) is a break like a timeout: both pages of the stats, held until
 the next play. The half alternates the halftime card with the stats' pages for as long as it
 lasts. The 2nd and 4th quarter ends add nothing of their own (the half has its card, the 4th is
-the game's end). College only: the NFL keeps what it had.
+the game's end). Both leagues; team timeouts stay college only.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def test_a_quarter_end_without_stats_shows_nothing():
     assert [s.stage for s in run_to_next_play(rig, RUSH, end_period(1, 1))] == []
 
 
-def test_the_nfl_director_keeps_a_quarter_end_as_it_was():
+def test_the_nfl_director_also_shows_stats_at_a_quarter_end():
     from test_football_college_events import ScoresRig
 
     rig = ScoresRig()
@@ -60,7 +60,7 @@ def test_the_nfl_director_keeps_a_quarter_end_as_it_was():
     )  # fmt: skip
     rig.poll(RUSH)
     rig.run()
-    assert [s.stage for s in run_to_next_play(rig, RUSH, end_period(1, 1))] == []
+    assert [s.stage for s in run_to_next_play(rig, RUSH, end_period(1, 1))] == [dr.STATS]
 
 
 # -- the halftime cycle -------------------------------------------------------------------------
@@ -105,10 +105,16 @@ def test_no_stats_yet_keeps_the_plain_card():
     assert cycle(mode, game, 100.0 + HALFTIME_CARD_SECONDS + 5) is None
 
 
-def test_the_nfl_halftime_and_a_narrow_panel_keep_the_plain_card():
-    for mode, game in (half_mode(league="nfl"), half_mode(wide=False)):
-        cycle(mode, game, 100.0)
-        assert cycle(mode, game, 100.0 + HALFTIME_CARD_SECONDS + 5) is None
+def test_a_narrow_panel_keeps_the_plain_card():
+    mode, game = half_mode(wide=False)
+    cycle(mode, game, 100.0)
+    assert cycle(mode, game, 100.0 + HALFTIME_CARD_SECONDS + 5) is None
+
+
+def test_the_nfl_halftime_cycles_the_stats_too():
+    mode, game = half_mode(league="nfl")
+    cycle(mode, game, 100.0)
+    assert cycle(mode, game, 100.0 + HALFTIME_CARD_SECONDS + 5) is not None
 
 
 def test_a_game_that_is_not_at_the_half_gets_nothing_and_forgets_the_half():
