@@ -767,18 +767,6 @@ class Game:
     situation: Situation | None = None
     #: Likewise from landing, only once a shootout has begun (#259).
     shootout: Shootout | None = None
-    #: The feed's own clock seconds and intermission flag; during a break the clock is believed to
-    #: count the break down (#526, unverified live), see ``intermission_left``.
-    clock_seconds: int = 0
-    feed_intermission: bool = False
-
-    @property
-    def intermission_left(self) -> int | None:
-        """Seconds the feed says are left in the intermission, or ``None`` when it does not say
-        (the flag has not caught up, or the clock reads zero): the caller times it itself."""
-        if self.feed_intermission and self.clock_seconds > 0:
-            return self.clock_seconds
-        return None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> Game:
@@ -808,8 +796,6 @@ class Game:
             max_regulation_periods=max_regulation,
             clock_time=clock_time,
             clock_running=clock_running,
-            clock_seconds=int(clock.get("secondsRemaining") or 0),
-            feed_intermission=bool(clock.get("inIntermission")),
             # The API's own inIntermission flag lags briefly right at a period's
             # end -- confirmed against a real live game sitting at
             # timeRemaining "00:00"/running false with inIntermission still
