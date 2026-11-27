@@ -783,6 +783,14 @@ class Game:
         # flips to FINAL a poll or two later, and until then the board
         # flashed INT3. A tie is a real intermission (OT or shootout follows).
         game_decided = period >= max_regulation and away.score != home.score
+        # The NHL feed can sit in CRIT ("critical", i.e. live) long after a
+        # shootout ends -- 2026-11-27 UTA 6-5 NSH stayed CRIT for 20+ minutes with
+        # the winner already credited. Shootouts are scored level until the
+        # winning shot, which adds the single goal, so unequal scores in the SO
+        # period mean it is over; don't wait for the feed to say FINAL.
+        shootout_over = descriptor.get("periodType") == "SO" and away.score != home.score
+        if state in LIVE_STATES and shootout_over:
+            state = "FINAL"
         return cls(
             id=int(raw["id"]),
             state=state,

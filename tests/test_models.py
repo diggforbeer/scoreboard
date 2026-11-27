@@ -844,3 +844,29 @@ def test_one_bad_play_does_not_lose_the_rest_and_no_shots_is_none():
 def test_shots_of_a_side_are_picked_out():
     shots = shot_map_from_play_by_play(_pbp(_shot(6, 80, 1), _shot(26, -80, 1), _shot(26, -70, 2)))
     assert len(shots.of("away")) == 2 and len(shots.of("home")) == 1
+
+
+def _so_game(state: str, away: int, home: int) -> Game:
+    return Game.from_api(
+        {
+            "id": 9,
+            "gameState": state,
+            "awayTeam": {"abbrev": "UTA", "score": away},
+            "homeTeam": {"abbrev": "NSH", "score": home},
+            "periodDescriptor": {"number": 5, "periodType": "SO", "maxRegulationPeriods": 3},
+            "clock": {"timeRemaining": "00:00", "running": False, "inIntermission": False},
+        }
+    )
+
+
+def test_shootout_with_a_winner_is_final_even_if_feed_stays_crit() -> None:
+    game = _so_game("CRIT", 6, 5)
+    assert game.is_final
+    assert not game.is_live
+    assert not game.shows_shootout
+
+
+def test_shootout_still_level_stays_live() -> None:
+    game = _so_game("CRIT", 5, 5)
+    assert game.is_live
+    assert game.shows_shootout
