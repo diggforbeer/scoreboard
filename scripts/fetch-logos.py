@@ -124,6 +124,37 @@ def lift_dim(image, floor: float = LIFT_FLOOR, cap: float = LIFT_CAP):
     return out, factor
 
 
+#: Football crests whose dark pixels (black, navy, burgundy) vanish into a DARK end-zone tint
+#: (``lift_dark``). NO, WSH and LV scored as weak too, but their end zones are gold or silver, so
+#: their dark marks already read (dark on light) and lifting them only makes grey on grey.
+DARK_CRESTS = frozenset({"CAR", "CHI", "TB"})
+DARK_FLOOR = 120.0
+
+
+def lift_dark(image, floor: float = DARK_FLOOR):
+    """``image`` with every lit pixel darker than ``floor`` (luma) mixed toward white until it
+    reaches it. ``lift_dim`` multiplies, so it cannot help black; this keeps the crest's bright
+    marks as they are and turns its black outlines and fills into readable greys."""
+    out = image.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if a < 48:
+                continue
+            luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            if luma >= floor:
+                continue
+            t = (floor - luma) / (255.0 - luma)
+            px[x, y] = (
+                round(r + (255 - r) * t),
+                round(g + (255 - g) * t),
+                round(b + (255 - b) * t),
+                a,
+            )
+    return out
+
+
 def fetch(abbrev: str, variant: str) -> bytes:
     import requests
 
@@ -343,6 +374,8 @@ def fetch_football(args: argparse.Namespace) -> int:
                             raise LookupError(f"ESPN lists no {variant} logo")
                         downloaded[key] = fetch_url(url)
                     image, factor = lift_dim(rasterise_png(downloaded[key], size))
+                    if abbrev in DARK_CRESTS:
+                        image = lift_dark(image)
                     image.save(target)
                 except Exception as exc:  # one bad logo must not stop the rest
                     failures.append(f"{abbrev} ({variant}, {size}px): {exc}")

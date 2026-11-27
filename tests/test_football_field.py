@@ -66,7 +66,7 @@ def scale(color, k):
 def test_the_colours_and_sizes():
     assert ff.TURF == (0, 52, 16) and ff.YARD_LINE == (0, 104, 40) and ff.MID_FIELD == (0, 150, 60)
     assert ff.SCRIMMAGE == (70, 130, 255) and ff.FIRST_DOWN == (255, 225, 0)
-    assert ff.BALL == (214, 130, 54) and ff.END_ZONE_TINT == 0.30 and ff.DIM_LOGO == 0.45
+    assert ff.BALL == (214, 130, 54) and ff.END_ZONE_TINT == 0.30 and ff.DIM_LOGO == 0.7
     assert ff.END_ZONE_LOGO_SIZE == 12
 
 
