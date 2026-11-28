@@ -28,7 +28,7 @@ from .fonts import text_width
 from .football_plays import DIM, WHITE, play_screen, r_fit
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 FREEZE_AT, FLASH_END = 0.35, 0.60

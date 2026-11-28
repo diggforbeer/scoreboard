@@ -33,7 +33,7 @@ from .football_touchdown import draw_safety
 from .goal_light import _Buffer, _ease, _scaled
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 FLASH_SECONDS = 0.12

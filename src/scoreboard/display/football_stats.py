@@ -22,7 +22,7 @@ from ..football.teams import is_team, team_color
 from .football_plays import DIM, WHITE, event_screen
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 #: Row baselines for the tiny font (6px a row, five rows).

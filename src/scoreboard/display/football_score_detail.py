@@ -26,7 +26,7 @@ from .fonts import text_width
 from .football_plays import AMBER_CARD, WHITE, event_screen, r_fit
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 #: The text column on a 128px panel sits between the two logos.

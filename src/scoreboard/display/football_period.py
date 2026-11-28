@@ -27,7 +27,7 @@ from .football_plays import AMBER_CARD, DIM, WHITE, play_screen, quarter_clock, 
 from .football_run import eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 WIPE_END = 0.35

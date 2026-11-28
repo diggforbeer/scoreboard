@@ -58,8 +58,8 @@ from .upset import UpsetWatcher
 from .worker import STALE_AFTER_SECONDS, FeedSnapshot, FeedWorker
 
 if TYPE_CHECKING:
-    from ..app import Scene
     from ..config import FootballConfig, ScoreboardConfig
+    from ..scene import Scene
 
 #: Every scene kind football mode draws.
 #: Documented in ``football_screen.md`` ("Base scenes"); a test keeps that list, this tuple and
@@ -639,7 +639,7 @@ class FootballMode:
 
     @_in_scope
     def scene(self) -> Scene:
-        from ..app import Scene
+        from ..scene import Scene
 
         now = self._monotonic()
         snap = self.snapshot
@@ -696,7 +696,7 @@ class FootballMode:
         long as the half lasts; a pure function of how long the half has run. ``None`` (the plain
         card) for anything but the half, or until the stats have arrived. A score screen never gets
         here: ``current`` is only None when nothing is being played out."""
-        from ..app import Scene
+        from ..scene import Scene
         from .director import STATS
 
         if not game.is_halftime:
@@ -735,7 +735,7 @@ class FootballMode:
         Only on a 128px panel (the idle screens are), and only when the owner has not turned it
         off. The alert is one short card; the idle screen comes back when it has had its seconds.
         """
-        from ..app import Scene
+        from ..scene import Scene
 
         cfg = self._football() if self._football else _no_football()
         if not cfg.show_redzone or not self._wide():
@@ -755,7 +755,7 @@ class FootballMode:
         is news about a team the owner follows, wherever the board is. College only, 128px only,
         silent, only if the owner has not turned it off, and only when the team being upset is
         in the ranked list (#588)."""
-        from ..app import Scene
+        from ..scene import Scene
 
         if self.league != LEAGUE_COLLEGE or not self._wide():
             return None
@@ -934,7 +934,7 @@ class FootballMode:
         self, kind: str, games: Sequence[FbGame], snap: FeedSnapshot, now: float
     ) -> Scene:
         """The scene for the chosen idle screen: its builder's view, and the favourite's game."""
-        from ..app import Scene
+        from ..scene import Scene
         from .idle_screens import IDLE_SCREENS
 
         if kind == "stocks":
@@ -972,7 +972,7 @@ class FootballMode:
 
     def _play_scene(self, current: Any, base: Scene) -> Scene:
         """The scene for the stage on screen (#377), over the game's latest score."""
-        from ..app import Scene
+        from ..scene import Scene
         from .director import PLAY, PLAYTEXT, STATS
 
         stage = current.stage

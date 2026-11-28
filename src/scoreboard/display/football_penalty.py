@@ -39,7 +39,7 @@ from .football_punt import FLAG, draw_flag
 from .football_run import draw_trail, eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 COMPRESS_END, FLAG_START, FLAG_END, LANDED, MOVE_END = 0.25, 0.25, 0.50, 0.55, 0.85

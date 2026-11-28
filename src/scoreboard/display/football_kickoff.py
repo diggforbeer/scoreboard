@@ -39,8 +39,8 @@ from .football_plays import DIM, GAIN, LOSS, NEUTRAL, play_screen, quarter_clock
 from .football_run import MAX_LABEL, draw_carrier, draw_markers_for, draw_trail, eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
     from ..football.models import Play
+    from ..scene import Scene
     from .renderer import Renderer
 
 TEE, LAND, LANDED, RETURN_END = 0.08, 0.50, 0.55, 0.90

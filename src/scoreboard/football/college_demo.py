@@ -13,8 +13,8 @@ import dataclasses
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ..app import Scene
 from ..demo import DemoStep
+from ..scene import Scene
 from . import events as ev
 from .college_standings import ConferenceRow
 from .college_views import ConferenceView, PollRow, PollView, ScoresView, scores_order
