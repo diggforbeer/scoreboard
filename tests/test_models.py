@@ -848,6 +848,32 @@ def test_shots_of_a_side_are_picked_out():
     assert len(shots.of("away")) == 2 and len(shots.of("home")) == 1
 
 
+def _so_game(state: str, away: int, home: int) -> Game:
+    return Game.from_api(
+        {
+            "id": 9,
+            "gameState": state,
+            "awayTeam": {"abbrev": "UTA", "score": away},
+            "homeTeam": {"abbrev": "NSH", "score": home},
+            "periodDescriptor": {"number": 5, "periodType": "SO", "maxRegulationPeriods": 3},
+            "clock": {"timeRemaining": "00:00", "running": False, "inIntermission": False},
+        }
+    )
+
+
+def test_shootout_with_a_winner_is_final_even_if_feed_stays_crit() -> None:
+    game = _so_game("CRIT", 6, 5)
+    assert game.is_final
+    assert not game.is_live
+    assert not game.shows_shootout
+
+
+def test_shootout_still_level_stays_live() -> None:
+    game = _so_game("CRIT", 5, 5)
+    assert game.is_live
+    assert game.shows_shootout
+
+
 def test_a_shot_the_feed_puts_beside_its_own_net_is_turned_back_to_the_net_it_shot_at():
     """NSH at DAL, 2026-11-25: two DAL shots (zone D, NSH's goalie in net) carried the coordinates
     of DAL's own end, which put DAL's glow at the Predators' end. Period one: home (DAL, 6) defends
