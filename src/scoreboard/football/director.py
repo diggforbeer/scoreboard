@@ -63,7 +63,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 #: The plays that are a break in the game, when the team stats go up.
-STATS_BREAKS = (PlayKind.OFFICIAL_TIMEOUT, PlayKind.TWO_MINUTE_WARNING)
+STATS_BREAKS = (PlayKind.OFFICIAL_TIMEOUT, PlayKind.TWO_MINUTE_WARNING, PlayKind.END_PERIOD)
 
 #: The stages a scene can be in (``Scene.fb_stage``).
 PLAY, PLAYTEXT, EVENT, DETAIL, REVERSAL = "play", "playtext", "event", "detail", "reversal"
@@ -179,13 +179,9 @@ class Director:
         self._scores_only = scores_only
         #: College (owner's call, 2026-11-22): the feed does not mark official timeouts, every
         #: stoppage is "Timeout <team>", so every timeout is a break that gets the team stats.
-        #: It also gets the end of the 1st and 3rd quarters (#549): a break of several minutes
-        #: (the end of the 2nd is the halftime card's, the end of the 4th is the game's).
-        self._breaks = (
-            (*STATS_BREAKS, PlayKind.TIMEOUT, PlayKind.END_PERIOD)
-            if stats_at_timeouts
-            else STATS_BREAKS
-        )
+        #: Both leagues also get the end of the 1st and 3rd quarters (#549): a break of several
+        #: minutes (the end of the 2nd is the halftime card's, the end of the 4th is the game's).
+        self._breaks = (*STATS_BREAKS, PlayKind.TIMEOUT) if stats_at_timeouts else STATS_BREAKS
         #: Called with each celebration that carries a sound (``Event.sound``: the lead team's
         #: touchdown or made field goal, #517) the moment it is detected, whatever is on screen.
         self._on_sound = on_sound

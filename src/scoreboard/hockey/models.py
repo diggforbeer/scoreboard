@@ -545,6 +545,11 @@ class ShotMap:
         return tuple(s for s in self.shots if s.side == side)
 
 
+#: A shot on goal whose feed zone is the shooter's own and which lies this many feet past centre ice
+#: in its own half is read as mirrored (see ``shot_map_from_play_by_play``).
+MIRROR_AFTER = 25.0
+
+
 def shot_map_from_play_by_play(raw: dict[str, Any] | None) -> ShotMap | None:
     """Shots on goal and goals from ``play-by-play``, or ``None`` when there are none with a place.
 
@@ -555,6 +560,12 @@ def shot_map_from_play_by_play(raw: dict[str, Any] | None) -> ShotMap | None:
     being attacked, so its x says which end that is. Shootout attempts are left out (their
     coordinates are not the rink's), as are blocked and missed shots (the screen's count is the
     SOG count). One malformed play does not lose the rest.
+
+    **Mirrored plays.** Now and then the feed gives a shot on goal the coordinates of the wrong end:
+    the shooter's own net, ``zoneCode`` ``D`` (the shooter's *defensive* zone) with the other
+    team's goalie in net. Nobody shoots from beside their own net, so the point is mirrored and is
+    turned back (seen 2026-11-25, NSH at DAL: two DAL shots at x = 89 and -86 put DAL's glow at the
+    Predators' end). Only a shot that really lies in its shooter's own half is touched.
     """
     if not isinstance(raw, dict):
         return None
@@ -584,6 +595,8 @@ def shot_map_from_play_by_play(raw: dict[str, Any] | None) -> ShotMap | None:
             attacks_right = x > 0
         if not attacks_right:
             x, y = -x, -y
+        if details.get("zoneCode") == "D" and x < -MIRROR_AFTER:
+            x, y = -x, -y  # in its own end, which a shot on goal cannot be taken from
         if side == "away":  # away attacks the left net: turn the whole picture half a turn
             x, y = -x, -y
         shots.append(ShotPoint(side, x, y, kind == "goal"))
@@ -754,18 +767,6 @@ class Game:
     situation: Situation | None = None
     #: Likewise from landing, only once a shootout has begun (#259).
     shootout: Shootout | None = None
-    #: The feed's own clock seconds and intermission flag; during a break the clock is believed to
-    #: count the break down (#526, unverified live), see ``intermission_left``.
-    clock_seconds: int = 0
-    feed_intermission: bool = False
-
-    @property
-    def intermission_left(self) -> int | None:
-        """Seconds the feed says are left in the intermission, or ``None`` when it does not say
-        (the flag has not caught up, or the clock reads zero): the caller times it itself."""
-        if self.feed_intermission and self.clock_seconds > 0:
-            return self.clock_seconds
-        return None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> Game:
@@ -803,8 +804,6 @@ class Game:
             max_regulation_periods=max_regulation,
             clock_time=clock_time,
             clock_running=clock_running,
-            clock_seconds=int(clock.get("secondsRemaining") or 0),
-            feed_intermission=bool(clock.get("inIntermission")),
             # The API's own inIntermission flag lags briefly right at a period's
             # end -- confirmed against a real live game sitting at
             # timeRemaining "00:00"/running false with inIntermission still

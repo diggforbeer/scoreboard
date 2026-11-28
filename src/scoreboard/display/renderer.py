@@ -579,30 +579,14 @@ class Renderer:
     #: The side behind on a row shows its number in the label's grey: dimmer was unreadable.
     _INTERMISSION_TRAILING = _INTERMISSION_LABEL
 
-    def draw_intermission(
-        self,
-        canvas: Any,
-        game: Game,
-        stats: GameStats | None,
-        tick: int = 0,
-        shots: ShotMap | None = None,
-        ice: tuple[float, float] | None = None,
-    ) -> None:
-        """The favourite's game stats in place of an empty game scene during an intermission.
+    def _intermission_layout(
+        self, game: Game, stats: GameStats | None, shots: ShotMap | None
+    ) -> tuple[Any, int, int, bool, list[Any], bool]:
+        """What the intermission screen is made of on this panel: the logos (or ``None``), the
+        table's left and right edges, whether it is headed by abbreviations, the stat tables a page
+        each, and whether the shot map is offered."""
+        from . import shotmap
 
-        Away on the left, home on the right, a stat's name between them in the tiny face; whoever
-        leads a row shows it in their team colour and the other side dims (a tie keeps both lit).
-        With both logos (the 128px layout) they sit at the edges as on the game scene and the table
-        fills the middle five rows a page. Without them (a 64px panel, or a missing logo) the
-        two abbreviations head the table and four rows fit a page. The last page is the shot map
-        (``display.shotmap``) when there are shots and the panel is wide enough for the rink. The
-        pages take turns by ``tick`` (a clock count, one per page-length) and a row of dots at the
-        bottom says which. ``ice`` (elapsed, total seconds of the break) adds the Zamboni page
-        (``display.zamboni``, #526) after them on a panel wide enough for it.
-        """
-        from . import shotmap, zamboni
-
-        canvas.Clear()
         logos = None
         left, right = 0, self.width
         if self.logos is not None and self.width >= 128:
@@ -617,8 +601,39 @@ class Renderer:
         flat = [line for page in stats.pages for line in page] if stats is not None else []
         tables = [flat[i : i + size] for i in range(0, len(flat), size)]
         has_map = shots is not None and shotmap.fits(self.width)
-        has_ice = ice is not None and zamboni.fits(self.width)
-        total = len(tables) + (1 if has_map else 0) + (1 if has_ice else 0)
+        return logos, left, right, headed, tables, has_map
+
+    def intermission_page_count(
+        self, game: Game, stats: GameStats | None, shots: ShotMap | None
+    ) -> int:
+        """How many pages ``draw_intermission`` cycles through here (0: nothing to draw)."""
+        _, _, _, _, tables, has_map = self._intermission_layout(game, stats, shots)
+        return len(tables) + (1 if has_map else 0)
+
+    def draw_intermission(
+        self,
+        canvas: Any,
+        game: Game,
+        stats: GameStats | None,
+        tick: int = 0,
+        shots: ShotMap | None = None,
+    ) -> None:
+        """The favourite's game stats in place of an empty game scene during an intermission.
+
+        Away on the left, home on the right, a stat's name between them in the tiny face; whoever
+        leads a row shows it in their team colour and the other side dims (a tie keeps both lit).
+        With both logos (the 128px layout) they sit at the edges as on the game scene and the table
+        fills the middle five rows a page. Without them (a 64px panel, or a missing logo) the
+        two abbreviations head the table and four rows fit a page. The last page is the shot map
+        (``display.shotmap``) when there are shots and the panel is wide enough for the rink. The
+        pages take turns by ``tick`` (a clock count, one per page-length) and a row of dots at the
+        bottom says which.
+        """
+        from . import shotmap
+
+        canvas.Clear()
+        logos, left, right, headed, tables, has_map = self._intermission_layout(game, stats, shots)
+        total = len(tables) + (1 if has_map else 0)
         if total == 0:
             return
         page = tick % total
@@ -626,10 +641,8 @@ class Renderer:
             if logos is not None:
                 self._draw_logos(canvas, *logos)
             self._draw_intermission_table(canvas, game, tables[page], left, right, headed)
-        elif has_map and page == len(tables):
-            shotmap.draw_shot_map(self, canvas, game, shots)
         else:
-            zamboni.draw(self, canvas, game, *ice)
+            shotmap.draw_shot_map(self, canvas, game, shots)
         if total > 1:
             x0 = self.width // 2 - (total * 4 - 2) // 2
             for i in range(total):
@@ -1312,14 +1325,18 @@ class Renderer:
     ) -> None:
         """The holiday rotation screen in November (like the December tree): a turkey on the
         left, the countdown to Thanksgiving on the right, the top line in the favourite's colour.
+        On Thanksgiving Day itself the bird is dinner: a steaming roast on a
+        platter, and no turkey run (#626, an egg: not in the guide or the demo).
 
         ``egg`` is the turkey run (#516), ``("turkey", age)`` from ``ScoreboardApp._turkey_egg``.
         """
         from .holiday import (
+            THANKSGIVING_DAY_LINES,
             THANKSGIVING_TEXT,
             TURKEY_RUN_SECONDS,
             TURKEY_SCREEN_HEIGHT,
             TURKEY_SCREEN_WIDTH,
+            draw_thanksgiving_roast,
             draw_thanksgiving_turkey,
             draw_turkey_run,
             thanksgiving_countdown,
@@ -1331,6 +1348,8 @@ class Renderer:
         local = now.astimezone(self.tz)
         tick = int(now.timestamp() * 2)
         lines = thanksgiving_countdown(local.date())
+        day = lines == THANKSGIVING_DAY_LINES
+        draw_bird = draw_thanksgiving_roast if day else draw_thanksgiving_turkey
         top = (self.height - TURKEY_SCREEN_HEIGHT) // 2
         left = TURKEY_SCREEN_WIDTH + 6  # the text column starts here
         room = self.width - left - 2
@@ -1341,13 +1360,13 @@ class Renderer:
         if not fits:
             # A single 64px panel has no room beside the turkey: just the turkey.
             x = (self.width - TURKEY_SCREEN_WIDTH) // 2
-            draw_thanksgiving_turkey(canvas, x, top, tick, self.width, self.height)
+            draw_bird(canvas, x, top, tick, self.width, self.height)
             return
-        run = egg[1] if egg is not None and egg[0] == "turkey" else None
+        run = egg[1] if egg is not None and egg[0] == "turkey" and not day else None
         if run is not None and run >= TURKEY_RUN_SECONDS:
             run = None
         if run is None:
-            draw_thanksgiving_turkey(canvas, 3, top, tick, self.width, self.height)
+            draw_bird(canvas, 3, top, tick, self.width, self.height)
         first, second = lines
         centre = (left + self.width) // 2
         first_colour = team_color(favourite) if favourite else THANKSGIVING_TEXT

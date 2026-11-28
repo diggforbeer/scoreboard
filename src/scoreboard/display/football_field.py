@@ -43,8 +43,8 @@ RED_ZONE_YARDS = 20
 UNKNOWN_TEAM: RGB = (220, 220, 220)
 #: How much of a team's colour tints its end zone.
 END_ZONE_TINT = 0.30
-#: The logo of the team without the ball.
-DIM_LOGO = 0.45
+#: The logo of the team without the ball. 0.45 lost thin crests (the Eagles wing) in the end zone.
+DIM_LOGO = 0.7
 
 #: The logo drawn in an end zone, in pixels, and the size that has to exist in ``LogoSet``.
 END_ZONE_LOGO_SIZE = 12

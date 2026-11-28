@@ -51,6 +51,7 @@ from .display.college_idle import COLLEGE_DRAWERS
 from .display.fonts import FontSet
 from .display.holiday import (
     HOLIDAYS,
+    THANKSGIVING_DAY_LINES,
     TURKEY_RUN_SECONDS,
     Holiday,
     HolidayOverlay,
@@ -130,9 +131,6 @@ INTERMISSION_PAGE_SECONDS = 6.0
 INTERMISSION_STATS_REFRESH_SECONDS = 60.0
 #: A failed or empty stats fetch is tried again after this long.
 INTERMISSION_STATS_RETRY_SECONDS = 15.0
-#: The usual length of a break between periods, regular season and playoffs (#526).
-INTERMISSION_SECONDS = 17 * 60
-INTERMISSION_PLAYOFF_SECONDS = 18 * 60
 #: The favourite's season schedule changes rarely; this is plenty.
 SCHEDULE_TTL_SECONDS = 60 * 60
 #: Standings don't change intra-day except right after games finish.
@@ -303,10 +301,6 @@ class Scene:
     stats_page: int = 0
     #: Set only for ``intermission`` -- the shots for its shot-map page, when there are any.
     shots: ShotMap | None = None
-    #: Set only for ``intermission`` -- seconds of the break gone and its length, for the Zamboni
-    #: page (#526); whole seconds, so the scene (and the live view's key) moves once a second.
-    ice_elapsed: float | None = None
-    ice_total: float = 0.0
     #: Set only for ``ap_setup`` (#131 follow-up) -- the board's own
     #: first-boot WiFi AP, so a phone can join and finish setup. ``None``
     #: password means the AP came up open, not WPA2-protected.
@@ -639,8 +633,6 @@ class ScoreboardApp:
         self._int_stats_tried: dict[int, float] = {}
         self._int_shots: dict[int, tuple[float, ShotMap]] = {}
         self._int_shots_tried: dict[int, float] = {}
-        #: (game id, period) -> monotonic time the break was first seen, for the Zamboni page.
-        self._int_started: dict[tuple[int, int], float] = {}
         #: (game id, monotonic start) of the blowout flash (#326, blowout.py).
         self._blowout: tuple[int, float] | None = None
         self._blowout_shown: set[int] = set()
@@ -688,6 +680,9 @@ class ScoreboardApp:
         )
         #: The stock ticker's quotes (``stocks.py``): its own thread, started by ``run()``; it idles
         #: with no symbols, and the screen is skipped until the first quotes arrive.
+        #: When the favourite's intermission turn on screen began (monotonic), set by
+        #: ``_favourite_scene`` each frame it is chosen: the intermission's pages count from it.
+        self._intermission_turn_start: float | None = None
         self._stocks_feed = stocks_mod.StockFeed(
             lambda: self.settings.stocks.symbols, lambda: self.settings.stocks.refresh_seconds
         )
@@ -1457,7 +1452,6 @@ class ScoreboardApp:
         self._int_stats_tried = {}
         self._int_shots = {}
         self._int_shots_tried = {}
-        self._int_started = {}
         self._blowout = None
         self._blowout_shown = set()
         self._shootout_animating = False
@@ -2259,7 +2253,6 @@ class ScoreboardApp:
                 self._int_stats_tried,
                 self._int_shots,
                 self._int_shots_tried,
-                self._int_started,
             ):
                 store.clear()
             return
@@ -2326,37 +2319,13 @@ class ScoreboardApp:
         shots = shots_held[1] if shots_held is not None else None
         if stats is None and shots is None:
             return None
-        # The page count is the renderer's (it depends on the panel), so this is just the tick.
-        tick = int(self.monotonic() // INTERMISSION_PAGE_SECONDS)
-        ice = self._intermission_ice(game)
-        return Scene(
-            "intermission",
-            game,
-            stats=stats,
-            stats_page=tick,
-            shots=shots,
-            ice_elapsed=None if ice is None else ice[0],
-            ice_total=0.0 if ice is None else ice[1],
-        )
-
-    def _intermission_ice(self, game: Game) -> tuple[float, float] | None:
-        """(seconds gone, length) of this break for the Zamboni page (#526), or ``None`` after the
-        last regulation period (the break before overtime is short). The length is the usual one
-        (17 minutes, 18 in the playoffs) unless the feed's countdown says it is longer; the time
-        gone comes from the feed's countdown when it gives one, else from when we first saw the
-        break. Whole seconds, so the page and the live view move once a second."""
-        if game.period >= game.max_regulation_periods:
-            return None
-        usual = float(INTERMISSION_PLAYOFF_SECONDS if game.game_type == 3 else INTERMISSION_SECONDS)
+        # The page count is the renderer's (it depends on the panel), so this is just the tick:
+        # counted from the start of the favourite's turn while other followed games share the
+        # screen (every turn starts on the first page), else from the clock.
         now = self.monotonic()
-        seen = self._int_started.setdefault((game.id, game.period), now)
-        left = game.intermission_left
-        if left is None:
-            total, elapsed = usual, now - seen
-        else:
-            total = max(usual, left + (now - seen))
-            elapsed = total - left
-        return float(int(min(max(elapsed, 0.0), total))), total
+        started = self._intermission_turn_start
+        tick = int(((now - started) if started is not None else now) // INTERMISSION_PAGE_SECONDS)
+        return Scene("intermission", game, stats=stats, stats_page=tick, shots=shots)
 
     def _three_stars_override(self) -> Scene | None:
         if self._three_stars is None:
@@ -3391,9 +3360,12 @@ class ScoreboardApp:
         cfg = self._hockey_cfg()
         turns = self._followed_turns()
         if turns:
-            position = self.monotonic() % sum(seconds for _, seconds in turns)
+            now = self.monotonic()
+            position = now % sum(seconds for _, seconds in turns)
+            self._intermission_turn_start = None
             for game, seconds in turns:
                 if position < seconds:
+                    self._intermission_turn_start = now - position
                     return self._turn_scene(game)
                 position -= seconds
             return self._turn_scene(turns[-1][0])
@@ -3451,7 +3423,21 @@ class ScoreboardApp:
             favourite_game = today
         if favourite_game is None:
             return others
-        return [(favourite_game, cfg.rotate_seconds * FAVOURITE_QUICK_TURN), *others]
+        quick = cfg.rotate_seconds * FAVOURITE_QUICK_TURN
+        if favourite_game.in_intermission:
+            quick = max(quick, self._intermission_turn_seconds(favourite_game))
+        return [(favourite_game, quick), *others]
+
+    def _intermission_turn_seconds(self, game: Game) -> float:
+        """How long the favourite's intermission turn must last to show every page of its screen
+        (``INTERMISSION_PAGE_SECONDS`` each, in order), or 0 while the screen has nothing yet.
+        A shorter turn cut the pages off wherever the clock happened to be, so the three pages
+        came and went in no order while another followed game took the rest of the time."""
+        shown = self._intermission_scene(Scene("game", game))
+        if shown is None:
+            return 0.0
+        pages = self.renderer.intermission_page_count(shown.game, shown.stats, shown.shots)
+        return pages * INTERMISSION_PAGE_SECONDS
 
     def situation_targets(self) -> list[Game]:
         """Live games worth a second request: followed teams' and the on-screen one.
@@ -4073,10 +4059,7 @@ class ScoreboardApp:
         elif scene.kind == "three_stars":
             r.draw_three_stars(self.canvas, scene.game, scene.stars)
         elif scene.kind == "intermission":
-            ice = None if scene.ice_elapsed is None else (scene.ice_elapsed, scene.ice_total)
-            r.draw_intermission(
-                self.canvas, scene.game, scene.stats, scene.stats_page, scene.shots, ice
-            )
+            r.draw_intermission(self.canvas, scene.game, scene.stats, scene.stats_page, scene.shots)
         elif scene.kind == "blowout":  # not documented on purpose, see blowout.py
             r.draw_blowout(self.canvas, scene.game, favourite)
         elif scene.kind == "countdown":
@@ -4156,10 +4139,13 @@ class ScoreboardApp:
                 r.draw_christmas_tree(self.canvas, self.clock(), abbrev, egg)
         elif scene.kind == "thanksgiving":
             sport, abbrev = self._colour_scheme(favourite)
-            egg = self._turkey_egg()
+            now = self.clock()
+            # No turkey run on the day: the bird is in the oven (#626).
+            day = thanksgiving_countdown(now.astimezone(r.tz).date()) == THANKSGIVING_DAY_LINES
+            egg = None if day else self._turkey_egg()
             self._egg_animating = egg is not None
             with self._colour_context(sport):
-                r.draw_thanksgiving(self.canvas, self.clock(), abbrev, egg)
+                r.draw_thanksgiving(self.canvas, now, abbrev, egg)
         elif scene.kind == "stocks" and scene.stock_views:
             r.draw_stocks(self.canvas, scene.stock_views, scene.scroll_px)
         elif scene.kind == "dates" and scene.date_views:

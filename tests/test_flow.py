@@ -2408,6 +2408,7 @@ def test_the_stats_page_follows_the_clock(day):
     app, clock, client = day
     set_follow(app.settings, ["SEA"])
     _in_intermission(client)
+    client.shot_maps[1] = _shots()  # a second page, or there is nothing to turn
     tick(app, clock, hours=6)
     app.refresh_intermission_stats()
     first = app.select_scene()
@@ -2415,6 +2416,80 @@ def test_the_stats_page_follows_the_clock(day):
     second = app.select_scene()
     assert second.stats_page == first.stats_page + 1, "one page per page-length, the same clock"
     assert first != second, "so the live view takes a new snapshot"
+
+
+def _intermission_with_a_followed_game_live(followed, rotate=10):
+    """The favourite (game 1) in an intermission, stats in; SEA (game 9) live and followed."""
+    app, clock, client = followed
+    app.settings.scoreboard.rotate_seconds = rotate
+    client.today[1] = dataclasses.replace(_live(client.today[1]), in_intermission=True)
+    client.game_stats_by_game[1] = _int_stats()
+    client.shot_maps[1] = _shots()  # the second page: the stats alone fit on one
+    tick(app, clock, hours=6)
+    app.refresh_intermission_stats()
+    return app, clock, client
+
+
+def _runs(app, clock, seconds):
+    """Sample once a second: [(game id, kind, first page index, seconds)] for each unbroken run."""
+    runs: list[list] = []
+    for _ in range(seconds):
+        s = app.select_scene()
+        key = (s.game.id, s.kind)
+        if runs and runs[-1][0] == key:
+            runs[-1][2] += 1
+        else:
+            runs.append([key, s.stats_page, 1])
+        clock.advance(seconds=1)
+    return runs
+
+
+def _page_count(app, scene):
+    return app.renderer.intermission_page_count(scene.game, scene.stats, scene.shots)
+
+
+def test_the_intermission_turn_lasts_every_page_and_starts_on_the_first(followed):
+    """Another followed game shares the screen with the favourite's intermission. The favourite's
+    turn used to be half a rotation, with the page taken from the global clock, so the pages
+    appeared cut off, in any order. Now its turn is every page long and starts on page one."""
+    from scoreboard.app import INTERMISSION_PAGE_SECONDS
+
+    page_len = int(INTERMISSION_PAGE_SECONDS)
+    app, clock, _client = _intermission_with_a_followed_game_live(followed)
+    scene_now = app.select_scene()
+    pages = _page_count(app, scene_now)
+    assert pages >= 1
+    runs = _runs(app, clock, int(3 * (pages * page_len + 10)))
+    own = [r for r in runs if r[0] == (1, "intermission")]
+    other = [r for r in runs if r[0] == (9, "game")]
+    assert len(own) >= 2 and len(other) >= 2, "both take turns, repeatedly"
+    for _, first_page, length in own[1:-1] or own[1:]:
+        assert length == pages * page_len, "the whole intermission, page after page"
+        assert first_page % pages == 0 or pages == 1, "and it always opens on the first page"
+    for _, _, length in other[1:-1] or other[1:]:
+        assert length == 10, "the other game keeps its usual turn"
+
+
+def test_the_intermission_pages_follow_in_order_within_its_turn(followed):
+    from scoreboard.app import INTERMISSION_PAGE_SECONDS
+
+    page_len = int(INTERMISSION_PAGE_SECONDS)
+    app, clock, _client = _intermission_with_a_followed_game_live(followed)
+    first = app.select_scene()
+    pages = _page_count(app, first)
+    # Walk to the start of the favourite's next turn, then read its pages second by second.
+    for _ in range(400):
+        s = app.select_scene()
+        if s.kind == "intermission" and app._intermission_turn_start == app.monotonic():
+            break
+        clock.advance(seconds=1)
+    seen = []
+    for _ in range(pages * page_len):
+        s = app.select_scene()
+        assert s.kind == "intermission"
+        seen.append(s.stats_page % pages)
+        clock.advance(seconds=1)
+    assert [seen[i * page_len] for i in range(pages)] == list(range(pages))
 
 
 def test_a_shootout_never_gets_the_stats_screen(day):
@@ -2684,61 +2759,3 @@ def test_the_stocks_screen_draws_through_the_renderer(day):
     scene = dataclasses.replace(app._rotation_screen_scene("stocks", None, None), scroll_px=40)
     app.draw_scene(scene)
     assert drawn == [("AAPL", 40)]
-
-
-# -- the Zamboni page's clock (#526) --------------------------------------------------------------
-
-
-def _ice_scene(app):
-    app.refresh_intermission_stats()
-    scene = app.select_scene()
-    assert scene.kind == "intermission"
-    return scene
-
-
-def test_the_break_is_timed_from_when_it_was_first_seen_when_the_feed_gives_no_countdown(day):
-    app, clock, client = day
-    set_follow(app.settings, ["SEA"])
-    _in_intermission(client, period=2)
-    tick(app, clock, hours=6)
-    first = _ice_scene(app)
-    assert first.ice_elapsed == 0 and first.ice_total == 17 * 60
-    clock.advance(seconds=300)
-    tick(app, clock, hours=0)
-    later = _ice_scene(app)
-    assert later.ice_elapsed == 300
-
-
-def test_the_feeds_countdown_is_used_and_a_longer_break_stretches_the_length(day):
-    app, clock, client = day
-    set_follow(app.settings, ["SEA"])
-    _in_intermission(client, period=2, clock_seconds=1100, feed_intermission=True)
-    tick(app, clock, hours=6)
-    scene = _ice_scene(app)
-    assert scene.ice_total == 1100 and scene.ice_elapsed == 0, "scaled to the feed"
-
-
-def test_a_board_that_joins_mid_break_starts_part_way_through(day):
-    app, clock, client = day
-    set_follow(app.settings, ["SEA"])
-    _in_intermission(client, period=1, clock_seconds=400, feed_intermission=True)
-    tick(app, clock, hours=6)
-    scene = _ice_scene(app)
-    assert scene.ice_total == 17 * 60 and scene.ice_elapsed == 17 * 60 - 400
-
-
-def test_the_playoffs_break_is_eighteen_minutes(day):
-    app, clock, client = day
-    set_follow(app.settings, ["SEA"])
-    _in_intermission(client, period=1, game_type=3)
-    tick(app, clock, hours=6)
-    assert _ice_scene(app).ice_total == 18 * 60
-
-
-def test_there_is_no_zamboni_before_overtime(day):
-    app, clock, client = day
-    set_follow(app.settings, ["SEA"])
-    _in_intermission(client, period=3)
-    tick(app, clock, hours=6)
-    scene = _ice_scene(app)
-    assert scene.ice_elapsed is None

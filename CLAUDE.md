@@ -130,7 +130,7 @@ follows `docs/college-loop.md`**: the queue, the per-issue steps, auto-merge on 
 rules it never breaks. Mockups of every college screen: `python scripts/college-mockups.py`
 (images in `docs/college/`). Live-game capture: `scripts/capture-college-live.py`.
 Every college timeout gets the team-stats card (owner's call, 2026-11-22): the college feed has no "Official Timeout" (every stoppage is "Timeout <team>", TV ones included), so `Director(stats_at_timeouts=True)` (set by `FootballMode` for college only; the NFL is unchanged) puts the STATS stage on a `TIMEOUT` play, held until the next play, in a scores-only director too (`_is_score_stage`). College has its own rows (`stats.COLLEGE_PAGES`: no yards per play or sacks in its boxscore; `GameStats.layout`). Mockups 41-42 in `docs/college/`.
-The stats card also comes at the end of the 1st and 3rd quarters (`PlayKind.END_PERIOD`, #549; `Director._is_break`: the 2nd's is the halftime's and nothing follows the 4th), and **halftime alternates the card with the stats' pages** (`FootballMode._halftime_cycle`: `HALFTIME_CARD_SECONDS` 15s, then each page `stats_seconds`, round again, a pure function of how long the half has run via `_half_since`; the plain card until the stats arrive, college and 128px only). A score screen still wins: the cycle only runs when the director has nothing on.
+The stats card also comes at the end of the 1st and 3rd quarters (`PlayKind.END_PERIOD`, #549; both leagues since 2026-11-26, as is the halftime cycle below, after an NFL halftime showed only the score; `Director._is_break`: the 2nd's is the halftime's and nothing follows the 4th), and **halftime alternates the card with the stats' pages** (`FootballMode._halftime_cycle`: `HALFTIME_CARD_SECONDS` 15s, then each page `stats_seconds`, round again, a pure function of how long the half has run via `_half_since`; the plain card until the stats arrive, 128px only). A score screen still wins: the cycle only runs when the director has nothing on.
 The halftime card never shows rank badges (owner's call, 2026-11-22, seen on a real board: a number before each team cluttered the score line), and neither does a **live** game's scoreboard or field band (same night, same reason); the pregame scoreboard, the upset alert and the other screens keep theirs.
 The red zone marker (#562) is the NFL's drawing on the live field/scoreboard, driven by ESPN's `isRedZone`
 **as sent** (never derived from the yard line: the flag was not seen true in the one live game captured);
@@ -326,7 +326,12 @@ only when they score. During its intermission or held final, the other
 live followed games take `rotate_seconds` turns and the favourite's own
 screen drops in for `FAVOURITE_QUICK_TURN` (half) of that each cycle, so
 its score stays in view without hogging time from games actually being
-played. With the favourite not playing, live followed games take equal
+played. **Except** an intermission that has its stats screen: its turn is
+every page long (`_intermission_turn_seconds`: `renderer.intermission_page_count` x
+`INTERMISSION_PAGE_SECONDS`) and the pages count from the turn's start
+(`_intermission_turn_start`), so the pages run in order and a followed game's
+turn comes after them, not in the middle (seen NSH at DAL with MIN live: a half-rotation
+turn showed whichever page the global clock was on). With the favourite not playing, live followed games take equal
 turns (intermissions included -- skipping them was considered and not
 chosen); if the favourite's game today hasn't started, its countdown/preview
 joins as a `FAVOURITE_QUICK_TURN` so a live followed team can't hide it
@@ -475,7 +480,7 @@ needed at 128px -- only 12+ letter surnames truncate between logos.
 favourite's own intermission the game scene's frozen scoreboard is replaced by a two-page table of
 the game's team stats (shots, faceoff %, power plays, hits, penalty minutes; blocks, giveaways,
 takeaways, the last two periods' shots), away left and home right with the logos at the edges, the
-leader of each row in their colour, pages turning every `INTERMISSION_PAGE_SECONDS` (a pure function
+leader of each row in their colour, pages turning every `INTERMISSION_PAGE_SECONDS` (counted from the start of the favourite's turn when other followed games share the screen, else a pure function
 of the clock; `Scene.stats_page` is the tick and the renderer takes it modulo its own page count).
 By the owner's decisions: **the favourite's game only** (not a followed team's, not a shootout) and
 **one extra request, scoped**: `HockeyClient.game_stats` reads `right-rail` (`teamGameStats`,
@@ -484,26 +489,14 @@ By the owner's decisions: **the favourite's game only** (not a followed team's, 
 (15 s retry on a failure), on the fetch worker, and forgotten when the intermission ends. The **shot map** (`display/shotmap.py`, the last page of the same screen, 128px only) is a second request on the
 same schedule: `HockeyClient.shot_map` reads `play-by-play` (~100-200 KB; shots on goal and goals
 with their rink coordinates, each team turned to attack the net at its own end: away left, home
-right, from `homeTeamDefendingSide`), also only for the favourite's intermission, held a minute,
+right, from `homeTeamDefendingSide`; a shot on goal the feed gives `zoneCode` `D` (its shooter's own zone) with
+coordinates in its own half is mirrored and turned back, `MIRROR_AFTER` = 25 ft past centre, seen NSH at DAL
+2026-11-25), also only for the favourite's intermission, held a minute,
 retried after 15 s. The screen shows as soon as either the stats or the shots have arrived. Do not
 widen either to other games without asking. Until the first answer arrives the plain game scene stays
 up. It is the last layer of `_apply_goal_override`, so a goal, penalty, blowout or three stars
 still win over it. Not verified against a live intermission (does `right-rail` update during one?)
 or on hardware (#4).
-
-**The Zamboni page (#526, `display/zamboni.py`)** is the last page of the same intermission screen
-(after the stats tables and the shot map), 128px only, periods 1 and 2 only (the break before OT is
-short). A top-down rink: scratched ice on a rounded-rectangle rink (elliptical corners, faint lines and face-off circles), two
-machines (the away team's on the top half, the home team's on the bottom, each the owner's drawn
-inward spiral in 3px swaths: outer board east, far end down, middle west, near end up, inner lap, a
-last middle pass; legs are pulled in at the rounded corners) turning it clean, the countdown at
-the right. A pure function of (elapsed, total) seconds; `Scene.ice_elapsed/ice_total` carry it in whole
-seconds, so the live view re-snapshots once a second while that page is up. `_intermission_ice` times
-it: the feed's `clock.secondsRemaining` while `inIntermission` (`Game.intermission_left`), the length
-the usual 17 min (18 playoffs) or longer if the feed says so, else a timer from when the break was
-first seen (`_int_started`). The clean finishes `EARLY_FINISH_SECONDS` before the end. Like the other
-intermission pages it needs the stats or shots to have arrived. **Not verified:** that the feed
-counts the break down on a live game, and the cost on a Pi 4 (#4).
 
 The shootout screen (#259) replaces the game scene while `periodType ==
 "SO"` and the game is live (a finished one falls back to the plain game
@@ -992,7 +985,12 @@ right; each patch heals at its own time. The lettering is *overdrawn* (black pat
 because the real binding's `DrawText` never reaches Python `SetPixel`. Skipped on a single 64px
 panel. Same fences and no-snapshots rule as the tree eggs, which still use the fixed wall-clock roll.
 
-**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools|turkey]`** (`eggs.py`,
+On **Thanksgiving Day itself** (#626) the `thanksgiving` screen draws a steaming roast on a platter
+(`display/holiday.py` `draw_thanksgiving_roast`, two steam frames at 2 fps and one stray feather drifting down beside the steam, in the turkey's own slot)
+instead of the walking turkey, and the turkey run never starts: same family, same rule, never
+documented user-facing (no `screens.md` picture, no demo step), pinned by the same fence tests.
+
+**To see them: `scoreboard --eggs [quote|squirrel|fire|blowout|april_fools|turkey|roast]`** (`eggs.py`,
 `ScoreboardApp.run_eggs`): a hidden flag (`argparse.SUPPRESS`, absent from `--help`, README and
 `screens.md`) that loops every egg on the real panel, or plays just the one named. Each is a `plan()`
 of `Phase`s (a calm moment, the egg, a calm moment). The tree eggs hold the tree screen's date in
