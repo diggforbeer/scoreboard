@@ -31,7 +31,7 @@ from .fonts import text_width
 from .football_plays import DIM, GAIN, LOSS, NEUTRAL, WHITE, play_screen, quarter_clock, r_fit
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 #: The ball travels for this share of the stage and rests for the rest.

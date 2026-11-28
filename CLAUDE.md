@@ -261,6 +261,20 @@ file the Pi reads from its boot partition (`image/files/boot/scoreboard.toml`).
   assume the auto-fetched SVG is right by default.
 
 
+## Engine and shell (Android prep)
+
+`ScoreboardApp` is the engine (fetch, pick the scene, draw) plus a **shell** only the Pi has (GPIO
+button, light sensor, audio, the admin and WiFi-setup pages, the mDNS alias, the join attempt).
+`scoreboard/engine.py` `Engine` runs the same app with the shell off, on a pure-Python backend
+(`display/software.py`: no `rgbmatrix`, no browser; text placed like the C++ driver via
+`mirror.parse_bdf`), and hands back `Frame`s: `start()`, `step()` (one `tick()` plus `draw()`),
+`latest_frame()`, `frame_interval()`. A host that owns its own loop (an Android service via Chaquopy,
+a screenshot script) pumps it. `ScoreboardApp.run()` is the board's loop: `start()`, then each pass
+`tick()` plus the shell steps, `draw()`, sleep. `Scene` lives in `scene.py` (re-exported by `app`)
+so drawing code never imports `app`. **`tests/test_engine.py` fails if anything under `display/`,
+`hockey/` or `football/` imports the shell modules or a hardware library**: keep the drawing and
+data code shell-free, and add any new board-only module to its `SHELL` set.
+
 ## Ranked teams (epic #470)
 
 One ranked `[[teams]]` list (hockey and football mixed, up to 12, rank 1 first) replaced the old

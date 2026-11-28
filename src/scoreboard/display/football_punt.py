@@ -39,7 +39,7 @@ from .football_plays import DIM, GAIN, LOSS, NEUTRAL, play_screen, quarter_clock
 from .football_run import draw_carrier, draw_markers_for, draw_trail, eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 TEE, LANDED, ENDING, SETTLED = 0.08, 0.55, 0.60, 0.90

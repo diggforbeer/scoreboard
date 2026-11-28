@@ -29,7 +29,7 @@ from .fonts import text_width
 from .football_plays import DIM, WHITE, event_screen, r_fit
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 APPEAR_END, FLIP_END, LAND_END = 0.08, 0.50, 0.58

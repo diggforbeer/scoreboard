@@ -33,7 +33,7 @@ from .football_plays import WHITE, event_screen, r_fit
 from .goal_light import _Buffer, _ease, _glyph, _scaled, _shimmer, _towards_white
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 WORD = "TOUCHDOWN"

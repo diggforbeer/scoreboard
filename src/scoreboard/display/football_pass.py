@@ -37,7 +37,7 @@ from .football_plays import DIM, GAIN, LOSS, NEUTRAL, play_screen, quarter_clock
 from .football_run import MAX_LABEL, draw_carrier, draw_markers_for, draw_trail, eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 #: Where each phase starts, as a share of the stage (see the module docstring).

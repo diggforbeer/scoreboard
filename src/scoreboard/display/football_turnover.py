@@ -31,7 +31,7 @@ from .football_plays import GAIN, LOSS, NEUTRAL, WHITE, event_screen, r_fit
 from .goal_light import _ease, _scaled
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 TITLE_FADE, ARROW_START, ARROW_END, SWAP_END, DETAIL_START = 0.12, 0.12, 0.60, 0.70, 0.65

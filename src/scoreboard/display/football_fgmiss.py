@@ -33,7 +33,7 @@ from .football_plays import LOSS, play_screen, r_fit
 from .football_run import eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 KICK_START, FLIGHT_END, DONE = 0.10, 0.70, 1.0

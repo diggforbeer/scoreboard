@@ -14,8 +14,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ..app import Scene
 from ..demo import DemoStep
+from ..scene import Scene
 from .college_demo import college_demo_steps
 from .events import CoinToss, Event, FieldGoal, GenericScore, Scope, Touchdown, Turnover
 from .models import FbGame, Play

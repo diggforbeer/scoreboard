@@ -36,7 +36,7 @@ from .football_plays import DIM, NEUTRAL, play_screen, quarter_clock, r_fit
 from .football_run import MAX_LABEL, draw_carrier, eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 THROW, DOWN, BOUNCED = 0.10, 0.55, 0.80

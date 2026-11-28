@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 from typing import NamedTuple
 
 from . import blowout
-from .app import Scene
 from .demo import demo_steps
 from .display.holiday import TREE_EGGS, TURKEY_RUN_SECONDS, nth_weekday
+from .scene import Scene
 
 #: The tour's items, in order.
 NAMES = ("quote", "squirrel", "fire", "blowout", "april_fools", "turkey", "roast")

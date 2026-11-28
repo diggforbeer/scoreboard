@@ -34,7 +34,7 @@ from . import football_field as ff
 from .fonts import text_width
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 Drawer = Callable[["Renderer", Any, "Scene"], None]

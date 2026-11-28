@@ -50,7 +50,7 @@ from .football_plays import (
 from .goal_light import _Buffer, _ease, _scaled
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 YELLOW = (255, 225, 0)

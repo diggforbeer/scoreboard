@@ -29,7 +29,7 @@ from .football_plays import AMBER_CARD, DIM, WHITE, event_screen, r_fit
 from .football_punt import draw_flag
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 #: Seconds the reason is held before it starts to scroll, and per character after that.

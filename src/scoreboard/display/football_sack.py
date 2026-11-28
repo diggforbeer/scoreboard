@@ -34,7 +34,7 @@ from .football_plays import DIM, LOSS, NEUTRAL, play_screen, quarter_clock, r_fi
 from .football_run import MAX_LABEL, draw_carrier, eased
 
 if TYPE_CHECKING:
-    from ..app import Scene
+    from ..scene import Scene
     from .renderer import Renderer
 
 DROP_END, BURST_START, BURST_END, SLIDE_END = 0.35, 0.35, 0.65, 0.85

@@ -11,7 +11,7 @@ import dataclasses
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
-from .app import Scene, ScoreboardApp
+from .app import ScoreboardApp
 from .hockey.models import (
     AssistDetail,
     Game,
@@ -34,6 +34,7 @@ from .hockey.models import (
     standings_window,
 )
 from .important_dates import DateView
+from .scene import Scene
 from .stocks import StockView, strip_width
 
 
